@@ -1,0 +1,15 @@
+(executable
+ (name llvm_compiler)
+ (modules llvm_compiler)
+ (libraries stdio LL miniml))
+
+(library
+ (name LL)
+ (modules LL)
+ (libraries llvm)
+ (inline_tests)
+ (preprocess
+  (pps ppx_inline_test)))
+
+(cram
+ (deps ./llvm_compiler.exe))
