@@ -1,5 +1,5 @@
 open Miniml
-open Compile
+open CConv
 open Format
 
 let iter =
@@ -15,13 +15,13 @@ let iter n =
 
 let%expect_test " " =
   let _, _, expr = Parsing.parse_vb_exn iter in
-  Format.printf "%a\n" StringSet.pp (free_vars_of_expr expr);
+  Format.printf "%a\n" String_set.pp (free_vars_of_expr expr);
   [%expect {|{set| +, =, |set} |}]
 ;;
 
 let%expect_test " " =
   let _, _, expr = Parsing.parse_vb_exn "let x = let rec loop m = m in loop x" in
-  Format.printf "%a\n" StringSet.pp (free_vars_of_expr expr);
+  Format.printf "%a\n" String_set.pp (free_vars_of_expr expr);
   [%expect {|{set| x, |set} |}]
 ;;
 
@@ -54,7 +54,7 @@ let anon1 = {|
 let mul5 x = repeat 5 (fun acc -> x) 0|}
 
 let%expect_test " " =
-  wrap ~verbose:false ~standart_globals:(SS.add "repeat" standart_globals) anon1;
+  wrap ~verbose:false ~standart_globals:(String_set.add "repeat" standart_globals) anon1;
   [%expect
     {|
     let mul5 x = repeat 5 (fun acc -> x) 0
@@ -67,7 +67,7 @@ let%expect_test " " =
 
 let%expect_test "iter" =
   wrap
-    ~standart_globals:(SS.add "repeat" standart_globals)
+    ~standart_globals:(String_set.add "repeat" standart_globals)
     "let iter n = let rec loop m = n + m in loop n";
   [%expect
     {|

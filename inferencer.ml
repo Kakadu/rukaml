@@ -145,8 +145,8 @@ end = struct
   let ( ++ ) = compose
 end
 
-module VarSet = struct
-  include VarSet
+module Var_set = struct
+  include Var_set
 
   let fold_R f acc set =
     fold
@@ -174,11 +174,11 @@ module Type = struct
     let rec helper acc { typ_desc } =
       match typ_desc with
       | Prim _ -> acc
-      | V b -> VarSet.add b acc
+      | V b -> Var_set.add b acc
       | TLink t -> helper acc t
       | Arrow (l, r) -> helper (helper acc l) r
     in
-    helper VarSet.empty
+    helper Var_set.empty
   ;;
 
   let apply subs t = Subst.apply subs t
@@ -188,15 +188,15 @@ module Scheme = struct
   type t = scheme
 
   let occurs_in v = function
-    | S (xs, t) -> (not (VarSet.mem v xs)) && Type.occurs_in v t
+    | S (xs, t) -> (not (Var_set.mem v xs)) && Type.occurs_in v t
   ;;
 
   let free_vars = function
-    | S (bs, t) -> VarSet.fold VarSet.remove bs (Type.free_vars t)
+    | S (bs, t) -> Var_set.fold Var_set.remove bs (Type.free_vars t)
   ;;
 
   let apply sub (S (names, ty)) =
-    let s2 = VarSet.fold (fun k s -> Subst.remove s k) names sub in
+    let s2 = Var_set.fold (fun k s -> Subst.remove s k) names sub in
     S (names, Type.apply s2 ty)
   ;;
 
@@ -204,8 +204,11 @@ module Scheme = struct
 end
 
 let%expect_test " " =
-  Format.printf "%a\n" VarSet.pp (Type.free_vars { typ_desc = V 1 });
-  Format.printf "%a\n" VarSet.pp (Scheme.free_vars (S (VarSet.empty, { typ_desc = V 1 })));
+  Format.printf "%a\n" Var_set.pp (Type.free_vars { typ_desc = V 1 });
+  Format.printf
+    "%a\n"
+    Var_set.pp
+    (Scheme.free_vars (S (Var_set.empty, { typ_desc = V 1 })));
   [%expect {|
     [ 1; ]
     [ 1; ] |}]
@@ -217,9 +220,9 @@ module TypeEnv = struct
   let extend e h = h :: e
   let empty = []
 
-  let free_vars : t -> VarSet.t =
-    List.fold_left ~init:VarSet.empty ~f:(fun acc (_, s) ->
-      VarSet.union acc (Scheme.free_vars s))
+  let free_vars : t -> Var_set.t =
+    List.fold_left ~init:Var_set.empty ~f:(fun acc (_, s) ->
+      Var_set.union acc (Scheme.free_vars s))
   ;;
 
   let apply s env = List.Assoc.map env ~f:(Scheme.apply s)
@@ -262,7 +265,7 @@ let unify l r =
 
 let instantiate : scheme -> ty R.t =
  fun (S (bs, t)) ->
-  VarSet.fold_R
+  Var_set.fold_R
     (fun typ name ->
       let* f1 = fresh in
       return @@ Subst.apply (Subst.singleton name (tv f1)) typ)
@@ -272,7 +275,7 @@ let instantiate : scheme -> ty R.t =
 
 let generalize : TypeEnv.t -> Type.t -> Scheme.t =
  fun env ty ->
-  let free = VarSet.diff (Type.free_vars ty) (TypeEnv.free_vars env) in
+  let free = Var_set.diff (Type.free_vars ty) (TypeEnv.free_vars env) in
   S (free, ty)
 ;;
 
@@ -309,7 +312,7 @@ let infer =
       (* lambda abstraction *)
     | ELam (PVar x, e1) ->
       let* v = fresh_var in
-      let env2 = TypeEnv.extend env (x, S (VarSet.empty, v)) in
+      let env2 = TypeEnv.extend env (x, S (Var_set.empty, v)) in
       let* ty, tbody = helper env2 e1 in
       let trez = tarrow v ty in
       return (trez, TLam (x, tbody, trez))
@@ -334,7 +337,7 @@ let infer =
       let* t1, trhs = helper env rhs in
       (* log "letrec t1 = %a" pp_ty t1; *)
       (* log "env = %a" TypeEnv.pp env; *)
-      (* log "env free vars = %a" VarSet.pp (TypeEnv.free_vars env); *)
+      (* log "env free vars = %a" Var_set.pp (TypeEnv.free_vars env); *)
       let t2 = generalize env t1 in
       (* log "letrec t2 = %a" Pprint.pp_scheme t2; *)
       let* t3, typed_in = helper (TypeEnv.extend env (x, t2)) e2 in
@@ -343,7 +346,7 @@ let infer =
     | Parsetree.ELet (Recursive, PVar f, erhs, wher) ->
       let* tv = fresh_var in
       let* t1, typed_rhs =
-        let env = TypeEnv.extend env (f, S (VarSet.empty, tv)) in
+        let env = TypeEnv.extend env (f, S (Var_set.empty, tv)) in
         helper env erhs
       in
       let* () = unify tv t1 in
@@ -354,7 +357,9 @@ let infer =
   helper
 ;;
 
-let start_env = TypeEnv.(extend empty) ("print", S (VarSet.empty, tarrow int_typ unit_typ))
+let start_env =
+  TypeEnv.(extend empty) ("print", S (Var_set.empty, tarrow int_typ unit_typ))
+;;
 
 let w e =
   Result.map (run (infer start_env e)) ~f:(fun (_, x) -> x)
@@ -377,19 +382,14 @@ let%expect_test _ =
   [%expect {| [ 1 -> int, 2 -> int ] |}]
 ;;
 
-let vb (flg, Parsetree.PVar name, body) =
+let vb ?(env = start_env) (flg, Parsetree.PVar name, body) =
   (* TODO(Kakadu): recursion and generalization *)
   let comp =
     let* v = fresh in
-    infer ((name, S (VarSet.empty, Typedtree.tv v)) :: start_env) body
+    infer ((name, S (Var_set.empty, Typedtree.tv v)) :: env) body
   in
   run comp
   |> Result.map_error ~f:(function #error as x -> x)
-  |> Result.map ~f:(fun (ty, body) -> value_binding flg (PVar name) body ty)
+  |> Result.map ~f:(fun (ty, body) ->
+       value_binding flg (PVar name) body (generalize env ty))
 ;;
-(* |> Result.map_error
-       ~f:
-         (function
-          | #error as x -> x)
-       w
-       body *)

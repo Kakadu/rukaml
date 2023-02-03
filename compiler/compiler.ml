@@ -9,9 +9,17 @@ let run_single text =
   let ( let* ) x f = Result.bind x ~f in
   let* stru = Miniml.Parsing.parse_structure text in
   (* List.iter ~f:(Format.printf "%a\n%!" Pprint.pp_value_binding) stru; *)
-  let stru = List.concat_map ~f:Compile_lib.Compile.conv stru in
+  let stru = List.concat_map ~f:Compile_lib.CConv.conv stru in
   (* List.iter ~f:(Format.printf "%a\n%!" Pprint.pp_value_binding) stru; *)
-  let* xs = Result.all (List.map ~f:Inferencer.vb stru) in
+  let* xs =
+    let f acc ((_, Parsetree.PVar name, _) as vb) =
+      let* ans, env = acc in
+      let* rez = Inferencer.vb ~env vb in
+      Result.return (rez :: ans, (name, rez.tvb_typ) :: env)
+    in
+    List.fold stru ~init:(Result.return ([], Inferencer.start_env)) ~f
+    |> Result.map ~f:(fun (vbs, _) -> List.rev vbs)
+  in
   List.iter ~f:(Format.printf "%a\n%!" Typedtree.pp_vb_hum) xs;
   Result.return ()
 ;;

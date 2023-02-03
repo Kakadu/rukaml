@@ -12,7 +12,7 @@ let log fmt =
   else Format.ifprintf Format.std_formatter fmt
 ;;
 
-module StringSet = struct
+module String_set = struct
   include Set.Make (String)
 
   let pp ppf set =
@@ -23,7 +23,7 @@ module StringSet = struct
   ;;
 end
 
-module SS = StringSet
+module SS = String_set
 
 let simplify =
   let open Parsetree in
@@ -49,19 +49,19 @@ let%expect_test " " =
 let free_vars_of_expr =
   let rec helper acc = function
     | Parsetree.EConst _ -> acc
-    | EVar s -> StringSet.add s acc
+    | EVar s -> String_set.add s acc
     | EIf (c, th, el) -> helper (helper (helper acc c) th) el
     | EApp (l, r) -> helper (helper acc l) r
     | ELet (NonRecursive, _, rhs, wher) -> helper (helper acc rhs) wher
     | ELet (Recursive, PVar pat, rhs, wher) ->
-      StringSet.remove pat (helper (helper acc rhs) wher)
-    | ELam (Parsetree.PVar v, rhs) -> StringSet.remove v (helper acc rhs)
+      String_set.remove pat (helper (helper acc rhs) wher)
+    | ELam (Parsetree.PVar v, rhs) -> String_set.remove v (helper acc rhs)
   in
-  helper StringSet.empty
+  helper String_set.empty
 ;;
 
-let is_free_in x term = StringSet.mem x (free_vars_of_expr term)
-let rec next_name s ~old = if StringSet.mem s old then next_name ("_" ^ s) ~old else s
+let is_free_in x term = String_set.mem x (free_vars_of_expr term)
+let rec next_name s ~old = if String_set.mem s old then next_name ("_" ^ s) ~old else s
 
 let rec subst x ~by:v =
   let open Parsetree in
@@ -72,7 +72,7 @@ let rec subst x ~by:v =
     | EApp (l, r) -> eapp (helper l) [ helper r ]
     | ELam (PVar y, b) when Stdlib.(y = x) -> elam (PVar y) b
     | ELam (PVar y, t) when is_free_in y v ->
-      let frees = StringSet.union (free_vars_of_expr v) (free_vars_of_expr t) in
+      let frees = String_set.union (free_vars_of_expr v) (free_vars_of_expr t) in
       let w = next_name y ~old:frees in
       helper (elam (PVar w) (subst y ~by:(EVar w) t))
     | ELam (y, b) -> elam y (helper b)
@@ -91,13 +91,13 @@ let rec subst x ~by:v =
   helper
 ;;
 
-let without set ~other = StringSet.fold (fun x acc -> StringSet.remove x acc) other set
+let without set ~other = String_set.fold (fun x acc -> String_set.remove x acc) other set
 
 let%expect_test " " =
-  let left = StringSet.of_list [ "a"; "b"; "c" ] in
-  let other = StringSet.of_list [ "d"; "b"; "c" ] in
+  let left = String_set.of_list [ "a"; "b"; "c" ] in
+  let other = String_set.of_list [ "d"; "b"; "c" ] in
   let set = without ~other left in
-  Format.printf "%a\n" StringSet.pp set;
+  Format.printf "%a\n" String_set.pp set;
   [%expect {|{set| a, |set} |}]
 ;;
 
@@ -110,7 +110,7 @@ let gensym =
     Format.sprintf "%s_%d" prefix !last
 ;;
 
-let standart_globals = StringSet.of_list [ "+"; "="; "<" ]
+let standart_globals = String_set.of_list [ "+"; "="; "<" ]
 let elams names rhs = List.fold_right (fun x acc -> Parsetree.elam (PVar x) acc) names rhs
 
 let conv ?(standart_globals = standart_globals)
@@ -120,8 +120,8 @@ let conv ?(standart_globals = standart_globals)
   let classify globals local_args expr =
     let fvs = free_vars_of_expr expr in
     log "free vars inside `%a` are:\n%a\n%!" Pprint.pp_expr expr SS.pp fvs;
-    let vars = without fvs ~other:(StringSet.union local_args globals) in
-    if StringSet.cardinal vars = 0 then None else Some vars
+    let vars = without fvs ~other:(String_set.union local_args globals) in
+    if String_set.cardinal vars = 0 then None else Some vars
   in
   let open Parsetree in
   (* TODO(Kakadu): don't know if monads are needed here *)
@@ -169,13 +169,13 @@ let conv ?(standart_globals = standart_globals)
       return (elam (PVar v) e) *)
          (* let subj = ELam (PVar v, e) in
       log "\tgot expr : %a" Pprint.pp_expr subj;
-      log "\tglobals  : %a" StringSet.pp globals;
+      log "\tglobals  : %a" String_set.pp globals;
       let fvs = free_vars_of_expr e in
-      log "conv.helper. fvs of rhs = %a" StringSet.pp fvs;
-      let vars = without fvs ~other:(StringSet.add v globals) in
-      log "conv.helper. vars = %a" StringSet.pp vars;
-      let ans = StringSet.fold (fun name acc -> ELam (PVar name, acc)) vars subj in
-      let ans = StringSet.fold (fun name acc -> EApp (acc, EVar name)) vars ans in
+      log "conv.helper. fvs of rhs = %a" String_set.pp fvs;
+      let vars = without fvs ~other:(String_set.add v globals) in
+      log "conv.helper. vars = %a" String_set.pp vars;
+      let ans = String_set.fold (fun name acc -> ELam (PVar name, acc)) vars subj in
+      let ans = String_set.fold (fun name acc -> EApp (acc, EVar name)) vars ans in
       log "conv.helper. ans = %a" Pprint.pp_expr ans;
       return ans *))
     | ELet (isrec, PVar pat, rhs, wher) ->
@@ -185,19 +185,19 @@ let conv ?(standart_globals = standart_globals)
       in
       let args_like =
         match isrec with
-        | Recursive -> StringSet.(of_list (pat :: args))
-        | _ -> StringSet.of_list args
+        | Recursive -> String_set.(of_list (pat :: args))
+        | _ -> String_set.of_list args
       in
       (match classify globals args_like rhs with
        | None ->
          log "classify says None";
-         let* rhs = helper (StringSet.add pat globals) rhs in
-         let* body = helper (StringSet.add pat globals) wher in
+         let* rhs = helper (String_set.add pat globals) rhs in
+         let* body = helper (String_set.add pat globals) wher in
          return (elet ~isrec (PVar pat) rhs body)
        | Some extra ->
-         log "classify says Some %a" StringSet.pp extra;
-         let* rhs = helper StringSet.(union extra globals) rhs in
-         let new_args = StringSet.to_seq extra |> List.of_seq in
+         log "classify says Some %a" String_set.pp extra;
+         let* rhs = helper String_set.(union extra globals) rhs in
+         let new_args = String_set.to_seq extra |> List.of_seq in
          let by =
            List.fold_right (fun name acc -> eapp1 acc (evar name)) new_args (evar pat)
          in
@@ -220,14 +220,14 @@ let conv ?(standart_globals = standart_globals)
          let () = log "Going to subst (inside a wher) %s |~~> %a" pat Pprint.pp_expr by in
          let wher = subst pat ~by wher in
          log "next where = %a" Pprint.pp_expr wher;
-         let* wher = helper (StringSet.add pat globals) wher in
+         let* wher = helper (String_set.add pat globals) wher in
          let* () = save (isrec, PVar pat, rhs) in
          return wher)
   in
   fun (is_rec, (PVar v as pat), root) ->
     let args, rhs = group_lams root in
     let saved, last_rhs =
-      Monads.Store.run (helper (StringSet.add v standart_globals) rhs) []
+      Monads.Store.run (helper (String_set.add v standart_globals) rhs) []
     in
     List.rev_append saved [ is_rec, pat, elams args last_rhs ] |> List.map simplify_vb
 ;;

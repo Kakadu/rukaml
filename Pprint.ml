@@ -100,5 +100,5 @@ let rec pp_typ ppf { typ_desc } =
 ;;
 
 let pp_scheme ppf = function
-  | S (xs, t) -> fprintf ppf "forall %a . %a" VarSet.pp xs pp_typ t
+  | S (xs, t) -> fprintf ppf "forall %a . %a" Var_set.pp xs pp_typ t
 ;;

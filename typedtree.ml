@@ -1,6 +1,6 @@
 type binder = int [@@deriving show { with_path = false }]
 
-module VarSet = struct
+module Var_set = struct
   include Caml.Set.Make (Int)
 
   let pp ppf s =
@@ -10,7 +10,7 @@ module VarSet = struct
   ;;
 end
 
-type binder_set = VarSet.t [@@deriving show { with_path = false }]
+type binder_set = Var_set.t [@@deriving show { with_path = false }]
 
 type ty = { mutable typ_desc : type_desc }
 
@@ -113,7 +113,7 @@ type value_binding =
   { tvb_flag : Parsetree.rec_flag
   ; tvb_pat : Parsetree.pattern
   ; tvb_body : expr
-  ; tvb_typ : ty
+  ; tvb_typ : scheme
   }
 
 let value_binding tvb_flag tvb_pat tvb_body tvb_typ =
@@ -134,7 +134,8 @@ let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
     pp_pattern
     tvb_pat
     pp_typ_hum
-    tvb_typ
+    (match tvb_typ with
+     | S (_, typ) -> typ)
     pp_hum
     tvb_body
 ;;
