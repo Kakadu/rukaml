@@ -4,8 +4,6 @@
  (modules compile monads compile_tests)
  (preprocess
   (pps ppx_blob ppx_expect))
- (preprocessor_deps
-  (file fac.il))
  (inline_tests))
 
 (executable
@@ -14,5 +12,6 @@
  (libraries stdio base miniml compile_lib))
 
 (cram
- (enabled_if (= true %{env:RUN_MY_TEST=false}))
+ ;(enabled_if
+ ; (= true %{env:RUN_MY_TEST=false}))
  (deps ../REPL.exe ./compiler.exe))

@@ -3,21 +3,13 @@ module Format = Stdlib.Format
 open Stdio
 open Miniml
 
-let log_enables = ref true
+let log_enables = ref false
 let set_logging b = log_enables := b
 
 let log fmt =
   if !log_enables
-  then Format.kasprintf (fun s -> Format.printf "%s\n%!" s) fmt
+  then Format.kasprintf (Format.printf "%s\n%!") fmt
   else Format.ifprintf Format.std_formatter fmt
-;;
-
-let demo = [%blob "fac.il"]
-
-let compile _tast =
-  Out_channel.write_all "/tmp/file.il" ~data:demo;
-  let _ = Stdlib.Sys.command "ilasm /tmp/file.il /exe" in
-  ()
 ;;
 
 module StringSet = struct
@@ -49,7 +41,7 @@ let simplify =
 let simplify_vb (flg, pat, rhs) = flg, pat, simplify rhs
 
 let%expect_test " " =
-  let ast = Parsing.parse_exn "let ter loop = (fun n -> loop n 0) loop" in
+  let ast = Parsing.parse_vb_exn "let ter loop = (fun n -> loop n 0) loop" in
   Format.printf "%a\n%!" Pprint.pp_value_binding (simplify_vb ast);
   [%expect {| let ter n = loop n 0 |}]
 ;;
@@ -132,6 +124,7 @@ let conv ?(standart_globals = standart_globals)
     if StringSet.cardinal vars = 0 then None else Some vars
   in
   let open Parsetree in
+  (* TODO(Kakadu): don't know if monads are needed here *)
   let open Monads.Store in
   let save : value_binding -> (value_binding list, unit) t =
    fun x ->

@@ -14,20 +14,20 @@ let iter n =
 ;;
 
 let%expect_test " " =
-  let _, _, expr = Parsing.parse_exn iter in
+  let _, _, expr = Parsing.parse_vb_exn iter in
   Format.printf "%a\n" StringSet.pp (free_vars_of_expr expr);
   [%expect {|{set| +, =, |set} |}]
 ;;
 
 let%expect_test " " =
-  let _, _, expr = Parsing.parse_exn "let x = let rec loop m = m in loop x" in
+  let _, _, expr = Parsing.parse_vb_exn "let x = let rec loop m = m in loop x" in
   Format.printf "%a\n" StringSet.pp (free_vars_of_expr expr);
   [%expect {|{set| x, |set} |}]
 ;;
 
 let wrap ?(verbose = false) ?(standart_globals = standart_globals) input =
   set_logging verbose;
-  let ast = Parsing.parse_exn input in
+  let ast = Parsing.parse_vb_exn input in
   let rez = conv ~standart_globals ast in
   Format.printf
     "@[%a@]\n\t~~[%d value bindings]~~>\n@[<v>%a@]\n"

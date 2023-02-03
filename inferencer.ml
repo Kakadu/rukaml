@@ -277,6 +277,8 @@ let generalize : TypeEnv.t -> Type.t -> Scheme.t =
 ;;
 
 let lookup_env e xs =
+  (* log "Looking up for %s" e;
+  log "  inside %a" TypeEnv.pp xs; *)
   match List.Assoc.find_exn xs ~equal:String.equal e with
   | (exception Caml.Not_found) | (exception Not_found_s _) -> fail (`NoVariable e)
   | scheme -> instantiate scheme
@@ -374,3 +376,20 @@ let%expect_test _ =
   in
   [%expect {| [ 1 -> int, 2 -> int ] |}]
 ;;
+
+let vb (flg, Parsetree.PVar name, body) =
+  (* TODO(Kakadu): recursion and generalization *)
+  let comp =
+    let* v = fresh in
+    infer ((name, S (VarSet.empty, Typedtree.tv v)) :: start_env) body
+  in
+  run comp
+  |> Result.map_error ~f:(function #error as x -> x)
+  |> Result.map ~f:(fun (ty, body) -> value_binding flg (PVar name) body ty)
+;;
+(* |> Result.map_error
+       ~f:
+         (function
+          | #error as x -> x)
+       w
+       body *)

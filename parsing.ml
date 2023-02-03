@@ -198,15 +198,15 @@ let pack : dispatch =
 let value_binding = letdef (pack.expr_long pack) <* ws
 let parse_pack p str = parse_string ~consume:All (p pack) str
 
-type error = [ `ParseError of string ]
+type error = [ `Parse_error of string ]
 
 let pp_error ppf = function
-  | `ParseError s -> Format.pp_print_string ppf s
+  | `Parse_error s -> Format.pp_print_string ppf s
 ;;
 
 let parse str =
   Caml.Format.printf "parsing a string '%s'\n%!" str;
-  Result.map_error (fun x -> `ParseError x) (parse_pack pack.prio str)
+  Result.map_error (fun x -> `Parse_error x) (parse_pack pack.prio str)
 ;;
 
 let parse_expr_exn str =
@@ -218,7 +218,7 @@ let parse_expr_exn str =
   | Ok r -> Format.printf "@[%a@]\n%!" Pprint.pp_expr r
 ;;
 
-let parse_exn str =
+let parse_vb_exn str =
   (* Caml.Format.printf "parsing a string '%s'\n%!" str; *)
   match parse_string ~consume:All value_binding str with
   | Result.Error e ->
@@ -228,7 +228,31 @@ let parse_exn str =
 ;;
 
 let print_end_parse_exn input =
-  Format.printf "@[%a@]\n%!" Pprint.pp_value_binding (parse_exn input)
+  Format.printf "@[%a@]\n%!" Pprint.pp_value_binding (parse_vb_exn input)
+;;
+
+let parse_structure str =
+  parse_string ~consume:All (many value_binding) str
+  |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
+;;
+
+let test_stru str =
+  match parse_string ~consume:All (many value_binding) str with
+  | Result.Error e -> Format.eprintf "Error: %s\n" e
+  | Ok xs -> List.iter (Format.printf "%a\n%!" Pprint.pp_value_binding) xs
+;;
+
+let%expect_test _ =
+  test_stru
+    {|
+    let mul5 x = repeat 5 (fun acc -> x) 0
+    let rec fac = fun n -> if n=1 then n else n * (fac (n-1))
+    let main x = 32
+     |};
+  [%expect {|
+    let mul5 x = repeat 5 (fun acc -> x) 0
+    let rec fac n = if n = 1 then n else n * (fac (- n 1))
+    let main x = 32 |}]
 ;;
 
 let%expect_test _ =
@@ -289,8 +313,8 @@ let%expect_test _ =
 open Format
 
 let%expect_test _ =
-  let vb1 = parse_exn {| let fresh_1 x acc = x |} in
-  let vb2 = parse_exn {| let mul5 x = repeat 5 (fresh_1 x) 0 |} in
+  let vb1 = parse_vb_exn {| let fresh_1 x acc = x |} in
+  let vb2 = parse_vb_exn {| let mul5 x = repeat 5 (fresh_1 x) 0 |} in
   printf
     "@[%a@]\n\t~~[%d value bindings]~~>\n@[<v>%a@]\n"
     Pprint.pp_value_binding
