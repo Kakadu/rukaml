@@ -1,7 +1,7 @@
 (library
  (name compile_lib)
  (libraries stdio miniml)
- (modules CConv monads compile_tests)
+ (modules CConv ANF monads compile_tests)
  (preprocess
   (pps ppx_blob ppx_expect))
  (inline_tests))
