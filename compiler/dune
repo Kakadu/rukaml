@@ -3,7 +3,7 @@
  (libraries stdio miniml)
  (modules CConv ANF monads compile_tests)
  (preprocess
-  (pps ppx_blob ppx_expect))
+  (pps ppx_blob ppx_expect ppx_show))
  (inline_tests))
 
 (executable
