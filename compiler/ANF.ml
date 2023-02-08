@@ -5,6 +5,18 @@ open Typedtree
 
 let failwiths ppf = Format.kasprintf failwith ppf
 
+(*     <aexp> ::= NUMBER | STRING | VAR | BOOLEAN | PRIMOP
+            |  (lambda (VAR ...) <exp>)
+
+    <cexp> ::= (<aexp> <aexp> ...)
+            |  (if <aexp> <exp> <exp>)
+
+    <exp>  ::= (let ([VAR <cexp>]) <exp>)
+            |  <cexp>
+            |  <aexp>
+
+ *)
+
 type a_expr =
   | AConst of int
   | AVar of string
@@ -195,7 +207,7 @@ end = struct
   let ( >>= ) : 'a t -> ('a -> 'b t) -> 'b t =
    fun x f ->
     (* TODO(Kakadu): Do I lose tailrec here ? *)
-    Simple_reader.( >>= ) x (fun c -> c |> Cont.run_cont (fun a -> f a))
+    Simple_reader.( >>= ) x (Cont.run_cont f)
  ;;
 
   let ( >>| ) : 'a t -> ('a -> 'b) -> 'b t =
@@ -243,13 +255,12 @@ let rec expr_to_atomic exp k : expr M.t =
 ;;
 
 let rec normalize : Typedtree.expr -> rez M.t =
- fun m ->
+  let open M in
   let open M.Syntax in
-  let return_a x = M.return (`A x) in
   let return_c x = M.return (`C x) in
   let return_e x = M.return (`E x) in
   let alam name b = `A (ALam (name, b)) in
-  match m with
+  function
   | TConst n -> return (`A (AConst n))
   | TLam (name, body, _) ->
     let* b = normalize body in
@@ -259,9 +270,7 @@ let rec normalize : Typedtree.expr -> rez M.t =
     let* th = normalize th in
     let* el = normalize el in
     (match cond with
-     | `A cond ->
-       let anf = CIte (cond, expr_of_rez th, expr_of_rez el) in
-       return (`C anf)
+     | `A cond -> return_c @@ CIte (cond, expr_of_rez th, expr_of_rez el)
      | `C cond ->
        let* name = M.gensym in
        let ident = string_of_int name in
@@ -281,70 +290,47 @@ let rec normalize : Typedtree.expr -> rez M.t =
   | TApp (l, r, _) ->
     let* l = normalize l in
     let* r = normalize r in
+    let complex_to_atomic2 expr k =
+      let* pref1, l = complex_to_atomic expr in
+      let* (init : expr) = k l in
+      let (_ : (string * c_expr) list) = pref1 in
+      List.fold_right
+        (fun (name, rhs) acc -> ELet (NonRecursive, name, rhs, acc))
+        pref1
+        init
+      |> return
+    in
     (match l, r with
      | `A l, `A r -> return_c (CApp (l, r))
      | `A l, `C r ->
-       let* pref2, r = complex_to_atomic r in
-       let init = EComplex (CApp (l, r)) in
-       List.fold_right
-         (fun (name, rhs) acc -> ELet (NonRecursive, name, rhs, acc))
-         pref2
-         init
-       |> return_e
+       complex_to_atomic2 r (fun r -> return @@ EComplex (CApp (l, r))) >>= return_e
      | `C l, `A r ->
-       let* pref1, l = complex_to_atomic l in
-       let init = EComplex (CApp (l, r)) in
-       List.fold_right
-         (fun (name, rhs) acc -> ELet (NonRecursive, name, rhs, acc))
-         pref1
-         init
-       |> return_e
+       complex_to_atomic2 l (fun l -> return @@ EComplex (CApp (l, r))) >>= return_e
      | `C l, `C r ->
-       let* pref1, l = complex_to_atomic l in
-       let* pref2, r = complex_to_atomic r in
-       let init = EComplex (CApp (l, r)) in
-       List.fold_right
-         (fun (name, rhs) acc -> ELet (NonRecursive, name, rhs, acc))
-         (List.append pref1 pref2)
-         init
-       |> return_e
+       complex_to_atomic2 l (fun l ->
+         complex_to_atomic2 r (fun r -> return @@ EComplex (CApp (l, r))))
+       >>= return_e
+     | `E l, `C r ->
+       complex_to_atomic2 r (fun r ->
+         expr_to_atomic l (fun l -> return @@ EComplex (CApp (l, r))))
+       >>= return_e
      | `C l, `E r ->
-       let* pref1, l = complex_to_atomic l in
-       let* init = expr_to_atomic r (fun r -> return @@ EComplex (CApp (l, r))) in
-       List.fold_right
-         (fun (name, rhs) acc -> ELet (NonRecursive, name, rhs, acc))
-         pref1
-         init
-       |> return_e
+       complex_to_atomic2 l (fun l ->
+         expr_to_atomic r (fun r -> return @@ EComplex (CApp (l, r))))
+       >>= return_e
      | `E l, `A r ->
-       let* rez = expr_to_atomic l (fun l -> return @@ EComplex (CApp (l, r))) in
-       return_e rez
+       expr_to_atomic l (fun l -> return @@ EComplex (CApp (l, r))) >>= return_e
      | `A l, `E r ->
-       let* r = expr_to_atomic r (fun r -> return @@ EComplex (CApp (l, r))) in
-       return_e r
+       expr_to_atomic r (fun r -> return @@ EComplex (CApp (l, r))) >>= return_e
      | `E l, `E r ->
-       let* r =
-         expr_to_atomic l (fun l ->
-           let* e = expr_to_atomic r (fun r -> return @@ EComplex (CApp (l, r))) in
-           return e)
-       in
-       return_e r)
+       expr_to_atomic l (fun l ->
+         let* e = expr_to_atomic r (fun r -> return @@ EComplex (CApp (l, r))) in
+         return e)
+       >>= return_e)
   | s -> failwiths "Not supported: %a" Typedtree.pp_hum s
 ;;
 
 let normalize_term t = M.run (normalize t) 0 Fun.id |> expr_of_rez
-
-(*     <aexp> ::= NUMBER | STRING | VAR | BOOLEAN | PRIMOP
-            |  (lambda (VAR ...) <exp>)
-
-    <cexp> ::= (<aexp> <aexp> ...)
-            |  (if <aexp> <exp> <exp>)
-
-    <exp>  ::= (let ([VAR <cexp>]) <exp>)
-            |  <cexp>
-            |  <aexp>
-
- *)
 
 let%expect_test " " =
   let text = {| let rec fac = fun n -> if n=0 then 1 else n * (fac (n-1))|} in
@@ -355,7 +341,8 @@ let%expect_test " " =
    Format.printf "%a\n%!" pp_expr anf;
    Result.Ok ())
   |> ignore;
-  [%expect "
+  [%expect
+    {|
     (fun n -> let v/0 = (= n) in
               let v/5 = (v/0 0) in
               if v/5
@@ -364,5 +351,5 @@ let%expect_test " " =
                      let v/1 = (- n) in
                      let v/2 = (v/1 1) in
                      let v/4 = (fac v/2) in
-                     (v/3 v/4))"]
+                     (v/3 v/4)) |}]
 ;;
