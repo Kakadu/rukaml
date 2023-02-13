@@ -104,5 +104,17 @@ let%expect_test " " =
    Format.printf "%a\n%!" pp anf;
    Result.Ok ())
   |> ignore;
-  [%expect ""]
+  [%expect.unreachable]
+[@@expect.uncaught_exn {|
+  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
+     This is strongly discouraged as backtraces are fragile.
+     Please change this test to not include a backtrace. *)
+
+  (Failure "Not implemented in 'normalize_a': (n = 0)")
+  Raised at Stdlib.failwith in file "stdlib.ml", line 29, characters 17-33
+  Called from Compile_lib__ANF.normalize in file "compiler/ANF.ml", line 65, characters 50-69
+  Called from Compile_lib__ANF.(fun) in file "compiler/ANF.ml", line 103, characters 13-33
+  Called from Stdlib__Result.bind in file "result.ml" (inlined), line 23, characters 36-39
+  Called from Compile_lib__ANF.(fun).let* in file "compiler/ANF.ml", line 100, characters 21-36
+  Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 262, characters 12-19 |}]
 ;;

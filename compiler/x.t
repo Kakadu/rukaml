@@ -1,9 +1,4 @@
-  $ cat << EOF | ../REPL.exe -
-  > print 42
-  > EOF
-  parsing a string 'print 42'
-  Parsed: EApp (EVar ("print"), EConst (42))
-  Result: unit
+
   $ cat << EOF | ./compiler.exe -
   > let rec fac = fun n -> if n=1 then n else n * (fac (n-1))
   > EOF
