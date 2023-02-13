@@ -102,3 +102,11 @@ let rec pp_typ ppf { typ_desc } =
 let pp_scheme ppf = function
   | S (xs, t) -> fprintf ppf "forall %a . %a" Var_set.pp xs pp_typ t
 ;;
+
+let pp_stru ppf vbs =
+  open_vbox 0;
+  List.iter (fprintf ppf "@[%a@]" pp_value_binding) vbs;
+  close_box ()
+;;
+
+let structure = pp_stru

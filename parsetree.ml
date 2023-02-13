@@ -36,6 +36,8 @@ let elt a b = eapp (evar "<") [ a; b ]
 let egt a b = eapp (evar ">") [ a; b ]
 
 type value_binding = rec_flag * pattern * expr
+type structure_item = value_binding
+type structure = structure_item list
 
 let group_lams body =
   let rec helper acc = function

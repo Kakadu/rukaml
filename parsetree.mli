@@ -25,6 +25,8 @@ type expr =
   | ELet of rec_flag * pattern * expr * expr (** let rec? .. = ... in ...  *)
 
 type value_binding = rec_flag * pattern * expr
+type structure_item = value_binding
+type structure = structure_item list
 
 (* val pp_value_binding : Format.formatter -> value_binding -> unit *)
 val pp_expr : Format.formatter -> expr -> unit

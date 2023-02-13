@@ -1,7 +1,10 @@
+val set_logging : bool -> unit
+
 type dispatch =
   { prio : dispatch -> Parsetree.expr Angstrom.t
-  ; expr : dispatch -> Parsetree.expr Angstrom.t
+  ; expr_basic : dispatch -> Parsetree.expr Angstrom.t
   ; expr_long : dispatch -> Parsetree.expr Angstrom.t
+  ; expr : dispatch -> Parsetree.expr Angstrom.t
   }
 
 val is_digit : char -> bool
@@ -31,12 +34,14 @@ val letdef0
      Angstrom.t
      Angstrom.t
 
+val value_binding : Parsetree.value_binding Angstrom.t
 val pack : dispatch
-val parse_pack : (dispatch -> 'a Angstrom.t) -> string -> ('a, string) result
+val structure : Parsetree.value_binding list Angstrom.t
 
 type error = [ `Parse_error of string ]
 
 val pp_error : Format.formatter -> error -> unit
 val parse : string -> (Parsetree.expr, [> error ]) result
+val parse_pack : (dispatch -> 'a Angstrom.t) -> string -> ('a, string) result
 val parse_vb_exn : string -> Parsetree.value_binding
 val parse_structure : string -> (Parsetree.value_binding list, [> error ]) result

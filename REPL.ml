@@ -4,16 +4,19 @@ open Format
 open Miniml
 
 let run_single text =
-  let ast = Parsing.parse text in
+  let ast = Parsing.parse_structure text in
   match ast with
   | Error s -> Format.printf "Error: %a\n%!" Parsing.pp_error s
   | Result.Ok ast ->
-    Format.printf "Parsed: %a\n%!" Parsetree.pp_expr ast;
-    (match Inferencer.w ast with
-    | Result.Ok ty ->
-      Format.printf "Result: %a\n%!" Pprint.pp_typ (Typedtree.type_of_expr ty)
-    (* Format.printf "%a\n%!" Typedtree.pp_expr ty *)
-    | Result.Error e -> Format.printf "Error: %a" Inferencer.pp_error e)
+    Format.printf "Parsed: %a\n%!" Pprint.pp_stru ast;
+    (match Inferencer.structure ast with
+     | Result.Ok ty ->
+       Format.printf "Result:%!";
+       Format.printf "@[<v>@ ";
+       List.iter ~f:(Format.printf "@[%a@]@ " Typedtree.pp_vb_hum) ty;
+       Format.printf "@]\n%!"
+     (* Format.printf "%a\n%!" Typedtree.pp_expr ty *)
+     | Result.Error e -> Format.printf "Error: %a" Inferencer.pp_error e)
 ;;
 
 let run_repl =

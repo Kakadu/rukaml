@@ -57,6 +57,9 @@ type value_binding =
   ; tvb_typ : scheme
   }
 
+type structure_item = value_binding
+type structure = structure_item list
+
 val value_binding
   :  Parsetree.rec_flag
   -> Parsetree.pattern
@@ -74,3 +77,4 @@ val pp_binder_set : Format.formatter -> binder_set -> unit
 val show_binder_set : binder_set -> string
 val pp_binder : Format.formatter -> binder -> unit
 val show_binder : binder -> string
+val pp_stru : Format.formatter -> structure -> unit

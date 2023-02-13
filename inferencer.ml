@@ -393,3 +393,22 @@ let vb ?(env = start_env) (flg, Parsetree.PVar name, body) =
   |> Result.map ~f:(fun (ty, body) ->
        value_binding flg (PVar name) body (generalize env ty))
 ;;
+
+let structure ?(env = start_env) stru =
+  let ( let* ) = Result.( >>= ) in
+  let return = Result.return in
+  let* new_env, items =
+    List.fold_left
+      stru
+      ~init:(return (env, []))
+      ~f:(fun acc item ->
+        let* env, acc = acc in
+        let* new_item = vb ~env item in
+        let env : TypeEnv.t =
+          match new_item.Typedtree.tvb_pat with
+          | Parsetree.PVar name -> TypeEnv.extend env (name, new_item.Typedtree.tvb_typ)
+        in
+        return (env, new_item :: acc))
+  in
+  return (List.rev items)
+;;

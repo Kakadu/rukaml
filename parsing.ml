@@ -1,10 +1,13 @@
 open Angstrom
 open Parsetree
 
-let use_logging = false
+type cfg = { mutable use_logging : bool }
+
+let cfg = { use_logging = false }
+let set_logging flg = cfg.use_logging <- flg
 
 let log fmt =
-  if use_logging
+  if cfg.use_logging
   then Format.kasprintf (fun s -> Format.printf "%s\n%!" s) fmt
   else Format.ifprintf Format.std_formatter fmt
 ;;
@@ -22,7 +25,7 @@ let ws =
 let trace_pos msg =
   let* n = pos in
   let _ = msg, n in
-  (* log "`%s` on pos %d" msg n; *)
+  log "`%s` on pos %d" msg n;
   return ()
 ;;
 
@@ -40,8 +43,9 @@ let const = char '0' >>= fun c -> return (Printf.sprintf "%c" c)
 
 type dispatch =
   { prio : dispatch -> expr t
-  ; expr : dispatch -> expr t
+  ; expr_basic : dispatch -> expr t
   ; expr_long : dispatch -> expr t
+  ; expr : dispatch -> expr t
   }
 
 let is_digit = function
@@ -106,12 +110,16 @@ let pattern =
   x
 ;;
 
+let failf fmt = Format.kasprintf fail fmt
+
 let keyword kwd =
   ws
   *> string kwd
   *> let* c = peek_char_fail in
      if is_alpha c || is_digit c
-     then fail "not a keyword"
+     then
+       let* p = pos in
+       failf "input is not a keyword '%s', pos = %d" kwd p
      else ws *> return (log "keyword '%s' parsed" kwd)
 ;;
 
@@ -138,10 +146,13 @@ let prio expr table =
 
 let letdef erhs =
   return (fun isrec name ps rhs -> isrec, name, List.fold_right elam ps rhs)
-  <*> (keyword "let" *> option NonRecursive (keyword "rec" >>| fun _ -> Recursive) <* ws)
+  <*> (trace_pos "let"
+       *> keyword "let"
+       *> option NonRecursive (keyword "rec" >>| fun _ -> Recursive)
+      <* ws)
   <*> pattern
   <*> many pattern
-  <*> ws *> keyword "=" *> ws *> erhs
+  <*> ws *> string "=" *> ws *> erhs
 ;;
 
 (* The equivalent of [letdef] *)
@@ -156,6 +167,7 @@ let letdef0 erhs =
 ;;
 
 let pack : dispatch =
+  let open Format in
   let prio d =
     prio
       (d.expr_long d)
@@ -164,38 +176,40 @@ let pack : dispatch =
        ; [ ws *> string "*", emul ]
       |]
   in
-  let expr d =
-    fix (fun _self ->
-      ws
-      *> (parens (d.prio d)
-         <|> (ws *> number >>| econst)
-         <|> (ws *> ident >>| evar)
-         <|> (keyword "fun" *> pattern
-             >>= fun p ->
-             let () = log "Got a abstraction over %a" Pprint.pp_pattern p in
-             ws *> string "->" *> ws *> d.prio d >>= fun b -> return (elam p b))
-         <|> (keyword "if" *> d.prio d
-             >>= fun cond ->
-             keyword "then" *> d.prio d
-             >>= fun th ->
-             keyword "else" *> d.prio d >>= fun el -> return (eite cond th el))
-         <|> (letdef (d.prio d)
-             >>= fun (isrec, ident, rhs) ->
-             keyword "in" *> d.prio d >>= fun in_ -> return (elet ~isrec ident rhs in_))))
+  let expr_basic d =
+    trace_pos "expr_basic"
+    *> fix (fun _self ->
+         ws
+         *> (fail ""
+            <|> ws *> (number >>| econst)
+            <* trace_pos "const parsed"
+            <|> (ws *> ident >>| evar)
+            <|> (keyword "fun" *> pattern
+                >>= fun p ->
+                (* let () = log "Got a abstraction over %a" Pprint.pp_pattern p in *)
+                ws *> string "->" *> ws *> d.prio d >>= fun b -> return (elam p b))
+            <|> (keyword "if" *> d.prio d
+                >>= fun cond ->
+                keyword "then" *> d.prio d
+                >>= fun th ->
+                keyword "else" *> d.prio d >>= fun el -> return (eite cond th el))
+            <|> (letdef (d.prio d)
+                >>= fun (isrec, ident, rhs) ->
+                keyword "in" *> d.prio d >>= fun in_ -> return (elet ~isrec ident rhs in_)
+                )))
   in
   let expr_long d =
     fix (fun _self ->
-      many (d.expr d)
-      <* ws
+      many (ws *> (d.expr_basic d <|> parens (d.prio d)) <* ws)
       >>= function
       | [] -> fail "can't parse many expressions"
       | [ h ] -> return h
       | foo :: args -> return @@ eapp foo args)
   in
-  { expr; expr_long; prio }
+  { expr_basic; expr_long; prio; expr = prio }
 ;;
 
-let value_binding = letdef (pack.expr_long pack) <* ws
+let value_binding = letdef (pack.expr pack) <* ws
 let parse_pack p str = parse_string ~consume:All (p pack) str
 
 type error = [ `Parse_error of string ]
@@ -207,6 +221,14 @@ let pp_error ppf = function
 let parse str =
   Caml.Format.printf "parsing a string '%s'\n%!" str;
   Result.map_error (fun x -> `Parse_error x) (parse_pack pack.prio str)
+;;
+
+let wrap_parse_exn parser printer str =
+  match parse_string ~consume:All parser str with
+  | Result.Error e ->
+    Format.eprintf "Error: %s\n" e;
+    failwith "Error during parsing"
+  | Ok r -> Format.printf "@[%a@]\n%!" printer r
 ;;
 
 let parse_expr_exn str =
@@ -231,8 +253,10 @@ let print_end_parse_exn input =
   Format.printf "@[%a@]\n%!" Pprint.pp_value_binding (parse_vb_exn input)
 ;;
 
+let structure = many value_binding
+
 let parse_structure str =
-  parse_string ~consume:All (many value_binding) str
+  parse_string ~consume:All structure str
   |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
 ;;
 
@@ -246,10 +270,11 @@ let%expect_test _ =
   test_stru
     {|
     let mul5 x = repeat 5 (fun acc -> x) 0
-    let rec fac = fun n -> if n=1 then n else n * (fac (n-1))
+    let rec fac n = if n = 1 then n else n * (fac (n - 1))
     let main x = 32
      |};
-  [%expect {|
+  [%expect
+    {|
     let mul5 x = repeat 5 (fun acc -> x) 0
     let rec fac n = if n = 1 then n else n * (fac (- n 1))
     let main x = 32 |}]
@@ -260,6 +285,16 @@ let%expect_test _ =
      |};
   [%expect {|
     let mul5 x = repeat 5 (fun acc -> x) 0 |}]
+;;
+
+let%expect_test _ =
+  wrap_parse_exn (pack.expr pack) Pprint.pp_expr {|5+1|};
+  [%expect {| (5 + 1) |}]
+;;
+
+let%expect_test _ =
+  print_end_parse_exn {|let mul5 = 5+1 |};
+  [%expect {| let mul5 = 5 + 1 |}]
 ;;
 
 let%expect_test _ =

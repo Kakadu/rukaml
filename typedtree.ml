@@ -116,6 +116,9 @@ type value_binding =
   ; tvb_typ : scheme
   }
 
+type structure_item = value_binding
+type structure = structure_item list
+
 let value_binding tvb_flag tvb_pat tvb_body tvb_typ =
   { tvb_flag; tvb_pat; tvb_body; tvb_typ }
 ;;
@@ -138,4 +141,10 @@ let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
      | S (_, typ) -> typ)
     pp_hum
     tvb_body
+;;
+
+let pp_stru ppf stru =
+  Format.open_vbox 0;
+  Format.pp_print_list pp_vb_hum ppf stru;
+  Format.close_box ()
 ;;

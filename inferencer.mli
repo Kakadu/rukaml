@@ -13,3 +13,8 @@ val vb
   :  ?env:(string * Typedtree.scheme) list
   -> Parsetree.value_binding
   -> (Typedtree.value_binding, [> error ]) Result.t
+
+val structure
+  :  ?env:(string * Typedtree.scheme) list
+  -> Parsetree.structure
+  -> (Typedtree.structure, [> error ]) Result.t
