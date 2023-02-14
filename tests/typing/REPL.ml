@@ -7,7 +7,7 @@ let run_single parser pp pp_err text =
   let ast = Angstrom.parse_string ~consume:All parser text in
   match ast with
   | Error s -> printf "Error: %a\n%!" pp_err s
-  | Result.Ok ast -> printf "Parsed.@,%a%!" pp ast
+  | Result.Ok ast -> printf "@[<v>Parsed.@ @[%a@]@]" pp ast
 ;;
 
 type mode =

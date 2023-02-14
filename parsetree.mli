@@ -22,6 +22,7 @@ type expr =
   | EIf of expr * expr * expr (** if ... then ... else ... *)
   | ELam of pattern * expr (** fun ... -> ... *)
   | EApp of expr * expr (** Application f x *)
+  | ETuple of expr * expr * expr list
   | ELet of rec_flag * pattern * expr * expr (** let rec? .. = ... in ...  *)
 
 type value_binding = rec_flag * pattern * expr
@@ -44,4 +45,5 @@ val esub : expr -> expr -> expr
 val eeq : expr -> expr -> expr
 val elt : expr -> expr -> expr
 val egt : expr -> expr -> expr
+val etuple : expr -> expr -> expr list -> expr
 val group_lams : expr -> string list * expr

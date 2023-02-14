@@ -182,7 +182,11 @@ let pack : dispatch =
          ws
          *> (fail ""
             <|> ws *> (number >>| econst)
-            <* trace_pos "const parsed"
+            <|> parens
+                  (return (fun a b xs -> etuple a b xs)
+                  <*> (d.expr d <* ws)
+                  <*> (string "," *> d.expr d <* ws)
+                  <*> many (string "," *> d.expr d <* ws))
             <|> (ws *> ident >>| evar)
             <|> (keyword "fun" *> pattern
                 >>= fun p ->

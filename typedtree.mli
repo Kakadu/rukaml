@@ -15,6 +15,7 @@ and type_desc =
   | V of binder
   | Arrow of ty * ty
   | TLink of ty
+  | TProd of ty * ty * ty list
 
 val pp_ty : Format.formatter -> ty -> unit
 val pp_type_desc : Format.formatter -> type_desc -> unit
@@ -29,6 +30,7 @@ val tarrow : ty -> ty -> ty
 val tprim : string -> ty
 val tv : binder -> ty
 val tlink : ty -> ty
+val tprod : ty -> ty -> ty list -> ty
 val int_typ : ty
 val bool_typ : ty
 val unit_typ : ty
@@ -39,12 +41,14 @@ val pp_pattern : Format.formatter -> pattern -> unit
 val show_pattern : pattern -> string
 
 type expr =
-  | TConst of binder
+  | TConst of binder (** Contant 42 *)
   | TVar of pattern * ty
-  | TIf of expr * expr * expr * ty
-  | TLam of pattern * expr * ty
-  | TApp of expr * expr * ty
+  | TIf of expr * expr * expr * ty (** if ... then ... else ... *)
+  | TLam of pattern * expr * ty (** fun ... -> ... *)
+  | TApp of expr * expr * ty (** Application f x *)
+  | TTuple of expr * expr * expr list * ty (** Tuple (a,b,...,_) as a tuple (a,b,...) *)
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
+      (** let rec? .. = ... in ...  *)
 
 val type_of_expr : expr -> ty
 val type_without_links : ty -> ty

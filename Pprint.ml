@@ -65,6 +65,14 @@ let rec pp_expr_helper ?(ps = true) ppf = function
     Format.fprintf ppf "@[<2>%a @]@[in @]@]" no_pars body;
     fprintf ppf "@[%a@]" no_pars in_;
     fprintf ppf "@]"
+  | ETuple (h1, h2, hs) ->
+    fprintf ppf "@[(%a, " no_pars h1;
+    Format.fprintf
+      ppf
+      "%a"
+      (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") no_pars)
+      (h2 :: hs);
+    fprintf ppf ")@]"
 
 and no_pars ppf = pp_expr_helper ~ps:false ppf
 and maybe_pars ppf = pp_expr_helper ~ps:true ppf
@@ -97,6 +105,10 @@ let rec pp_typ ppf { typ_desc } =
   | Prim s -> pp_print_string ppf s
   | Arrow (l, r) -> fprintf ppf "(%a -> %a)" pp_typ l pp_typ r
   | TLink t -> pp_typ ppf t
+  | TProd (a, b, ts) ->
+    fprintf ppf "@[(%a, %a" pp_typ a pp_typ b;
+    List.iter (fprintf ppf ", %a" pp_typ) ts;
+    fprintf ppf ")@]"
 ;;
 
 let pp_scheme ppf = function

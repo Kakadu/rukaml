@@ -19,6 +19,7 @@ and type_desc =
   | V of binder
   | Arrow of ty * ty
   | TLink of ty
+  | TProd of ty * ty * ty list
 [@@deriving show { with_path = false }]
 
 type scheme = S of binder_set * ty [@@deriving show { with_path = false }]
@@ -27,6 +28,7 @@ let tarrow l r = { typ_desc = Arrow (l, r) }
 let tprim s = { typ_desc = Prim s }
 let tv v = { typ_desc = V v }
 let tlink t = { typ_desc = TLink t }
+let tprod a b ts = { typ_desc = TProd (a, b, ts) }
 let int_typ = tprim "int"
 let bool_typ = tprim "bool"
 let unit_typ = tprim "unit"
@@ -34,18 +36,19 @@ let unit_typ = tprim "unit"
 type pattern = string [@@deriving show { with_path = false }]
 
 type expr =
-  | TConst of int (** Contant 42 *)
+  | TConst of int
   | TVar of string * ty
-  | TIf of expr * expr * expr * ty (** if ... then ... else ... *)
-  | TLam of pattern * expr * ty (** fun ... -> ... *)
-  | TApp of expr * expr * ty (** Application f x *)
+  | TIf of expr * expr * expr * ty
+  | TLam of pattern * expr * ty
+  | TApp of expr * expr * ty
+  | TTuple of expr * expr * expr list * ty
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
-      (** let rec? .. = ... in ...  *)
 [@@deriving show { with_path = false }]
 
 let rec type_of_expr = function
   | TConst _ -> int_typ
-  | TVar (_, t) | TIf (_, _, _, t) | TLam (_, _, t) | TApp (_, _, t) -> t
+  | TTuple (_, _, _, t) | TVar (_, t) | TIf (_, _, _, t) | TLam (_, _, t) | TApp (_, _, t)
+    -> t
   | TLet (_, _, _, _, wher) -> type_of_expr wher
 ;;
 
@@ -57,6 +60,7 @@ let type_without_links =
     | Prim _ | V _ -> t
     | Arrow (l, r) -> tarrow (helper l) (helper r)
     | TLink ty -> helper ty
+    | TProd (a, b, ts) -> { typ_desc = TProd (helper a, helper b, List.map helper ts) }
   in
   helper
 ;;
@@ -71,6 +75,7 @@ let compact_expr =
     | TApp (l, r, ty) -> TApp (helper l, helper r, type_without_links ty)
     | TLet (flg, pat, S (vars, ty), e1, e2) ->
       TLet (flg, pat, S (vars, type_without_links ty), helper e1, helper e2)
+    | TTuple (a, b, ts, ty) -> TTuple (helper a, helper b, List.map helper ts, ty)
   in
   helper
 ;;
@@ -83,6 +88,10 @@ let pp_typ_hum =
     | V n -> fprintf ppf "'_%d" n
     | Arrow (l, r) -> fprintf ppf "(%a -> %a)" pp_typ l pp_typ r
     | TLink ty -> pp_typ ppf ty
+    | TProd (a, b, ts) ->
+      fprintf ppf "@[(%a, %a" pp_typ a pp_typ b;
+      List.iter (fprintf ppf ", %a" pp_typ) ts;
+      fprintf ppf ")@]"
   in
   pp_typ
 ;;
@@ -104,6 +113,10 @@ let pp_hum =
       fprintf ppf "let rec %a : %a = %a in %a" pp_pat pat pp_typ ty expr rhs expr wher
     | TLet (NonRecursive, pat, S (_vars, ty), rhs, wher) ->
       fprintf ppf "@[let %a : %a = %a in@]@,%a" pp_pat pat pp_typ ty expr rhs expr wher
+    | TTuple (a, b, es, _) ->
+      fprintf ppf "@[(%a, %a" expr a expr b;
+      List.iter (fprintf ppf ", %a" expr) es;
+      fprintf ppf ")@]"
   and pp_typ = pp_typ_hum
   and pp_pat ppf s = fprintf ppf "%s" s in
   fun ppf e -> fprintf ppf "@[<v>%a@]" expr e

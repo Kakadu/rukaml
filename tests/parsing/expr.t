@@ -49,7 +49,14 @@
   > EOF
   "(fun x -> x)(fun x -> 2)(fun x -> 1)"
   Parsed: ((fun x -> x) (fun x -> 2) (fun x -> 1))
-# value binding  
+# tuples
+  $ cat << EOF | ./REPL.exe -prio -
+  > (1,2,3) + (4,5)
+  > EOF
+  "(1,2,3) + (4,5)"
+  Parsed: ((1, 2, 3) + (4, 5))
+
+# value binding
   $ cat << EOF | ./REPL.exe -vb  -
   > let main = 9
   > EOF

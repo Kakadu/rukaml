@@ -85,3 +85,9 @@
   > EOF
   "let add = fun x -> x + x\nlet add1 = add 1\nlet main = add 1"
   Parsed: let add x = x + xlet add1 = add 1let main = add 1
+
+  $ cat << EOF | ./REPL.exe  -stru -
+  > let double = fun x -> (x, x)
+  > EOF
+  "let double = fun x -> (x, x)"
+  Parsed: let double x = (x, x)

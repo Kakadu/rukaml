@@ -13,6 +13,7 @@ type expr =
   | EIf of expr * expr * expr
   | ELam of pattern * expr
   | EApp of expr * expr
+  | ETuple of expr * expr * expr list
   | ELet of rec_flag * pattern * expr * expr
 [@@deriving show { with_path = false }]
 
@@ -20,6 +21,7 @@ let econst n = EConst n
 let evar s = EVar s
 let elam v body = ELam (v, body)
 let eapp1 f x = EApp (f, x)
+let etuple a b xs = ETuple (a, b, xs)
 
 let eapp f = function
   | [] -> f

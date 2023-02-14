@@ -45,6 +45,8 @@ module R : sig
 
   (** Running a transformer: getting the inner result value *)
   val run : 'a t -> ('a, error) Result.t
+
+  val list_foldm : f:('a -> 'b -> 'a t) -> init:'a t -> 'b list -> 'a t
 end = struct
   (* A compositon: State monad after Result monad *)
   type 'a t = int -> int * ('a, error) Result.t
@@ -75,6 +77,15 @@ end = struct
 
   let fresh : int t = fun last -> last + 1, Result.Ok last
   let run m = snd (m 0)
+
+  let rec list_foldm ~f ~init xs =
+    let open Syntax in
+    match xs with
+    | [] -> init
+    | h :: tl ->
+      let* acc = init in
+      list_foldm ~f ~init:(f acc h) tl
+  ;;
 end
 
 type fresh = int
@@ -166,6 +177,11 @@ module Type = struct
     match typ_desc with
     | V b -> b = v
     | Arrow (l, r) -> occurs_in v l || occurs_in v r
+    | TProd (a, b, ts) ->
+      List.fold_left
+        ~f:(fun acc t -> acc || occurs_in v t)
+        ~init:(occurs_in v a || occurs_in v b)
+        ts
     | TLink t -> occurs_in v t
     | Prim _ -> false
   ;;
@@ -177,6 +193,7 @@ module Type = struct
       | V b -> Var_set.add b acc
       | TLink t -> helper acc t
       | Arrow (l, r) -> helper (helper acc l) r
+      | TProd (a, b, ts) -> List.fold_left ts ~init:(helper (helper acc a) b) ~f:helper
     in
     helper Var_set.empty
   ;;
@@ -333,6 +350,20 @@ let infer =
       let* () = unify t1 bool_typ in
       let* () = unify t2 t3 in
       R.return (t2, TIf (tc, tth, tel, t2))
+    | ETuple (a, b, es) ->
+      (* fold_left *)
+      let* ta, ea = helper env a in
+      let* tb, eb = helper env b in
+      let* typs, exprs =
+        list_foldm
+          ~init:(return ([], []))
+          ~f:(fun (typs, exprs) e ->
+            let* t1, e1 = helper env e in
+            return (t1 :: typs, e1 :: exprs))
+          es
+      in
+      let tup_typ = tprod ta tb typs in
+      return (tup_typ, TTuple (ea, eb, exprs, tup_typ))
     | Parsetree.ELet (NonRecursive, PVar x, rhs, e2) ->
       let* t1, trhs = helper env rhs in
       (* log "letrec t1 = %a" pp_ty t1; *)
