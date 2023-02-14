@@ -9,7 +9,21 @@ let run_single parser pp pp_err text =
   | Error s -> Format.printf "Error: %a\n%!" pp_err s
   | Result.Ok stru ->
     Format.printf "Parsed: %a\n%!" pp stru;
-    let stru = List.concat_map ~f:CConv.conv stru in
+    let stru =
+      let init = CConv.standart_globals, [] in
+      Stdlib.ListLabels.fold_left
+        (stru : Parsetree.structure)
+        ~init
+        ~f:(fun (glob, ans) stru ->
+          let new_strus = CConv.conv ~standart_globals:glob stru in
+          let new_glob =
+            List.fold_left ~init:glob new_strus ~f:(fun acc -> function
+              | _, PVar s, _ -> CConv.String_set.add s acc
+              | _, PTuple _, _ -> acc)
+          in
+          new_glob, List.append ans new_strus)
+      |> snd
+    in
     Format.printf "After CCovv.\n%!";
     Format.printf "%a\n%!" pp stru;
     ()
@@ -20,22 +34,24 @@ type mode = Stru
 type opts =
   { mutable batch : bool
   ; mutable mode : mode
-  ; mutable log : bool
+  ; mutable log_cc : bool
+  ; mutable log_parsing : bool
   }
 
 let () =
-  let opts = { batch = false; mode = Stru; log = false } in
-  let mode_arg v = Caml.Arg.Unit (fun () -> opts.mode <- v) in
+  let opts = { batch = false; mode = Stru; log_cc = false; log_parsing = false } in
   Caml.Arg.parse
     [ "-", Caml.Arg.Unit (fun () -> opts.batch <- true), " read from stdin"
-    ; "-v", Caml.Arg.Unit (fun () -> opts.log <- true), " verbose logging"
-    ; "-stru", mode_arg Stru, " structure"
+    ; "-vcc", Caml.Arg.Unit (fun () -> opts.log_cc <- true), " verbose logging of CC"
+    ; ( "-vp"
+      , Caml.Arg.Unit (fun () -> opts.log_parsing <- true)
+      , " verbose logging of parsing" )
     ]
     (fun _ -> assert false)
     "TODO";
-  Parsing.set_logging opts.log;
+  Parsing.set_logging opts.log_parsing;
+  CConv.set_logging opts.log_cc;
   let s = Stdio.In_channel.(input_all stdin) |> String.rstrip in
-  (* Format.printf "%S\n%!" s; *)
   (match opts.mode with
    | Stru -> run_single Parsing.structure Pprint.structure Format.pp_print_string)
     s

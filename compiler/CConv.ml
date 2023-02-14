@@ -91,7 +91,6 @@ let rec subst x ~by:v =
 ;;
 
 let without set ~other = String_set.diff set other
-(* String_set.fold (fun x acc -> String_set.remove x acc) other set *)
 
 let%expect_test " " =
   let left = String_set.of_list [ "a"; "b"; "c" ] in
@@ -120,7 +119,7 @@ let conv ?(standart_globals = standart_globals)
   let classify globals local_args expr =
     let fvs = free_vars_of_expr expr in
     log "free vars inside `%a` are:\n%a\n%!" Pprint.pp_expr expr SS.pp fvs;
-    let vars = without fvs ~other:(String_set.union local_args globals) in
+    let vars = without fvs ~other:(String_set.union local_args standart_globals) in
     if String_set.cardinal vars = 0 then None else Some vars
   in
   let open Parsetree in
@@ -143,6 +142,7 @@ let conv ?(standart_globals = standart_globals)
       helper globals body *)
     | EApp (l, r) -> return eapp1 <*> helper globals l <*> helper globals r
     | ELam (PVar _, _) ->
+      log "Got ELam _: globals = %a" SS.pp globals;
       (match sugarize_let root_expr with
        | args, rhs ->
          (match classify globals (SS.of_list args) rhs with

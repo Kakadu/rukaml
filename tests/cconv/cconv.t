@@ -10,8 +10,11 @@
   Parsed: let main f = (fun x -> f (fun v -> x x v)) (fun x -> f (fun v ->
                                                                   x x v))
   After CCovv.
-  let fresh_2 f x = f (fun v -> x x v)
-  let fresh_1 f x = f (fun v -> x x v) let main f = fresh_2 f (fresh_1 f)
+  let fresh_4 x v = x x v
+  let fresh_3 f x = f (fresh_4 x)
+  let fresh_2 x v = x x v
+  let fresh_1 f x = f (fresh_2 x)
+  let main f = fresh_3 f (fresh_1 f)
   $ cat << EOF | ./REPL.exe -
   > let rec f = fun n -> f
   > EOF
@@ -35,6 +38,21 @@
   After CCovv.
   let fresh_1 n k m = k (n * m)
   let rec fack n k = if n = 1 then k 1 else fack (- n 1) (fresh_1 n k)
+  $ cat << EOF | ./REPL.exe -
+  > let id x = x
+  > let rec fibk n k =
+  >  if n<1 then k 1 else fibk (n-1) (fun p -> fibk (fun q -> k (p + q)))
+  > EOF
+  Parsed: let id x = x
+          let rec fibk n k = if n < 1 then k 1 else fibk (- n 1) (fun p ->
+                                                                  fibk 
+                                                                  (fun q ->
+                                                                   k (p + q)))
+  After CCovv.
+  let id x = x
+  let fresh_2 p k q = k (p + q)
+  let fresh_1 k fibk p = fibk (fresh_2 p k)
+  let rec fibk n k = if n < 1 then k 1 else fibk (- n 1) (fresh_1 k fibk)
 #next one looks buggy
   $ cat << EOF | ./REPL.exe -
   > let rec fibk n k =
@@ -46,6 +64,6 @@
                                                                   (fun q ->
                                                                    k (p + q)))
   After CCovv.
-  let fresh_2 k q = k (p + q)
-  let fresh_1 n k p = fibk (- n 2) (fresh_2 k)
-  let rec fibk n k = if n < 1 then k 1 else fibk (- n 1) (fresh_1 n k)
+  let fresh_2 p k q = k (p + q)
+  let fresh_1 n k fibk p = fibk (- n 2) (fresh_2 p k)
+  let rec fibk n k = if n < 1 then k 1 else fibk (- n 1) (fresh_1 n k fibk)
