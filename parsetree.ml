@@ -1,4 +1,7 @@
-type pattern = PVar of string [@@deriving show { with_path = false }]
+type pattern =
+  | PVar of string
+  | PTuple of pattern * pattern * pattern list
+[@@deriving show { with_path = false }]
 
 let pvar s = PVar s
 

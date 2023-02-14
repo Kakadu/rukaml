@@ -26,6 +26,7 @@ type mode =
   | E
   | VB
   | Stru
+  | Pat
 
 type opts =
   { mutable batch : bool
@@ -35,14 +36,16 @@ type opts =
 
 let () =
   let opts = { batch = false; mode = VB; log = false } in
+  let mode_arg v = Caml.Arg.Unit (fun () -> opts.mode <- v) in
   Caml.Arg.parse
     [ "-", Caml.Arg.Unit (fun () -> opts.batch <- true), " read from stdin"
-    ; "-long", Caml.Arg.Unit (fun () -> opts.mode <- ELong), " long"
-    ; "-prio", Caml.Arg.Unit (fun () -> opts.mode <- Eprio), " prio"
-    ; "-e", Caml.Arg.Unit (fun () -> opts.mode <- E), " basic expr"
-    ; "-vb", Caml.Arg.Unit (fun () -> opts.mode <- VB), " value binding"
-    ; "-stru", Caml.Arg.Unit (fun () -> opts.mode <- Stru), " structure"
     ; "-v", Caml.Arg.Unit (fun () -> opts.log <- true), " verbose logging"
+    ; "-long", mode_arg ELong, " long"
+    ; "-prio", mode_arg Eprio, " prio"
+    ; "-e", mode_arg E, " basic expr"
+    ; "-vb", mode_arg VB, " value binding"
+    ; "-stru", mode_arg Stru, " structure"
+    ; "-pat", mode_arg Pat, " pattern"
     ]
     (fun _ -> assert false)
     "TODO";
@@ -56,6 +59,7 @@ let () =
    | Eprio -> run_single Parsing.(pack.prio pack) Pprint.pp_expr Format.pp_print_string
    | VB ->
      run_single Parsing.(value_binding) Pprint.pp_value_binding Format.pp_print_string
+   | Pat -> run_single Parsing.pattern Pprint.pp_pattern pp_print_string
    | Stru -> run_single Parsing.structure Pprint.structure Format.pp_print_string)
     s
 ;;

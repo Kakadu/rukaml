@@ -17,6 +17,14 @@ let group_applications l r =
   loop [ r ] l
 ;;
 
+let rec pp_pattern ppf = function
+  | Parsetree.PVar s -> fprintf ppf "%s" s
+  | PTuple (pa, pb, ps) ->
+    fprintf ppf "@[(%a" pp_pattern pa;
+    List.iter (fprintf ppf ", %a" pp_pattern) (pb :: ps);
+    fprintf ppf ")@]"
+;;
+
 let rec pp_expr_helper ?(ps = true) ppf = function
   | EConst n -> fprintf ppf "%d" n
   | EIf (c, th, el) ->
@@ -51,14 +59,15 @@ let rec pp_expr_helper ?(ps = true) ppf = function
       fprintf ppf "@]"
     in
     if ps then fprintf ppf "(%a)" lam_itself grouped else lam_itself ppf grouped
-  | ELam (PVar name, e) -> fprintf ppf "@[(fun %s ->@[ %a@])" name no_pars e
-  | ELet (flg, PVar name, body, in_) ->
+  | ELam (pat, e) -> fprintf ppf "@[(fun %a ->@[ %a@])" pp_pattern pat no_pars e
+  | ELet (Recursive, PTuple _, _, _) -> failwith "Should not be representable in types"
+  | ELet (flg, pat, body, in_) ->
     let rec_ =
       match flg with
       | Recursive -> "rec "
       | _ -> ""
     in
-    fprintf ppf "@[<v>@[<hv>@[let %s%s " rec_ name;
+    fprintf ppf "@[<v>@[<hv>@[let %s%a " rec_ pp_pattern pat;
     let args, body = group_lams body in
     List.iter (fprintf ppf "%s ") args;
     fprintf ppf "= @]";
@@ -78,10 +87,6 @@ and no_pars ppf = pp_expr_helper ~ps:false ppf
 and maybe_pars ppf = pp_expr_helper ~ps:true ppf
 
 let pp_expr = pp_expr_helper ~ps:true
-
-let pp_pattern ppf = function
-  | Parsetree.PVar s -> fprintf ppf "%s" s
-;;
 
 let pp_value_binding ppf (is_rec, pat, rhs) =
   let () =
@@ -116,8 +121,13 @@ let pp_scheme ppf = function
 ;;
 
 let pp_stru ppf vbs =
+  let open Format in
   open_vbox 0;
-  List.iter (fprintf ppf "@[%a@]" pp_value_binding) vbs;
+  pp_print_list
+    ~pp_sep:(fun ppf () -> fprintf ppf "@ ")
+    (fun ppf -> fprintf ppf "@[%a@]" pp_value_binding)
+    ppf
+    vbs;
   close_box ()
 ;;
 

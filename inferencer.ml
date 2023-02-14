@@ -275,7 +275,21 @@ let unify l r =
     | Arrow (l1, r1), Arrow (l2, r2) ->
       let* () = helper l1 l2 in
       helper r1 r2
-    | Arrow _, Prim _ | Prim _, Arrow _ -> fail (`UnificationFailed (l, r))
+    | TProd (a1, b1, ts1), TProd (a2, b2, ts2) ->
+      let* () = helper a1 a2 in
+      let* () = helper b1 b2 in
+      if List.length ts1 = List.length ts2
+      then
+        List.fold2_exn ts1 ts2 ~init:(return ()) ~f:(fun acc l r ->
+          let* () = acc in
+          helper l r)
+      else fail (`UnificationFailed (l, r))
+    | TProd _, Arrow _
+    | Arrow _, TProd _
+    | TProd _, Prim _
+    | Prim _, TProd _
+    | Arrow _, Prim _
+    | Prim _, Arrow _ -> fail (`UnificationFailed (l, r))
   in
   helper l r
 ;;

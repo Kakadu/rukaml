@@ -12,15 +12,15 @@ let log fmt =
   else Format.ifprintf Format.std_formatter fmt
 ;;
 
-let pp_list f ppf xs =
-  Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf " ") f ppf xs
-;;
+let pp_list eta = Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf " ") eta
 
 let ws =
   skip_while (function
     | '\x20' | '\x0a' | '\x0d' | '\x09' -> true
     | _ -> false)
 ;;
+
+let failf fmt = Format.kasprintf fail fmt
 
 let trace_pos msg =
   let* n = pos in
@@ -103,14 +103,19 @@ let ident =
 let string s = trace_pos (Format.sprintf "string `%s`" s) *> string s
 
 let pattern =
-  ws *> ident
-  >>| pvar
-  >>| fun x ->
-  log "pattern %a parsed" Pprint.pp_pattern x;
-  x
+  fix (fun pattern ->
+    fail ""
+    <|> parens
+          (return (fun a b ps -> PTuple (a, b, ps))
+          <*> pattern
+          <*> string "," *> ws *> pattern
+          <*> many (string "," *> ws *> pattern))
+    <|> (ws *> ident >>= fun v -> return (pvar v) <* trace_pos v))
 ;;
 
-let failf fmt = Format.kasprintf fail fmt
+(* >>| fun x ->
+  log "pattern %a parsed" Pprint.pp_pattern x;
+  x *)
 
 let keyword kwd =
   ws
@@ -151,7 +156,7 @@ let letdef erhs =
        *> option NonRecursive (keyword "rec" >>| fun _ -> Recursive)
       <* ws)
   <*> pattern
-  <*> many pattern
+  <*> many (ws *> pattern)
   <*> ws *> string "=" *> ws *> erhs
 ;;
 
@@ -161,6 +166,7 @@ let letdef0 erhs =
     keyword "let" *> option NonRecursive (keyword "rec" >>| fun _ -> Recursive) <* ws
   in
   let+ name = pattern in
+  (* TODO(Kakadu): not any pattern *)
   let+ ps = many pattern in
   let+ rhs = ws *> keyword "=" *> ws *> erhs in
   isrec, name, List.fold_right elam ps rhs

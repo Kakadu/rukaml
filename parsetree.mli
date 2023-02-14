@@ -1,8 +1,10 @@
 (** Abstract syntax tree for MiniML, helper functions. *)
 
-(** For now only variable patterns are allowed. *)
-type pattern = PVar of string (** *)
-(** TODO: add wildcard patterns, pairs, etc... *)
+(** Patterns *)
+type pattern =
+  | PVar of string (** Variable *)
+  | PTuple of pattern * pattern * pattern list (** Tuples *)
+(* TODO: add wildcard patterns, etc... *)
 
 val pp_pattern : Format.formatter -> pattern -> unit
 val show_pattern : pattern -> string
