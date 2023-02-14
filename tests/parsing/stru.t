@@ -114,8 +114,9 @@
   > let swap (x,y) = (y,x)
   > EOF
   "let fst (x,y) = x\nlet snd (x,y) = y\nlet swap (x,y) = (y,x)"
-  Parsed: let fst = (fun (x, y) -> x)
-          let snd = (fun (x, y) -> y) let swap = (fun (x, y) -> (y, x))
+  Parsed: let fst (x, y) = x
+          let snd (x, y) = y
+          let swap (x, y) = (y, x)
   $ cat << EOF | ./REPL.exe -prio -
   >   let (a,b) = swap p in
   >   a+b
@@ -130,7 +131,7 @@
   >   a+b
   > EOF
   "let swap (a,b) = (b,a)\nlet resum p =\n  let (a,b) = swap p in\n  a+b"
-  Parsed: let swap = (fun (a, b) -> (b, a))
+  Parsed: let swap (a, b) = (b, a)
           let resum p = let (a, b) = swap p in a + b
 
 
@@ -150,5 +151,7 @@
   Parsed: let rec fibk n k = if n < 1 then k 1 else fibk (n - 1) (fun p ->
                                                                   fibk 
                                                                   (n - 2) 
-                                                                  (fun q ->
-                                                                   k (p + q)))
+                                                                  (fun 
+                                                                  q -> 
+                                                                      k 
+                                                                      (p + q)))

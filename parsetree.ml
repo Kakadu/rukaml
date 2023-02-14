@@ -46,8 +46,8 @@ type structure = structure_item list
 
 let group_lams body =
   let rec helper acc = function
-    | ELam (PVar x, body) -> helper (x :: acc) body
-    | new_body -> List.rev acc, new_body
+    | ELam (p, body) -> helper (p :: acc) body
+    | not_a_lam -> List.rev acc, not_a_lam
   in
   helper [] body
 ;;

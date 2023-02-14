@@ -18,7 +18,7 @@ let group_applications l r =
 ;;
 
 let rec pp_pattern ppf = function
-  | Parsetree.PVar s -> fprintf ppf "%s" s
+  | Parsetree.PVar s -> fprintf ppf "@[%s@]" s
   | PTuple (pa, pb, ps) ->
     fprintf ppf "@[(%a" pp_pattern pa;
     List.iter (fprintf ppf ", %a" pp_pattern) (pb :: ps);
@@ -70,7 +70,7 @@ let rec pp_expr_helper ?(ps = true) ppf = function
     in
     fprintf ppf "@[<v>@[<hv>@[let %s%a " rec_ pp_pattern pat;
     let args, body = group_lams body in
-    List.iter (fprintf ppf "%s ") args;
+    List.iter (fprintf ppf "%a " pp_pattern) args;
     fprintf ppf "= @]";
     Format.fprintf ppf "@[<2>%a @]@[in @]@]" no_pars body;
     fprintf ppf "@[%a@]" no_pars in_;
@@ -99,7 +99,7 @@ let pp_value_binding ppf (is_rec, pat, rhs) =
   in
   match group_lams rhs with
   | args, rhs ->
-    List.iter (fprintf ppf "%s ") args;
+    List.iter (fprintf ppf "%a@ " pp_pattern) args;
     fprintf ppf "=@ @]@[%a@]@]" no_pars rhs
 ;;
 

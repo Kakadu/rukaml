@@ -32,6 +32,7 @@ let simplify =
     | (EVar _ as e) | (EConst _ as e) -> e
     | EIf (a, b, c) -> eite (helper a) (helper b) (helper c)
     | EApp (l, r) -> eapp (helper l) [ helper r ]
+    | ETuple (a, b, es) -> etuple (helper a) (helper b) (List.map helper es)
     | ELet (isrec, pat, rhs, wher) -> elet ~isrec pat (helper rhs) (helper wher)
   in
   helper
@@ -45,6 +46,15 @@ let%expect_test " " =
   [%expect {| let ter n = loop n 0 |}]
 ;;
 
+let vars_from_pattern, vars_from_patterns =
+  let rec helper acc = function
+    | Parsetree.PVar name -> SS.add name acc
+    | PTuple (a, b, ps) ->
+      ListLabels.fold_left ~f:helper ~init:(helper (helper acc a) b) ps
+  in
+  helper SS.empty, List.fold_left helper SS.empty
+;;
+
 let free_vars_of_expr =
   let rec helper acc = function
     | Parsetree.EConst _ -> acc
@@ -52,9 +62,10 @@ let free_vars_of_expr =
     | EIf (c, th, el) -> helper (helper (helper acc c) th) el
     | EApp (l, r) -> helper (helper acc l) r
     | ELet (NonRecursive, _, rhs, wher) -> helper (helper acc rhs) wher
-    | ELet (Recursive, PVar pat, rhs, wher) ->
-      String_set.remove pat (helper (helper acc rhs) wher)
-    | ELam (Parsetree.PVar v, rhs) -> String_set.remove v (helper acc rhs)
+    | ELet (Recursive, pat, rhs, wher) ->
+      String_set.diff (helper (helper acc rhs) wher) (vars_from_pattern pat)
+    | ETuple (a, b, es) -> List.fold_left helper (helper (helper acc a) b) es
+    | ELam (pat, rhs) -> SS.diff (helper acc rhs) (vars_from_pattern pat)
   in
   helper String_set.empty
 ;;
@@ -110,17 +121,20 @@ let gensym =
 ;;
 
 let standart_globals = String_set.of_list [ "+"; "="; "<"; "*"; "-" ]
-let elams names rhs = List.fold_right (fun x acc -> Parsetree.elam (PVar x) acc) names rhs
+let elams = List.fold_right Parsetree.elam
 
 let conv ?(standart_globals = standart_globals)
   : Parsetree.value_binding -> Parsetree.value_binding list
   =
   let open Parsetree in
-  let classify globals local_args expr =
+  let classify patterns expr =
     let fvs = free_vars_of_expr expr in
     log "free vars inside `%a` are:\n%a\n%!" Pprint.pp_expr expr SS.pp fvs;
-    let vars = without fvs ~other:(String_set.union local_args standart_globals) in
-    if String_set.cardinal vars = 0 then None else Some vars
+    let names_in_pats =
+      List.fold_left (fun acc p -> SS.union acc (vars_from_pattern p)) SS.empty patterns
+    in
+    let vars = without fvs ~other:(SS.union names_in_pats standart_globals) in
+    if SS.cardinal vars = 0 then None else Some vars
   in
   let open Parsetree in
   (* TODO(Kakadu): don't know if monads are needed here *)
@@ -141,26 +155,26 @@ let conv ?(standart_globals = standart_globals)
       (* fusion with simplifier *)
       helper globals body *)
     | EApp (l, r) -> return eapp1 <*> helper globals l <*> helper globals r
-    | ELam (PVar _, _) ->
+    | ELam (_, _) ->
       log "Got ELam _: globals = %a" SS.pp globals;
       (match sugarize_let root_expr with
-       | args, rhs ->
-         (match classify globals (SS.of_list args) rhs with
+       | arg_pats, rhs ->
+         (match classify arg_pats rhs with
           | None ->
             log "None : %d" __LINE__;
             (* let new_f = gensym () in *)
-            let* rhs = helper (SS.union (SS.of_list args) globals) rhs in
+            let* rhs = helper (SS.union (vars_from_patterns arg_pats) globals) rhs in
             (* let* () = save (NonRecursive, PVar new_f, elams args rhs) in *)
             (* return (EVar new_f) *)
-            return (elams args rhs)
+            return (elams arg_pats rhs)
           | Some extra ->
             log "Some %d, %a" __LINE__ SS.pp extra;
             let new_f = gensym () in
             (* TODO: maybe call on e too? *)
             let es = SS.to_seq extra |> List.of_seq in
-            let* rhs = helper (SS.union (SS.of_list args) globals) rhs in
+            let* rhs = helper (SS.union (vars_from_patterns arg_pats) globals) rhs in
             let new_rhs =
-              List.fold_left (fun acc x -> elam (PVar x) acc) (elams args rhs) es
+              List.fold_left (fun acc x -> elam (PVar x) acc) (elams arg_pats rhs) es
             in
             let* () = save (NonRecursive, PVar new_f, new_rhs) in
             let new_call = eapp (EVar new_f) (List.rev_map evar es) in
@@ -178,6 +192,13 @@ let conv ?(standart_globals = standart_globals)
       let ans = String_set.fold (fun name acc -> EApp (acc, EVar name)) vars ans in
       log "conv.helper. ans = %a" Pprint.pp_expr ans;
       return ans *))
+    | ETuple (e1, e2, es) ->
+      let* e1 = helper globals e1 in
+      let* e2 = helper globals e2 in
+      let* es = helper_list globals es in
+      return (etuple e1 e2 es)
+      (* failwith "not implemented 1" *)
+    | ELet (_, PTuple _, _, _) -> failwith "not implemented 2"
     | ELet (isrec, PVar pat, rhs, wher) ->
       let args, rhs =
         match sugarize_let rhs with
@@ -185,10 +206,10 @@ let conv ?(standart_globals = standart_globals)
       in
       let args_like =
         match isrec with
-        | Recursive -> String_set.(of_list (pat :: args))
-        | _ -> String_set.of_list args
+        | Recursive -> PVar pat :: args
+        | _ -> args
       in
-      (match classify globals args_like rhs with
+      (match classify args_like rhs with
        | None ->
          log "classify says None";
          let* rhs = helper (String_set.add pat globals) rhs in
@@ -208,7 +229,7 @@ let conv ?(standart_globals = standart_globals)
                log "Going to subst (inside a body) %s |~~> %a" pat Pprint.pp_expr by
              in
              let rhs = subst pat ~by rhs in
-             let rhs = List.fold_right (fun name acc -> elam (PVar name) acc) args rhs in
+             let rhs = elams args rhs in
              let rhs =
                List.fold_left (fun acc name -> elam (PVar name) acc) rhs new_args
              in
@@ -223,6 +244,15 @@ let conv ?(standart_globals = standart_globals)
          let* wher = helper (String_set.add pat globals) wher in
          let* () = save (isrec, PVar pat, rhs) in
          return wher)
+  and helper_list globals : Parsetree.expr list -> (value_binding list, expr list) t =
+   fun es ->
+    List.fold_left
+      (fun acc e ->
+        let* acc = acc in
+        let* e = helper globals e in
+        return (e :: acc))
+      (return [])
+      es
   in
   fun (is_rec, (PVar v as pat), root) ->
     let args, rhs = group_lams root in
