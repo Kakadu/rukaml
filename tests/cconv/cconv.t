@@ -33,15 +33,8 @@
   > let sum x = let (a, b) = x in a+b
   > EOF
   Parsed: let sum x = let (a, b) = x in a + b
-  Fatal error: exception Failure("not implemented 2")
-  Raised at Stdlib.failwith in file "stdlib.ml", line 29, characters 17-33
-  Called from CConv.conv.(fun) in file "compiler/CConv.ml", line 260, characters 23-71
-  Called from Dune__exe__REPL.run_single.(fun) in file "tests/cconv/REPL.ml", line 18, characters 26-64
-  Called from Stdlib__List.fold_left in file "list.ml", line 121, characters 24-34
-  Called from Dune__exe__REPL.run_single in file "tests/cconv/REPL.ml", line 14, characters 6-443
-  Called from Dune__exe__REPL in file "tests/cconv/REPL.ml" (inlined), line 56, characters 13-81
-  Called from Dune__exe__REPL in file "tests/cconv/REPL.ml", line 55, characters 2-112
-  [2]
+  After CCovv.
+  let sum x = let (a, b) = x in a + b
 
 # CPS Factorial
   $ cat << EOF | ./REPL.exe -
@@ -111,13 +104,17 @@
   > let succ prev f (a, rest) = (f a, prev f rest)
   > let three = succ two
   > let four = succ three
+  > let temp = two (fun x -> x) (1,2)
   > EOF
   Parsed: let two f (a, b) = (f a, f b)
           let succ prev f (a, rest) = (f a, prev f rest)
           let three = succ two
           let four = succ three
+          let temp = two (fun x -> x) (1, 2)
   After CCovv.
   let two f (a, b) = (f a, f b)
   let succ prev f (a, rest) = (f a, prev f rest)
   let three = succ two
   let four = succ three
+  let fresh_1 x = x
+  let temp = two fresh_1 (1, 2)
