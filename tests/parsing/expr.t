@@ -87,5 +87,5 @@
   > if 1 then 2 else x * fac (y-1)
   > EOF
   "if 1 then 2 else x * fac (y-1)"
-  Parsed: (if 1 then 2 else x * (fac (- y 1)))
+  Parsed: (if 1 then 2 else x * (fac (y - 1)))
 #

@@ -47,6 +47,7 @@ let rec pp_expr_helper ?(ps = true) ppf = function
   | EApp (EApp (EVar ("*" as op), l), r)
   | EApp (EApp (EVar ("/" as op), l), r)
   | EApp (EApp (EVar ("+" as op), l), r)
+  | EApp (EApp (EVar ("-" as op), l), r)
   | EApp (EApp (EVar ("=" as op), l), r) ->
     if ps
     then fprintf ppf "(%a %s %a)" maybe_pars l op maybe_pars r

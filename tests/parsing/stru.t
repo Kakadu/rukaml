@@ -5,7 +5,7 @@
   > EOF
   "let rec zed f x = f (zed f) x\nlet fac = fun self -> fun n -> if n=1 then 1 else n * (self (n-1))\nlet main = zed fac"
   Parsed: let rec zed f x = f (zed f) x
-          let fac self n = if n = 1 then 1 else n * (self (- n 1))
+          let fac self n = if n = 1 then 1 else n * (self (n - 1))
           let main = zed fac
 
   $ cat << EOF | ./REPL.exe  -stru -
@@ -30,7 +30,7 @@
   > EOF
   "let rec fix f = f (fix f)\nlet fac = fun self -> fun n -> if n=1 then 1 else n * (self (n-1))\nlet main = fix fac"
   Parsed: let rec fix f = f (fix f)
-          let fac self n = if n = 1 then 1 else n * (self (- n 1))
+          let fac self n = if n = 1 then 1 else n * (self (n - 1))
           let main = fix fac
 
   $ cat << EOF | ./REPL.exe  -stru -
@@ -40,7 +40,7 @@
   > EOF
   "let rec zed f x = f (zed f) x\nlet fac = fun self -> fun n -> if n=1 then 1 else n * (self (n-1))\nlet main = zed fac"
   Parsed: let rec zed f x = f (zed f) x
-          let fac self n = if n = 1 then 1 else n * (self (- n 1))
+          let fac self n = if n = 1 then 1 else n * (self (n - 1))
           let main = zed fac
 
   $ cat << EOF | ./REPL.exe  -stru -
@@ -58,7 +58,7 @@
   > let main = fac
   > EOF
   "let rec fac = fun n -> if n=1 then 1 else n * (fac (n-1))\nlet main = fac"
-  Parsed: let rec fac n = if n = 1 then 1 else n * (fac (- n 1))
+  Parsed: let rec fac n = if n = 1 then 1 else n * (fac (n - 1))
           let main = fac
 
   $ cat << EOF | ./REPL.exe  -stru -
@@ -140,15 +140,15 @@
   >  if n=1 then k 1 else fack (n-1) (fun m -> k (n*m))
   > EOF
   "let rec fack n k =\n if n=1 then k 1 else fack (n-1) (fun m -> k (n*m))"
-  Parsed: let rec fack n k = if n = 1 then k 1 else fack (- n 1) (fun m ->
+  Parsed: let rec fack n k = if n = 1 then k 1 else fack (n - 1) (fun m ->
                                                                   k (n * m))
   $ cat << EOF | ./REPL.exe -stru -
   > let rec fibk n k =
   >  if n<1 then k 1 else fibk (n-1) (fun p -> fibk (n-2) (fun q -> k (p + q)))
   > EOF
   "let rec fibk n k =\n if n<1 then k 1 else fibk (n-1) (fun p -> fibk (n-2) (fun q -> k (p + q)))"
-  Parsed: let rec fibk n k = if n < 1 then k 1 else fibk (- n 1) (fun p ->
+  Parsed: let rec fibk n k = if n < 1 then k 1 else fibk (n - 1) (fun p ->
                                                                   fibk 
-                                                                  (- n 2) 
+                                                                  (n - 2) 
                                                                   (fun q ->
                                                                    k (p + q)))

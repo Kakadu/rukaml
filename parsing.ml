@@ -286,7 +286,7 @@ let%expect_test _ =
   [%expect
     {|
     let mul5 x = repeat 5 (fun acc -> x) 0
-    let rec fac n = if n = 1 then n else n * (fac (- n 1))
+    let rec fac n = if n = 1 then n else n * (fac (n - 1))
     let main x = 32 |}]
 ;;
 

@@ -20,7 +20,7 @@
   > let rec fac f x = if x<1 then 1 else x * fac (x-1)
   > EOF
   "let rec fac f x = if x<1 then 1 else x * fac (x-1)"
-  Parsed: let rec fac f x = if x < 1 then 1 else x * (fac (- x 1))
+  Parsed: let rec fac f x = if x < 1 then 1 else x * (fac (x - 1))
   $ cat << EOF | ./REPL.exe -
   > let main = fun x -> 1+1
   > EOF

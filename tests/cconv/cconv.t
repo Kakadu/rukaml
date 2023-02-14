@@ -33,18 +33,18 @@
   > let rec fack n k =
   >  if n=1 then k 1 else fack (n-1) (fun m -> k (n*m))
   > EOF
-  Parsed: let rec fack n k = if n = 1 then k 1 else fack (- n 1) (fun m ->
+  Parsed: let rec fack n k = if n = 1 then k 1 else fack (n - 1) (fun m ->
                                                                   k (n * m))
   After CCovv.
   let fresh_1 n k m = k (n * m)
-  let rec fack n k = if n = 1 then k 1 else fack (- n 1) (fresh_1 n k)
+  let rec fack n k = if n = 1 then k 1 else fack (n - 1) (fresh_1 n k)
   $ cat << EOF | ./REPL.exe -
   > let id x = x
   > let rec fibk n k =
   >  if n<1 then k 1 else fibk (n-1) (fun p -> fibk (fun q -> k (p + q)))
   > EOF
   Parsed: let id x = x
-          let rec fibk n k = if n < 1 then k 1 else fibk (- n 1) (fun p ->
+          let rec fibk n k = if n < 1 then k 1 else fibk (n - 1) (fun p ->
                                                                   fibk 
                                                                   (fun q ->
                                                                    k (p + q)))
@@ -52,18 +52,18 @@
   let id x = x
   let fresh_2 p k q = k (p + q)
   let fresh_1 k fibk p = fibk (fresh_2 p k)
-  let rec fibk n k = if n < 1 then k 1 else fibk (- n 1) (fresh_1 k fibk)
+  let rec fibk n k = if n < 1 then k 1 else fibk (n - 1) (fresh_1 k fibk)
 #next one looks buggy
   $ cat << EOF | ./REPL.exe -
   > let rec fibk n k =
   >  if n<1 then k 1 else fibk (n-1) (fun p -> fibk (n-2) (fun q -> k (p + q)))
   > EOF
-  Parsed: let rec fibk n k = if n < 1 then k 1 else fibk (- n 1) (fun p ->
+  Parsed: let rec fibk n k = if n < 1 then k 1 else fibk (n - 1) (fun p ->
                                                                   fibk 
-                                                                  (- n 2) 
+                                                                  (n - 2) 
                                                                   (fun q ->
                                                                    k (p + q)))
   After CCovv.
   let fresh_2 p k q = k (p + q)
-  let fresh_1 n k fibk p = fibk (- n 2) (fresh_2 p k)
-  let rec fibk n k = if n < 1 then k 1 else fibk (- n 1) (fresh_1 n k fibk)
+  let fresh_1 n k fibk p = fibk (n - 2) (fresh_2 p k)
+  let rec fibk n k = if n < 1 then k 1 else fibk (n - 1) (fresh_1 n k fibk)
