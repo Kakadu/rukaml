@@ -1,0 +1,7 @@
+(executable
+ (name REPL)
+ (modules REPL)
+ (libraries stdio miniml cconv))
+
+(cram
+ (deps ./REPL.exe))

@@ -1,6 +1,5 @@
 (* https://gist.github.com/jozefg/652f1d7407b7f0266ae9 *)
 module Format = Stdlib.Format
-open Stdio
 open Miniml
 
 let log_enables = ref false
@@ -91,7 +90,8 @@ let rec subst x ~by:v =
   helper
 ;;
 
-let without set ~other = String_set.fold (fun x acc -> String_set.remove x acc) other set
+let without set ~other = String_set.diff set other
+(* String_set.fold (fun x acc -> String_set.remove x acc) other set *)
 
 let%expect_test " " =
   let left = String_set.of_list [ "a"; "b"; "c" ] in
@@ -110,7 +110,7 @@ let gensym =
     Format.sprintf "%s_%d" prefix !last
 ;;
 
-let standart_globals = String_set.of_list [ "+"; "="; "<" ]
+let standart_globals = String_set.of_list [ "+"; "="; "<"; "*"; "-" ]
 let elams names rhs = List.fold_right (fun x acc -> Parsetree.elam (PVar x) acc) names rhs
 
 let conv ?(standart_globals = standart_globals)

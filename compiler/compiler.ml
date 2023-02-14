@@ -9,7 +9,7 @@ let run_single text =
   let ( let* ) x f = Result.bind x ~f in
   let* stru = Miniml.Parsing.parse_structure text in
   (* List.iter ~f:(Format.printf "%a\n%!" Pprint.pp_value_binding) stru; *)
-  let stru = List.concat_map ~f:Compile_lib.CConv.conv stru in
+  let stru = List.concat_map ~f:CConv.conv stru in
   (* List.iter ~f:(Format.printf "%a\n%!" Pprint.pp_value_binding) stru; *)
   let* xs =
     let f acc ((_, Parsetree.PVar name, _) as vb) =
