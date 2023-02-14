@@ -59,8 +59,9 @@ let%expect_test " " =
     {|
     let mul5 x = repeat 5 (fun acc -> x) 0
     	~~[2 value bindings]~~>
-    let fresh_1 x acc =
-                                                                    x
+    let fresh_1
+                                                                    x acc =
+                                                                      x
     let mul5 x = repeat 5 (fresh_1 x) 0
        |}]
 ;;
