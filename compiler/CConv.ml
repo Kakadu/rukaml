@@ -232,6 +232,7 @@ let conv ?(standart_globals = standart_globals)
          log "classify says Some %a" String_set.pp extra;
          let* rhs = helper String_set.(union extra globals) rhs in
          let new_args = String_set.to_seq extra |> List.of_seq in
+         (* TODO(Kakadu): replace multiple arguments by flat closures somewhere here *)
          let by =
            List.fold_right (fun name acc -> eapp1 acc (evar name)) new_args (evar name)
          in
