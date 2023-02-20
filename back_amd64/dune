@@ -1,0 +1,11 @@
+(library
+ (public_name MiniML_amd64.backend)
+ (name plugin1_impl)
+ (modules back_amd64)
+ (libraries MiniML.register))
+
+(plugin
+ (name plugin1)
+ (libraries MiniML_amd64.backend)
+ (site
+  (MiniML plugins)))

@@ -1,4 +1,6 @@
-(lang dune 2.8)
+(lang dune 3.6)
+
+(using dune_site 0.1)
 
 (cram enable)
 
@@ -14,12 +16,16 @@
 
 (homepage "FIXME")
 
+(name MiniML)
+
 (package
  (name MiniML)
  (synopsis "A MiniML interpreter")
  (description
   "FIXME. A longer description, for example, which are the most interesing features being supported, etc.")
  (version 0.1)
+ (sites
+  (lib plugins))
  (depends
   dune
   angstrom

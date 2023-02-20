@@ -10,7 +10,7 @@ license: "LGPL-3.0-only"
 homepage: "FIXME"
 bug-reports: "FIXME"
 depends: [
-  "dune" {>= "2.8"}
+  "dune" {>= "3.6"}
   "angstrom"
   "ppx_inline_test" {with-test}
   "ppx_expect"
@@ -28,10 +28,12 @@ build: [
     name
     "-j"
     jobs
+    "--promote-install-files=false"
     "@install"
     "@runtest" {with-test}
     "@doc" {with-doc}
   ]
+  ["dune" "install" "-p" name "--create-install-files" name]
 ]
 depexts: [
   [ "mono-devel"

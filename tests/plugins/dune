@@ -1,0 +1,6 @@
+(cram
+ (deps
+  (package MiniML)
+  (package MiniML_amd64)
+  ;
+  ))

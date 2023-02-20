@@ -1,7 +1,7 @@
 (env
  (dev
   (flags
-   (:standard -w -32-33 -warn-error -26-27-34-39-8))))
+   (:standard -w -32-33 -warn-error -8-26-27-34-37-39-69))))
 
 (library
  (name miniml)
@@ -24,3 +24,22 @@
 
 (cram
  (deps ./REPL.exe))
+
+; Compiler executable and plugins
+
+(library
+ (public_name MiniML.register)
+ (name registration)
+ (modules registration)
+ (libraries miniml))
+
+(executable
+ (public_name minimlc)
+ (name compiler)
+ (modules sites compiler)
+ (libraries registration dune-site dune-site.plugins))
+
+(generate_sites_module
+ (module sites)
+ (plugins
+  (MiniML plugins)))
