@@ -12,7 +12,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: kakadu18/ocaml:llvm
+      image: kakadu18/ocaml:llvm # TODO: add dune-site to image
       options: --user root
 
     # The below probably could be used instead of styfle/cancel-workflow-action
@@ -34,6 +34,10 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 1
+
+      - name: Install OPAM dependencies via Makefile
+        continue-on-error: true
+        run: make deps
 
       - run: opam exec -- dune build @default --profile=release
       - run: opam exec -- dune test

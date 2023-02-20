@@ -11,6 +11,7 @@ homepage: "FIXME"
 bug-reports: "FIXME"
 depends: [
   "dune" {>= "3.6"}
+  "dune-site"
   "angstrom"
   "ppx_inline_test" {with-test}
   "ppx_expect"

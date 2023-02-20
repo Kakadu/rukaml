@@ -11,4 +11,5 @@ promote:
 	dune runtest --auto-promote
 
 deps:
-	opam install angstrom ppx_blob ppx_show llvm ppx_expect
+	opam install --yes dune-site angstrom ppx_blob ppx_show llvm ppx_expect
+

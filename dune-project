@@ -28,6 +28,7 @@
   (lib plugins))
  (depends
   dune
+  dune-site
   angstrom
   (ppx_inline_test :with-test)
   ppx_expect
