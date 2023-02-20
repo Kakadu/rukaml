@@ -1,4 +1,18 @@
-type back = Miniml.Typedtree.structure -> filename:string -> unit
+type error = [ `Backend_unspecified ]
+
+module type BACK = sig
+  type error
+
+  val pp_error : Format.formatter -> error -> unit
+
+  val run
+    :  Miniml.Parsetree.structure
+    -> Miniml.Typedtree.structure
+    -> filename:string
+    -> (unit, error) Result.t
+end
+
+type back = (module BACK)
 
 let current_backend : back option ref = ref None
 let backends : (string * back) list ref = ref []
@@ -19,4 +33,10 @@ let register_backend_exn name back switches =
         , Printf.sprintf " use %s backend" name )
       ];
     add_cmd_switches switches
+;;
+
+let backend_exn () =
+  match !current_backend with
+  | None -> Result.error `Backend_unspecified
+  | Some back -> Result.Ok back
 ;;
