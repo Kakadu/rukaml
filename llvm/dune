@@ -1,7 +1,7 @@
-(executable
- (name llvm_compiler)
- (modules llvm_compiler)
- (libraries stdio LL miniml))
+(env
+ (dev
+  (flags
+   (:standard -w -32-33 -warn-error -8-26-27-34-37-39-69))))
 
 (library
  (name LL)
@@ -11,5 +11,22 @@
  (preprocess
   (pps ppx_inline_test)))
 
+(executable
+ (name llvm_compiler)
+ (modules llvm_compiler)
+ (libraries stdio LL MiniML.frontend))
+
 (cram
  (deps ./llvm_compiler.exe))
+
+(library
+ (public_name MiniML_llvm.backend)
+ (name llvm_backend)
+ (modules back_llvm)
+ (libraries MiniML.register))
+
+(plugin
+ (name plugin_llvm)
+ (libraries MiniML_llvm.backend)
+ (site
+  (MiniML plugins)))

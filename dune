@@ -5,7 +5,7 @@
 
 (library
  (name miniml)
- (package MiniML)
+ (public_name MiniML.frontend)
  (modules parsetree Pprint parsing typedtree inferencer stuff)
  (inline_tests)
  (libraries ppx_show.runtime angstrom)

@@ -2,5 +2,6 @@
  (deps
   (package MiniML)
   (package MiniML_amd64)
+  (package MiniML_llvm)
   ;
   ))
