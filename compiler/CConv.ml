@@ -287,3 +287,23 @@ let conv ?(standart_globals = standart_globals)
     in
     List.rev_append saved [ is_rec, pat, rhs ] |> List.map simplify_vb
 ;;
+
+let value_binding = conv
+
+let structure ?(standart_globals = standart_globals) stru =
+  let init = standart_globals, [] in
+  Stdlib.ListLabels.fold_left
+    (stru : Parsetree.structure)
+    ~init
+    ~f:(fun (glob, ans) stru ->
+      let new_strus = conv ~standart_globals:glob stru in
+      let new_glob =
+        ListLabels.fold_left ~init:glob new_strus ~f:(fun acc -> function
+          | _, Parsetree.PVar s, _ -> String_set.add s acc
+          | _, PTuple _, _ ->
+            (* TODO(Kakadu): add other names too *)
+            acc)
+      in
+      new_glob, List.append ans new_strus)
+  |> snd
+;;
