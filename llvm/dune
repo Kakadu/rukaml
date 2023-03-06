@@ -6,27 +6,32 @@
 (library
  (name LL)
  (modules LL)
- (libraries llvm)
+ (libraries llvm llvm.all_backends llvm.target)
  (inline_tests)
  (preprocess
   (pps ppx_inline_test)))
 
+(library
+  (name LLVMIR)
+  (modules LLVMIR)
+  (libraries llvm MiniML.frontend LL))
+
 (executable
  (name llvm_compiler)
  (modules llvm_compiler)
- (libraries stdio LL MiniML.frontend))
+ (libraries stdio LL LLVMIR MiniML.frontend MiniML.cconv))
 
 (cram
- (deps ./llvm_compiler.exe))
-
-(library
- (public_name MiniML_llvm.backend)
- (name llvm_backend)
- (modules back_llvm)
- (libraries MiniML.register))
+ (deps ./llvm_compiler.exe ./runtime.c))
 
 (plugin
  (name plugin_llvm)
  (libraries MiniML_llvm.backend)
  (site
   (MiniML plugins)))
+
+(library
+ (public_name MiniML_llvm.backend)
+ (name llvm_backend)
+ (modules back_llvm)
+ (libraries MiniML.register))

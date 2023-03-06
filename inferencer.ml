@@ -405,7 +405,13 @@ let infer =
 ;;
 
 let start_env =
-  TypeEnv.(extend empty) ("print", S (Var_set.empty, tarrow int_typ unit_typ))
+  List.fold [ 
+    ("print_int", S (Var_set.empty, tarrow int_typ unit_typ));
+    ("print_bool", S (Var_set.empty, tarrow bool_typ unit_typ));
+    ("trace_int", S (Var_set.empty, tarrow int_typ int_typ));
+    ("trace_bool", S (Var_set.empty, tarrow bool_typ bool_typ));
+    ("get_int_arg", S (Var_set.empty, tarrow int_typ int_typ));
+  ] ~init:TypeEnv.empty ~f:TypeEnv.extend
 ;;
 
 let w e =
