@@ -1,6 +1,6 @@
 depexts: [
-  [ "mono-devel"
-    "mono-utils"
-    "fsharp"
-  ] {os-distribution = "debian"}
+#  [ "mono-devel"
+#    "mono-utils"
+#    "fsharp"
+#  ] {os-distribution = "debian"}
 ]
