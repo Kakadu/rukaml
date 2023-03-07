@@ -188,6 +188,11 @@ let pack : dispatch =
          ws
          *> (fail ""
             <|> ws *> (number >>| fun n -> econst (const_int n))
+            <|> (ws *> ident
+                >>= function
+                | "true" -> return @@ econst (const_bool true)
+                | "false" -> return @@ econst (const_bool true)
+                | _ -> fail "Not a boolean constant")
             <|> parens
                   (return (fun a b xs -> etuple a b xs)
                   <*> (d.expr d <* ws)
