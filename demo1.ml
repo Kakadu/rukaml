@@ -25,7 +25,7 @@ let wrap_e s =
   let* ast = Parsing.parse s in
   print_endline @@ Parsetree.show_expr ast;
   let* typ = Inferencer.w ast in
-  Base.Result.return (Format.printf "type is %a\n%!" Typedtree.pp_hum typ)
+  Base.Result.return (Format.printf "type is %a\n%!" Pprinttyped.pp_hum typ)
 ;;
 
 (* | Result.Ok t ->
