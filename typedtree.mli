@@ -40,6 +40,7 @@ type pattern = string
 val show_pattern : pattern -> string
 
 type expr =
+  | TUnit
   | TConst of Parsetree.const (** Contants *)
   | TVar of pattern * ty
   | TIf of expr * expr * expr * ty (** if ... then ... else ... *)

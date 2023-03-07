@@ -341,6 +341,7 @@ let infer =
       let* typ = lookup_env x env in
       return (typ, TVar (x, typ))
       (* lambda abstraction *)
+    | EUnit -> return (unit_typ, TUnit)
     | ELam (PVar x, e1) ->
       let* v = fresh_var in
       let env2 = TypeEnv.extend env (x, S (Var_set.empty, v)) in

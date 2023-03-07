@@ -25,6 +25,7 @@ type const =
 [@@deriving show]
 
 type expr =
+  | EUnit
   | EConst of const
   | EVar of string
   | EIf of expr * expr * expr (** if ... then ... else ... *)
@@ -44,6 +45,7 @@ val const_bool : bool -> const
 val pp_expr : Format.formatter -> expr -> unit
 val show_expr : expr -> string
 val econst : const -> expr
+val eunit : expr
 val evar : string -> expr
 val elam : pattern -> expr -> expr
 val eapp : expr -> expr list -> expr

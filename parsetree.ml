@@ -17,6 +17,7 @@ type const =
 [@@deriving show { with_path = false }]
 
 type expr =
+  | EUnit
   | EConst of const
   | EVar of string
   | EIf of expr * expr * expr
@@ -28,6 +29,7 @@ type expr =
 
 let const_int n = PConst_int n
 let const_bool b = PConst_bool b
+let eunit = EUnit
 let econst n = EConst n
 let evar s = EVar s
 let elam v body = ELam (v, body)

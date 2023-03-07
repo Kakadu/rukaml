@@ -19,3 +19,7 @@
   > EOF
   "x && y ||\nx && y"
   Error: : end_of_input
+  $ cat << EOF | ./REPL.exe -prio -
+  > fun x -> if x then printint 52 else ()
+  "fun x -> if x then printint 52 else ()"
+  Parsed: (fun x -> if x then printint 52 else ())

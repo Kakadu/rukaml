@@ -36,6 +36,7 @@ let unit_typ = tprim "unit"
 type pattern = string [@@deriving show { with_path = false }]
 
 type expr =
+  | TUnit
   | TConst of Parsetree.const
   | TVar of string * ty
   | TIf of expr * expr * expr * ty
@@ -46,6 +47,7 @@ type expr =
 [@@deriving show { with_path = false }]
 
 let rec type_of_expr = function
+  | TUnit -> unit_typ
   | TConst _ -> int_typ
   | TTuple (_, _, _, t) | TVar (_, t) | TIf (_, _, _, t) | TLam (_, _, t) | TApp (_, _, t)
     -> t

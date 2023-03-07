@@ -188,6 +188,7 @@ let pack : dispatch =
          ws
          *> (fail ""
             <|> ws *> (number >>| fun n -> econst (const_int n))
+            <|> (ws *> char '(' *> char ')' >>| fun _ -> eunit)
             <|> (ws *> ident
                 >>= function
                 | "true" -> return @@ econst (const_bool true)

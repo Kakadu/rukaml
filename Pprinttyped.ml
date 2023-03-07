@@ -21,6 +21,7 @@ let pp_typ_hum =
 let pp_hum =
   let open Format in
   let rec expr ppf = function
+    | TUnit -> fprintf ppf "unit"
     | TConst c -> Pprint.pp_const ppf c
     | TVar (name, _) -> fprintf ppf "%s" name
     | TIf (cond, th, el, _) ->

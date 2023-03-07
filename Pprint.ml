@@ -31,6 +31,7 @@ let pp_const ppf = function
 ;;
 
 let rec pp_expr_helper ?(ps = true) ppf = function
+  | EUnit -> fprintf ppf "()"
   | EConst n -> pp_const ppf n
   | EIf (c, th, el) ->
     (if ps then fprintf ppf "(%a)" else fprintf ppf "%a")
