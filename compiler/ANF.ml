@@ -54,21 +54,19 @@ type _ expr =
   | EAtom : [ `Atom ] expr -> [ `Default ] expr
   | EComplex : [ `Complex ] expr -> [ `Default ] expr
 
-let rec pp : 'a. Format.formatter -> 'a expr -> unit =
- fun ppf e -> Format.fprintf ppf "<anf>"
-;;
+let pp : 'a. Format.formatter -> 'a expr -> unit = fun ppf e -> Format.fprintf ppf "<anf>"
 
 let rec normalize : 'a 'b. Typedtree.expr -> ([ `Default ] expr -> 'a) -> 'a =
  fun m k ->
   match m with
-  | Typedtree.TConst n -> k (EAtom (AConst n))
+  | Typedtree.TConst (PConst_int n) -> k (EAtom (AConst n))
   | TLam (name, body, _) -> k (EAtom (ALam (name, normalize_term body)))
   | TLet (flg, pat, _, body, wher) ->
     normalize_c body (fun body ->
       normalize wher (fun wher -> k (ELet (flg, pat, body, wher))))
   (* Chaining below *)
   | TIf _ | TApp _ -> normalize_c m (fun c -> k (EComplex c))
-  | _ -> Format.kasprintf failwith "Not implemented; '%a'" Typedtree.pp_hum m
+  | _ -> Format.kasprintf failwith "Not implemented; '%a'" Pprinttyped.pp_hum m
 
 and normalize_c : 'a 'b. Typedtree.expr -> ([ `Complex ] expr -> 'a) -> 'a =
  fun m k ->
@@ -84,14 +82,14 @@ and normalize_c : 'a 'b. Typedtree.expr -> ([ `Complex ] expr -> 'a) -> 'a =
 and normalize_a : 'a 'b. Typedtree.expr -> ([ `Atom ] expr -> 'a) -> 'a =
  fun m k ->
   match m with
-  | Typedtree.TConst n -> k (AConst n)
+  | Typedtree.TConst (PConst_int n) -> k (AConst n)
   | _ ->
-    Format.kasprintf failwith "Not implemented in 'normalize_a': %a" Typedtree.pp_hum m
+    Format.kasprintf failwith "Not implemented in 'normalize_a': %a" Pprinttyped.pp_hum m
 
 and normalize_name : 'a 'b. Typedtree.expr -> ([ `Atom ] expr -> 'a) -> 'a =
  fun m k ->
   match m with
-  | Typedtree.TConst n -> k (AConst n)
+  | Typedtree.TConst (PConst_int n) -> k (AConst n)
 
 and normalize_term t = normalize t Fun.id
 
@@ -105,16 +103,17 @@ let%expect_test " " =
    Result.Ok ())
   |> ignore;
   [%expect.unreachable]
-[@@expect.uncaught_exn {|
+  [@@expect.uncaught_exn
+    {|
   (* CR expect_test_collector: This test expectation appears to contain a backtrace.
      This is strongly discouraged as backtraces are fragile.
      Please change this test to not include a backtrace. *)
 
   (Failure "Not implemented in 'normalize_a': (n = 0)")
   Raised at Stdlib.failwith in file "stdlib.ml", line 29, characters 17-33
-  Called from Compile_lib__ANF.normalize in file "compiler/ANF.ml", line 65, characters 50-69
-  Called from Compile_lib__ANF.(fun) in file "compiler/ANF.ml", line 103, characters 13-33
+  Called from Compile_lib__ANF.normalize in file "compiler/ANF.ml", line 63, characters 50-69
+  Called from Compile_lib__ANF.(fun) in file "compiler/ANF.ml", line 101, characters 13-33
   Called from Stdlib__Result.bind in file "result.ml" (inlined), line 23, characters 36-39
-  Called from Compile_lib__ANF.(fun).let* in file "compiler/ANF.ml", line 100, characters 21-36
+  Called from Compile_lib__ANF.(fun).let* in file "compiler/ANF.ml", line 98, characters 21-36
   Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 262, characters 12-19 |}]
 ;;

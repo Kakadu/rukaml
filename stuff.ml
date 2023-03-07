@@ -29,7 +29,7 @@ let okprio = ok ~parser:Parsing.(pack.prio) ~pp:pp_expr
 (* let%test _ = okexpr "(1)" (econst 1) *)
 (* let%test _ = oknumber "1" 1 *)
 let%test _ = okident "a" "a"
-let%test _ = okexpr "(1)" (econst 1)
+let%test _ = okexpr "(1)" (econst (const_int 1))
 (* let%test _ = okexpr "(fun _1 -> _1)" (elam (pvar 1) (evar 1)) *)
 
 let%expect_test _ =

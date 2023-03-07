@@ -13,7 +13,7 @@ let run_single text =
      | Result.Ok ty ->
        Format.printf "Result:%!";
        Format.printf "@[<v>@ ";
-       List.iter ~f:(Format.printf "@[%a@]@ " Typedtree.pp_vb_hum) ty;
+       List.iter ~f:(Format.printf "@[%a@]@ " Pprinttyped.pp_vb_hum) ty;
        Format.printf "@]\n%!"
      (* Format.printf "%a\n%!" Typedtree.pp_expr ty *)
      | Result.Error e -> Format.printf "Error: %a" Inferencer.pp_error e)

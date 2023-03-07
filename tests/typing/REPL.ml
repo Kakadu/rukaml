@@ -49,7 +49,7 @@ let () =
        Parsing.structure
        (fun ppf stru ->
          match Inferencer.structure stru with
-         | Result.Ok ty -> fprintf ppf "@[%a@]@ " Typedtree.pp_stru ty
+         | Result.Ok ty -> fprintf ppf "@[%a@]@ " Pprinttyped.pp_stru ty
          | Result.Error e -> fprintf ppf "Error: %a" Inferencer.pp_error e)
        pp_print_string)
     s

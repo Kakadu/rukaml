@@ -18,8 +18,14 @@ type rec_flag =
 val pp_rec_flag : Format.formatter -> rec_flag -> unit
 val show_rec_flag : rec_flag -> string
 
+type const =
+  | PConst_int of int (** Contant 42 *)
+  (* | PConst_string of string *)
+  | PConst_bool of bool
+[@@deriving show]
+
 type expr =
-  | EConst of int (** Contant 42 *)
+  | EConst of const
   | EVar of string
   | EIf of expr * expr * expr (** if ... then ... else ... *)
   | ELam of pattern * expr (** fun ... -> ... *)
@@ -31,10 +37,13 @@ type value_binding = rec_flag * pattern * expr
 type structure_item = value_binding
 type structure = structure_item list
 
+val const_int : int -> const
+val const_bool : bool -> const
+
 (* val pp_value_binding : Format.formatter -> value_binding -> unit *)
 val pp_expr : Format.formatter -> expr -> unit
 val show_expr : expr -> string
-val econst : int -> expr
+val econst : const -> expr
 val evar : string -> expr
 val elam : pattern -> expr -> expr
 val eapp : expr -> expr list -> expr

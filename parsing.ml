@@ -187,7 +187,7 @@ let pack : dispatch =
     *> fix (fun _self ->
          ws
          *> (fail ""
-            <|> ws *> (number >>| econst)
+            <|> ws *> (number >>| fun n -> econst (const_int n))
             <|> parens
                   (return (fun a b xs -> etuple a b xs)
                   <*> (d.expr d <* ws)

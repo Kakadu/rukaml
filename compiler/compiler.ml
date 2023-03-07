@@ -20,7 +20,7 @@ let run_single text =
     List.fold stru ~init:(Result.return ([], Inferencer.start_env)) ~f
     |> Result.map ~f:(fun (vbs, _) -> List.rev vbs)
   in
-  List.iter ~f:(Format.printf "%a\n%!" Typedtree.pp_vb_hum) xs;
+  List.iter ~f:(Format.printf "%a\n%!" Pprinttyped.pp_vb_hum) xs;
   Result.return ()
 ;;
 

@@ -25,8 +25,13 @@ let rec pp_pattern ppf = function
     fprintf ppf ")@]"
 ;;
 
+let pp_const ppf = function
+  | PConst_bool b -> fprintf ppf "%b" b
+  | PConst_int n -> fprintf ppf "%d" n
+;;
+
 let rec pp_expr_helper ?(ps = true) ppf = function
-  | EConst n -> fprintf ppf "%d" n
+  | EConst n -> pp_const ppf n
   | EIf (c, th, el) ->
     (if ps then fprintf ppf "(%a)" else fprintf ppf "%a")
       (fun ppf ->

@@ -1,15 +1,14 @@
-type cfg =
-  { mutable out : [ `Stdout | `File of string ]
-  ; mutable input_file : string option
-  }
+type cfg = {
+  mutable out : [ `Stdout | `File of string ];
+  mutable input_file : string option;
+}
 
 open Miniml
 
 module ToLLVM = struct
   let codegen typedtree fout =
-    Format.printf "%a\n%!" Typedtree.pp_hum typedtree;
+    Format.printf "%a\n%!" Pprinttyped.pp_hum typedtree;
     Result.ok ()
-  ;;
 
   let run cfg =
     let text =
@@ -25,28 +24,23 @@ module ToLLVM = struct
     let* typedtree = Inferencer.w ast |> promote_error in
     let typedtree = Typedtree.compact_expr typedtree in
     codegen typedtree cfg.out |> promote_error
-  ;;
 end
 
 let cfg = { out = `Stdout; input_file = None }
 
 let print_errors = function
   | #Miniml.Parsing.error as e -> Format.printf "%a\n%!" Parsing.pp_error e
-  | #Miniml.Inferencer.error as e -> Format.printf "%a\n%!" Inferencer.pp_error e
-;;
+  | #Miniml.Inferencer.error as e ->
+      Format.printf "%a\n%!" Inferencer.pp_error e
 
 let () =
   Arg.parse
-    [ ( "-o"
-      , Arg.String
-          (function
-           | "-" -> cfg.out <- `Stdout
-           | s -> cfg.out <- `File s)
-      , "" )
+    [
+      ( "-o",
+        Arg.String
+          (function "-" -> cfg.out <- `Stdout | s -> cfg.out <- `File s),
+        "" );
     ]
     (fun s -> cfg.input_file <- Some s)
     "help";
-  match ToLLVM.run cfg with
-  | Result.Ok () -> ()
-  | Error err -> print_errors err
-;;
+  match ToLLVM.run cfg with Result.Ok () -> () | Error err -> print_errors err

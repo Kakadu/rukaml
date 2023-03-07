@@ -37,11 +37,10 @@ val unit_typ : ty
 
 type pattern = string
 
-val pp_pattern : Format.formatter -> pattern -> unit
 val show_pattern : pattern -> string
 
 type expr =
-  | TConst of binder (** Contant 42 *)
+  | TConst of Parsetree.const (** Contants *)
   | TVar of pattern * ty
   | TIf of expr * expr * expr * ty (** if ... then ... else ... *)
   | TLam of pattern * expr * ty (** fun ... -> ... *)
@@ -71,14 +70,9 @@ val value_binding
   -> scheme
   -> value_binding
 
-val pp_pattern : Format.formatter -> Parsetree.pattern -> unit
-val pp_vb_hum : Format.formatter -> value_binding -> unit
 val pp_expr : Format.formatter -> expr -> unit
 val show_expr : expr -> string
-val pp_typ_hum : Format.formatter -> ty -> unit
-val pp_hum : Format.formatter -> expr -> unit
 val pp_binder_set : Format.formatter -> binder_set -> unit
 val show_binder_set : binder_set -> string
 val pp_binder : Format.formatter -> binder -> unit
 val show_binder : binder -> string
-val pp_stru : Format.formatter -> structure -> unit

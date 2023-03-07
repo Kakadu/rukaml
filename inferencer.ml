@@ -356,7 +356,7 @@ let infer =
       (* log "t2 = %a" pp_ty t2; *)
       (* log "tv = %a" pp_ty tv; *)
       return (tv, TApp (te1, te2, tv))
-    | EConst c -> return (int_typ, TConst c)
+    | EConst (PConst_int n as c) -> return (int_typ, TConst c)
     | Parsetree.EIf (c, th, el) ->
       let* t1, tc = helper env c in
       let* t2, tth = helper env th in

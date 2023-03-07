@@ -54,7 +54,8 @@ let () =
     in
     let* typed = Inferencer.(structure ~env:start_env) parsed in
     let () =
-      if !Config.dump_typedtree then Format.printf "%a\n%!" Miniml.Typedtree.pp_stru typed
+      if !Config.dump_typedtree
+      then Format.printf "%a\n%!" Miniml.Pprinttyped.pp_stru typed
     in
     apply_backend parsed typed ~filename:!Config.out_file
   with
