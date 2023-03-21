@@ -6,7 +6,7 @@
 (library
  (name LL)
  (modules LL)
- (libraries llvm llvm.all_backends llvm.target)
+ (libraries llvm llvm.all_backends llvm.target llvm.analysis)
  (inline_tests)
  (preprocess
   (pps ppx_inline_test)))

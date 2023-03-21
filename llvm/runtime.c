@@ -25,6 +25,10 @@ int trace_bool(int x) {
   return x;
 }
 
+int* resolve_pointer(int* p) {
+
+}
+
 char** arguments;
 
 int get_int_arg(int n) {

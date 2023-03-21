@@ -16,11 +16,12 @@ module type S = sig
   val build_ret: llvalue -> llvalue
   (* val build_function: ?name:string -> llvalue  *)
 
-  (* val build_ptrtoint : ?name:string -> llvalue -> lltype -> llvalue
+  val build_ptrtoint : ?name:string -> llvalue -> lltype -> llvalue
   val build_inttoptr : ?name:string -> llvalue -> lltype -> llvalue
-  val build_pointercast : ?name:string -> llvalue -> lltype -> llvalue *)
+  val build_pointercast : ?name:string -> llvalue -> lltype -> llvalue
 
   val const_int : lltype -> int -> llvalue
+  val const_bool: lltype -> bool -> llvalue
   val params : llvalue -> llvalue array
 end
 
@@ -41,14 +42,14 @@ let make builder module_ =
     let build_mul ?(name = "") l r = build_mul l r name builder
     let build_sdiv ?(name = "") l r = build_sdiv l r name builder
 
-    (* let build_ptrtoint ?(name = "") e typ =
+    let build_ptrtoint ?(name = "") e typ =
       Llvm.build_ptrtoint e typ name builder
 
     let build_inttoptr ?(name = "") e typ =
       Llvm.build_inttoptr e typ name builder
 
     let build_pointercast ?(name = "") f typ =
-      Llvm.build_pointercast f typ name builder *)
+      Llvm.build_pointercast f typ name builder
 
     let declare_function name ftype = declare_function name ftype module_
     let position_at_end basic_block = position_at_end basic_block builder
@@ -56,6 +57,10 @@ let make builder module_ =
 
     (* Aliases *)
     let const_int = Llvm.const_int
+    let const_bool lltype v = 
+      match v with  
+      | true -> const_int lltype 1
+      | false -> const_int lltype 0
     let params = Llvm.params
 
 
