@@ -1,4 +1,6 @@
-let plus = fun x -> fun y -> x + y
-let kek = plus 1
+let fplus = fun f -> fun x -> fun y -> (f x) + (f y) + x + y
+let square = fun x -> x * x
+let plus = fplus square
 let ret_zero = fun x -> x - x
-let main = ret_zero (trace_int (kek 2))
+let main = ret_zero (trace_int (plus (get_int_arg 1) (get_int_arg 2)))
+
