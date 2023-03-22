@@ -32,6 +32,11 @@ int trace_bool(int x) {
 typedef void *(*fun0)(void);
 typedef void *(*fun1)(void *);
 typedef void *(*fun2)(void *, void *);
+typedef void *(*fun3)(void *, void *, void *);
+typedef void *(*fun4)(void *, void *, void *, void *);
+typedef void *(*fun5)(void *, void *, void *, void *, void *);
+typedef void *(*fun6)(void *, void *, void *, void *, void *, void *);
+typedef void *(*fun7)(void *, void *, void *, void *, void *, void *, void *);
 
 void *apply0(void *f)
 {
@@ -50,6 +55,37 @@ void *apply2(void *f, void *arg1, void *arg2)
   fun2 foo = (fun2)f;
   return foo(arg1, arg2);
 }
+
+void *apply3(void *f, void *arg1, void *arg2, void *arg3)
+{
+  fun3 foo = (fun3)f;
+  return foo(arg1, arg2, arg3);
+}
+
+void *apply4(void *f, void *arg1, void *arg2, void *arg3, void *arg4)
+{
+  fun4 foo = (fun4)f;
+  return foo(arg1, arg2, arg3, arg4);
+}
+
+void *apply5(void *f, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5)
+{
+  fun5 foo = (fun5)f;
+  return foo(arg1, arg2, arg3, arg4, arg5);
+}
+
+void *apply6(void *f, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5, void *arg6)
+{
+  fun6 foo = (fun6)f;
+  return foo(arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
+void *apply7(void *f, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5, void *arg6, void *arg7)
+{
+  fun7 foo = (fun7)f;
+  return foo(arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+}
+
 typedef struct
 {
   void *code;
@@ -81,29 +117,29 @@ void *alloc_closure(void *func, int32_t argsc)
 void *applyN(void *f, int32_t argc, ...)
 {
   setbuf(stdout, NULL);
-  printf("%s argc = %u, closure = %p\n", __func__, argc, f);
+  // printf("%s argc = %u, closure = %p\n", __func__, argc, f);
   fflush(stdout);
 
   va_list argp;
   va_start(argp, argc);
   closure *f_closure = copy_closure((closure *)f);
-  printf("f->arg_received = %u\n", f_closure->args_received);
+  // printf("f->arg_received = %u\n", f_closure->args_received);
   //printf("%d\n", __LINE__);
   assert(f_closure->args_received + argc <= f_closure->argsc);
 
   for (size_t i = 0; i < argc; i++)
   {
-    // printf("%d\n", __LINE__);
+    //printf("%d\n", __LINE__);
     void *arg1 = va_arg(argp, void *);
     // printf("arg[%lu] = %p, ", i, arg1);
     fflush(stdout);
     f_closure->args[f_closure->args_received++] = arg1;
   }
-  /* printf("\n");
-  printf("f->arg_received = %u, f->argc = %u\n",
-         f_closure->args_received,
-         f_closure->argsc);
-  fflush(stdout); */
+  // printf("\n");
+  // printf("f->arg_received = %u, f->argc = %u\n",
+  //        f_closure->args_received,
+  //        f_closure->argsc);
+  fflush(stdout);
   va_end(argp);
   if (f_closure->argsc == f_closure->args_received)
   {
@@ -117,6 +153,21 @@ void *applyN(void *f, int32_t argc, ...)
       break;
     case 2:
       return apply2(f_closure->code, f_closure->args[0], f_closure->args[1]);
+      break;
+    case 3:
+      return apply3(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2]);
+      break;
+    case 4:
+      return apply4(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2], f_closure->args[3]);
+      break;
+    case 5:
+      return apply5(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2], f_closure->args[3], f_closure->args[4]);
+      break;
+    case 6:
+      return apply6(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2], f_closure->args[3], f_closure->args[4], f_closure->args[5]);
+      break;
+    case 7:
+      return apply7(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2], f_closure->args[3], f_closure->args[4], f_closure->args[5], f_closure->args[6]);
       break;
     default:
       printf("FUCK\n");

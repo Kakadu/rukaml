@@ -3,7 +3,7 @@ module Format = Stdlib.Format
 open Llvm
 open Miniml
 
-let debug_log = prerr_endline
+let debug_log = fun x -> ()
 let debug_log_action action meth name = "[" ^ meth ^ ":" ^ action ^ " {" ^ name ^ "}]"  |> debug_log
 
 
@@ -155,7 +155,7 @@ module LlvmFunction = struct
 
   let get_value (v: llvalue) (t: lltype) =
     if type_of v = t then v
-    else Llvm.build_load v "" builder
+    else Llvm.build_pointercast v int_type "" builder
   let has_lambda_arg = List.exists (not << is_prim_arg)
   let get_llvm_args = List.map (to_llvm_type << snd)
 
@@ -168,7 +168,7 @@ module LlvmFunction = struct
     let f = LL.declare_function name function_type in
     let basic_block = Llvm.append_block context "entry" f in
     LL.position_at_end basic_block;
-    Hashtbl.add named_values name f;
+
 
     Array.iter (fun (arg, arg_name) ->
       set_value_name arg_name arg;
@@ -197,8 +197,7 @@ module LlvmFunction = struct
     let kek = globs |> Seq.map (function (name, (t, init)) -> 
       let* value = codegen init in
       let glob = Hashtbl.find named_values name in
-      let value' = LL.build_pointercast value t in
-      Llvm.build_store value' glob builder |> ignore |> Result.ok
+      Llvm.build_store value glob builder |> ignore |> Result.ok
     ) in
 
     let* _ = kek |> List.of_seq |> list_or_error in
@@ -242,34 +241,39 @@ module LlvmFunction = struct
         Builtins.call_builtin_binop name arg1 arg2 |> Result.ok
       | _ ->  failwith "Unreachable"
     else
-      let calling_f = LL.lookup_func_exn name 
-        (* match (Hashtbl.find_opt named_values name) with
-        | None -> LL.lookup_func_exn name 
-        | Some f -> f *)
-      in
-
-      let real_args_count = args |> List.length in
-      let expected_args_count = Array.length (LL.params calling_f) in
-      (match (expected_args_count - real_args_count) with
-      | 0 ->
-        let real_args = 
-          Array.combine (params calling_f) (Array.of_list args) 
-          |> Array.map (fun (p, x) -> (Llvm.type_of p, x))
-          |> Array.map (fun (t, v) -> get_value v t)
-          |> Array.to_list  
-        in
-        debug_log_action "finished(direct call)" "build_call" name;
-        LL.build_call calling_f real_args |> Result.ok
-      | _ -> 
-        let callee = 
-          let alloc_closure = LL.lookup_func_exn "alloc_closure" in
-          let f_pointer = LL.build_pointercast calling_f pointer_type in
-          LL.build_call alloc_closure [f_pointer; LL.const_int int_type expected_args_count]
-        in
+      match (Hashtbl.find_opt named_values name) with
+      | None -> 
+        let calling_f = LL.lookup_func_exn name in
+        let real_args_count = args |> List.length in
+        let expected_args_count = Array.length (LL.params calling_f) in
+        (match (expected_args_count - real_args_count) with
+        | 0 ->
+          let real_args = 
+            Array.combine (params calling_f) (Array.of_list args) 
+            |> Array.map (fun (p, x) -> (Llvm.type_of p, x))
+            |> Array.map (fun (t, v) -> get_value v t)
+            |> Array.to_list  
+          in
+          debug_log_action "finished(direct call)" "build_call" name;
+          LL.build_call calling_f real_args |> Result.ok
+        | _ -> 
+          let callee = 
+            let alloc_closure = LL.lookup_func_exn "alloc_closure" in
+            let f_pointer = LL.build_pointercast calling_f pointer_type in
+            LL.build_call alloc_closure [f_pointer; LL.const_int int_type expected_args_count]
+          in
+          let applyN = LL.lookup_func_exn "applyN" in
+          let final_args = callee :: LL.const_int int_type real_args_count :: args in
+          debug_log_action "finished(partial application)" "build_call" name;
+          LL.build_call applyN final_args |> Result.ok) 
+      | Some f -> 
+        let arg_number = List.length args in
         let applyN = LL.lookup_func_exn "applyN" in
-        let final_args = callee :: LL.const_int int_type real_args_count :: args in
-        debug_log_action "finished(partial application)" "build_call" name;
-        LL.build_call applyN final_args |> Result.ok)
+        let callee_f = Llvm.build_load f "" builder in
+        let final_args =
+          callee_f :: LL.const_int int_type arg_number :: args
+        in
+        LL.build_call applyN final_args |> Result.ok
 end
 
 let is_value_binding expr = (Typedtree.type_of_expr expr).typ_desc = Prim "int"
@@ -326,9 +330,8 @@ let codegen_top_level =
 
   | Typedtree.TLet (_, name, _, value_expr, in_expr) ->
       debug_log_action "codegen_top_level(value)" "start" name;
-      let global_type = LlvmFunction.to_llvm_type (Typedtree.type_of_expr value_expr) in 
-      let global_value = Llvm.define_global name (Llvm.const_null global_type) the_module in
-      Hashtbl.add global_initializers name (global_type, value_expr);
+      let global_value = Llvm.define_global name (Llvm.const_null pointer_type) the_module in
+      Hashtbl.add global_initializers name (int_type, value_expr);
       Hashtbl.add named_values name global_value;
       debug_log_action "codegen_top_level(value)" "finished" name;
       codegen in_expr |> ignore |> Result.ok
@@ -367,7 +370,7 @@ let value_binding_to_expr (x: Typedtree.value_binding) =
   let name_of_pattern (Parsetree.PVar s) = s in
   let name = name_of_pattern x.tvb_pat in
   Typedtree.TLet (x.tvb_flag, name, x.tvb_typ, x.tvb_body, Typedtree.TVar (name, Typedtree.type_of_expr x.tvb_body ))
-  |> Typedtree.compact_expr 
+  |> Typedtree.compact_expr
 
 let generate_llvm (value_bindings: Typedtree.value_binding list) emit_llvm llvm_out object_out = 
   Builtins.declare_builtins ();
