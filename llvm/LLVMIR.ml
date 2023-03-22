@@ -3,7 +3,10 @@ module Format = Stdlib.Format
 open Llvm
 open Miniml
 
-let debug = fun x -> ()
+let debug_log = prerr_endline
+let debug_log_action action meth name = "[" ^ meth ^ ":" ^ action ^ " {" ^ name ^ "}]"  |> debug_log
+
+
 let context = Llvm.global_context ()
 let builder = Llvm.builder context
 let int_type = Llvm.i64_type context
@@ -15,6 +18,8 @@ let pointer_type = Llvm.pointer_type int_type
 
 let the_module = Llvm.create_module context "main"
 let named_values:(string, llvalue) Hashtbl.t = Hashtbl.create 10
+let global_initializers:(string, lltype * Typedtree.expr) Hashtbl.t = Hashtbl.create 10
+let main_body = ref None
 
 let the_fpm = Llvm.PassManager.create_function the_module
 let () = Llvm.PassManager.initialize the_fpm |> ignore
@@ -51,13 +56,13 @@ let list_or_error lst =
 let (<<) f g x = f(g(x))
 let ( let* ) x f = Result.bind x f
 
+
 let validatef f =     
   (match Llvm_analysis.verify_function f with
   | true -> ()
   | false ->
-      prerr_endline "invalid function generated\n";
+      prerr_endline "invalid function generated!\n";
       prerr_endline (Llvm.string_of_llvalue f);
-      prerr_endline "module";
       prerr_endline (Llvm.string_of_llmodule the_module);
       Llvm_analysis.assert_valid_function f
   ) |> Result.ok
@@ -119,6 +124,9 @@ module Builtins = struct
     LL.declare_function "trace_int" (Llvm.function_type int_type [| int_type |]) |> ignore;
     LL.declare_function "trace_bool" (Llvm.function_type bool_type [| bool_type |]) |> ignore;
     LL.declare_function "get_int_arg" (Llvm.function_type int_type [| int_type |]) |> ignore;
+
+    LL.declare_function "applyN" (Llvm.var_arg_function_type pointer_type [| pointer_type; int_type |]) |> ignore;
+    LL.declare_function "alloc_closure" (Llvm.function_type pointer_type [| pointer_type; int_type|]) |> ignore;
 end
 
 module LlvmFunction = struct
@@ -128,27 +136,31 @@ module LlvmFunction = struct
     | Typedtree.Prim "int" | Typedtree.Prim "bool" | Typedtree.Prim "unit" -> true
     | _ -> false
 
-  let to_llvm_prim_arg (t: Typedtree.type_desc) =
+  let to_llvm_prim_type (t: Typedtree.type_desc) =
     match t with
     | Typedtree.Prim "int" ->  int_type
     | Typedtree.Prim "bool" -> bool_type
     | Typedtree.Prim "unit" -> unit_type
     | _ -> failwith "fail prim"
 
-  let to_llvm_arg (t: Typedtree.ty) =
+  let to_llvm_type (t: Typedtree.ty) =
     match t.typ_desc with
     | Typedtree.Prim "int" ->  int_type
     | Typedtree.Prim "bool" -> bool_type
     | Typedtree.Prim "unit" -> unit_type
     | Typedtree.Arrow _ as arr -> 
       let (args, ret_type) = TypedtreeHelper.fold_arrow arr
-      in Llvm.function_type (to_llvm_prim_arg ret_type) (List.map to_llvm_prim_arg args |> Array.of_list) |> Llvm.pointer_type
+      in Llvm.function_type (to_llvm_prim_type ret_type) (List.map to_llvm_prim_type args |> Array.of_list) |> Llvm.pointer_type
     | _ -> failwith "fail arg"
 
+  let get_value (v: llvalue) (t: lltype) =
+    if type_of v = t then v
+    else Llvm.build_load v "" builder
   let has_lambda_arg = List.exists (not << is_prim_arg)
-  let get_llvm_args = List.map (to_llvm_arg << snd)
+  let get_llvm_args = List.map (to_llvm_type << snd)
 
   let build_function name args body codegen =
+    debug_log_action "start" "build_function" name;
     let args_names = List.map fst args in
     let args_types = get_llvm_args args |> Array.of_list in 
 
@@ -157,87 +169,107 @@ module LlvmFunction = struct
     let basic_block = Llvm.append_block context "entry" f in
     LL.position_at_end basic_block;
     Hashtbl.add named_values name f;
+
     Array.iter (fun (arg, arg_name) ->
       set_value_name arg_name arg;
       Hashtbl.add named_values arg_name arg;
     ) (Array.combine (params f) (Array.of_list args_names));
 
-    let ret_val = codegen body in
-    debug "1";
-    Result.bind ret_val (Result.ok << LL.build_ret) |> ignore;
+    let* ret_val = codegen body in
+    LL.build_ret ret_val |> ignore;
 
-    (match Llvm_analysis.verify_function f with
-    | true -> ()
-    | false ->
-        print_string "invalid function generated\n";
-        prerr_endline (Llvm.string_of_llvalue f);
-        Format.printf "invalid function generated\n%s\n" (Llvm.string_of_llvalue f);
-        Llvm_analysis.assert_valid_function f
-    ) |> Result.ok
+    debug_log_action "finished" "build_function" name;
+    debug_log (string_of_llvalue f);
 
-  let build_main body codegen = 
-    let function_type = Llvm.function_type int_type [| unit_type |] in
+    validatef f
+
+  let build_init_globals codegen = 
+    debug_log_action "start" "build_init_globals" "";
+
+    let function_type = Llvm.function_type int_type [| |] in
+    let f = LL.declare_function "init_globals" function_type in
+    let basic_block = Llvm.append_block context "entry" f in
+    LL.position_at_end basic_block;
+    Hashtbl.add named_values "init_globals" f;
+
+    let globs = Hashtbl.to_seq global_initializers in
+
+    let kek = globs |> Seq.map (function (name, (t, init)) -> 
+      let* value = codegen init in
+      let glob = Hashtbl.find named_values name in
+      let value' = LL.build_pointercast value t in
+      Llvm.build_store value' glob builder |> ignore |> Result.ok
+    ) in
+
+    let* _ = kek |> List.of_seq |> list_or_error in
+
+    (Llvm.const_int int_type 1) |> LL.build_ret |> ignore;
+
+    debug_log (string_of_llmodule the_module);
+    debug_log_action "finished" "build_init_globals" "" ;
+    (* debug_log (string_of_llvalue f);
+    debug_log "1"; *)
+
+    validatef f
+
+  let build_main codegen = 
+    debug_log_action "start" "build_main" "";
+
+    let* _ = build_init_globals codegen in
+
+    let function_type = Llvm.function_type int_type [||] in
     let f = LL.declare_function "real_main" function_type in
     let basic_block = Llvm.append_block context "entry" f in
     LL.position_at_end basic_block;
-    let ret_val = codegen body in
     Hashtbl.add named_values "main" f;
-    Result.bind ret_val (Result.ok << LL.build_ret) |> ignore;
+
+    LL.build_call (LL.lookup_func_exn "init_globals") [] |> ignore;
+    let* ret_val = codegen (Option.get main_body.contents) in
+    LL.build_ret ret_val |> ignore;
+
+    debug_log_action "finished" "build_function" "";
+    debug_log (string_of_llvalue f);
+
     validatef f
 
-  let build_call name args codegen = 
+  let build_call name args codegen =
+    debug_log_action "start" "build_call" name;
     let* args = List.map codegen args |> list_or_error in
     if Builtins.is_builtin_binop name then
       match args with
-      | [arg1; arg2] -> Builtins.call_builtin_binop name arg1 arg2 |> Result.ok
+      | [arg1; arg2] ->
+        debug_log_action "finished(builtin)" "build_call" name;
+        Builtins.call_builtin_binop name arg1 arg2 |> Result.ok
       | _ ->  failwith "Unreachable"
     else
-      match (Hashtbl.find_opt named_values name) with
-      | None -> 
-        let calling_f = LL.lookup_func_exn name in
-        let real_args_count = args |> List.length in
-        let expected_args_count = Array.length (LL.params calling_f) in
-        assert (real_args_count = expected_args_count);
-        LL.build_call calling_f args |> Result.ok
-      | Some f -> 
-        debug (string_of_llvalue f);
-        LL.build_call f args |> Result.ok
-  
-  let is_partial_application name args = 
-    let calling_f = LL.lookup_func_exn name in
-    let real_args_count = args |> List.length in
-    let expected_args_count = Array.length (LL.params calling_f) in
-    (real_args_count = expected_args_count) |> not
+      let calling_f = LL.lookup_func_exn name 
+        (* match (Hashtbl.find_opt named_values name) with
+        | None -> LL.lookup_func_exn name 
+        | Some f -> f *)
+      in
 
-  let build_partial_application fname name args codegen =
-    let inner_f = LL.lookup_func_exn name in
-    let inner_f_type = Llvm.return_type (Llvm.type_of inner_f) in
-    let inner_f_args_types = Llvm.param_types inner_f_type in
-    Array.iter (fun x -> debug (string_of_lltype x)) inner_f_args_types;
-    let inner_f_return_type = Llvm.return_type inner_f_type in
-
-    let args_types = Array.sub inner_f_args_types (List.length args) (Array.length inner_f_args_types - List.length args) in
-    let args_names = Array.map (fun _ -> "arg") args_types in
-
-    let function_type = Llvm.function_type inner_f_return_type args_types in
-    let f = LL.declare_function fname function_type in
-    let basic_block = Llvm.append_block context "entry" f in
-    LL.position_at_end basic_block;
-
-    Hashtbl.add named_values fname f;
-    Array.iter (fun (arg, arg_name) ->
-      Llvm.set_value_name arg_name arg;
-      Hashtbl.add named_values arg_name arg;
-    ) (Array.combine (params f) args_names);
-
-    let fname_args = Array.to_list (params f) in
-    let* outer_args = List.map codegen args |> list_or_error in 
-    let call_args = List.concat [ outer_args; fname_args ] in
-    let ret_val = LL.build_call inner_f call_args in
-    LL.build_ret ret_val |> ignore;
-
-    validatef f
-    
+      let real_args_count = args |> List.length in
+      let expected_args_count = Array.length (LL.params calling_f) in
+      (match (expected_args_count - real_args_count) with
+      | 0 ->
+        let real_args = 
+          Array.combine (params calling_f) (Array.of_list args) 
+          |> Array.map (fun (p, x) -> (Llvm.type_of p, x))
+          |> Array.map (fun (t, v) -> get_value v t)
+          |> Array.to_list  
+        in
+        debug_log_action "finished(direct call)" "build_call" name;
+        LL.build_call calling_f real_args |> Result.ok
+      | _ -> 
+        let callee = 
+          let alloc_closure = LL.lookup_func_exn "alloc_closure" in
+          let f_pointer = LL.build_pointercast calling_f pointer_type in
+          LL.build_call alloc_closure [f_pointer; LL.const_int int_type expected_args_count]
+        in
+        let applyN = LL.lookup_func_exn "applyN" in
+        let final_args = callee :: LL.const_int int_type real_args_count :: args in
+        debug_log_action "finished(partial application)" "build_call" name;
+        LL.build_call applyN final_args |> Result.ok)
 end
 
 let is_value_binding expr = (Typedtree.type_of_expr expr).typ_desc = Prim "int"
@@ -260,29 +292,7 @@ let rec codegen =
         | Some x -> x |> Result.ok)
 
   | Typedtree.TIf _ -> 
-      `NotImplemented "if expr" |> Result.error 
-
-  | Typedtree.TLet (_, "main", _, value_expr, in_expr) -> 
-      let _ = LlvmFunction.build_main value_expr codegen in
-      codegen in_expr
-  
-  | Typedtree.TLet (_, name, _, (Typedtree.TLam _ as lambda) , in_expr) ->
-      let (args, body) = TypedtreeHelper.fold_lambda lambda in
-      let _ = LlvmFunction.build_function name args body codegen in
-      codegen in_expr
-
-  | Typedtree.TLet (_, pattern, _, (Typedtree.TApp _ as app), in_expr) -> 
-      let (args, f) = TypedtreeHelper.fold_application app in
-      let _ = 
-      (match f with
-      | Typedtree.TVar (name, _) -> 
-          if LlvmFunction.is_partial_application name args then
-            LlvmFunction.build_partial_application pattern name args codegen
-          else (* value binding *)
-            let* value = LlvmFunction.build_call name args codegen in
-            Hashtbl.add named_values pattern value |> Result.ok
-      | _ -> Result.error `NotFunctionApplication) in
-      codegen in_expr
+      `NotImplemented "if expr" |> Result.error
 
   | Typedtree.TLet (_, pattern, _, value_expr, in_expr) -> 
       let* value = codegen value_expr in
@@ -290,16 +300,40 @@ let rec codegen =
       codegen in_expr
 
   | Typedtree.TApp _ as app ->
-    let (args, f) = TypedtreeHelper.fold_application app in
-    (match f with
-    | Typedtree.TVar (name, _) -> 
-      debug "call";
-      debug name;
-      LlvmFunction.build_call name args codegen
-    | _ -> Result.error `NotFunctionApplication) 
+      let (args, f) = TypedtreeHelper.fold_application app in
+      (match f with
+      | Typedtree.TVar (name, _) -> LlvmFunction.build_call name args codegen
+      | _ -> Result.error `NotFunctionApplication) 
 
   | Typedtree.TLam _ -> Result.error `LambdaOutsideLet
-  | _ -> failwith "dfsdf"
+
+  | _ -> failwith "kek"
+
+let codegen_top_level =
+  function
+  | Typedtree.TLet (_, "main", _, value_expr, _) ->
+      debug_log_action "codegen_top_level(main)" "start" "main"; 
+      main_body := Some value_expr;
+      debug_log_action "codegen_top_level(main)" "finished" "main"; 
+      () |> Result.ok
+
+  | Typedtree.TLet (_, name, _, (Typedtree.TLam _ as lambda) , in_expr) ->
+      debug_log_action "codegen_top_level(function)" "start" name; 
+      let (args, body) = TypedtreeHelper.fold_lambda lambda in
+      let _ = LlvmFunction.build_function name args body codegen in
+      debug_log_action "codegen_top_level(function)" "finished" name; 
+      codegen in_expr |> ignore |> Result.ok
+
+  | Typedtree.TLet (_, name, _, value_expr, in_expr) ->
+      debug_log_action "codegen_top_level(value)" "start" name;
+      let global_type = LlvmFunction.to_llvm_type (Typedtree.type_of_expr value_expr) in 
+      let global_value = Llvm.define_global name (Llvm.const_null global_type) the_module in
+      Hashtbl.add global_initializers name (global_type, value_expr);
+      Hashtbl.add named_values name global_value;
+      debug_log_action "codegen_top_level(value)" "finished" name;
+      codegen in_expr |> ignore |> Result.ok
+
+  | _ -> failwith "incorrect toplevel"
 
 let dump_to_object ~the_fpm filename =
   Llvm_all_backends.initialize ();
@@ -333,11 +367,15 @@ let value_binding_to_expr (x: Typedtree.value_binding) =
   let name_of_pattern (Parsetree.PVar s) = s in
   let name = name_of_pattern x.tvb_pat in
   Typedtree.TLet (x.tvb_flag, name, x.tvb_typ, x.tvb_body, Typedtree.TVar (name, Typedtree.type_of_expr x.tvb_body ))
-  |>  Typedtree.compact_expr 
+  |> Typedtree.compact_expr 
 
 let generate_llvm (value_bindings: Typedtree.value_binding list) emit_llvm llvm_out object_out = 
   Builtins.declare_builtins ();
-  let result = List.map (codegen << value_binding_to_expr) value_bindings |> list_or_error in 
+  let result =
+    let* _ = List.map (codegen_top_level << value_binding_to_expr) value_bindings |> list_or_error in
+    let* _ = LlvmFunction.build_main codegen in
+    () |> Result.ok
+  in
   match result with
   | Result.Ok _ -> dump emit_llvm object_out llvm_out |> Result.ok
   | Result.Error e -> e |> Result.error

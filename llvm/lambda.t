@@ -4,6 +4,7 @@
   > let plus = fplus square
   > let ret_zero = fun x -> x - x
   > let main = ret_zero (trace_int (plus (get_int_arg 1) (get_int_arg 2)))
+  > EOF
   $ ./llvm_compiler.exe test.ml -o test.o
   $ gcc runtime.c -c -o runtime.o
   $ gcc runtime.o test.o -o test.exe
