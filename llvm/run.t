@@ -85,3 +85,21 @@
   15
   $ ./test.exe 1
   16
+
+  $ cat > test.ml <<-EOF
+  > let tuple = fun x -> fun y -> (x, y)
+  > let tuple_map = fun f -> fun x -> tuple (f (fst x)) (f (snd x))
+  > let square = tuple_map (fun x -> x * x)
+  > let sum = fun x -> fst x + snd x
+  > let id = fun x -> x
+  > let f = fun x -> fun y -> sum (id (square (tuple x y)))
+  > let ret_zero = fun x -> 0
+  > let main = ret_zero ( trace_int (f (get_int_arg 1) (get_int_arg 2)) )
+  > EOF
+  $ ./llvm_compiler.exe test.ml -o test.o
+  $ gcc runtime.c -c -o runtime.o
+  $ gcc runtime.o test.o -o test.exe
+  $ ./test.exe 0 0
+  0
+  $ ./test.exe 3 4
+  25
