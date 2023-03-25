@@ -18,8 +18,8 @@ module LL = (val LL.make builder the_module)
 let int_type = Llvm.i64_type context
 let bool_type = Llvm.i1_type context
 let unit_type = int_type
-let tuple_type = Llvm.array_type int_type
 let pointer_type = Llvm.pointer_type int_type
+let tuple_type = Llvm.vector_type pointer_type
 
 let named_values:(string, llvalue) Hashtbl.t = Hashtbl.create 10
 let global_initializers:(string, Typedtree.expr) Hashtbl.t = Hashtbl.create 10
@@ -73,6 +73,7 @@ let transform_if_needed (v: llvalue) (t: lltype) =
   else if (type_of v = int_type) && (t = pointer_type) then LL.build_inttoptr v t
   else if (type_of v = unit_type) && (t = pointer_type) then LL.build_inttoptr v t
   else if (type_of v = bool_type) && (t = pointer_type) then LL.build_inttoptr v t
+  else if (type_of v = Llvm.pointer_type t) && (t <> pointer_type) && (type_of v <> pointer_type) then Llvm.build_load v "" builder 
   else Llvm.build_pointercast v t "" builder
 
 module TypedtreeHelper = struct 
@@ -120,6 +121,28 @@ module Builtins = struct
     let arg2 = transform_if_needed arg2 op_type in
     op arg1 arg2
 
+  let build_fst () =
+    let function_type = Llvm.function_type pointer_type [| tuple_type 2 |] in
+    let f = LL.declare_function "fst" function_type in
+    let basic_block = Llvm.append_block context "entry" f in
+    LL.position_at_end basic_block;
+
+    let tuple = (param f 0) in
+    let ret_val = (Llvm.build_extractelement tuple (LL.const_int int_type 0) "" builder) in
+    LL.build_ret ret_val |> ignore;
+  ;;
+
+  let build_snd () =
+    let function_type = Llvm.function_type pointer_type [| tuple_type 2 |] in
+    let f = LL.declare_function "snd" function_type in
+    let basic_block = Llvm.append_block context "entry" f in
+    LL.position_at_end basic_block;
+
+    let tuple = (param f 0) in
+    let ret_val = (Llvm.build_extractelement tuple (LL.const_int int_type 1) "" builder) in
+    LL.build_ret ret_val |> ignore;
+  ;;
+
   let declare_builtins () =
     LL.declare_function "print_int" (Llvm.function_type unit_type [| int_type |]) |> ignore;
     LL.declare_function "print_bool" (Llvm.function_type unit_type [| bool_type |]) |> ignore;
@@ -128,6 +151,8 @@ module Builtins = struct
     LL.declare_function "get_int_arg" (Llvm.function_type int_type [| int_type |]) |> ignore;
     LL.declare_function "applyN" (Llvm.var_arg_function_type pointer_type [| pointer_type; int_type |]) |> ignore;
     LL.declare_function "alloc_closure" (Llvm.function_type pointer_type [| pointer_type; int_type|]) |> ignore;
+    build_fst ();
+    build_snd ();
 end
 
 module LlvmFunction = struct
@@ -142,7 +167,7 @@ module LlvmFunction = struct
       in Llvm.function_type (to_llvm_type ret_type) (List.map to_llvm_type args |> Array.of_list) |> Llvm.pointer_type
     | Typedtree.Prim x -> failwith ("Unexpected primitive " ^ x)
     | Typedtree.TLink _ -> failwith "Unexpected link"
-    | Typedtree.TProd _ -> failwith "Unsupportesd"
+    | Typedtree.TProd (_, _, lst) -> tuple_type (2 + List.length lst) |> Llvm.pointer_type
 
   let get_llvm_args = List.map (to_llvm_type << snd)
 
@@ -293,6 +318,19 @@ module LlvmFunction = struct
       | Some f -> build_closure_call f args
 end
 
+module LlvmTuple = struct
+
+  let create_tuple args codegen = 
+    let* values = List.map codegen args |> list_or_error in
+    let values = List.map (fun v -> transform_if_needed v pointer_type) values in
+    let size = List.length values in
+    let array = Llvm.build_alloca (tuple_type size) "" builder in
+    let i = ref (-1) in
+    let result = List.fold_left (fun vec v -> i := (i.contents + 1); build_insertelement vec v (LL.const_int (i32_type context) i.contents) "" builder) (LL.build_load array) values in
+    Llvm.build_store result array builder |> ignore;
+    array |> Result.ok
+end
+
 let rec codegen = 
   function
   | Typedtree.TConst x -> 
@@ -322,7 +360,8 @@ let rec codegen =
 
   | Typedtree.TUnit -> LL.const_int int_type 0 |> Result.ok
 
-  | Typedtree.TTuple (_, _, _, _) -> Result.error `LambdaOutsideLet
+  | Typedtree.TTuple (fst, snd, other, _) -> LlvmTuple.create_tuple (fst :: snd :: other) codegen
+
 
 let codegen_top_level =
   function

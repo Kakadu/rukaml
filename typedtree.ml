@@ -78,7 +78,7 @@ let compact_expr =
     | TLet (flg, pat, S (vars, ty), e1, e2) ->
       TLet (flg, pat, S (vars, type_without_links ty), helper e1, helper e2)
     | TTuple (a, b, ts, ty) -> TTuple (helper a, helper b, List.map helper ts, ty)
-    | TUnit -> failwith "Kakaduuuu"
+    | TUnit -> TUnit
   in
   helper
 ;;

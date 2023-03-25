@@ -20,6 +20,7 @@ module type S = sig
   val build_ret: llvalue -> llvalue
   (* val build_function: ?name:string -> llvalue  *)
 
+  val build_load: ?name:string -> llvalue -> llvalue
   val build_ptrtoint : ?name:string -> llvalue -> lltype -> llvalue
   val build_inttoptr : ?name:string -> llvalue -> lltype -> llvalue
   val build_pointercast : ?name:string -> llvalue -> lltype -> llvalue
@@ -60,6 +61,8 @@ let make builder module_ =
     let declare_function name ftype = declare_function name ftype module_
     let position_at_end basic_block = position_at_end basic_block builder
     let build_ret ret_val = build_ret ret_val builder
+
+    let build_load ?(name="") v = build_load v name builder
 
     (* Aliases *)
     let const_int = Llvm.const_int

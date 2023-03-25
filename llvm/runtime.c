@@ -117,6 +117,7 @@ void *alloc_closure(void *func, int32_t argsc)
 void *applyN(void *f, int32_t argc, ...)
 {
   setbuf(stdout, NULL);
+  // printf("\n\n");
   // printf("%s argc = %u, closure = %p\n", __func__, argc, f);
   fflush(stdout);
 
@@ -124,22 +125,22 @@ void *applyN(void *f, int32_t argc, ...)
   va_start(argp, argc);
   closure *f_closure = copy_closure((closure *)f);
   // printf("f->arg_received = %u\n", f_closure->args_received);
-  //printf("%d\n", __LINE__);
+  // printf("%d\n", __LINE__);
   assert(f_closure->args_received + argc <= f_closure->argsc);
 
   for (size_t i = 0; i < argc; i++)
   {
-    //printf("%d\n", __LINE__);
+    // printf("%d\n", __LINE__);
     void *arg1 = va_arg(argp, void *);
     // printf("arg[%lu] = %p, ", i, arg1);
-    fflush(stdout);
+    // fflush(stdout);
     f_closure->args[f_closure->args_received++] = arg1;
   }
   // printf("\n");
   // printf("f->arg_received = %u, f->argc = %u\n",
   //        f_closure->args_received,
   //        f_closure->argsc);
-  fflush(stdout);
+  // fflush(stdout);
   va_end(argp);
   if (f_closure->argsc == f_closure->args_received)
   {
