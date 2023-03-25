@@ -1,14 +1,18 @@
 open Llvm
 open Printf
 
+type binop = ?name:string -> llvalue -> llvalue -> llvalue
+
 module type S = sig
   val build_store : llvalue -> llvalue -> llvalue
   val build_call : ?name:string -> llvalue -> llvalue list -> llvalue
   val lookup_func_exn : string -> llvalue
-  val build_add : ?name:string -> llvalue -> llvalue -> llvalue
-  val build_sub : ?name:string -> llvalue -> llvalue -> llvalue
-  val build_mul : ?name:string -> llvalue -> llvalue -> llvalue
-  val build_sdiv : ?name:string -> llvalue -> llvalue -> llvalue [@@inline]
+
+  val build_add : binop
+  val build_sub : binop
+  val build_mul : binop
+  val build_sdiv : binop [@@inline]
+  val build_eq: binop
 
 
   val declare_function: string -> lltype -> llvalue
@@ -37,10 +41,12 @@ let make builder module_ =
       | Some f -> f
       | None -> failwith (sprintf "Function '%s' not found" fname)
 
-    let build_add ?(name = "") l r = build_add l r name builder
-    let build_sub ?(name = "") l r = build_sub l r name builder
-    let build_mul ?(name = "") l r = build_mul l r name builder
-    let build_sdiv ?(name = "") l r = build_sdiv l r name builder
+    let build_binop op_builder ?(name = "") l r = op_builder l r name builder
+    let build_add = build_binop build_add 
+    let build_sub = build_binop build_sub 
+    let build_mul = build_binop build_mul 
+    let build_sdiv = build_binop build_sdiv 
+    let build_eq = build_binop (build_icmp Icmp.Eq)
 
     let build_ptrtoint ?(name = "") e typ =
       Llvm.build_ptrtoint e typ name builder

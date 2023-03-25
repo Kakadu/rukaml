@@ -9,26 +9,32 @@ let debug_log_action action meth name = "[" ^ meth ^ ":" ^ action ^ " {" ^ name 
 
 let context = Llvm.global_context ()
 let builder = Llvm.builder context
+let the_module = Llvm.create_module context "main"
+let the_fpm = Llvm.PassManager.create_function the_module
+let () = Llvm.PassManager.initialize the_fpm |> ignore
+
+module LL = (val LL.make builder the_module)
+
+
 let int_type = Llvm.i64_type context
-let bool_type = int_type
+let bool_type = Llvm.i1_type context
 let unit_type = int_type
 let tuple_type = Llvm.array_type int_type
 let pointer_type = Llvm.pointer_type int_type
 
 let cast_if_needed (v: llvalue) (t: lltype) =
   if type_of v = t then v
-  else if (type_of v = int_type) && (t = pointer_type) then Llvm.build_inttoptr v t "" builder
+  else if (type_of v = int_type) && (t = pointer_type) then LL.build_inttoptr v t
+  else if (type_of v = unit_type) && (t = pointer_type) then LL.build_inttoptr v t
+  else if (type_of v = bool_type) && (t = pointer_type) then LL.build_inttoptr v t
   else Llvm.build_pointercast v t "" builder
 
-let the_module = Llvm.create_module context "main"
+
 let named_values:(string, llvalue) Hashtbl.t = Hashtbl.create 10
 let global_initializers:(string, Typedtree.expr) Hashtbl.t = Hashtbl.create 10
 let main_body = ref None
 
-let the_fpm = Llvm.PassManager.create_function the_module
-let () = Llvm.PassManager.initialize the_fpm |> ignore
 
-module LL = (val LL.make builder the_module)
 
 (* TODO: More info in errors *)
 type error =
@@ -75,7 +81,7 @@ module TypedtreeHelper = struct
   let fold_lambda x = 
     let get_arg_type =
       function
-      | Typedtree.Arrow (x, _) -> x
+      | Typedtree.Arrow (x, _) -> x.typ_desc
       | _ -> failwith "fail lambda"
     in
     let rec helper lambda args =
@@ -106,7 +112,8 @@ module Builtins = struct
   let builtin_binops = [
     ("+", LL.build_add, int_type);
     ("*", LL.build_mul, int_type);
-    ("-", LL.build_sub, int_type)
+    ("-", LL.build_sub, int_type);
+    ("=", LL.build_eq, int_type)
   ]
   let is_builtin_binop n = List.exists (fun (op_n, _, _) -> op_n = n ) builtin_binops
   let call_builtin_binop n arg1 arg2 = 
@@ -121,7 +128,6 @@ module Builtins = struct
     LL.declare_function "trace_int" (Llvm.function_type int_type [| int_type |]) |> ignore;
     LL.declare_function "trace_bool" (Llvm.function_type bool_type [| bool_type |]) |> ignore;
     LL.declare_function "get_int_arg" (Llvm.function_type int_type [| int_type |]) |> ignore;
-
     LL.declare_function "applyN" (Llvm.var_arg_function_type pointer_type [| pointer_type; int_type |]) |> ignore;
     LL.declare_function "alloc_closure" (Llvm.function_type pointer_type [| pointer_type; int_type|]) |> ignore;
 end
@@ -133,28 +139,41 @@ module LlvmFunction = struct
     | Typedtree.Prim "int" | Typedtree.Prim "bool" | Typedtree.Prim "unit" -> true
     | _ -> false
 
-  let to_llvm_prim_type (t: Typedtree.type_desc) =
-    match t with
-    | Typedtree.Prim "int" ->  int_type
-    | Typedtree.Prim "bool" -> bool_type
-    | Typedtree.Prim "unit" -> unit_type
-    | _ -> failwith "fail prim"
 
-  let to_llvm_type (t: Typedtree.ty) =
-    match t.typ_desc with
+
+  let rec to_llvm_type =
+    function
     | Typedtree.Prim "int" ->  int_type
     | Typedtree.Prim "bool" -> bool_type
     | Typedtree.Prim "unit" -> unit_type
+    | Typedtree.V _ -> pointer_type
     | Typedtree.Arrow _ as arr -> 
       let (args, ret_type) = TypedtreeHelper.fold_arrow arr
-      in Llvm.function_type (to_llvm_prim_type ret_type) (List.map to_llvm_prim_type args |> Array.of_list) |> Llvm.pointer_type
-    | Typedtree.V _ -> pointer_type
-    | _ -> failwith "fail arg"
+      in Llvm.function_type (to_llvm_type ret_type) (List.map to_llvm_type args |> Array.of_list) |> Llvm.pointer_type
+    | Typedtree.Prim x -> failwith ("Unexpected primitive " ^ x)
+    | Typedtree.TLink _ -> failwith "Unexpected link"
+    | Typedtree.TProd _ -> failwith "Unsupportesd"
 
-
-
-  let has_lambda_arg = List.exists (not << is_prim_arg)
   let get_llvm_args = List.map (to_llvm_type << snd)
+
+  let build_f name args ret_val_builder =
+    let args_names = List.map fst args in
+    let args_types = get_llvm_args args |> Array.of_list in 
+
+    let function_type = Llvm.function_type int_type args_types in
+    let f = LL.declare_function name function_type in
+    let basic_block = Llvm.append_block context "entry" f in
+    LL.position_at_end basic_block;
+
+    Array.iter (fun (arg, arg_name) ->
+      set_value_name arg_name arg;
+      Hashtbl.add named_values arg_name arg;
+    ) (Array.combine (params f) (Array.of_list args_names));
+
+    let* ret_val = ret_val_builder () in
+    LL.build_ret ret_val |> ignore;
+
+    validatef f
 
   let build_function name args body codegen =
     let args_names = List.map fst args in
@@ -164,7 +183,6 @@ module LlvmFunction = struct
     let f = LL.declare_function name function_type in
     let basic_block = Llvm.append_block context "entry" f in
     LL.position_at_end basic_block;
-
 
     Array.iter (fun (arg, arg_name) ->
       set_value_name arg_name arg;
@@ -214,10 +232,10 @@ module LlvmFunction = struct
     validatef f
 
   let build_if cond then_ else_ codegen =
-      let cond = codegen cond in
+      let* cond = codegen cond in
 
-      let zero = const_int int_type 0 in
-      let cond_val = build_fcmp Fcmp.One cond zero "ifcond" builder in
+      let zero = const_int bool_type 1 in
+      let cond_val = build_icmp Icmp.Eq cond zero "ifcond" builder in
 
       let start_bb = insertion_block builder in
       let the_function = block_parent start_bb in
@@ -225,20 +243,20 @@ module LlvmFunction = struct
       let then_bb = append_block context "then" the_function in
 
       position_at_end then_bb builder;
-      let then_val = codegen then_ in
+      let* then_val = codegen then_ in
 
       let new_then_bb = insertion_block builder in
 
       let else_bb = append_block context "else" the_function in
       position_at_end else_bb builder;
-      let else_val = codegen else_ in
+      let* else_val = codegen else_ in
 
       let new_else_bb = insertion_block builder in
 
       let merge_bb = append_block context "ifcont" the_function in
       position_at_end merge_bb builder;
       let incoming = [(then_val, new_then_bb); (else_val, new_else_bb)] in
-      let _ = build_phi incoming "iftmp" builder in
+      let phi = build_phi incoming "iftmp" builder in
 
       position_at_end start_bb builder;
       ignore (build_cond_br cond_val then_bb else_bb builder);
@@ -246,7 +264,9 @@ module LlvmFunction = struct
       position_at_end new_then_bb builder; ignore (build_br merge_bb builder);
       position_at_end new_else_bb builder; ignore (build_br merge_bb builder);
 
-      position_at_end merge_bb builder
+      position_at_end merge_bb builder;
+
+      phi |> Result.ok
 
   let alloc_clossure f expected_args_count = 
     let alloc_closure = LL.lookup_func_exn "alloc_closure" in
@@ -289,13 +309,10 @@ module LlvmFunction = struct
     LL.build_call applyN final_args |> Result.ok
 
   let build_call name args codegen =
-    debug_log_action "start" "build_call" name;
     let* args = List.map codegen args |> list_or_error in
     if Builtins.is_builtin_binop name then
       match args with
-      | [arg1; arg2] ->
-        debug_log_action "finished(builtin)" "build_call" name;
-        Builtins.call_builtin_binop name arg1 arg2 |> Result.ok
+      | [arg1; arg2] -> Builtins.call_builtin_binop name arg1 arg2 |> Result.ok
       | _ ->  failwith "Unreachable"
     else
       let real_args_count = args |> List.length in
@@ -311,11 +328,6 @@ module LlvmFunction = struct
 end
 
 let rec codegen = 
-  (* TODO:
-     1) Add support for unit and bool type (n maybe)
-     3) Add support for lambda as function argument
-     4) Add support for if-expression 
-     5) Add print *)
   function
   | Typedtree.TConst x -> 
       (match x with
@@ -327,8 +339,7 @@ let rec codegen =
         | None -> LL.lookup_func_exn name |> Result.ok
         | Some x -> x |> Result.ok)
 
-  | Typedtree.TIf _ -> 
-      `NotImplemented "if expr" |> Result.error
+  | Typedtree.TIf (c, t, e, _) -> LlvmFunction.build_if c t e codegen
 
   | Typedtree.TLet (_, pattern, _, value_expr, in_expr) -> 
       let* value = codegen value_expr in
@@ -343,7 +354,9 @@ let rec codegen =
 
   | Typedtree.TLam _ -> Result.error `LambdaOutsideLet
 
-  | _ -> failwith "kek"
+  | Typedtree.TUnit -> LL.const_int int_type 0 |> Result.ok
+
+  | Typedtree.TTuple (_, _, _, _) -> Result.error `LambdaOutsideLet
 
 let codegen_top_level =
   function
