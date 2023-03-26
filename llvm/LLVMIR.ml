@@ -147,7 +147,7 @@ module Builtins = struct
     LL.declare_function "get_int_arg" (Llvm.function_type int_type [| int_type |]) |> ignore;
     LL.declare_function "applyN" (Llvm.var_arg_function_type pointer_type [| pointer_type; int_type |]) |> ignore;
     LL.declare_function "alloc_closure" (Llvm.function_type pointer_type [| pointer_type; int_type|]) |> ignore;
-    LL.declare_function "gc_alloc" (Llvm.function_type pointer_type [| int_type |]) |> ignore;
+    LL.declare_function "gc_alloc" (Llvm.function_type pointer_type [| int_type|]) |> ignore;
     build_tuple_get "fst" 0 2;
     build_tuple_get "snd" 1 2;
 end
