@@ -73,15 +73,15 @@ let transform_if_needed (v: llvalue) (t: lltype) =
   else if (type_of v = int_type) && (t = pointer_type) then LL.build_inttoptr v t
   else if (type_of v = unit_type) && (t = pointer_type) then LL.build_inttoptr v t
   else if (type_of v = bool_type) && (t = pointer_type) then LL.build_inttoptr v t
-  else if (type_of v = Llvm.pointer_type t) && (t <> pointer_type) && (type_of v <> pointer_type) then Llvm.build_load v "" builder 
-  else Llvm.build_pointercast v t "" builder
+  else if (type_of v = Llvm.pointer_type t) && (t <> pointer_type) && (type_of v <> pointer_type) then LL.build_load v 
+  else LL.build_pointercast v t 
 
 let build_gc_alloc (t: lltype) =
   let gc_alloc = LL.lookup_func_exn "gc_alloc" in
   let size_of_elem = Llvm.size_of (Llvm.element_type t) in
   let size_of_vector = LL.const_int int_type (Llvm.vector_size t) in
   let allocate_size = LL.build_mul size_of_elem size_of_vector in
-  Llvm.build_pointercast (LL.build_call gc_alloc [ allocate_size ]) (Llvm.pointer_type t) "" builder
+  LL.build_pointercast (LL.build_call gc_alloc [ allocate_size ]) (Llvm.pointer_type t)
 
 module TypedtreeHelper = struct 
   let fold_lambda x = 
@@ -292,7 +292,7 @@ module LlvmFunction = struct
     let applyN = LL.lookup_func_exn "applyN" in
     let callee_f = 
       match (classify_value f) with
-      | GlobalVariable -> Llvm.build_load f "" builder
+      | GlobalVariable -> LL.build_load f
       | _ -> transform_if_needed f pointer_type
     in
     let final_args = callee_f :: LL.const_int int_type arg_number :: (List.map alloc_closure_if_needed args) in
