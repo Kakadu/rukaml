@@ -76,6 +76,13 @@ let transform_if_needed (v: llvalue) (t: lltype) =
   else if (type_of v = Llvm.pointer_type t) && (t <> pointer_type) && (type_of v <> pointer_type) then Llvm.build_load v "" builder 
   else Llvm.build_pointercast v t "" builder
 
+let build_gc_alloc (t: lltype) =
+  let gc_alloc = LL.lookup_func_exn "gc_alloc" in
+  let size_of_elem = Llvm.size_of (Llvm.element_type t) in
+  let size_of_vector = LL.const_int int_type (Llvm.vector_size t) in
+  let allocate_size = LL.build_mul size_of_elem size_of_vector in
+  Llvm.build_pointercast (LL.build_call gc_alloc [ allocate_size ]) (Llvm.pointer_type t) "" builder
+
 module TypedtreeHelper = struct 
   let fold_lambda x = 
     let get_arg_type =
@@ -121,25 +128,14 @@ module Builtins = struct
     let arg2 = transform_if_needed arg2 op_type in
     op arg1 arg2
 
-  let build_fst () =
-    let function_type = Llvm.function_type pointer_type [| tuple_type 2 |] in
-    let f = LL.declare_function "fst" function_type in
+  let build_tuple_get name index size = 
+    let function_type = Llvm.function_type pointer_type [| Llvm.pointer_type (tuple_type size) |] in
+    let f = LL.declare_function name function_type in
     let basic_block = Llvm.append_block context "entry" f in
     LL.position_at_end basic_block;
 
-    let tuple = (param f 0) in
-    let ret_val = (Llvm.build_extractelement tuple (LL.const_int int_type 0) "" builder) in
-    LL.build_ret ret_val |> ignore;
-  ;;
-
-  let build_snd () =
-    let function_type = Llvm.function_type pointer_type [| tuple_type 2 |] in
-    let f = LL.declare_function "snd" function_type in
-    let basic_block = Llvm.append_block context "entry" f in
-    LL.position_at_end basic_block;
-
-    let tuple = (param f 0) in
-    let ret_val = (Llvm.build_extractelement tuple (LL.const_int int_type 1) "" builder) in
+    let tuple = LL.build_load (param f 0) in
+    let ret_val = (Llvm.build_extractelement tuple (LL.const_int int_type index) "" builder) in
     LL.build_ret ret_val |> ignore;
   ;;
 
@@ -151,8 +147,9 @@ module Builtins = struct
     LL.declare_function "get_int_arg" (Llvm.function_type int_type [| int_type |]) |> ignore;
     LL.declare_function "applyN" (Llvm.var_arg_function_type pointer_type [| pointer_type; int_type |]) |> ignore;
     LL.declare_function "alloc_closure" (Llvm.function_type pointer_type [| pointer_type; int_type|]) |> ignore;
-    build_fst ();
-    build_snd ();
+    LL.declare_function "gc_alloc" (Llvm.function_type pointer_type [| int_type |]) |> ignore;
+    build_tuple_get "fst" 0 2;
+    build_tuple_get "snd" 1 2;
 end
 
 module LlvmFunction = struct
@@ -179,6 +176,7 @@ module LlvmFunction = struct
 
     let function_type = Llvm.function_type ret_type args_types in
     let f = LL.declare_function name function_type in
+    (* set_gc (Some "shadow-stack") f; *)
     let basic_block = Llvm.append_block context "entry" f in
     LL.position_at_end basic_block;
 
@@ -324,7 +322,7 @@ module LlvmTuple = struct
     let* values = List.map codegen args |> list_or_error in
     let values = List.map (fun v -> transform_if_needed v pointer_type) values in
     let size = List.length values in
-    let array = Llvm.build_alloca (tuple_type size) "" builder in
+    let array = build_gc_alloc (tuple_type size) in
     let i = ref (-1) in
     let result = List.fold_left (fun vec v -> i := (i.contents + 1); build_insertelement vec v (LL.const_int (i32_type context) i.contents) "" builder) (LL.build_load array) values in
     Llvm.build_store result array builder |> ignore;
