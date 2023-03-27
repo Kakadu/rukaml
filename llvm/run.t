@@ -103,3 +103,10 @@
   0
   $ ./test.exe 3 4
   25
+
+  $ cat > fib.ml <<-EOF
+  > let ret_zero = fun x -> 0
+  > let main = ret_zero ( trace_int 5 )
+  > EOF
+  $ ./llvm_compiler.exe test.ml -o test.o
+  $ gcc runtime.o test.o -o test.exe && ./test.exe
