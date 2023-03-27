@@ -1,5 +1,2 @@
-let plus = fun x -> fun y -> x + y
-let plus5 = plus 5
-let ret_zero = fun x -> x - x
-let main = ret_zero (trace_int (plus5 (get_int_arg 1)))
-
+let ret_zero = fun x -> 0
+let main = ret_zero ( trace_int 5 )

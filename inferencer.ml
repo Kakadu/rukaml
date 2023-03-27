@@ -407,15 +407,17 @@ let infer =
 
 let start_env =
   let tuple_var_set = Var_set.add 2 (Var_set.add 1 Var_set.empty) in
-  List.fold [ 
-    ("print_int", S (Var_set.empty, tarrow int_typ unit_typ));
-    ("print_bool", S (Var_set.empty, tarrow bool_typ unit_typ));
-    ("trace_int", S (Var_set.empty, tarrow int_typ int_typ));
-    ("trace_bool", S (Var_set.empty, tarrow bool_typ bool_typ));
-    ("get_int_arg", S (Var_set.empty, tarrow int_typ int_typ));
-    ("fst", S (tuple_var_set, tarrow (tprod (tv 1) (tv 2) []) (tv 1)));
-    ("snd", S (tuple_var_set, tarrow (tprod (tv 1) (tv 2) []) (tv 2)));
-  ] ~init:TypeEnv.empty ~f:TypeEnv.extend
+  List.fold
+    [ "print_int", S (Var_set.empty, tarrow int_typ unit_typ)
+    ; "print_bool", S (Var_set.empty, tarrow bool_typ unit_typ)
+    ; "trace_int", S (Var_set.empty, tarrow int_typ int_typ)
+    ; "trace_bool", S (Var_set.empty, tarrow bool_typ bool_typ)
+    ; "get_int_arg", S (Var_set.empty, tarrow int_typ int_typ)
+    ; "fst", S (tuple_var_set, tarrow (tprod (tv 1) (tv 2) []) (tv 1))
+    ; "snd", S (tuple_var_set, tarrow (tprod (tv 1) (tv 2) []) (tv 2))
+    ]
+    ~init:TypeEnv.empty
+    ~f:TypeEnv.extend
 ;;
 
 let w e =

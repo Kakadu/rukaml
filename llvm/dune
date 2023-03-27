@@ -12,9 +12,9 @@
   (pps ppx_inline_test)))
 
 (library
-  (name LLVMIR)
-  (modules LLVMIR)
-  (libraries llvm MiniML.frontend LL))
+ (name LLVMIR)
+ (modules LLVMIR)
+ (libraries llvm MiniML.frontend LL))
 
 (executable
  (name llvm_compiler)

@@ -11,5 +11,7 @@ let () =
 
     let pp_error = pp_error
     let run = compile
-  end in
+  end
+  in
   Registration.register_backend_exn "llvm" (module B) []
+;;
