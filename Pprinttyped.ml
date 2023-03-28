@@ -7,7 +7,7 @@ let pp_typ_hum =
   let rec pp_typ ppf t =
     match t.typ_desc with
     | Prim s -> fprintf ppf "%s" s
-    | V n -> fprintf ppf "'_%d" n
+    | V { binder; _ } -> fprintf ppf "'_%d" binder
     | Arrow (l, r) -> fprintf ppf "(%a -> %a)" pp_typ l pp_typ r
     | TLink ty -> pp_typ ppf ty
     | TProd (a, b, ts) ->

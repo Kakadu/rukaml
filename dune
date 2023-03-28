@@ -1,7 +1,7 @@
 (env
  (dev
   (flags
-   (:standard -w -32-33 -warn-error -8-26-27-34-37-39-69))))
+   (:standard -w -32-33 -warn-error -8-9-26-27-34-37-39-69))))
 
 (library
  (name miniml)

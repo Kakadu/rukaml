@@ -16,7 +16,10 @@ type ty = { mutable typ_desc : type_desc }
 
 and type_desc =
   | Prim of string
-  | V of binder
+  | V of
+      { binder : binder
+      ; var_level : int
+      }
   | Arrow of ty * ty
   | TLink of ty
   | TProd of ty * ty * ty list
@@ -26,7 +29,7 @@ type scheme = S of binder_set * ty [@@deriving show { with_path = false }]
 
 let tarrow l r = { typ_desc = Arrow (l, r) }
 let tprim s = { typ_desc = Prim s }
-let tv v = { typ_desc = V v }
+let tv binder ~level = { typ_desc = V { binder; var_level = level } }
 let tlink t = { typ_desc = TLink t }
 let tprod a b ts = { typ_desc = TProd (a, b, ts) }
 let int_typ = tprim "int"

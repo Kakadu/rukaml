@@ -26,6 +26,8 @@ let pp_error ppf : error -> _ = function
     Format.fprintf ppf "unification failed on %a and %a" Pprint.pp_typ l Pprint.pp_typ r
 ;;
 
+type fresh_counter = int
+
 module R : sig
   type 'a t
 
@@ -43,13 +45,20 @@ module R : sig
   (** Creation of a fresh name from internal state *)
   val fresh : int t
 
+  val level : int t
+  val enter_level : unit t
+  val leave_level : unit t
+
   (** Running a transformer: getting the inner result value *)
   val run : 'a t -> ('a, error) Result.t
 
   val list_foldm : f:('a -> 'b -> 'a t) -> init:'a t -> 'b list -> 'a t
 end = struct
+  type cur_level = int
+
   (* A compositon: State monad after Result monad *)
-  type 'a t = int -> int * ('a, error) Result.t
+  type 'a t =
+    fresh_counter * cur_level -> (fresh_counter * cur_level) * ('a, error) Result.t
 
   let ( >>= ) : 'a 'b. 'a t -> ('a -> 'b t) -> 'b t =
    fun m f st ->
@@ -75,8 +84,17 @@ end = struct
     let ( let+ ) = ( >>| )
   end
 
-  let fresh : int t = fun last -> last + 1, Result.Ok last
-  let run m = snd (m 0)
+  let fresh : int t =
+   fun (last_fresh, level) -> (last_fresh + 1, level), Result.Ok last_fresh
+ ;;
+
+  let level : int t = fun ((_, level) as info) -> info, Result.Ok level
+
+  (* let set_level : int -> unit t = fun n (fresh, _) -> (fresh, n), Result.Ok ()
+      *)
+  let enter_level : unit t = fun (fresh, level) -> (fresh, 1 + level), Result.Ok ()
+  let leave_level : unit t = fun (fresh, level) -> (fresh, level - 1), Result.Ok ()
+  let run : 'a. 'a t -> ('a, error) Result.t = fun m -> snd (m (0, 0))
 
   let rec list_foldm ~f ~init xs =
     let open Syntax in
@@ -88,19 +106,17 @@ end = struct
   ;;
 end
 
-type fresh = int
-
 module Subst : sig
   type t
 
   val pp : Caml.Format.formatter -> t -> unit
   val empty : t
-  val singleton : fresh -> ty -> t
+  val singleton : binder -> ty -> t
 
   (** Getting value from substitution *)
-  val find_exn : fresh -> t -> ty
+  val find_exn : binder -> t -> ty
 
-  val find : fresh -> t -> ty option
+  val find : fresh_counter -> t -> ty option
   val apply : t -> ty -> ty
 
   (** Compositon of substitutions *)
@@ -109,10 +125,10 @@ module Subst : sig
   (** Alias for [(++)] *)
   val compose : t -> t -> t
 
-  val remove : t -> fresh -> t
+  val remove : t -> binder -> t
 end = struct
   (* an association list. In real world replace it by Map *)
-  type t = (fresh * ty) list
+  type t = (fresh_counter * ty) list
 
   let pp ppf subst =
     let open Format in
@@ -134,9 +150,9 @@ end = struct
   let apply s =
     let rec helper typ =
       match typ.typ_desc with
-      | V b ->
-        (match find_exn b s with
-         | exception Not_found_s _ -> { typ_desc = V b }
+      | V { binder; _ } ->
+        (match find_exn binder s with
+         | exception Not_found_s _ -> typ
          | x -> x)
       | Arrow (l, r) -> tarrow (helper l) (helper r)
       | _ -> typ
@@ -175,7 +191,7 @@ module Type = struct
 
   let rec occurs_in v { typ_desc } =
     match typ_desc with
-    | V b -> b = v
+    | V { binder; _ } -> binder = v
     | Arrow (l, r) -> occurs_in v l || occurs_in v r
     | TProd (a, b, ts) ->
       List.fold_left
@@ -190,7 +206,7 @@ module Type = struct
     let rec helper acc { typ_desc } =
       match typ_desc with
       | Prim _ -> acc
-      | V b -> Var_set.add b acc
+      | V { binder; _ } -> Var_set.add binder acc
       | TLink t -> helper acc t
       | Arrow (l, r) -> helper (helper acc l) r
       | TProd (a, b, ts) -> List.fold_left ts ~init:(helper (helper acc a) b) ~f:helper
@@ -221,11 +237,8 @@ module Scheme = struct
 end
 
 let%expect_test " " =
-  Format.printf "%a\n" Var_set.pp (Type.free_vars { typ_desc = V 1 });
-  Format.printf
-    "%a\n"
-    Var_set.pp
-    (Scheme.free_vars (S (Var_set.empty, { typ_desc = V 1 })));
+  Format.printf "%a\n" Var_set.pp (Type.free_vars (tv 1 ~level:1));
+  Format.printf "%a\n" Var_set.pp (Scheme.free_vars (S (Var_set.empty, tv 1 ~level:1)));
   [%expect {|
     [ 1; ]
     [ 1; ] |}]
@@ -264,8 +277,8 @@ let unify l r =
     | _, TLink r -> helper l r
     | Prim l, Prim r when String.equal l r -> return ()
     | Prim _, Prim _ -> fail (`UnificationFailed (l, r))
-    | V a, V b when Int.equal a b -> return ()
-    | V b, _ when Type.occurs_in b r -> fail `Occurs_check
+    | V { binder = a; _ }, V { binder = b; _ } when Int.equal a b -> return ()
+    | V { binder = b; _ }, _ when Type.occurs_in b r -> fail `Occurs_check
     | V _, _ ->
       l.typ_desc <- TLink r;
       return ()
@@ -299,7 +312,7 @@ let instantiate : scheme -> ty R.t =
   Var_set.fold_R
     (fun typ name ->
       let* f1 = fresh in
-      return @@ Subst.apply (Subst.singleton name (tv f1)) typ)
+      return @@ Subst.apply (Subst.singleton name (tv f1 ~level:0)) typ)
     bs
     (return t)
 ;;
@@ -318,7 +331,7 @@ let lookup_env e xs =
   | scheme -> instantiate scheme
 ;;
 
-let fresh_var = fresh >>| fun n -> { typ_desc = V n }
+let fresh_var ~level = fresh >>| fun n -> tv n ~level
 
 let pp_env subst ppf env =
   let env : TypeEnv.t =
@@ -343,7 +356,7 @@ let infer =
       (* lambda abstraction *)
     | EUnit -> return (unit_typ, TUnit)
     | ELam (PVar x, e1) ->
-      let* v = fresh_var in
+      let* v = fresh_var ~level:0 in
       let env2 = TypeEnv.extend env (x, S (Var_set.empty, v)) in
       let* ty, tbody = helper env2 e1 in
       let trez = tarrow v ty in
@@ -351,7 +364,7 @@ let infer =
     | EApp (e1, e2) ->
       let* t1, te1 = helper env e1 in
       let* t2, te2 = helper env e2 in
-      let* tv = fresh_var in
+      let* tv = fresh_var ~level:0 in
       let* () = unify t1 (tarrow t2 tv) in
       (* log "t1 = %a" pp_ty t1; *)
       (* log "t2 = %a" pp_ty t2; *)
@@ -391,7 +404,7 @@ let infer =
       (* log "letrec result = %a" pp_ty t3; *)
       return (t3, TLet (NonRecursive, x, t2, trhs, typed_in))
     | Parsetree.ELet (Recursive, PVar f, erhs, wher) ->
-      let* tv = fresh_var in
+      let* tv = fresh_var ~level:0 in
       let* t1, typed_rhs =
         let env = TypeEnv.extend env (f, S (Var_set.empty, tv)) in
         helper env erhs
@@ -415,8 +428,8 @@ let w e =
 
 let%expect_test _ =
   let _ =
-    let tv1 = tv 1 in
-    let tv2 = tv 2 in
+    let tv1 = tv 1 ~level:0 in
+    let tv2 = tv 2 ~level:0 in
     let l = tarrow tv1 tv1 in
     let r = tarrow (tprim "int") tv2 in
     let subst = unify l r in
@@ -433,7 +446,7 @@ let vb ?(env = start_env) (flg, Parsetree.PVar name, body) =
   (* TODO(Kakadu): recursion and generalization *)
   let comp =
     let* v = fresh in
-    infer ((name, S (Var_set.empty, Typedtree.tv v)) :: env) body
+    infer ((name, S (Var_set.empty, Typedtree.tv v ~level:0)) :: env) body
   in
   run comp
   |> Result.map_error ~f:(function #error as x -> x)

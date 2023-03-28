@@ -12,7 +12,10 @@ type ty = { mutable typ_desc : type_desc }
 
 and type_desc =
   | Prim of string
-  | V of binder
+  | V of
+      { binder : binder
+      ; var_level : int
+      }
   | Arrow of ty * ty
   | TLink of ty
   | TProd of ty * ty * ty list
@@ -28,7 +31,7 @@ val pp_scheme : Format.formatter -> scheme -> unit
 val show_scheme : scheme -> string
 val tarrow : ty -> ty -> ty
 val tprim : string -> ty
-val tv : binder -> ty
+val tv : binder -> level:int -> ty
 val tlink : ty -> ty
 val tprod : ty -> ty -> ty list -> ty
 val int_typ : ty
