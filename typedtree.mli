@@ -8,14 +8,16 @@ end
 
 type binder_set = Var_set.t
 
+type var_info =
+  { binder : binder
+  ; mutable var_level : int
+  }
+
 type ty = { mutable typ_desc : type_desc }
 
 and type_desc =
   | Prim of string
-  | V of
-      { binder : binder
-      ; var_level : int
-      }
+  | V of var_info
   | Arrow of ty * ty
   | TLink of ty
   | TProd of ty * ty * ty list

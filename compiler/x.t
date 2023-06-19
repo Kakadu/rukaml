@@ -11,4 +11,4 @@
   > EOF
   let rec zed: (((int -> int) -> (int -> int)) -> (int -> int)) =fun f -> fun x -> ((f (zed f)) x)
   let fac: ((int -> int) -> (int -> int)) =fun self -> fun n -> if (n = 1) then 1 else (n * (self (n - 1)))
-  let main: ('_1 -> '_6) =fun n -> ((zed fac) n)
+  let main: (int -> int) =fun n -> ((zed fac) n)

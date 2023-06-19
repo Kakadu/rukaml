@@ -1,3 +1,4 @@
+
   $ cat << EOF | ./REPL.exe -stru -
   > let rec zed f x = f (zed f) x
   > let fac = fun self -> fun n -> if n=1 then 1 else n * (self (n-1))
@@ -7,7 +8,7 @@
   Parsed.
   let rec zed: (((int -> int) -> (int -> int)) -> (int -> int)) =fun f -> fun x -> ((f (zed f)) x)
   let fac: ((int -> int) -> (int -> int)) =fun self -> fun n -> if (n = 1) then 1 else (n * (self (n - 1)))
-  let main: ('_1 -> '_3) =(zed fac) 
+  let main: (int -> int) =(zed fac) 
 
   $ cat << EOF | ./REPL.exe  -stru -
   > let id = fun x -> x
@@ -35,7 +36,7 @@
   Parsed.
   let rec fix: (((int -> int) -> (int -> int)) -> (int -> int)) =fun f -> (f (fix f))
   let fac: ((int -> int) -> (int -> int)) =fun self -> fun n -> if (n = 1) then 1 else (n * (self (n - 1)))
-  let main: '_3 =(fix fac) 
+  let main: (int -> int) =(fix fac) 
 
   $ cat << EOF | ./REPL.exe  -stru -
   > let rec zed f x = f (zed f) x
@@ -46,7 +47,7 @@
   Parsed.
   let rec zed: (((int -> int) -> (int -> int)) -> (int -> int)) =fun f -> fun x -> ((f (zed f)) x)
   let fac: ((int -> int) -> (int -> int)) =fun self -> fun n -> if (n = 1) then 1 else (n * (self (n - 1)))
-  let main: ('_1 -> '_3) =(zed fac) 
+  let main: (int -> int) =(zed fac) 
 
   $ cat << EOF | ./REPL.exe  -stru -
   > (fun fix -> fun f -> f (fix f))
@@ -106,3 +107,9 @@
   "let twice = fun x -> (x,x)"
   Parsed.
   let twice: ('_1 -> ('_1, '_1)) =fun x -> (x, x) 
+
+  $ cat << EOF | ./REPL.exe -stru -v -
+  > let foo x =
+  >   let y = fun z -> z in
+  >   (y 1, y true)
+  > EOF

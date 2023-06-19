@@ -37,6 +37,7 @@ let () =
     (fun _ -> assert false)
     "TODO";
   Parsing.set_logging opts.log;
+  Parsing.set_logging false;
   let s = Stdio.In_channel.(input_all stdin) |> String.rstrip in
   Format.printf "%S\n%!" s;
   (match opts.mode with
