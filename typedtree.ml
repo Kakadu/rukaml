@@ -1,7 +1,7 @@
 type binder = int [@@deriving show { with_path = false }]
 
 module Var_set = struct
-  include Caml.Set.Make (Int)
+  include Stdlib.Set.Make (Int)
 
   let pp ppf s =
     Format.fprintf ppf "[ ";

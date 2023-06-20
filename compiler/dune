@@ -3,7 +3,11 @@
  (libraries stdio miniml cconv)
  (modules ANF compile_tests)
  (preprocess
-  (pps ppx_blob ppx_expect))
+  (pps
+   ; ppx_blob
+   ppx_expect
+   ;
+   ))
  (inline_tests))
 
 (library
@@ -13,7 +17,11 @@
  (modules CConv monads)
  (wrapped false)
  (preprocess
-  (pps ppx_blob ppx_expect))
+  (pps
+   ; ppx_blob
+   ppx_expect
+   ;
+   ))
  (inline_tests))
 
 (executable

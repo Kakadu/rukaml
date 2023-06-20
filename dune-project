@@ -33,6 +33,8 @@
   (ppx_inline_test :with-test)
   ppx_expect
   ppx_show
+  llvm
+  ppx_blob
   (odoc :with-doc)
   (ocamlformat :build)
   base))

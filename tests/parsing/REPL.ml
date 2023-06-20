@@ -1,5 +1,5 @@
 open Base
-module Format = Caml.Format
+module Format = Stdlib.Format
 open Format
 open Miniml
 
@@ -36,10 +36,10 @@ type opts =
 
 let () =
   let opts = { batch = false; mode = VB; log = false } in
-  let mode_arg v = Caml.Arg.Unit (fun () -> opts.mode <- v) in
-  Caml.Arg.parse
-    [ "-", Caml.Arg.Unit (fun () -> opts.batch <- true), " read from stdin"
-    ; "-v", Caml.Arg.Unit (fun () -> opts.log <- true), " verbose logging"
+  let mode_arg v = Stdlib.Arg.Unit (fun () -> opts.mode <- v) in
+  Stdlib.Arg.parse
+    [ "-", Stdlib.Arg.Unit (fun () -> opts.batch <- true), " read from stdin"
+    ; "-v", Stdlib.Arg.Unit (fun () -> opts.log <- true), " verbose logging"
     ; "-long", mode_arg ELong, " long"
     ; "-prio", mode_arg Eprio, " prio"
     ; "-e", mode_arg E, " basic expr"

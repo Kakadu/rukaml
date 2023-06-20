@@ -235,7 +235,7 @@ let pp_error ppf = function
 ;;
 
 let parse str =
-  Caml.Format.printf "parsing a string '%s'\n%!" str;
+  Stdlib.Format.printf "parsing a string '%s'\n%!" str;
   Result.map_error (fun x -> `Parse_error x) (parse_pack pack.prio str)
 ;;
 
@@ -248,7 +248,7 @@ let wrap_parse_exn parser printer str =
 ;;
 
 let parse_expr_exn str =
-  (* Caml.Format.printf "parsing a string '%s'\n%!" str; *)
+  (* Stdlib.Format.printf "parsing a string '%s'\n%!" str; *)
   match parse_pack pack.prio str with
   | Result.Error e ->
     Format.eprintf "Error: %s\n" e;
@@ -257,7 +257,7 @@ let parse_expr_exn str =
 ;;
 
 let parse_vb_exn str =
-  (* Caml.Format.printf "parsing a string '%s'\n%!" str; *)
+  (* Stdlib.Format.printf "parsing a string '%s'\n%!" str; *)
   match parse_string ~consume:All value_binding str with
   | Result.Error e ->
     Format.eprintf "Error: %s\n" e;

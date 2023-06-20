@@ -1,5 +1,5 @@
 open Base
-module Format = Caml.Format
+module Format = Stdlib.Format
 open Format
 open Miniml
 
@@ -40,11 +40,11 @@ type opts =
 
 let () =
   let opts = { batch = false; mode = Stru; log_cc = false; log_parsing = false } in
-  Caml.Arg.parse
-    [ "-", Caml.Arg.Unit (fun () -> opts.batch <- true), " read from stdin"
-    ; "-vcc", Caml.Arg.Unit (fun () -> opts.log_cc <- true), " verbose logging of CC"
+  Stdlib.Arg.parse
+    [ "-", Stdlib.Arg.Unit (fun () -> opts.batch <- true), " read from stdin"
+    ; "-vcc", Stdlib.Arg.Unit (fun () -> opts.log_cc <- true), " verbose logging of CC"
     ; ( "-vp"
-      , Caml.Arg.Unit (fun () -> opts.log_parsing <- true)
+      , Stdlib.Arg.Unit (fun () -> opts.log_parsing <- true)
       , " verbose logging of parsing" )
     ]
     (fun _ -> assert false)

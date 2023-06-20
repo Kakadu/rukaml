@@ -1,5 +1,5 @@
 open Base
-module Format = Caml.Format
+module Format = Stdlib.Format
 open Format
 open Miniml
 
@@ -42,8 +42,8 @@ type opts = { mutable batch : bool }
 
 let () =
   let opts = { batch = false } in
-  Caml.Arg.parse
-    [ "-", Caml.Arg.Unit (fun () -> opts.batch <- true), "read from stdin" ]
+  Stdlib.Arg.parse
+    [ "-", Stdlib.Arg.Unit (fun () -> opts.batch <- true), "read from stdin" ]
     (fun _ -> assert false)
     "TODO";
   (if opts.batch

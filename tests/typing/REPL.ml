@@ -1,5 +1,5 @@
 open Base
-module Format = Caml.Format
+module Format = Stdlib.Format
 open Format
 open Miniml
 
@@ -25,21 +25,21 @@ type opts =
 
 let () =
   let opts = { batch = false; mode = VB; log = false } in
-  Caml.Arg.parse
-    [ "-", Caml.Arg.Unit (fun () -> opts.batch <- true), " read from stdin"
-    ; "-long", Caml.Arg.Unit (fun () -> opts.mode <- ELong), " long"
-    ; "-prio", Caml.Arg.Unit (fun () -> opts.mode <- Eprio), " prio"
-    ; "-e", Caml.Arg.Unit (fun () -> opts.mode <- E), " basic expr"
-    ; "-vb", Caml.Arg.Unit (fun () -> opts.mode <- VB), " value binding"
-    ; "-stru", Caml.Arg.Unit (fun () -> opts.mode <- Stru), " structure"
-    ; "-v", Caml.Arg.Unit (fun () -> opts.log <- true), " verbose logging"
+  Stdlib.Arg.parse
+    [ "-", Stdlib.Arg.Unit (fun () -> opts.batch <- true), " read from stdin"
+    ; "-long", Stdlib.Arg.Unit (fun () -> opts.mode <- ELong), " long"
+    ; "-prio", Stdlib.Arg.Unit (fun () -> opts.mode <- Eprio), " prio"
+    ; "-e", Stdlib.Arg.Unit (fun () -> opts.mode <- E), " basic expr"
+    ; "-vb", Stdlib.Arg.Unit (fun () -> opts.mode <- VB), " value binding"
+    ; "-stru", Stdlib.Arg.Unit (fun () -> opts.mode <- Stru), " structure"
+    ; "-v", Stdlib.Arg.Unit (fun () -> opts.log <- true), " verbose logging"
     ]
     (fun _ -> assert false)
     "TODO";
   Parsing.set_logging opts.log;
   Parsing.set_logging false;
   let s = Stdio.In_channel.(input_all stdin) |> String.rstrip in
-  Format.printf "%S\n%!" s;
+  (* Format.printf "%S\n%!" s; *)
   (match opts.mode with
    | ELong -> run_single Parsing.(pack.expr_long pack) Pprint.pp_expr pp_print_string
    | E -> run_single Parsing.(pack.expr pack) Pprint.pp_expr pp_print_string

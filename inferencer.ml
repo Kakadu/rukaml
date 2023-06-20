@@ -2,10 +2,10 @@
 
 open Base
 open Typedtree
-module Format = Caml.Format (* silencing a warning *)
+module Format = Stdlib.Format (* silencing a warning *)
 
-(* let use_logging = false *)
-let use_logging = true
+let use_logging = false
+(* let use_logging = true *)
 
 let log fmt =
   if use_logging
@@ -109,7 +109,7 @@ end
 module Subst : sig
   type t
 
-  val pp : Caml.Format.formatter -> t -> unit
+  val pp : Stdlib.Format.formatter -> t -> unit
   val empty : t
   val singleton : binder -> ty -> t
 
@@ -271,10 +271,10 @@ module TypeEnv = struct
   let apply s env = List.Assoc.map env ~f:(Scheme.apply s)
 
   let pp ppf xs =
-    Caml.Format.fprintf ppf "{| ";
+    Stdlib.Format.fprintf ppf "{| ";
     List.iter xs ~f:(fun (n, s) ->
-      Caml.Format.fprintf ppf "%s -> %a; " n Pprint.pp_scheme s);
-    Caml.Format.fprintf ppf "|}%!"
+      Stdlib.Format.fprintf ppf "%s -> %a; " n Pprint.pp_scheme s);
+    Stdlib.Format.fprintf ppf "|}%!"
   ;;
 
   let find_exn name xs = List.Assoc.find_exn ~equal:String.equal xs name
@@ -351,7 +351,7 @@ let lookup_env e xs =
   (* log "Looking up for %s" e;
   log "  inside %a" TypeEnv.pp xs; *)
   match List.Assoc.find_exn xs ~equal:String.equal e with
-  | (exception Caml.Not_found) | (exception Not_found_s _) -> fail (`NoVariable e)
+  | (exception Stdlib.Not_found) | (exception Not_found_s _) -> fail (`NoVariable e)
   | scheme -> instantiate scheme
 ;;
 
@@ -472,7 +472,7 @@ let%expect_test _ =
     let l = tarrow tv1 tv1 in
     let r = tarrow (tprim "int") tv2 in
     let subst = unify l r in
-    let open Caml.Format in
+    let open Stdlib.Format in
     match R.run subst with
     | Result.Error _ -> ()
     | Ok () ->
