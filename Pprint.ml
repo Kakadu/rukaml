@@ -98,8 +98,8 @@ let pp_expr = pp_expr_helper ~ps:true
 let pp_value_binding ppf (is_rec, pat, rhs) =
   let () =
     (match is_rec with
-     | Parsetree.Recursive -> fprintf ppf "@[<v2>@[let rec %a "
-     | NonRecursive -> fprintf ppf "@[<v2>@[let %a ")
+     | Parsetree.Recursive -> fprintf ppf "@[<v 2>@[let rec %a "
+     | NonRecursive -> fprintf ppf "@[<v 2>@[let %a ")
       pp_pattern
       pat
   in

@@ -20,13 +20,24 @@ let pp_typ_hum =
 
 let pp_hum =
   let open Format in
+  let rec extract_lambdas acc e =
+    match e with
+    | TLam (pat, body, _) -> extract_lambdas (pat :: acc) body
+    | body -> List.rev acc, body
+  in
   let rec expr ppf = function
     | TUnit -> fprintf ppf "unit"
     | TConst c -> Pprint.pp_const ppf c
     | TVar (name, _) -> fprintf ppf "%s" name
     | TIf (cond, th, el, _) ->
       fprintf ppf "if %a then %a else %a" expr cond expr th expr el
-    | TLam (pat, e, _) -> fprintf ppf "fun %a -> %a" pp_pat pat expr e
+    | TLam (pat, e, _) ->
+      (match extract_lambdas [ pat ] e with
+       | [], _ -> failwith "TODO: Should not happend. Rewrite!"
+       | ps, e ->
+         fprintf ppf "fun ";
+         List.iter (fun name -> fprintf ppf "%s " name) ps;
+         fprintf ppf "-> %a" expr e)
     | TApp (TApp (TVar ("+", _), l, _), r, _) -> fprintf ppf "(%a + %a)" expr l expr r
     | TApp (TApp (TVar ("*", _), l, _), r, _) -> fprintf ppf "(%a * %a)" expr l expr r
     | TApp (TApp (TVar ("-", _), l, _), r, _) -> fprintf ppf "(%a - %a)" expr l expr r
@@ -62,7 +73,7 @@ let rec pp_pattern ppf = function
 let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
   fprintf
     ppf
-    "@[let %s%a: @[%a@] =%a@]"
+    "@[<v 2>@[let %s%a: @[%a@] =@]@,@[%a@]@]"
     (match tvb_flag with
      | Recursive -> "rec "
      | NonRecursive -> "")
@@ -71,7 +82,7 @@ let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
     pp_typ_hum
     (match tvb_typ with
      | S (_, typ) -> typ)
-    pp_hum
+    (fun ppf e -> pp_hum ppf e)
     tvb_body
 ;;
 
