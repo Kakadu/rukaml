@@ -6,11 +6,11 @@
   > EOF
   Parsed.
   let rec zed: (((int -> int) -> (int -> int)) -> (int -> int)) =
-    fun f x -> ((f (zed f)) x)
+    fun f x -> (f (zed f)) x
   let fac: ((int -> int) -> (int -> int)) =
-    fun self n -> if (n = 1) then 1 else (n * (self (n - 1)))
+    fun self n -> if n = 1 then 1 else n * (self (n - 1))
   let main: (int -> int) =
-    (zed fac)
+    zed fac
 
   $ cat << EOF | ./REPL.exe  -stru -
   > let id = fun x -> x
@@ -23,13 +23,13 @@
   let idd: ('_1 -> '_1) =
     fun x -> x
   let main: int =
-    ((id idd) (id 1))
+    (id idd) (id 1)
   $ cat << EOF | ./REPL.exe  -stru -
   > let rec fix f = f (fix f)
   > EOF
   Parsed.
   let rec fix: (('_2 -> '_3) -> '_3) =
-    fun f -> (f (fix f)) 
+    fun f -> f (fix f) 
 
   $ cat << EOF | ./REPL.exe -stru  -
   > let rec fix f = f (fix f)
@@ -38,11 +38,11 @@
   > EOF
   Parsed.
   let rec fix: (((int -> int) -> (int -> int)) -> (int -> int)) =
-    fun f -> (f (fix f))
+    fun f -> f (fix f)
   let fac: ((int -> int) -> (int -> int)) =
-    fun self n -> if (n = 1) then 1 else (n * (self (n - 1)))
+    fun self n -> if n = 1 then 1 else n * (self (n - 1))
   let main: (int -> int) =
-    (fix fac)
+    fix fac
 
   $ cat << EOF | ./REPL.exe  -stru -
   > let rec zed f x = f (zed f) x
@@ -51,11 +51,11 @@
   > EOF
   Parsed.
   let rec zed: (((int -> int) -> (int -> int)) -> (int -> int)) =
-    fun f x -> ((f (zed f)) x)
+    fun f x -> (f (zed f)) x
   let fac: ((int -> int) -> (int -> int)) =
-    fun self n -> if (n = 1) then 1 else (n * (self (n - 1)))
+    fun self n -> if n = 1 then 1 else n * (self (n - 1))
   let main: (int -> int) =
-    (zed fac)
+    zed fac
 
   $ cat << EOF | ./REPL.exe  -stru -
   > (fun fix -> fun f -> f (fix f))
@@ -71,7 +71,7 @@
   > EOF
   Parsed.
   let rec fac: (int -> int) =
-    fun n -> if (n = 1) then 1 else (n * (fac (n - 1)))
+    fun n -> if n = 1 then 1 else n * (fac (n - 1))
   let main: (int -> int) =
     fac
 
@@ -90,11 +90,11 @@
   > EOF
   Parsed.
   let add: (int -> (int -> int)) =
-    fun x y -> (x + y)
+    fun x y -> x + y
   let add1: (int -> int) =
-    (add 1)
+    add 1
   let main: int =
-    (add1 13)
+    add1 13
 
   $ cat << EOF | ./REPL.exe  -stru -
   > let add = fun x -> x + x
@@ -103,11 +103,11 @@
   > EOF
   Parsed.
   let add: (int -> int) =
-    fun x -> (x + x)
+    fun x -> x + x
   let add1: int =
-    (add 1)
+    add 1
   let main: int =
-    (add 1)
+    add 1 
 # tuples 
 
   $ cat << EOF | ./REPL.exe  -stru -

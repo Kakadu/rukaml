@@ -8,6 +8,6 @@
   let add1 = add 1 in
   add1 13
   '
-  let add : (int -> (int -> int)) = fun x y -> (x + y) in
-  let add1 : (int -> int) = (add 1) in
-  (add1 13)
+  let add : (int -> (int -> int)) = fun x y -> x + y in
+  let add1 : (int -> int) = add 1 in
+  add1 13

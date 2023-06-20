@@ -125,7 +125,7 @@ let rec normalize : Typedtree.expr -> any_expr Monads.Cont.t =
        return
          (ELet
             (flg, pat, CAtom (ALam ("arg", anf_expr)) |> complex_to_atom_comlex, anf_wher)
-         |> to_any)
+          |> to_any)
      | _ -> assert false)
   | TIf (TLet (flg, name, rhs_typ, rhs, wher), eth, el, iftyp) ->
     normalize (TLet (flg, name, rhs_typ, rhs, TIf (wher, eth, el, iftyp)))

@@ -18,43 +18,76 @@ let pp_typ_hum =
   pp_typ
 ;;
 
-let pp_hum =
+let pp_expr =
   let open Format in
   let rec extract_lambdas acc e =
     match e with
     | TLam (pat, body, _) -> extract_lambdas (pat :: acc) body
     | body -> List.rev acc, body
   in
-  let rec expr ppf = function
+  let rec expr_gen ?(pars = true) ppf = function
     | TUnit -> fprintf ppf "unit"
     | TConst c -> Pprint.pp_const ppf c
     | TVar (name, _) -> fprintf ppf "%s" name
     | TIf (cond, th, el, _) ->
-      fprintf ppf "if %a then %a else %a" expr cond expr th expr el
+      fprintf ppf "if %a then %a else %a" expr_no cond expr_no th expr_no el
     | TLam (pat, e, _) ->
       (match extract_lambdas [ pat ] e with
        | [], _ -> failwith "TODO: Should not happend. Rewrite!"
        | ps, e ->
+         if pars then fprintf ppf "(";
          fprintf ppf "fun ";
          List.iter (fun name -> fprintf ppf "%s " name) ps;
-         fprintf ppf "-> %a" expr e)
-    | TApp (TApp (TVar ("+", _), l, _), r, _) -> fprintf ppf "(%a + %a)" expr l expr r
-    | TApp (TApp (TVar ("*", _), l, _), r, _) -> fprintf ppf "(%a * %a)" expr l expr r
-    | TApp (TApp (TVar ("-", _), l, _), r, _) -> fprintf ppf "(%a - %a)" expr l expr r
-    | TApp (TApp (TVar ("=", _), l, _), r, _) -> fprintf ppf "(%a = %a)" expr l expr r
-    | TApp (l, r, _) -> fprintf ppf "(%a %a)" expr l expr r
+         fprintf ppf "-> %a" expr_no e;
+         if pars then fprintf ppf ")")
+    | TApp (TApp (TVar ("+", _), l, _), r, _) ->
+      fprintf ppf (if pars then "(%a + %a)" else "%a + %a") expr l expr r
+    | TApp (TApp (TVar ("*", _), l, _), r, _) ->
+      fprintf ppf (if pars then "(%a * %a)" else "%a * %a") expr l expr r
+      (* fprintf ppf "(%a * %a)" expr l expr r *)
+    | TApp (TApp (TVar ("-", _), l, _), r, _) ->
+      fprintf ppf (if pars then "(%a - %a)" else "%a - %a") expr l expr r
+      (* fprintf ppf "(%a - %a)" expr l expr r *)
+    | TApp (TApp (TVar ("=", _), l, _), r, _) ->
+      fprintf ppf (if pars then "(%a = %a)" else "%a = %a") expr l expr r
+      (* fprintf ppf "(%a = %a)" expr l expr r *)
+    | TApp (l, r, _) -> fprintf ppf (if pars then "(%a %a)" else "%a %a") expr l expr r
     | TLet (Parsetree.Recursive, pat, S (_vars, ty), rhs, wher) ->
-      fprintf ppf "let rec %a : %a = %a in %a" pp_pat pat pp_typ ty expr rhs expr wher
+      fprintf
+        ppf
+        "let rec %a : %a = %a in %a"
+        pp_pat
+        pat
+        pp_typ
+        ty
+        expr_no
+        rhs
+        expr_no
+        wher
     | TLet (NonRecursive, pat, S (_vars, ty), rhs, wher) ->
-      fprintf ppf "@[let %a : %a = %a in@]@,%a" pp_pat pat pp_typ ty expr rhs expr wher
+      fprintf
+        ppf
+        "@[let %a : %a = %a in@]@,%a"
+        pp_pat
+        pat
+        pp_typ
+        ty
+        expr_no
+        rhs
+        expr_no
+        wher
     | TTuple (a, b, es, _) ->
       fprintf ppf "@[(%a, %a" expr a expr b;
-      List.iter (fprintf ppf ", %a" expr) es;
+      List.iter (fprintf ppf ", %a" expr_no) es;
       fprintf ppf ")@]"
   and pp_typ = pp_typ_hum
-  and pp_pat ppf s = fprintf ppf "%s" s in
-  fun ppf e -> fprintf ppf "@[<v>%a@]" expr e
+  and pp_pat ppf s = fprintf ppf "%s" s
+  and expr ppf = expr_gen ~pars:true ppf
+  and expr_no ppf = expr_gen ~pars:false ppf in
+  fun ?(pars = false) ppf e -> fprintf ppf "@[<v>%a@]" (expr_gen ~pars) e
 ;;
+
+let pp_hum = pp_expr ~pars:false
 
 let rec pp_pattern ppf = function
   | Parsetree.PVar s -> Format.fprintf ppf "%s" s
