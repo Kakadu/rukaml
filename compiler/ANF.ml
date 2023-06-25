@@ -46,6 +46,7 @@ type atom = [ `Atom ]
 type _ expr =
   | AUnit : [ `Atom ] expr
   | AConst : Parsetree.const -> [ `Atom ] expr
+  | ATuple : [ `Atom ] expr * [ `Atom ] expr * [ `Atom ] expr list -> [ `Atom ] expr
   | AVar : string -> [ `Atom ] expr
   | APrimitive : [ `Atom ] expr
   | ALam : string * _ expr -> [ `Atom ] expr
@@ -72,6 +73,17 @@ let rec pp : 'a. Format.formatter -> 'a expr -> unit =
   let open Format in
   fun (type a) ppf : (a expr -> unit) -> function
     | AUnit -> fprintf ppf "()"
+    | ATuple (a, b, []) -> fprintf ppf "@[(%a, %a)@]" pp a pp b
+    | ATuple (a, b, xs) ->
+      fprintf
+        ppf
+        "(%a,%a,%a)"
+        pp
+        a
+        pp
+        b
+        (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp)
+        xs
     | APrimitive -> fprintf ppf "<prim>"
     | AConst (Parsetree.PConst_int n) -> pp_print_int ppf n
     | AConst (Parsetree.PConst_bool n) -> pp_print_bool ppf n
@@ -107,6 +119,7 @@ open Monads.Cont.Syntax
 
 let to_any : _ expr -> any_expr = Obj.magic
 let complex_to_atom_comlex : [ `Complex ] expr -> [ `Complex | `Atom ] expr = Obj.magic
+let atom_to_atom_comlex : [ `Atom ] expr -> [ `Complex | `Atom ] expr = Obj.magic
 let complex_to_any : [ `Complex | `Atom ] expr -> any_expr = Obj.magic
 
 let rec normalize : Typedtree.expr -> any_expr Monads.Cont.t =
@@ -119,14 +132,27 @@ let rec normalize : Typedtree.expr -> any_expr Monads.Cont.t =
     (match body with
      | TLet (flg2, pat2, typ2, body2, wher) ->
        normalize (TLet (flg2, pat2, typ2, body2, TLet (flg, pat, typ, body, wher)))
+     | TConst c ->
+       let* anf_wher = normalize wher in
+       return @@ ELet (flg, pat, AConst c |> atom_to_atom_comlex, anf_wher)
+     | TVar (name, _ty) ->
+       let* anf_wher = normalize wher in
+       return @@ ELet (flg, pat, AVar name |> atom_to_atom_comlex, anf_wher)
      | Typedtree.TLam (pat, expr, _) ->
        let* anf_expr = normalize expr in
        let* anf_wher = normalize wher in
        return
          (ELet
             (flg, pat, CAtom (ALam ("arg", anf_expr)) |> complex_to_atom_comlex, anf_wher)
-          |> to_any)
-     | _ -> assert false)
+         |> to_any)
+     | _ ->
+       Format.kasprintf
+         failwith
+         "Not implemented (%s %d); '%a'"
+         __FUNCTION__
+         __LINE__
+         Pprinttyped.pp_hum
+         m)
   | TIf (TLet (flg, name, rhs_typ, rhs, wher), eth, el, iftyp) ->
     normalize (TLet (flg, name, rhs_typ, rhs, TIf (wher, eth, el, iftyp)))
   | TIf (econd, eth, el, _) ->
@@ -157,9 +183,7 @@ let rec normalize : Typedtree.expr -> any_expr Monads.Cont.t =
   | TApp (f, arg, _) ->
     let rec wrap (type a) : ([ `Atom ] expr -> any_expr) -> a expr -> any_expr =
      fun k -> function
-      | (AUnit as v)
-      | (AConst _ as v)
-      | (AVar _ as v)
+      | ((AUnit | AConst _ | AVar _) as v)
       | CAtom (AConst _ as v)
       | EComplex (CAtom (AConst _ as v)) -> k v
       | ALam _ as v -> k v
@@ -181,7 +205,81 @@ let rec normalize : Typedtree.expr -> any_expr Monads.Cont.t =
     |> return
   | TVar ("=", _) -> return (AVar "=" |> to_any)
   | TVar (name, _) -> return (AVar name |> to_any)
-  | _ -> Format.kasprintf failwith "Not implemented; '%a'" Pprinttyped.pp_hum m
+  | TTuple (a, b, ts, _ty) ->
+    (* TODO: eliminate copy-paste *)
+    let rec wrap (type a) : ([ `Atom ] expr -> any_expr) -> a expr -> any_expr =
+     fun k -> function
+      | ((AUnit | AConst _ | AVar _) as v)
+      | CAtom (AConst _ as v)
+      | EComplex (CAtom (AConst _ as v)) -> k v
+      | ALam _ as v -> k v
+      | EComplex (CAtom (ALam _ as v)) -> k v
+      | CAtom (ALam _ as v) -> k v
+      | CApp (l, r) ->
+        let tempname = gensym () |> Printf.sprintf "name%d" in
+        ELet (NonRecursive, tempname, CApp (l, r), k (AVar tempname)) |> to_any
+      | ELet (flg, name, rhs, wher) -> ELet (flg, name, rhs, wrap k wher) |> to_any
+      | anf ->
+        Format.kasprintf failwith "Not implemented; '%a' %s %d" pp anf __FILE__ __LINE__
+    in
+    let acc : (Parsetree.rec_flag * string * [ `Complex | `Atom ] expr) Stack.t =
+      Stack.create ()
+    in
+    let ext_stack ?(flg = Parsetree.NonRecursive) pat rhs =
+      Stack.push (flg, pat, rhs) acc
+    in
+    let rec foo (type a) : a expr -> [ `Atom ] expr = function
+      | ((AUnit | APrimitive | ATuple _ | AConst _ | AVar _) as v)
+      | CAtom (AConst _ as v)
+      | EComplex (CAtom (AConst _ as v)) -> v
+      | ALam _ as v -> v
+      | EComplex (CAtom ((AUnit | APrimitive | ATuple (_, _, _) | AVar _ | ALam _) as v))
+        -> v
+      | CAtom ((AUnit | APrimitive | ATuple (_, _, _) | AVar _ | ALam _) as v) -> v
+      | CIte (cond, th, el) ->
+        let tempname = gensym () |> Printf.sprintf "name%d" in
+        ext_stack tempname (CIte (cond, th, el) |> complex_to_atom_comlex);
+        AVar tempname
+      | CApp (_, _) as ecomplex ->
+        let tempname = gensym () |> Printf.sprintf "name%d" in
+        ext_stack tempname ecomplex;
+        AVar tempname
+      | EComplex (CIte (cond, th, el)) ->
+        let tempname = gensym () |> Printf.sprintf "name%d" in
+        ext_stack tempname (CIte (cond, th, el) |> complex_to_atom_comlex);
+        AVar tempname
+      | ELet (flg, name, rhs, other) ->
+        ext_stack ~flg name rhs;
+        foo other
+    in
+    let* a = normalize a in
+    let* b = normalize b in
+    let* ts =
+      Monads.Cont.list_mapm
+        (fun x ->
+          let* x = normalize x in
+          return @@ wrap (fun x -> x |> to_any) x)
+        ts
+    in
+    let a = foo a in
+    let b = foo b in
+    let ts = List.map foo ts in
+    return
+    @@ Stack.fold
+         (fun acc (flg, name, rhs) -> ELet (flg, name, rhs, acc))
+         (ATuple (a, b, ts) |> to_any)
+         acc
+  (*
+    return
+    @@ wrap (fun aatom -> wrap (fun batom -> ) b) a *)
+  | _ ->
+    Format.kasprintf
+      failwith
+      "Not implemented (%s %d); '%a'"
+      __FUNCTION__
+      __LINE__
+      Pprinttyped.pp_hum
+      m
 
 (*
 and normalize_a : 'a 'b. Typedtree.expr -> ([ `Atom ] expr -> 'a) -> 'a =
@@ -292,4 +390,33 @@ let%expect_test "CPS fibonacci" =
                                                                      (k name32)))))))))
 
      |}]
+;;
+
+let%expect_test _ =
+  test_anf {| let double a = ((let a = 1 in a), a) |};
+  [%expect {|
+    (fun a -> let a = 1 in
+              (a, a)) |}]
+;;
+
+let%expect_test "CPS fibonacci" =
+  test_anf
+    {|let rec fibk n k =
+        if (n < 1) then k 1 else fibk (n - 1) (fun p -> fibk (n - 2) (fun q -> k (p + q)))
+
+ |};
+  [%expect {|
+    (fun n -> (fun k -> let name37 = (< n) in
+                        let cond46 = (name37 1) in
+                        (if cond46 then (k 1) else let name38 = (- n) in
+                                                   let name39 = (name38 1) in
+                                                   let name45 = (fibk name39) in
+                                                   (name45 (fun p -> let name40 = (- n) in
+                                                                     let name41 = (name40 2) in
+                                                                     let name44 = (fibk name41) in
+                                                                     (name44 (fun q ->
+                                                                     let name42 = (+ p) in
+                                                                     let name43 = (name42 q) in
+                                                                     (k name43))))))))
+ |}]
 ;;

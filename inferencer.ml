@@ -257,10 +257,19 @@ let%expect_test " " =
     [ 1; ] |}]
 ;;
 
-module TypeEnv = struct
+module TypeEnv : sig
   type t = (string * scheme) list
 
-  let extend e h = h :: e
+  val pp : Format.formatter -> t -> unit
+  val empty : t
+  val extend : string * scheme -> t -> t
+  val apply : Subst.t -> t -> t
+  val find_exn : string -> t -> scheme
+  val free_vars : t -> Var_set.t
+end = struct
+  type t = (string * scheme) list
+
+  let extend h e = h :: e
   let empty = []
 
   let free_vars : t -> Var_set.t =
@@ -390,7 +399,7 @@ let infer env expr =
     | EUnit -> return (unit_typ, TUnit)
     | ELam (PVar x, e1) ->
       let* v = fresh_var ~level:!current_level in
-      let env2 = TypeEnv.extend env (x, S (Var_set.empty, v)) in
+      let env2 = TypeEnv.extend (x, S (Var_set.empty, v)) env in
       let* ty, tbody = helper env2 e1 in
       let trez = tarrow v ty in
       return (trez, TLam (x, tbody, trez))
@@ -435,21 +444,21 @@ let infer env expr =
       (* log "env free vars = %a" Var_set.pp (TypeEnv.free_vars env); *)
       let t2 = generalize env ~level:!current_level t1 in
       log "let generalized t2 = %a" Pprint.pp_scheme t2;
-      let* t3, typed_in = helper (TypeEnv.extend env (x, t2)) e2 in
+      let* t3, typed_in = helper (TypeEnv.extend (x, t2) env) e2 in
       log "let nonrec result = %a" pp_ty t3;
       return (t3, TLet (NonRecursive, x, t2, typed_rhs, typed_in))
     | Parsetree.ELet (Recursive, PVar f, erhs, wher) ->
       let* tv = fresh_var ~level:!current_level in
       enter_level ();
       let* t1, typed_rhs =
-        let env = TypeEnv.extend env (f, S (Var_set.empty, tv)) in
+        let env = TypeEnv.extend (f, S (Var_set.empty, tv)) env in
         helper env erhs
       in
       leave_level ();
       let* () = unify tv t1 in
       let t2 = generalize env ~level:!current_level tv in
       log "letrec  result = %a\n%!" pp_scheme t2;
-      let* twher, typed_wher = helper TypeEnv.(extend env (f, t2)) wher in
+      let* twher, typed_wher = helper TypeEnv.(extend (f, t2) env) wher in
       return (twher, TLet (Recursive, f, t2, typed_rhs, typed_wher))
     | ELet (_, PTuple _, _, _) | Parsetree.ELam (PTuple _, _) -> assert false
   in
@@ -457,7 +466,13 @@ let infer env expr =
 ;;
 
 let start_env =
-  TypeEnv.(extend empty) ("print", S (Var_set.empty, tarrow int_typ unit_typ))
+  let cmp_scheme = S (Var_set.empty, tarrow int_typ (tarrow int_typ bool_typ)) in
+  TypeEnv.empty
+  |> TypeEnv.extend ("print", S (Var_set.empty, tarrow int_typ unit_typ))
+  |> TypeEnv.extend ("<", cmp_scheme)
+  |> TypeEnv.extend (">", cmp_scheme)
+  |> TypeEnv.extend ("<=", cmp_scheme)
+  |> TypeEnv.extend (">=", cmp_scheme)
 ;;
 
 let w e =
@@ -505,7 +520,7 @@ let structure ?(env = start_env) stru =
         let* new_item = vb ~env item in
         let env : TypeEnv.t =
           match new_item.Typedtree.tvb_pat with
-          | Parsetree.PVar name -> TypeEnv.extend env (name, new_item.Typedtree.tvb_typ)
+          | Parsetree.PVar name -> TypeEnv.extend (name, new_item.Typedtree.tvb_typ) env
         in
         return (env, new_item :: acc))
   in

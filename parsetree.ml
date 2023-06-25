@@ -48,6 +48,7 @@ let eadd a b = eapp (evar "+") [ a; b ]
 let esub a b = eapp (evar "-") [ a; b ]
 let eeq a b = eapp (evar "=") [ a; b ]
 let elt a b = eapp (evar "<") [ a; b ]
+let ele a b = eapp (evar "<=") [ a; b ]
 let egt a b = eapp (evar ">") [ a; b ]
 
 type value_binding = rec_flag * pattern * expr

@@ -57,6 +57,7 @@ val eadd : expr -> expr -> expr
 val esub : expr -> expr -> expr
 val eeq : expr -> expr -> expr
 val elt : expr -> expr -> expr
+val ele : expr -> expr -> expr
 val egt : expr -> expr -> expr
 val etuple : expr -> expr -> expr list -> expr
 val group_lams : expr -> pattern list * expr

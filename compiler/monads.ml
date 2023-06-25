@@ -58,6 +58,8 @@ module Cont : sig
   module Syntax : sig
     val ( let* ) : 'a t -> ('a -> 'b t) -> 'b t
   end
+
+  val list_mapm : ('a -> 'b t) -> 'a list -> 'b list t
 end = struct
   type ('a, 'b) cont = 'a -> 'b
   type 'a t = { cont : 'b. ('a, 'b) cont -> 'b }
@@ -74,4 +76,15 @@ end = struct
   module Syntax = struct
     let ( let* ) = ( >>= )
   end
+
+  open Syntax
+
+  let rec list_mapm f xs =
+    match xs with
+    | [] -> return []
+    | h :: tl ->
+      let* h = f h in
+      let* tl = list_mapm f tl in
+      return (h :: tl)
+  ;;
 end

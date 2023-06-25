@@ -177,7 +177,11 @@ let pack : dispatch =
   let prio d =
     prio
       (d.expr_long d)
-      [| [ ws *> string "=", eeq; ws *> string "<", elt; ws *> string ">", egt ]
+      [| [ ws *> string "=", eeq
+         ; ws *> string "<=", ele
+         ; ws *> string "<", elt
+         ; ws *> string ">", egt
+         ]
        ; [ ws *> string "+", eadd; ws *> string "-", esub ]
        ; [ ws *> string "*", emul ]
       |]
