@@ -107,6 +107,34 @@ let rec pp : 'a. Format.formatter -> 'a expr -> unit =
     | EComplex ec -> pp ppf ec
 ;;
 
+let bubble_lets =
+  let rec helper (type a) : a expr -> [ `Atom ] expr = function
+    | ((AUnit | APrimitive | ATuple _ | AConst _ | AVar _) as v)
+    | CAtom (AConst _ as v)
+    | EComplex (CAtom (AConst _ as v)) -> v
+    | ALam _ as v -> v
+    | EComplex (CAtom ((AUnit | APrimitive | ATuple (_, _, _) | AVar _ | ALam _) as v)) ->
+      v
+    | CAtom ((AUnit | APrimitive | ATuple (_, _, _) | AVar _ | ALam _) as v) -> v
+    | CIte (cond, th, el) ->
+      let tempname = gensym () |> Printf.sprintf "name%d" in
+      ext_stack tempname (CIte (cond, th, el) |> complex_to_atom_comlex);
+      AVar tempname
+    | CApp (_, _) as ecomplex ->
+      let tempname = gensym () |> Printf.sprintf "name%d" in
+      ext_stack tempname ecomplex;
+      AVar tempname
+    | EComplex (CIte (cond, th, el)) ->
+      let tempname = gensym () |> Printf.sprintf "name%d" in
+      ext_stack tempname (CIte (cond, th, el) |> complex_to_atom_comlex);
+      AVar tempname
+    | ELet (flg, name, rhs, other) ->
+      ext_stack ~flg name rhs;
+      foo other
+  in
+  helper []
+;;
+
 let gensym =
   let n = ref 0 in
   fun () ->
@@ -180,6 +208,11 @@ let rec normalize : Typedtree.expr -> any_expr Monads.Cont.t =
         Format.kasprintf failwith "Not implemented; '%a' %s %d" pp anf __FILE__ __LINE__
     in
     hack anf_cond
+  | TApp (TApp (TVar ("<", _), arg1, _), arg2, _) ->
+    let anf_f = AVar "<" in
+    let* anf_arg1 = normalize arg1 in
+    let* anf_arg2 = normalize arg2 in
+    assert false
   | TApp (f, arg, _) ->
     let rec wrap (type a) : ([ `Atom ] expr -> any_expr) -> a expr -> any_expr =
      fun k -> function
@@ -405,7 +438,8 @@ let%expect_test "CPS fibonacci" =
         if (n < 1) then k 1 else fibk (n - 1) (fun p -> fibk (n - 2) (fun q -> k (p + q)))
 
  |};
-  [%expect {|
+  [%expect
+    {|
     (fun n -> (fun k -> let name37 = (< n) in
                         let cond46 = (name37 1) in
                         (if cond46 then (k 1) else let name38 = (- n) in
