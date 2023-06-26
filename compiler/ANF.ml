@@ -1,4 +1,6 @@
-(* https://matt.might.net/articles/a-normalization/ *)
+(* (* https://matt.might.net/articles/a-normalization/ 
+   https://www.cs.swarthmore.edu/~jpolitz/cs75/s16/n_anf-tutorial.html
+   *)
 
 open Miniml
 
@@ -51,7 +53,9 @@ type _ expr =
   | APrimitive : [ `Atom ] expr
   | ALam : string * _ expr -> [ `Atom ] expr
   (*  *)
-  | CApp : [ `Atom ] expr * [ `Atom ] expr -> [ `Complex | `Atom ] expr
+  | CApp :
+      [ `Atom ] expr * [ `Atom ] expr * [ `Atom ] expr list
+      -> [ `Complex | `Atom ] expr
   | CIte :
       [ `Atom ] expr
       * [ `Atom | `Complex | `Default ] expr
@@ -89,7 +93,8 @@ let rec pp : 'a. Format.formatter -> 'a expr -> unit =
     | AConst (Parsetree.PConst_bool n) -> pp_print_bool ppf n
     | AVar name -> fprintf ppf "%s" name
     | ALam (name, rhs) -> fprintf ppf "(fun %s -> %a)" name pp rhs
-    | CApp (l, r) -> fprintf ppf "(%a %a)" pp l pp r
+    | CApp (f, arg1, args) ->
+      fprintf ppf "(%a %a %a)" pp f pp arg1 (pp_print_list pp) args
     | CAtom ea -> pp ppf ea
     | CIte (cond, th, el) -> fprintf ppf "(if %a then %a else %a)" pp cond pp th pp el
     | ELet (flg, name, rhs, wher) ->
@@ -107,32 +112,40 @@ let rec pp : 'a. Format.formatter -> 'a expr -> unit =
     | EComplex ec -> pp ppf ec
 ;;
 
-let bubble_lets =
-  let rec helper (type a) : a expr -> [ `Atom ] expr = function
+let to_any : _ expr -> any_expr = Obj.magic
+let complex_to_atom_comlex : [ `Complex ] expr -> [ `Complex | `Atom ] expr = Obj.magic
+let atom_to_atom_comlex : [ `Atom ] expr -> [ `Complex | `Atom ] expr = Obj.magic
+let complex_to_any : [ `Complex | `Atom ] expr -> any_expr = Obj.magic
+
+let bubble_lets gensym ?(ite = false) ?(app = false) : any_expr -> _ =
+  let rec helper (type a)
+    :  ((Parsetree.rec_flag * string * [ `Complex | `Atom ] expr) list as 'acc) -> a expr
+    -> 'acc * [ `Complex | `Atom ] expr
+    =
+   fun acc -> function
     | ((AUnit | APrimitive | ATuple _ | AConst _ | AVar _) as v)
     | CAtom (AConst _ as v)
-    | EComplex (CAtom (AConst _ as v)) -> v
-    | ALam _ as v -> v
-    | EComplex (CAtom ((AUnit | APrimitive | ATuple (_, _, _) | AVar _ | ALam _) as v)) ->
-      v
-    | CAtom ((AUnit | APrimitive | ATuple (_, _, _) | AVar _ | ALam _) as v) -> v
-    | CIte (cond, th, el) ->
-      let tempname = gensym () |> Printf.sprintf "name%d" in
-      ext_stack tempname (CIte (cond, th, el) |> complex_to_atom_comlex);
-      AVar tempname
-    | CApp (_, _) as ecomplex ->
-      let tempname = gensym () |> Printf.sprintf "name%d" in
-      ext_stack tempname ecomplex;
-      AVar tempname
-    | EComplex (CIte (cond, th, el)) ->
-      let tempname = gensym () |> Printf.sprintf "name%d" in
-      ext_stack tempname (CIte (cond, th, el) |> complex_to_atom_comlex);
-      AVar tempname
-    | ELet (flg, name, rhs, other) ->
-      ext_stack ~flg name rhs;
-      foo other
+    | EComplex (CAtom (AConst _ as v)) -> acc, atom_to_atom_comlex v
+    | ALam _ as v -> acc, atom_to_atom_comlex v
+    | EComplex (CAtom ((AUnit | APrimitive | ATuple (_, _, _) | AVar _ | ALam _) as v))
+    | CAtom ((AUnit | APrimitive | ATuple (_, _, _) | AVar _ | ALam _) as v) ->
+      acc, atom_to_atom_comlex v
+    | CApp (_, _, _) as v when app ->
+      let name = gensym () in
+      let let1 = Parsetree.NonRecursive, name, v in
+      helper (let1 :: acc) (AVar name |> to_any)
+    | CApp (_, _, _) as v -> acc, v
+    | ((CIte (_, _, _) as v) | EComplex (CIte (_, _, _) as v)) when ite ->
+      let name = gensym () in
+      let let1 = Parsetree.NonRecursive, name, v |> complex_to_atom_comlex in
+      helper (let1 :: acc) (AVar name |> to_any)
+    | (CIte (_, _, _) as v) | EComplex (CIte (_, _, _) as v) ->
+      acc, complex_to_atom_comlex v
+    | ELet (flg, name, rhs, other) -> helper ((flg, name, rhs) :: acc) other
   in
-  helper []
+  fun e k ->
+    let acc, inner = helper [] e in
+    k (List.rev acc) inner
 ;;
 
 let gensym =
@@ -142,13 +155,14 @@ let gensym =
     !n
 ;;
 
+let gensym_s : _ =
+ fun ?(prefix = "temp") () ->
+  let n = gensym () in
+  Printf.sprintf "%s%d" prefix n
+;;
+
 open Monads.Cont
 open Monads.Cont.Syntax
-
-let to_any : _ expr -> any_expr = Obj.magic
-let complex_to_atom_comlex : [ `Complex ] expr -> [ `Complex | `Atom ] expr = Obj.magic
-let atom_to_atom_comlex : [ `Atom ] expr -> [ `Complex | `Atom ] expr = Obj.magic
-let complex_to_any : [ `Complex | `Atom ] expr -> any_expr = Obj.magic
 
 let rec normalize : Typedtree.expr -> any_expr Monads.Cont.t =
  fun m ->
@@ -172,7 +186,7 @@ let rec normalize : Typedtree.expr -> any_expr Monads.Cont.t =
        return
          (ELet
             (flg, pat, CAtom (ALam ("arg", anf_expr)) |> complex_to_atom_comlex, anf_wher)
-         |> to_any)
+          |> to_any)
      | _ ->
        Format.kasprintf
          failwith
@@ -194,7 +208,7 @@ let rec normalize : Typedtree.expr -> any_expr Monads.Cont.t =
       | ELet (flg, name, rhs, wher) ->
         let* inner = hack wher in
         return (ELet (flg, name, rhs, inner))
-      | CApp (f, arg) ->
+      | CApp (f, arg, []) ->
         let* anf_th = normalize eth in
         let* anf_el = normalize el in
         let tempname = gensym () |> Printf.sprintf "cond%d" in
@@ -202,17 +216,19 @@ let rec normalize : Typedtree.expr -> any_expr Monads.Cont.t =
           (ELet
              ( NonRecursive
              , tempname
-             , CApp (f, arg)
+             , CApp (f, arg, [])
              , EComplex (CIte (AVar tempname, anf_th, anf_el)) |> to_any ))
       | anf ->
         Format.kasprintf failwith "Not implemented; '%a' %s %d" pp anf __FILE__ __LINE__
     in
     hack anf_cond
   | TApp (TApp (TVar ("<", _), arg1, _), arg2, _) ->
-    let anf_f = AVar "<" in
     let* anf_arg1 = normalize arg1 in
     let* anf_arg2 = normalize arg2 in
-    assert false
+    bubble_lets gensym_s anf_arg1 (fun lets1 arg1 ->
+      bubble_lets gensym_s anf_arg2 (fun lets2 arg2 ->
+        let rez = CApp (AVar "<", arg1, [ arg2 ]) in
+        assert false))
   | TApp (f, arg, _) ->
     let rec wrap (type a) : ([ `Atom ] expr -> any_expr) -> a expr -> any_expr =
      fun k -> function
@@ -453,4 +469,4 @@ let%expect_test "CPS fibonacci" =
                                                                      let name43 = (name42 q) in
                                                                      (k name43))))))))
  |}]
-;;
+;; *)

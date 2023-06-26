@@ -1,7 +1,7 @@
 (library
  (name compile_lib)
  (libraries stdio miniml cconv)
- (modules ANF compile_tests)
+ (modules ANF ANF2 compile_tests)
  (preprocess
   (pps
    ; ppx_blob
