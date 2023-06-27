@@ -30,6 +30,11 @@ let pp_const ppf = function
   | PConst_int n -> fprintf ppf "%d" n
 ;;
 
+let pp_flg ppf = function
+  | Recursive -> Format.fprintf ppf "rec "
+  | NonRecursive -> ()
+;;
+
 let rec pp_expr_helper ?(ps = true) ppf = function
   | EUnit -> fprintf ppf "()"
   | EConst n -> pp_const ppf n
