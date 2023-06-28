@@ -6,10 +6,10 @@
   let rec s: (('_3 -> ('_5 -> '_6)) -> (('_3 -> '_5) -> ('_3 -> '_6))) =
     fun f g x -> (f x) (g x)
   After ANF transformation.
-  let rec s =
-    (fun f g x -> let temp4 = f x  in
-                    let temp5 = g x  in
-                      temp4 temp5 )
+  let rec s x g f =
+    let temp4 = f x  in
+      let temp5 = g x  in
+        temp4 temp5 
 # Zed combinator should trigger occurs check
   $ cat << EOF | ./REPL.exe -
   > let main = fun f -> (fun x -> f (fun v -> x x v)) (fun x -> f (fun v -> x x v))
@@ -38,9 +38,9 @@
     fun x -> let (a, b) : (int, int) = x in
     a + b
   After ANF transformation.
-  let sum =
-    (fun x -> let (a, b) = x in
-                (a + b))
+  let sum x =
+    let (a, b) = x in
+      (a + b)
 
   $ cat << EOF | ./REPL.exe -
   > let small n =
@@ -54,14 +54,14 @@
   let small: (bool -> int) =
     fun n -> (if half n then 0 else 1) + 1123
   After ANF transformation.
-  let half =
-    (fun n -> n)
-  let small =
-    (fun n -> let temp3 = half n  in
-                let temp4 = (if temp3
-                            then 0
-                            else 1) in
-                  (temp4 + 1123))
+  let half n =
+    n
+  let small n =
+    let temp3 = half n  in
+      let temp4 = (if temp3
+                  then 0
+                  else 1) in
+        (temp4 + 1123)
 # CPS Factorial
   $ cat << EOF | ./REPL.exe -
   > let rec fack n k =
@@ -75,18 +75,18 @@
   let rec fack: (int -> ((int -> '_12) -> '_12)) =
     fun n k -> (if n = 1 then k 1 else (fack (n - 1)) ((fresh_1 n) k))
   After ANF transformation.
-  let fresh_1 =
-    (fun n k m -> let temp4 = (n * m) in
-                    k temp4 )
-  let rec fack =
-    (fun n k -> let temp8 = (n = 1) in
-                  (if temp8
-                  then k 1 
-                  else let temp10 = (n - 1) in
-                         let temp11 = fack temp10  in
-                           let temp12 = fresh_1 n  in
-                             let temp13 = temp12 k  in
-                               temp11 temp13 ))
+  let fresh_1 m k n =
+    let temp4 = (n * m) in
+      k temp4 
+  let rec fack k n =
+    let temp8 = (n = 1) in
+      (if temp8
+      then k 1 
+      else let temp10 = (n - 1) in
+             let temp11 = fack temp10  in
+               let temp12 = fresh_1 n  in
+                 let temp13 = temp12 k  in
+                   temp11 temp13 )
 
 # CPS Fibonacci
   $ cat << EOF | ./REPL.exe -
@@ -108,25 +108,25 @@
   let rec fibk: (int -> ((int -> '_14) -> '_14)) =
     fun n k -> (if (< n) 1 then k 1 else (fibk (n - 1)) (((fresh_1 n) k) fibk))
   After ANF transformation.
-  let fresh_2 =
-    (fun p k q -> let temp4 = (p + q) in
-                    k temp4 )
-  let fresh_1 =
-    (fun n k fibk -> (fun p -> let temp10 = (n - 2) in
-                                 let temp11 = fibk temp10  in
-                                   let temp12 = fresh_2 p  in
-                                     let temp13 = temp12 k  in
-                                       temp11 temp13 ))
-  let rec fibk =
-    (fun n k -> let temp17 = (n < 1) in
-                  (if temp17
-                  then k 1 
-                  else let temp19 = (n - 1) in
-                         let temp20 = fibk temp19  in
-                           let temp21 = fresh_1 n  in
-                             let temp22 = temp21 k  in
-                               let temp23 = temp22 fibk  in
-                                 temp20 temp23 ))
+  let fresh_2 q k p =
+    let temp4 = (p + q) in
+      k temp4 
+  let fresh_1 p fibk k n =
+    let temp10 = (n - 2) in
+      let temp11 = fibk temp10  in
+        let temp12 = fresh_2 p  in
+          let temp13 = temp12 k  in
+            temp11 temp13 
+  let rec fibk k n =
+    let temp17 = (n < 1) in
+      (if temp17
+      then k 1 
+      else let temp19 = (n - 1) in
+             let temp20 = fibk temp19  in
+               let temp21 = fresh_1 n  in
+                 let temp22 = temp21 k  in
+                   let temp23 = temp22 fibk  in
+                     temp20 temp23 )
 
 # Polyvariadic uncurrying
   $ cat << EOF | ./REPL.exe  -
@@ -150,13 +150,13 @@
                                                                    ('_13, '_14))) -> '_15)) =
     succ three
   After ANF transformation.
-  let two =
-    (fun f (a, b) -> let temp3 = f a  in
-                       temp3 b )
-  let succ =
-    (fun prev f (a, rest) -> let temp8 = f a  in
-                               let temp9 = prev temp8  in
-                                 temp9 rest )
+  let two (a, b) f =
+    let temp3 = f a  in
+      temp3 b 
+  let succ (a, rest) f prev =
+    let temp8 = f a  in
+      let temp9 = prev temp8  in
+        temp9 rest 
   let three =
     succ two 
   let four =
@@ -171,9 +171,9 @@
   let fresh: ((('_2, '_3) -> '_4) -> ('_2 -> ('_3 -> '_4))) =
     fun f arg rest -> f (arg, rest)
   After ANF transformation.
-  let fresh =
-    (fun f arg rest -> let temp4 = (arg, rest) in
-                         f temp4 )
+  let fresh rest arg f =
+    let temp4 = (arg, rest) in
+      f temp4 
 
 # Polyvariadic currying
   $ cat << EOF | ./REPL.exe -
@@ -197,16 +197,16 @@
   let four: ((('_1, ('_9, ('_10, '_11))) -> '_12) -> ('_1 -> ('_9 -> ('_10 -> ('_11 -> '_12))))) =
     succ three
   After ANF transformation.
-  let two =
-    (fun f a b -> let temp4 = (a, b) in
-                    f temp4 )
-  let fresh_1 =
-    (fun f arg rest -> let temp9 = (arg, rest) in
-                         f temp9 )
-  let succ =
-    (fun prev f arg -> let temp14 = fresh_1 f  in
-                         let temp15 = temp14 arg  in
-                           prev temp15 )
+  let two b a f =
+    let temp4 = (a, b) in
+      f temp4 
+  let fresh_1 rest arg f =
+    let temp9 = (arg, rest) in
+      f temp9 
+  let succ arg f prev =
+    let temp14 = fresh_1 f  in
+      let temp15 = temp14 arg  in
+        prev temp15 
   let three =
     succ two 
   let four =
@@ -242,21 +242,21 @@
   let temp: (int, int) =
     (two fresh_1) (1, 2)
   After ANF transformation.
-  let two =
-    (fun f (a, b) -> let temp3 = f a  in
-                       let temp4 = f b  in
-                         (temp3, temp4))
-  let succ =
-    (fun prev f (a, rest) -> let temp9 = f a  in
-                               let temp10 = prev f  in
-                                 let temp11 = temp10 rest  in
-                                   (temp9, temp11))
+  let two (a, b) f =
+    let temp3 = f a  in
+      let temp4 = f b  in
+        (temp3, temp4)
+  let succ (a, rest) f prev =
+    let temp9 = f a  in
+      let temp10 = prev f  in
+        let temp11 = temp10 rest  in
+          (temp9, temp11)
   let three =
     succ two 
   let four =
     succ three 
-  let fresh_1 =
-    (fun x -> x)
+  let fresh_1 x =
+    x
   let temp =
     let temp16 = two fresh_1  in
       let temp17 = (1, 2) in

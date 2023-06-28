@@ -7,23 +7,47 @@ open Miniml
 
 module ToLLVM = struct
   let codegen typedtree fout =
-    Format.printf "%a\n%!" Pprinttyped.pp_hum typedtree;
+    Format.printf "%a\n%!" Compile_lib.ANF2.pp_stru typedtree;
     Result.ok ()
 
   let run cfg =
     let text =
-      let filename = cfg.input_file |> Option.get in
-      Stdio.In_channel.with_file filename ~f:Stdio.In_channel.input_all
+      match cfg.input_file with
+      | Some filename ->
+          Stdio.In_channel.with_file filename ~f:Stdio.In_channel.input_all
+      | None -> Stdio.In_channel.(input_all stdin)
     in
     let promote_error r =
       Result.map_error (fun x -> (x :> [ Parsing.error | Inferencer.error ])) r
     in
     let ( let* ) x f = Result.bind x f in
     (* let ( let+ ) x f = Result.map f x in *)
-    let* ast = Miniml.Parsing.parse text |> promote_error in
-    let* typedtree = Inferencer.w ast |> promote_error in
-    let typedtree = Typedtree.compact_expr typedtree in
-    codegen typedtree cfg.out |> promote_error
+    let* stru = Miniml.Parsing.parse_structure text |> promote_error in
+    let stru =
+      let init = (CConv.standart_globals, []) in
+      Stdlib.ListLabels.fold_left
+        (stru : Parsetree.structure)
+        ~init
+        ~f:(fun (glob, ans) stru ->
+          let new_strus = CConv.conv ~standart_globals:glob stru in
+          let new_glob =
+            ListLabels.fold_left ~init:glob new_strus ~f:(fun acc -> function
+              | _, Parsetree.PVar s, _ -> CConv.String_set.add s acc
+              | _, PTuple _, _ -> acc)
+          in
+          (new_glob, List.append ans new_strus))
+      |> snd
+    in
+    let* typedtree =
+      Inferencer.structure stru
+      |> Result.map_error (function #Inferencer.error as e -> e)
+    in
+    (* let* typedtree = Inferencer.structure ast |> promote_error in *)
+    (* let typedtree = Typedtree.compact_expr typedtree in *)
+    let anf = Compile_lib.ANF2.(anf_stru typedtree |> simplify_stru) in
+    Format.printf "After ANF transformation.\n%!";
+    Format.printf "%a\n%!" Compile_lib.ANF2.pp_stru anf;
+    codegen anf cfg.out |> promote_error
 end
 
 let cfg = { out = `Stdout; input_file = None }

@@ -108,8 +108,19 @@ include struct
     helper
   ;;
 
+  let group_abstractions =
+    let rec helper acc = function
+      | EComplex (CAtom (ALam (pat, body))) -> helper (pat :: acc) body
+      | e -> acc, e
+    in
+    helper []
+  ;;
+
   let pp_vb ppf (flg, name, expr) =
-    fprintf ppf "@[<v 2>@[let %a%s =@]@ @[%a@]@]" Pprint.pp_flg flg name pp expr
+    let pats, body = group_abstractions expr in
+    fprintf ppf "@[<v 2>@[let %a%s " Pprint.pp_flg flg name;
+    List.iter (fprintf ppf "%a " Pprint.pp_pattern) pats;
+    fprintf ppf "=@]@ @[%a@]@]" pp body
   ;;
 
   let pp_stru ppf xs = fprintf ppf "@[<v>%a@]" (pp_print_list pp_vb) xs
@@ -247,18 +258,18 @@ let%expect_test "CPS factorial" =
     else fack (n-1) (fun p -> k (p*n)) |};
   [%expect
     {|
-    let fresh_2 =
-      (fun n k p -> let temp4 = (p * n) in
-                      k temp4 )
-    let rec fack =
-      (fun n k -> let temp8 = (n = 0) in
-                    (if temp8
-                    then k 1
-                    else let temp10 = (n - 1) in
-                           let temp11 = fack temp10  in
-                             let temp12 = fresh_2 n  in
-                               let temp13 = temp12 k  in
-                                 temp11 temp13 )) |}]
+    let fresh_2 p k n =
+      let temp4 = (p * n) in
+        k temp4
+    let rec fack k n =
+      let temp8 = (n = 0) in
+        (if temp8
+        then k 1
+        else let temp10 = (n - 1) in
+               let temp11 = fack temp10  in
+                 let temp12 = fresh_2 n  in
+                   let temp13 = temp12 k  in
+                     temp11 temp13 ) |}]
 ;;
 
 let%expect_test _ =
@@ -273,10 +284,10 @@ let%expect_test _ =
   test_anf {| let foo = ((fun x -> x), (fun y -> y)) |};
   [%expect
     {|
-    let fresh_3 =
-      (fun x -> x)
-    let fresh_4 =
-      (fun y -> y)
+    let fresh_3 x =
+      x
+    let fresh_4 y =
+      y
     let foo =
       (fresh_3, fresh_4)
      |}]

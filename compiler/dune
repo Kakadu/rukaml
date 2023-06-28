@@ -1,5 +1,6 @@
 (library
  (name compile_lib)
+ (public_name MiniML.compile)
  (libraries stdio miniml cconv)
  (modules ANF ANF2 compile_tests)
  (preprocess
