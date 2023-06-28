@@ -17,7 +17,7 @@ and expr =
   | ELet of Parsetree.rec_flag * string * c_expr * expr
   | EComplex of c_expr
 
-type vb = Parsetree.rec_flag * string * c_expr
+type vb = Parsetree.rec_flag * string * expr
 
 [@@@ocaml.warnerror "-11"]
 
@@ -71,9 +71,13 @@ let pp =
     | ALam (name, e) -> fprintf ppf "(fun %s -> %a)" name helper e
     | AConst c -> Pprint.pp_const ppf c
     | APrimitive s | AVar s -> fprintf ppf "%s" s
-    | ATuple (a, b, ts) -> fprintf ppf "@[%a@]" (pp_comma_list helper_a) (a :: b :: ts)
+    | ATuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
   in
   helper
+;;
+
+let pp_vb ppf (flg, name, expr) =
+  Format.fprintf ppf "@[<v 2>@[let %a%s =@]@ @[%a@]@]" Pprint.pp_flg flg name pp expr
 ;;
 
 let gensym =
@@ -145,17 +149,29 @@ let anf =
   fun e -> helper e complex_of_atom
 ;;
 
+let anf_vb vb : vb =
+  let anf_body = anf vb.Typedtree.tvb_body in
+  let name =
+    match vb.tvb_pat with
+    | Parsetree.PVar s -> s
+    | PTuple _ -> assert false
+  in
+  vb.tvb_flag, name, anf_body
+;;
+
+let anf_stru = List.map anf_vb
+
 let test_anf text =
   let ( let* ) x f = Result.bind x f in
   match
     let stru = Miniml.Parsing.parse_vb_exn text in
+    let vbs = CConv.structure [ stru ] in
+    let* vbs_typed = Inferencer.structure vbs in
     (* Format.printf "%s %d\n%!" __FILE__ __LINE__; *)
-    let* { tvb_body = typed; tvb_flag; tvb_pat; _ } = Inferencer.vb stru in
-    (* Format.printf "%s %d\n%!" __FILE__ __LINE__; *)
-    Result.ok (anf typed)
+    Result.ok (anf_stru vbs_typed)
   with
   | Result.Error err -> Format.printf "%a\n%!" Inferencer.pp_error err
-  | Ok anf -> Format.printf "%a\n%!" pp anf
+  | Ok anf -> Format.printf "@[<v>%a@]\n%!" (Format.pp_print_list pp_vb) anf
 ;;
 
 let%expect_test "CPS factorial" =
@@ -165,36 +181,51 @@ let%expect_test "CPS factorial" =
     else fack (n-1) (fun p -> k (p*n)) |};
   [%expect
     {|
-    let temp1 n =
-      let temp2 k =
-        let temp3 = (n = 0) in
-          if temp3
-          then let temp10 = k 1  in
-                 temp10
-          else let temp4 = (n - 1) in
-                 let temp5 = fack temp4  in
-                   let temp6 p =
-                     let temp7 = (p * n) in
-                       let temp8 = k temp7  in
-                         temp8 in
-                     let temp9 = temp5 temp6  in
-                       temp9 in
-        temp2 in
-      temp1 |}]
+    let fresh_2 =
+      let temp1 n =
+        let temp2 k =
+          let temp3 p = let temp4 = (p * n) in
+                          let temp5 = k temp4  in
+                            temp5 in
+            temp3 in
+          temp2 in
+        temp1
+    let rec fack =
+      let temp6 n =
+        let temp7 k =
+          let temp8 = (n = 0) in
+            if temp8
+            then let temp14 = k 1  in
+                   temp14
+            else let temp9 = (n - 1) in
+                   let temp10 = fack temp9  in
+                     let temp11 = fresh_2 n  in
+                       let temp12 = temp11 k  in
+                         let temp13 = temp10 temp12  in
+                           temp13 in
+          temp7 in
+        temp6 |}]
 ;;
 
 let%expect_test _ =
   test_anf {| let double = ((let b = 1 in b), 2) |};
   [%expect {|
-    let b = 1 in
-      b, 2 |}]
+    let double =
+      let b = 1 in
+        (b, 2) |}]
 ;;
 
 let%expect_test _ =
   test_anf {| let foo = ((fun x -> x), (fun y -> y)) |};
-  [%expect {|
-    let temp11 x = x in
-      let temp12 y = y in
-        temp11, temp12
+  [%expect
+    {|
+    let fresh_3 =
+      let temp15 x = x in
+        temp15
+    let fresh_4 =
+      let temp16 y = y in
+        temp16
+    let foo =
+      (fresh_3, fresh_4)
      |}]
 ;;
