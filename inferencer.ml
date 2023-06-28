@@ -17,6 +17,7 @@ type error =
   [ `Occurs_check
   | `NoVariable of string
   | `UnificationFailed of ty * ty
+  | `Only_varibles_on_the_left_of_letrec
   ]
 
 let pp_error ppf : error -> _ = function
@@ -24,6 +25,8 @@ let pp_error ppf : error -> _ = function
   | `NoVariable s -> Format.fprintf ppf "Undefined variable '%s'" s
   | `UnificationFailed (l, r) ->
     Format.fprintf ppf "unification failed on %a and %a" Pprint.pp_typ l Pprint.pp_typ r
+  | `Only_varibles_on_the_left_of_letrec ->
+    Format.fprintf ppf "Only variables are allowed as left-hand side of `let rec'"
 ;;
 
 type fresh_counter = int
@@ -155,7 +158,9 @@ end = struct
          | exception Not_found_s _ -> typ
          | x -> x)
       | Arrow (l, r) -> tarrow (helper l) (helper r)
-      | _ -> typ
+      | TProd (a, b, ts) -> tprod (helper a) (helper b) (List.map ~f:helper ts)
+      | TLink ty -> helper ty
+      | Prim _ -> typ
     in
     helper
   ;;
@@ -232,6 +237,8 @@ end
 
 module Scheme = struct
   type t = scheme
+
+  let make_mono ty = S (Var_set.empty, ty)
 
   let occurs_in info = function
     | S (xs, t) -> (not (Var_set.mem info.binder xs)) && Type.occurs_in info t
@@ -329,12 +336,17 @@ let unify l r =
   helper l r
 ;;
 
-let instantiate : scheme -> ty R.t =
+let instantiate ?(level = 0) : scheme -> ty R.t =
  fun (S (bs, t)) ->
+  let rec next_name () =
+    let* new_name = fresh in
+    if Var_set.mem new_name bs then next_name () else return new_name
+  in
   Var_set.fold_R
     (fun typ name ->
-      let* f1 = fresh in
-      return @@ Subst.apply (Subst.singleton name (tv f1 ~level:0)) typ)
+      let* f1 = next_name () in
+      (* log "create fresh variable %d for name %d" f1 name; *)
+      return @@ Subst.apply (Subst.singleton name (tv f1 ~level)) typ)
     bs
     (return t)
 ;;
@@ -350,7 +362,7 @@ let generalize : TypeEnv.t -> level:int -> Type.t -> Scheme.t =
     | Prim _ -> acc
   in
   fun ty ->
-    log "generalize: @[%a@]" pp_ty ty;
+    (* log "generalize: @[%a@]" pp_ty ty; *)
     let free = helper Var_set.empty ty in
     (* let free = Var_set.diff (Type.free_vars ty) (TypeEnv.free_vars env) in *)
     S (free, ty)
@@ -362,6 +374,15 @@ let lookup_env e xs =
   match List.Assoc.find_exn xs ~equal:String.equal e with
   | (exception Stdlib.Not_found) | (exception Not_found_s _) -> fail (`NoVariable e)
   | scheme -> instantiate scheme
+;;
+
+let lookup_scheme : _ -> TypeEnv.t -> scheme t =
+ fun e xs ->
+  (* log "Looking up for %s" e;
+  log "  inside %a" TypeEnv.pp xs; *)
+  match List.Assoc.find_exn xs ~equal:String.equal e with
+  | (exception Stdlib.Not_found) | (exception Not_found_s _) -> fail (`NoVariable e)
+  | scheme -> return scheme
 ;;
 
 let fresh_var ~level = fresh >>| fun n -> tv n ~level
@@ -376,33 +397,49 @@ let pp_env subst ppf env =
 let infer env expr =
   let current_level = ref 1 in
   let enter_level () =
-    log "== enter level %d" (1 + !current_level);
+    (* log "== enter level %d" (1 + !current_level); *)
     Int.incr current_level
   in
   let leave_level () =
-    log "== leave level %d" !current_level;
+    (* log "== leave level %d" !current_level; *)
     Int.decr current_level
+  in
+  let rec check_pat env : _ -> (_ * ty) t = function
+    | Parsetree.PVar x ->
+      let* tx = fresh_var ~level:!current_level in
+      let env = TypeEnv.extend (x, S (Var_set.empty, tx)) env in
+      return (env, tx)
+    | Parsetree.PTuple (p1, p2, []) ->
+      let* env, t1 = check_pat env p1 in
+      let* env, t2 = check_pat env p2 in
+      return (env, { typ_desc = TProd (t1, t2, []) })
+    | Parsetree.PTuple (_p1, _p2, _ps) -> assert false
   in
   let rec (helper : TypeEnv.t -> Parsetree.expr -> (ty * Typedtree.expr) R.t) =
    fun env -> function
-    | Parsetree.EVar ("*" as _v) | Parsetree.EVar ("-" as _v) | Parsetree.EVar ("+" as _v)
-      ->
+    | Parsetree.EVar (("+" | "*" | "-" | "/") as v) ->
       let typ = tarrow int_typ (tarrow int_typ int_typ) in
-      return (typ, TVar (_v, typ))
+      return (typ, TVar (v, typ))
     | Parsetree.EVar "=" ->
       let typ = tarrow int_typ (tarrow int_typ bool_typ) in
       return (typ, TVar ("=", typ))
     | Parsetree.EVar x ->
-      let* typ = lookup_env x env in
+      let* scheme = lookup_scheme x env in
+      let* typ = instantiate ~level:!current_level scheme in
       return (typ, TVar (x, typ))
-      (* lambda abstraction *)
     | EUnit -> return (unit_typ, TUnit)
+    (* lambda abstraction *)
     | ELam (PVar x, e1) ->
-      let* v = fresh_var ~level:!current_level in
-      let env2 = TypeEnv.extend (x, S (Var_set.empty, v)) env in
+      let* tx = fresh_var ~level:!current_level in
+      let env2 = TypeEnv.extend (x, S (Var_set.empty, tx)) env in
       let* ty, tbody = helper env2 e1 in
-      let trez = tarrow v ty in
-      return (trez, TLam (x, tbody, trez))
+      let trez = tarrow tx ty in
+      return (trez, TLam (PVar x, tbody, trez))
+    | Parsetree.ELam ((PTuple _ as pat), body) ->
+      let* env, tp = check_pat env pat in
+      let* ty, tbody = helper env body in
+      let trez = tarrow tp ty in
+      return (trez, TLam (pat, tbody, trez))
     | EApp (e1, e2) ->
       let* t1, te1 = helper env e1 in
       let* t2, te2 = helper env e2 in
@@ -436,6 +473,7 @@ let infer env expr =
       let tup_typ = tprod ta tb typs in
       return (tup_typ, TTuple (ea, eb, exprs, tup_typ))
     | Parsetree.ELet (NonRecursive, PVar x, rhs, e2) ->
+      (* log "   (%d)" Stdlib.__LINE__; *)
       enter_level ();
       let* t1, typed_rhs = helper env rhs in
       leave_level ();
@@ -443,36 +481,50 @@ let infer env expr =
       (* log "env = %a" TypeEnv.pp env; *)
       (* log "env free vars = %a" Var_set.pp (TypeEnv.free_vars env); *)
       let t2 = generalize env ~level:!current_level t1 in
-      log "let generalized t2 = %a" Pprint.pp_scheme t2;
+      (* log "let generalized t2 = %a" Pprint.pp_scheme t2; *)
       let* t3, typed_in = helper (TypeEnv.extend (x, t2) env) e2 in
-      log "let nonrec result = %a" pp_ty t3;
-      return (t3, TLet (NonRecursive, x, t2, typed_rhs, typed_in))
+      (* log "let nonrec result = %a" pp_ty t3; *)
+      return (t3, TLet (NonRecursive, PVar x, t2, typed_rhs, typed_in))
     | Parsetree.ELet (Recursive, PVar f, erhs, wher) ->
-      let* tv = fresh_var ~level:!current_level in
+      (* log "  RECURSION"; *)
+      let* tf = fresh_var ~level:!current_level in
+      (* log "  var %s will have type %a (%d)" f Pprint.pp_typ tf Stdlib.__LINE__; *)
       enter_level ();
       let* t1, typed_rhs =
-        let env = TypeEnv.extend (f, S (Var_set.empty, tv)) env in
+        let env = TypeEnv.extend (f, S (Var_set.empty, tf)) env in
         helper env erhs
       in
       leave_level ();
-      let* () = unify tv t1 in
-      let t2 = generalize env ~level:!current_level tv in
-      log "letrec  result = %a\n%!" pp_scheme t2;
+      let* () = unify tf t1 in
+      (* log "  var %s will have type %a" f Pprint.pp_typ tf; *)
+      let t2 = generalize env ~level:!current_level tf in
+      (* log "letrec  result = %a\n%!" pp_scheme t2; *)
       let* twher, typed_wher = helper TypeEnv.(extend (f, t2) env) wher in
-      return (twher, TLet (Recursive, f, t2, typed_rhs, typed_wher))
-    | ELet (_, PTuple _, _, _) | Parsetree.ELam (PTuple _, _) -> assert false
+      return (twher, TLet (Recursive, PVar f, t2, typed_rhs, typed_wher))
+    | ELet (Recursive, PTuple _, _, _) -> fail `Only_varibles_on_the_left_of_letrec
+    | ELet (NonRecursive, (PTuple _ as pat), rhs, wher) ->
+      let* env, tp = check_pat env pat in
+      let* _ty, tbody = helper env rhs in
+      let* () = unify tp _ty in
+      let* twher, typed_wher = helper env wher in
+      return (twher, TLet (NonRecursive, pat, Scheme.make_mono _ty, tbody, typed_wher))
   in
   helper env expr
 ;;
 
 let start_env =
-  let cmp_scheme = S (Var_set.empty, tarrow int_typ (tarrow int_typ bool_typ)) in
+  let cmp_scheme = Scheme.make_mono (tarrow int_typ (tarrow int_typ bool_typ)) in
+  let int_arith_scheme = Scheme.make_mono (tarrow int_typ (tarrow int_typ bool_typ)) in
   TypeEnv.empty
-  |> TypeEnv.extend ("print", S (Var_set.empty, tarrow int_typ unit_typ))
+  |> TypeEnv.extend ("print", Scheme.make_mono (tarrow int_typ unit_typ))
   |> TypeEnv.extend ("<", cmp_scheme)
   |> TypeEnv.extend (">", cmp_scheme)
   |> TypeEnv.extend ("<=", cmp_scheme)
   |> TypeEnv.extend (">=", cmp_scheme)
+  |> TypeEnv.extend ("+", int_arith_scheme)
+  |> TypeEnv.extend ("-", int_arith_scheme)
+  |> TypeEnv.extend ("*", int_arith_scheme)
+  |> TypeEnv.extend ("/", int_arith_scheme)
 ;;
 
 let w e =
@@ -497,10 +549,16 @@ let%expect_test _ =
 ;;
 
 let vb ?(env = start_env) (flg, Parsetree.PVar name, body) =
-  (* TODO(Kakadu): recursion and generalization *)
+  (* log "   (%d)" Stdlib.__LINE__; *)
   let comp =
     let* v = fresh in
-    infer ((name, S (Var_set.empty, Typedtree.tv v ~level:(-1))) :: env) body
+    let tv = Typedtree.tv v ~level:(-1) in
+    let* env, tbody = infer ((name, S (Var_set.empty, tv)) :: env) body in
+    match flg with
+    | Parsetree.Recursive ->
+      let* () = unify tv (type_of_expr tbody) in
+      return (env, tbody)
+    | NonRecursive -> return (env, tbody)
   in
   run comp
   |> Result.map_error ~f:(function #error as x -> x)
@@ -511,7 +569,7 @@ let vb ?(env = start_env) (flg, Parsetree.PVar name, body) =
 let structure ?(env = start_env) stru =
   let ( let* ) = Result.( >>= ) in
   let return = Result.return in
-  let* new_env, items =
+  let* _new_env, items =
     List.fold_left
       stru
       ~init:(return (env, []))
@@ -521,6 +579,7 @@ let structure ?(env = start_env) stru =
         let env : TypeEnv.t =
           match new_item.Typedtree.tvb_pat with
           | Parsetree.PVar name -> TypeEnv.extend (name, new_item.Typedtree.tvb_typ) env
+          | _ -> failwith "Not implemented"
         in
         return (env, new_item :: acc))
   in

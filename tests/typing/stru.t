@@ -28,7 +28,7 @@
   > let rec fix f = f (fix f)
   > EOF
   Parsed.
-  let rec fix: (('_2 -> '_3) -> '_3) =
+  let rec fix: (('_3 -> '_3) -> '_3) =
     fun f -> f (fix f) 
 
   $ cat << EOF | ./REPL.exe -stru  -
@@ -135,3 +135,8 @@
   let foo: ('_1 -> (int, bool)) =
     fun x -> let y : ('_2 -> '_2) = fun z -> z in
     ((y 1), (y true))
+  $ cat << EOF | ./REPL.exe -stru -
+  > let rec fac = fun n -> n*fac
+  > EOF
+  Parsed.
+  Error: unification failed on int and (int -> int)

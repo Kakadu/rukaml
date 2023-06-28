@@ -39,7 +39,7 @@ let int_typ = tprim "int"
 let bool_typ = tprim "bool"
 let unit_typ = tprim "unit"
 
-type pattern = string [@@deriving show { with_path = false }]
+type pattern = Parsetree.pattern [@@deriving show { with_path = false }]
 
 type expr =
   | TUnit

@@ -2,6 +2,7 @@ type error =
   [ `Occurs_check
   | `NoVariable of string
   | `UnificationFailed of Typedtree.ty * Typedtree.ty
+  | `Only_varibles_on_the_left_of_letrec
   ]
 
 val pp_error : Format.formatter -> error -> unit

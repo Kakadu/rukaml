@@ -11,6 +11,7 @@ let pp_typ_hum =
     | Arrow (l, r) -> fprintf ppf "(%a -> %a)" pp_typ l pp_typ r
     | TLink ty -> pp_typ ppf ty
     | TProd (a, b, ts) ->
+      (* TODO: change comma to asterisk *)
       fprintf ppf "@[(%a, %a" pp_typ a pp_typ b;
       List.iter (fprintf ppf ", %a" pp_typ) ts;
       fprintf ppf ")@]"
@@ -37,7 +38,7 @@ let pp_expr =
        | ps, e ->
          if pars then fprintf ppf "(";
          fprintf ppf "fun ";
-         List.iter (fun name -> fprintf ppf "%s " name) ps;
+         List.iter (fun name -> fprintf ppf "%a " Pprint.pp_pattern name) ps;
          fprintf ppf "-> %a" expr_no e;
          if pars then fprintf ppf ")")
     | TApp (TApp (TVar ("+", _), l, _), r, _) ->
@@ -81,7 +82,7 @@ let pp_expr =
       List.iter (fprintf ppf ", %a" expr_no) es;
       fprintf ppf ")@]"
   and pp_typ = pp_typ_hum
-  and pp_pat ppf s = fprintf ppf "%s" s
+  and pp_pat ppf s = fprintf ppf "%a" Pprint.pp_pattern s
   and expr ppf = expr_gen ~pars:true ppf
   and expr_no ppf = expr_gen ~pars:false ppf in
   fun ?(pars = false) ppf e -> fprintf ppf "@[<v>%a@]" (expr_gen ~pars) e

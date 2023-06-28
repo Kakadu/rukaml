@@ -38,6 +38,7 @@ type value_binding = rec_flag * pattern * expr
 type structure_item = value_binding
 type structure = structure_item list
 
+val show_structure : structure -> string
 val const_int : int -> const
 val const_bool : bool -> const
 

@@ -40,14 +40,14 @@ val int_typ : ty
 val bool_typ : ty
 val unit_typ : ty
 
-type pattern = string
+type pattern = Parsetree.pattern
 
 val show_pattern : pattern -> string
 
 type expr =
   | TUnit
   | TConst of Parsetree.const (** Contants *)
-  | TVar of pattern * ty
+  | TVar of string * ty
   | TIf of expr * expr * expr * ty (** if ... then ... else ... *)
   | TLam of pattern * expr * ty (** fun ... -> ... *)
   | TApp of expr * expr * ty (** Application f x *)

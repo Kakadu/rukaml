@@ -51,9 +51,9 @@ let elt a b = eapp (evar "<") [ a; b ]
 let ele a b = eapp (evar "<=") [ a; b ]
 let egt a b = eapp (evar ">") [ a; b ]
 
-type value_binding = rec_flag * pattern * expr
-type structure_item = value_binding
-type structure = structure_item list
+type value_binding = rec_flag * pattern * expr [@@deriving show { with_path = false }]
+type structure_item = value_binding [@@deriving show { with_path = false }]
+type structure = structure_item list [@@deriving show { with_path = false }]
 
 let group_lams body =
   let rec helper acc = function

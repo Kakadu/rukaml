@@ -6,7 +6,7 @@ type imm_expr =
   | AVar of string
   | APrimitive of string
   | ATuple of imm_expr * imm_expr * imm_expr list
-  | ALam of string * expr
+  | ALam of Parsetree.pattern * expr
 
 and c_expr =
   | CApp of imm_expr * imm_expr * imm_expr list
@@ -14,7 +14,7 @@ and c_expr =
   | CAtom of imm_expr
 
 and expr =
-  | ELet of Parsetree.rec_flag * string * c_expr * expr
+  | ELet of Parsetree.rec_flag * Parsetree.pattern * c_expr * expr
   | EComplex of c_expr
 
 type vb = Parsetree.rec_flag * string * expr
@@ -39,17 +39,24 @@ include struct
       | ELet (flg, name, CAtom (ALam (arg1, rhs)), wher) ->
         fprintf
           ppf
-          "@[<v 2>@[<hov 2>@[let %a%s %s =@]@ @[%a@]@ in@]@ @[%a@]@]"
+          "@[<v 2>@[<hov 2>@[let %a%a %a =@]@ "
           Pprint.pp_flg
           flg
+          Pprint.pp_pattern
           name
-          arg1
-          helper
+          Pprint.pp_pattern
+          arg1;
+        fprintf ppf "@[%a@]@ in@]@ @[%a@]@]" helper rhs helper wher
+      | ELet (_, name, rhs, wher) ->
+        fprintf
+          ppf
+          "@[<v 2>@[let %a = %a in@]@ @[%a@]@]"
+          Pprint.pp_pattern
+          name
+          helper_c
           rhs
           helper
           wher
-      | ELet (_, name, rhs, wher) ->
-        fprintf ppf "@[<v 2>@[let %s = %a in@]@ @[%a@]@]" name helper_c rhs helper wher
       | EComplex (CAtom (AConst c)) -> Pprint.pp_const ppf c
       | EComplex ea -> helper_c ppf ea
     and helper_c ppf = function
@@ -69,9 +76,29 @@ include struct
           helper
           el
     and helper_a ppf = function
+      | ALam (arg1, EComplex (CAtom (ALam (arg2, EComplex (CAtom (ALam (arg3, e))))))) ->
+        fprintf
+          ppf
+          "@[(fun %a %a %a -> %a)@]"
+          Pprint.pp_pattern
+          arg1
+          Pprint.pp_pattern
+          arg2
+          Pprint.pp_pattern
+          arg3
+          helper
+          e
       | ALam (arg1, EComplex (CAtom (ALam (arg2, e)))) ->
-        fprintf ppf "@[(fun %s %s -> %a)@]" arg1 arg2 helper e
-      | ALam (name, e) -> fprintf ppf "(fun %s -> %a)" name helper e
+        fprintf
+          ppf
+          "@[(fun %a %a -> %a)@]"
+          Pprint.pp_pattern
+          arg1
+          Pprint.pp_pattern
+          arg2
+          helper
+          e
+      | ALam (name, e) -> fprintf ppf "(fun %a -> %a)" Pprint.pp_pattern name helper e
       | AConst c -> Pprint.pp_const ppf c
       | APrimitive s | AVar s -> fprintf ppf "%s" s
       | ATuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
@@ -82,6 +109,8 @@ include struct
   let pp_vb ppf (flg, name, expr) =
     fprintf ppf "@[<v 2>@[let %a%s =@]@ @[%a@]@]" Pprint.pp_flg flg name pp expr
   ;;
+
+  let pp_stru ppf xs = fprintf ppf "@[<v>%a@]" (pp_print_list pp_vb) xs
 end
 
 let simplify : expr -> expr =
@@ -94,7 +123,7 @@ let simplify : expr -> expr =
     | CIte (cond, th, el) -> CIte (helper_a cond, helper th, helper el)
   and helper = function
     | EComplex e -> EComplex (helper_c e)
-    | ELet (Parsetree.NonRecursive, name1, body, EComplex (CAtom (AVar name2)))
+    | ELet (Parsetree.NonRecursive, PVar name1, body, EComplex (CAtom (AVar name2)))
       when String.equal name1 name2 -> EComplex (helper_c body)
     | ELet (flg, name, body, wher) -> ELet (flg, name, helper_c body, helper wher)
   in
@@ -102,6 +131,7 @@ let simplify : expr -> expr =
 ;;
 
 let simplify_vb (flag, name, body) = flag, name, simplify body
+let simplify_stru eta = List.map simplify_vb eta
 
 let gensym =
   let n = ref 0 in
@@ -127,16 +157,19 @@ let anf =
         helper arg2 (fun arg2 ->
           let name = gensym_s () in
           ELet
-            (NonRecursive, name, CApp (APrimitive varname, arg1, [ arg2 ]), k (AVar name))))
+            ( NonRecursive
+            , PVar name
+            , CApp (APrimitive varname, arg1, [ arg2 ])
+            , k (AVar name) )))
     | TApp (f, arg1, _) ->
       helper f (fun f ->
         helper arg1 (fun arg1 ->
           let name = gensym_s () in
-          ELet (NonRecursive, name, CApp (f, arg1, []), k (AVar name))))
-    | TLam (v, body, _) ->
+          ELet (NonRecursive, PVar name, CApp (f, arg1, []), k (AVar name))))
+    | TLam (pat, body, _) ->
       let name = gensym_s () in
-      let body : expr = helper body (fun imm -> EComplex (CAtom imm)) in
-      ELet (NonRecursive, name, CAtom (ALam (v, body)), k (AVar name))
+      let body = helper body complex_of_atom in
+      ELet (NonRecursive, PVar name, CAtom (ALam (pat, body)), k (AVar name))
     | TLet (flag, name, _typ, TLam (vname, body, _), wher) ->
       ELet
         ( flag
@@ -146,7 +179,8 @@ let anf =
              (ALam
                 ( vname
                 , helper body (fun imm ->
-                    ELet (NonRecursive, name, CAtom imm, complex_of_atom (AVar name))) )))
+                    ELet (NonRecursive, PVar name, CAtom imm, complex_of_atom (AVar name)))
+                )))
         , helper wher complex_of_atom )
     | TLet (flag, name, _typ, rhs, wher) ->
       (* NOTE: CPS in this part is triky *)
@@ -158,8 +192,10 @@ let anf =
     | TVar (name, _) -> k (AVar name)
     | TTuple (ea, eb, [], _) ->
       helper ea (fun aimm ->
-        helper eb (fun bimm -> complex_of_atom (ATuple (aimm, bimm, []))))
-    | m ->
+        helper eb (fun bimm ->
+          let name = gensym_s () in
+          ELet (NonRecursive, PVar name, CAtom (ATuple (aimm, bimm, [])), k (AVar name))))
+    | (TTuple (_, _, _ :: _, _) | _) as m ->
       Format.eprintf "%a\n%!" Typedtree.pp_expr m;
       Format.kasprintf
         failwith
@@ -205,8 +241,8 @@ let%expect_test "CPS factorial" =
   [%expect
     {|
     let fresh_2 =
-      (fun n k -> (fun p -> let temp4 = (p * n) in
-                              k temp4 ))
+      (fun n k p -> let temp4 = (p * n) in
+                      k temp4 )
     let rec fack =
       (fun n k -> let temp8 = (n = 0) in
                     if temp8
