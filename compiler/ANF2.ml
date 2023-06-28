@@ -30,55 +30,78 @@ let pp_comma_list eta =
   Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf ", ") eta
 ;;
 
-let pp =
-  let open Format in
-  let rec helper ppf = function
-    | ELet (flg, name, CAtom (ALam (arg1, rhs)), wher) ->
-      fprintf
-        ppf
-        "@[<v 2>@[<hov 2>@[let %a%s %s =@]@ @[%a@]@ in@]@ @[%a@]@]"
-        Pprint.pp_flg
-        flg
-        name
-        arg1
-        helper
-        rhs
-        helper
-        wher
-    | ELet (_, name, rhs, wher) ->
-      fprintf ppf "@[<v 2>@[let %s = %a in@]@ @[%a@]@]" name helper_c rhs helper wher
-    | EComplex (CAtom (AConst c)) -> Pprint.pp_const ppf c
-    | EComplex ea -> helper_c ppf ea
-  and helper_c ppf = function
-    | CApp (APrimitive binop, arg1, [ arg2 ]) when is_infix_binop binop ->
-      fprintf ppf "(%a %s %a)" helper_a arg1 binop helper_a arg2
-    | CApp (f, arg1, args) ->
-      fprintf ppf "@[%a %a %a@]" helper_a f helper_a arg1 (pp_print_list helper_a) args
-    | CAtom a -> helper_a ppf a
-    | CIte (acond, th, el) ->
-      fprintf
-        ppf
-        "@[<v>@[if %a@]@ @[then %a@]@ @[else %a@]@]"
-        helper_a
-        acond
-        helper
-        th
-        helper
-        el
-  and helper_a ppf = function
-    | ALam (arg1, EComplex (CAtom (ALam (arg2, e)))) ->
-      fprintf ppf "@[(fun %s %s -> %a)@]" arg1 arg2 helper e
-    | ALam (name, e) -> fprintf ppf "(fun %s -> %a)" name helper e
-    | AConst c -> Pprint.pp_const ppf c
-    | APrimitive s | AVar s -> fprintf ppf "%s" s
-    | ATuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
+(** Formatting *)
+include struct
+  open Format
+
+  let pp =
+    let rec helper ppf = function
+      | ELet (flg, name, CAtom (ALam (arg1, rhs)), wher) ->
+        fprintf
+          ppf
+          "@[<v 2>@[<hov 2>@[let %a%s %s =@]@ @[%a@]@ in@]@ @[%a@]@]"
+          Pprint.pp_flg
+          flg
+          name
+          arg1
+          helper
+          rhs
+          helper
+          wher
+      | ELet (_, name, rhs, wher) ->
+        fprintf ppf "@[<v 2>@[let %s = %a in@]@ @[%a@]@]" name helper_c rhs helper wher
+      | EComplex (CAtom (AConst c)) -> Pprint.pp_const ppf c
+      | EComplex ea -> helper_c ppf ea
+    and helper_c ppf = function
+      | CApp (APrimitive binop, arg1, [ arg2 ]) when is_infix_binop binop ->
+        fprintf ppf "(%a %s %a)" helper_a arg1 binop helper_a arg2
+      | CApp (f, arg1, args) ->
+        fprintf ppf "@[%a %a %a@]" helper_a f helper_a arg1 (pp_print_list helper_a) args
+      | CAtom a -> helper_a ppf a
+      | CIte (acond, th, el) ->
+        fprintf
+          ppf
+          "@[<v>@[if %a@]@ @[then %a@]@ @[else %a@]@]"
+          helper_a
+          acond
+          helper
+          th
+          helper
+          el
+    and helper_a ppf = function
+      | ALam (arg1, EComplex (CAtom (ALam (arg2, e)))) ->
+        fprintf ppf "@[(fun %s %s -> %a)@]" arg1 arg2 helper e
+      | ALam (name, e) -> fprintf ppf "(fun %s -> %a)" name helper e
+      | AConst c -> Pprint.pp_const ppf c
+      | APrimitive s | AVar s -> fprintf ppf "%s" s
+      | ATuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
+    in
+    helper
+  ;;
+
+  let pp_vb ppf (flg, name, expr) =
+    fprintf ppf "@[<v 2>@[let %a%s =@]@ @[%a@]@]" Pprint.pp_flg flg name pp expr
+  ;;
+end
+
+let simplify : expr -> expr =
+  let rec helper_a = function
+    | ALam (name, e) -> ALam (name, helper e)
+    | x -> x
+  and helper_c = function
+    | CAtom a -> CAtom (helper_a a)
+    | CApp (f, arg1, args) -> CApp (helper_a f, helper_a arg1, List.map helper_a args)
+    | CIte (cond, th, el) -> CIte (helper_a cond, helper th, helper el)
+  and helper = function
+    | EComplex e -> EComplex (helper_c e)
+    | ELet (Parsetree.NonRecursive, name1, body, EComplex (CAtom (AVar name2)))
+      when String.equal name1 name2 -> EComplex (helper_c body)
+    | ELet (flg, name, body, wher) -> ELet (flg, name, helper_c body, helper wher)
   in
   helper
 ;;
 
-let pp_vb ppf (flg, name, expr) =
-  Format.fprintf ppf "@[<v 2>@[let %a%s =@]@ @[%a@]@]" Pprint.pp_flg flg name pp expr
-;;
+let simplify_vb (flag, name, body) = flag, name, simplify body
 
 let gensym =
   let n = ref 0 in
@@ -168,7 +191,7 @@ let test_anf text =
     let vbs = CConv.structure [ stru ] in
     let* vbs_typed = Inferencer.structure vbs in
     (* Format.printf "%s %d\n%!" __FILE__ __LINE__; *)
-    Result.ok (anf_stru vbs_typed)
+    anf_stru vbs_typed |> List.map simplify_vb |> Result.ok
   with
   | Result.Error err -> Format.printf "%a\n%!" Inferencer.pp_error err
   | Ok anf -> Format.printf "@[<v>%a@]\n%!" (Format.pp_print_list pp_vb) anf
@@ -182,29 +205,17 @@ let%expect_test "CPS factorial" =
   [%expect
     {|
     let fresh_2 =
-      let temp1 n =
-        let temp2 k =
-          let temp3 p = let temp4 = (p * n) in
-                          let temp5 = k temp4  in
-                            temp5 in
-            temp3 in
-          temp2 in
-        temp1
+      (fun n k -> (fun p -> let temp4 = (p * n) in
+                              k temp4 ))
     let rec fack =
-      let temp6 n =
-        let temp7 k =
-          let temp8 = (n = 0) in
-            if temp8
-            then let temp14 = k 1  in
-                   temp14
-            else let temp9 = (n - 1) in
-                   let temp10 = fack temp9  in
-                     let temp11 = fresh_2 n  in
-                       let temp12 = temp11 k  in
-                         let temp13 = temp10 temp12  in
-                           temp13 in
-          temp7 in
-        temp6 |}]
+      (fun n k -> let temp8 = (n = 0) in
+                    if temp8
+                    then k 1
+                    else let temp9 = (n - 1) in
+                           let temp10 = fack temp9  in
+                             let temp11 = fresh_2 n  in
+                               let temp12 = temp11 k  in
+                                 temp10 temp12 ) |}]
 ;;
 
 let%expect_test _ =
@@ -220,11 +231,9 @@ let%expect_test _ =
   [%expect
     {|
     let fresh_3 =
-      let temp15 x = x in
-        temp15
+      (fun x -> x)
     let fresh_4 =
-      let temp16 y = y in
-        temp16
+      (fun y -> y)
     let foo =
       (fresh_3, fresh_4)
      |}]
