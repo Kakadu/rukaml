@@ -17,6 +17,8 @@ type mode =
   | VB
   | Stru
 
+[@@@ocaml.warning "-69"]
+
 type opts =
   { mutable batch : bool
   ; mutable mode : mode

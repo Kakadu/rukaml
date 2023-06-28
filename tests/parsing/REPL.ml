@@ -28,10 +28,12 @@ type mode =
   | Stru
   | Pat
 
+[@@@ocaml.warning "-69"]
+
 type opts =
-  { mutable batch : bool
-  ; mutable mode : mode
+  { mutable mode : mode
   ; mutable log : bool
+  ; mutable batch : bool
   }
 
 let () =

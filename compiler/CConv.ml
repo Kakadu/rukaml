@@ -159,7 +159,7 @@ let conv ?(standart_globals = standart_globals)
    fun root_expr ->
     log "Calling helper on @[%a@] and @[%a@]" SS.pp globals Pprint.pp_expr root_expr;
     match root_expr with
-    | (EVar _ as e) | (EConst _ as e) -> return e
+    | (EVar _ | EUnit | EConst _) as e -> return e
     | EIf (e1, e2, e3) ->
       return eite <*> helper globals e1 <*> helper globals e2 <*> helper globals e3
     (* | EApp (ELam (PVar arg, (ELam (_, _) as body)), EVar y) when arg = y ->

@@ -76,7 +76,7 @@ let type_without_links =
 let compact_expr =
   let rec helper t =
     match t with
-    | TConst _ -> t
+    | TUnit | TConst _ -> t
     | TVar (name, ty) -> TVar (name, type_without_links ty)
     | TIf (a, b, c, ty) -> TIf (helper a, helper b, helper c, type_without_links ty)
     | TLam (pat, e, ty) -> TLam (pat, helper e, type_without_links ty)

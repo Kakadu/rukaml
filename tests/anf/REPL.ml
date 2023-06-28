@@ -36,6 +36,8 @@ let run_single parser pp pp_typed pp_err text =
 
 type mode = Stru
 
+[@@@ocaml.warning "-69"]
+
 type opts =
   { mutable batch : bool
   ; mutable mode : mode
