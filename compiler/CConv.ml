@@ -34,6 +34,7 @@ let simplify =
     | EApp (l, r) -> eapp (helper l) [ helper r ]
     | ETuple (a, b, es) -> etuple (helper a) (helper b) (List.map helper es)
     | ELet (isrec, pat, rhs, wher) -> elet ~isrec pat (helper rhs) (helper wher)
+    | EUnit -> EUnit
   in
   helper
 ;;
@@ -66,6 +67,7 @@ let free_vars_of_expr =
       String_set.diff (helper (helper acc rhs) wher) (vars_from_pattern pat)
     | ETuple (a, b, es) -> List.fold_left helper (helper (helper acc a) b) es
     | ELam (pat, rhs) -> SS.diff (helper acc rhs) (vars_from_pattern pat)
+    | EUnit -> acc
   in
   helper String_set.empty
 ;;
@@ -105,6 +107,7 @@ let rec subst x ~by:v =
       if fname = x
       then elet ~isrec fpat body wher
       else elet ~isrec fpat (helper body) (helper wher)
+    | EUnit -> EUnit
   in
   helper
 ;;

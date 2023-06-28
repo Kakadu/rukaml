@@ -8,7 +8,7 @@
   let rec zed: (((int -> int) -> (int -> int)) -> (int -> int)) =
     fun f x -> (f (zed f)) x
   let fac: ((int -> int) -> (int -> int)) =
-    fun self n -> if n = 1 then 1 else n * (self (n - 1))
+    fun self n -> (if n = 1 then 1 else n * (self (n - 1)))
   let main: (int -> int) =
     zed fac
 
@@ -40,7 +40,7 @@
   let rec fix: (((int -> int) -> (int -> int)) -> (int -> int)) =
     fun f -> f (fix f)
   let fac: ((int -> int) -> (int -> int)) =
-    fun self n -> if n = 1 then 1 else n * (self (n - 1))
+    fun self n -> (if n = 1 then 1 else n * (self (n - 1)))
   let main: (int -> int) =
     fix fac
 
@@ -53,7 +53,7 @@
   let rec zed: (((int -> int) -> (int -> int)) -> (int -> int)) =
     fun f x -> (f (zed f)) x
   let fac: ((int -> int) -> (int -> int)) =
-    fun self n -> if n = 1 then 1 else n * (self (n - 1))
+    fun self n -> (if n = 1 then 1 else n * (self (n - 1)))
   let main: (int -> int) =
     zed fac
 
@@ -71,7 +71,7 @@
   > EOF
   Parsed.
   let rec fac: (int -> int) =
-    fun n -> if n = 1 then 1 else n * (fac (n - 1))
+    fun n -> (if n = 1 then 1 else n * (fac (n - 1)))
   let main: (int -> int) =
     fac
 
@@ -140,3 +140,9 @@
   > EOF
   Parsed.
   Error: unification failed on int and (int -> int)
+
+  $ cat << EOF | ./REPL.exe -stru -
+  > let rec (a,b) = (a,b)
+  > EOF
+  Parsed.
+  Error: Only variables are allowed as left-hand side of `let rec'

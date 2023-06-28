@@ -42,6 +42,26 @@
     (fun x -> let (a, b) = x in
                 (a + b))
 
+  $ cat << EOF | ./REPL.exe -
+  > let small n =
+  >   let half = n  in
+  >   (if half then 0 else 1)+1123
+  > EOF
+  Parsed: let small n = let half = n in (if half then 0 else 1) + 1123
+  After CCovv.
+  let half: ('_1 -> '_1) =
+    fun n -> n
+  let small: (bool -> int) =
+    fun n -> (if half n then 0 else 1) + 1123
+  After ANF transformation.
+  let half =
+    (fun n -> n)
+  let small =
+    (fun n -> let temp3 = half n  in
+                let temp4 = (if temp3
+                            then 0
+                            else 1) in
+                  (temp4 + 1123))
 # CPS Factorial
   $ cat << EOF | ./REPL.exe -
   > let rec fack n k =
@@ -53,20 +73,20 @@
   let fresh_1: (int -> ((int -> '_6) -> (int -> '_6))) =
     fun n k m -> k (n * m)
   let rec fack: (int -> ((int -> '_12) -> '_12)) =
-    fun n k -> if n = 1 then k 1 else (fack (n - 1)) ((fresh_1 n) k)
+    fun n k -> (if n = 1 then k 1 else (fack (n - 1)) ((fresh_1 n) k))
   After ANF transformation.
   let fresh_1 =
     (fun n k m -> let temp4 = (n * m) in
                     k temp4 )
   let rec fack =
     (fun n k -> let temp8 = (n = 1) in
-                  if temp8
+                  (if temp8
                   then k 1 
-                  else let temp9 = (n - 1) in
-                         let temp10 = fack temp9  in
-                           let temp11 = fresh_1 n  in
-                             let temp12 = temp11 k  in
-                               temp10 temp12 )
+                  else let temp10 = (n - 1) in
+                         let temp11 = fack temp10  in
+                           let temp12 = fresh_1 n  in
+                             let temp13 = temp12 k  in
+                               temp11 temp13 ))
 
 # CPS Fibonacci
   $ cat << EOF | ./REPL.exe -
@@ -86,7 +106,7 @@
   let fresh_1: (int -> ((int -> '_8) -> ((int -> ((int -> '_8) -> '_11)) -> (int -> '_11)))) =
     fun n k fibk p -> (fibk (n - 2)) ((fresh_2 p) k)
   let rec fibk: (int -> ((int -> '_14) -> '_14)) =
-    fun n k -> if (< n) 1 then k 1 else (fibk (n - 1)) (((fresh_1 n) k) fibk)
+    fun n k -> (if (< n) 1 then k 1 else (fibk (n - 1)) (((fresh_1 n) k) fibk))
   After ANF transformation.
   let fresh_2 =
     (fun p k q -> let temp4 = (p + q) in
@@ -99,14 +119,14 @@
                                        temp11 temp13 ))
   let rec fibk =
     (fun n k -> let temp17 = (n < 1) in
-                  if temp17
+                  (if temp17
                   then k 1 
-                  else let temp18 = (n - 1) in
-                         let temp19 = fibk temp18  in
-                           let temp20 = fresh_1 n  in
-                             let temp21 = temp20 k  in
-                               let temp22 = temp21 fibk  in
-                                 temp19 temp22 )
+                  else let temp19 = (n - 1) in
+                         let temp20 = fibk temp19  in
+                           let temp21 = fresh_1 n  in
+                             let temp22 = temp21 k  in
+                               let temp23 = temp22 fibk  in
+                                 temp20 temp23 ))
 
 # Polyvariadic uncurrying
   $ cat << EOF | ./REPL.exe  -

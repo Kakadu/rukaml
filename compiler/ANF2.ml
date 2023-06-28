@@ -19,6 +19,8 @@ and expr =
 
 type vb = Parsetree.rec_flag * string * expr
 
+let make_let_nonrec name rhs wher = ELet (NonRecursive, Parsetree.PVar name, rhs, wher)
+
 [@@@ocaml.warnerror "-11"]
 
 let is_infix_binop = function
@@ -68,7 +70,7 @@ include struct
       | CIte (acond, th, el) ->
         fprintf
           ppf
-          "@[<v>@[if %a@]@ @[then %a@]@ @[else %a@]@]"
+          "@[<v>@[(if %a@]@ @[then %a@]@ @[else %a)@]@]"
           helper_a
           acond
           helper
@@ -149,6 +151,7 @@ let gensym_s : _ =
 let complex_of_atom x = EComplex (CAtom x)
 
 let anf =
+  (* Standard pitfall: forgot to call continuation *)
   let rec helper e (k : imm_expr -> expr) =
     match e with
     | Typedtree.TConst n -> k @@ AConst n
@@ -183,18 +186,22 @@ let anf =
                 )))
         , helper wher complex_of_atom )
     | TLet (flag, name, _typ, rhs, wher) ->
-      (* NOTE: CPS in this part is triky *)
+      (* NOTE: CPS in this part is tricky *)
       helper rhs (fun imm_rhs -> ELet (flag, name, CAtom imm_rhs, helper wher k))
     | TIf (econd, eth, el, _) ->
       helper econd (fun eimm ->
-        EComplex (CIte (eimm, helper eth complex_of_atom, helper el complex_of_atom)))
-    | TVar ("=", _) -> k @@ APrimitive "="
+        let name = gensym_s () in
+        make_let_nonrec
+          name
+          (CIte (eimm, helper eth complex_of_atom, helper el complex_of_atom))
+          (k (AVar name)))
+    | TVar ("=", _) -> k (APrimitive "=")
     | TVar (name, _) -> k (AVar name)
     | TTuple (ea, eb, [], _) ->
       helper ea (fun aimm ->
         helper eb (fun bimm ->
           let name = gensym_s () in
-          ELet (NonRecursive, PVar name, CAtom (ATuple (aimm, bimm, [])), k (AVar name))))
+          make_let_nonrec name (CAtom (ATuple (aimm, bimm, []))) (k (AVar name))))
     | (TTuple (_, _, _ :: _, _) | _) as m ->
       Format.eprintf "%a\n%!" Typedtree.pp_expr m;
       Format.kasprintf
@@ -245,13 +252,13 @@ let%expect_test "CPS factorial" =
                       k temp4 )
     let rec fack =
       (fun n k -> let temp8 = (n = 0) in
-                    if temp8
+                    (if temp8
                     then k 1
-                    else let temp9 = (n - 1) in
-                           let temp10 = fack temp9  in
-                             let temp11 = fresh_2 n  in
-                               let temp12 = temp11 k  in
-                                 temp10 temp12 ) |}]
+                    else let temp10 = (n - 1) in
+                           let temp11 = fack temp10  in
+                             let temp12 = fresh_2 n  in
+                               let temp13 = temp12 k  in
+                                 temp11 temp13 )) |}]
 ;;
 
 let%expect_test _ =

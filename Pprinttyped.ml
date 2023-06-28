@@ -31,7 +31,7 @@ let pp_expr =
     | TConst c -> Pprint.pp_const ppf c
     | TVar (name, _) -> fprintf ppf "%s" name
     | TIf (cond, th, el, _) ->
-      fprintf ppf "if %a then %a else %a" expr_no cond expr_no th expr_no el
+      fprintf ppf "(if %a then %a else %a)" expr_no cond expr_no th expr_no el
     | TLam (pat, e, _) ->
       (match extract_lambdas [ pat ] e with
        | [], _ -> failwith "TODO: Should not happend. Rewrite!"
