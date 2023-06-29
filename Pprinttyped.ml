@@ -2,21 +2,41 @@ open Parsetree
 open Typedtree
 open Format
 
+type pp_typ_ctx =
+  | CArrow_left
+  | CArrow_right
+  | CTuple
+
 let pp_typ_hum =
   let open Format in
-  let rec pp_typ ppf t =
+  let rec pp_typ ctx ppf t =
     match t.typ_desc with
     | Prim s -> fprintf ppf "%s" s
     | V { binder; _ } -> fprintf ppf "'_%d" binder
-    | Arrow (l, r) -> fprintf ppf "(%a -> %a)" pp_typ l pp_typ r
-    | TLink ty -> pp_typ ppf ty
+    | TLink ty -> pp_typ ctx ppf ty
+    | Arrow (l, r) ->
+      let fmt : _ format =
+        match ctx with
+        | CArrow_right -> "%a -> %a"
+        | CArrow_left | CTuple -> "(%a -> %a)"
+      in
+      fprintf ppf fmt (pp_typ CArrow_left) l (pp_typ CArrow_right) r
     | TProd (a, b, ts) ->
-      (* TODO: change comma to asterisk *)
-      fprintf ppf "@[(%a, %a" pp_typ a pp_typ b;
-      List.iter (fprintf ppf ", %a" pp_typ) ts;
-      fprintf ppf ")@]"
+      let fmt : _ format =
+        match ctx with
+        | CArrow_left | CArrow_right -> "%a"
+        | CTuple -> "(%a)"
+      in
+      fprintf
+        ppf
+        fmt
+        (fun ppf () ->
+          fprintf ppf "@[%a * %a" (pp_typ CTuple) a (pp_typ CTuple) b;
+          List.iter (fprintf ppf " * %a" (pp_typ CTuple)) ts;
+          fprintf ppf "@]")
+        ()
   in
-  pp_typ
+  pp_typ CArrow_right
 ;;
 
 let pp_expr =

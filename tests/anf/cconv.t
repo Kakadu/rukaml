@@ -3,7 +3,7 @@
   > EOF
   Parsed: let rec s f g x = f x (g x)
   After CCovv.
-  let rec s: (('_3 -> ('_5 -> '_6)) -> (('_3 -> '_5) -> ('_3 -> '_6))) =
+  let rec s: ('_3 -> '_5 -> '_6) -> ('_3 -> '_5) -> '_3 -> '_6 =
     fun f g x -> (f x) (g x)
   After ANF transformation.
   let rec s x g f =
@@ -34,8 +34,8 @@
   > EOF
   Parsed: let sum x = let (a, b) = x in a + b
   After CCovv.
-  let sum: ((int, int) -> int) =
-    fun x -> let (a, b) : (int, int) = x in
+  let sum: int * int -> int =
+    fun x -> let (a, b) : int * int = x in
     a + b
   After ANF transformation.
   let sum x =
@@ -49,9 +49,9 @@
   > EOF
   Parsed: let small n = let half = n in (if half then 0 else 1) + 1123
   After CCovv.
-  let half: ('_1 -> '_1) =
+  let half: '_1 -> '_1 =
     fun n -> n
-  let small: (bool -> int) =
+  let small: bool -> int =
     fun n -> (if half n then 0 else 1) + 1123
   After ANF transformation.
   let half n =
@@ -70,9 +70,9 @@
   Parsed: let rec fack n k = if n = 1 then k 1 else fack (n - 1) (fun m ->
                                                                   k (n * m))
   After CCovv.
-  let fresh_1: (int -> ((int -> '_6) -> (int -> '_6))) =
+  let fresh_1: int -> (int -> '_6) -> int -> '_6 =
     fun n k m -> k (n * m)
-  let rec fack: (int -> ((int -> '_12) -> '_12)) =
+  let rec fack: int -> (int -> '_12) -> '_12 =
     fun n k -> (if n = 1 then k 1 else (fack (n - 1)) ((fresh_1 n) k))
   After ANF transformation.
   let fresh_1 m k n =
@@ -101,11 +101,11 @@
                                                                       k 
                                                                       (p + q)))
   After CCovv.
-  let fresh_2: (int -> ((int -> '_6) -> (int -> '_6))) =
+  let fresh_2: int -> (int -> '_6) -> int -> '_6 =
     fun p k q -> k (p + q)
-  let fresh_1: (int -> ((int -> '_8) -> ((int -> ((int -> '_8) -> '_11)) -> (int -> '_11)))) =
+  let fresh_1: int -> (int -> '_8) -> (int -> (int -> '_8) -> '_11) -> int -> '_11 =
     fun n k fibk p -> (fibk (n - 2)) ((fresh_2 p) k)
-  let rec fibk: (int -> ((int -> '_14) -> '_14)) =
+  let rec fibk: int -> (int -> '_14) -> '_14 =
     fun n k -> (if (< n) 1 then k 1 else (fibk (n - 1)) (((fresh_1 n) k) fibk))
   After ANF transformation.
   let fresh_2 q k p =
@@ -140,14 +140,13 @@
           let three = succ two
           let four = succ three
   After CCovv.
-  let two: (('_2 -> ('_3 -> '_5)) -> (('_2, '_3) -> '_5)) =
+  let two: ('_2 -> '_3 -> '_5) -> '_2 * '_3 -> '_5 =
     fun f (a, b) -> (f a) b
-  let succ: (('_5 -> ('_4 -> '_7)) -> (('_3 -> '_5) -> (('_3, '_4) -> '_7))) =
+  let succ: ('_5 -> '_4 -> '_7) -> ('_3 -> '_5) -> '_3 * '_4 -> '_7 =
     fun prev f (a, rest) -> (prev (f a)) rest
-  let three: (('_1 -> ('_9 -> ('_10 -> '_11))) -> (('_1, ('_9, '_10)) -> '_11)) =
+  let three: ('_1 -> '_9 -> '_10 -> '_11) -> '_1 * ('_9 * '_10) -> '_11 =
     succ two
-  let four: (('_1 -> ('_12 -> ('_13 -> ('_14 -> '_15)))) -> (('_1, ('_12, 
-                                                                   ('_13, '_14))) -> '_15)) =
+  let four: ('_1 -> '_12 -> '_13 -> '_14 -> '_15) -> '_1 * ('_12 * ('_13 * '_14)) -> '_15 =
     succ three
   After ANF transformation.
   let two (a, b) f =
@@ -168,7 +167,7 @@
   > EOF
   Parsed: let fresh f arg rest = f (arg, rest)
   After CCovv.
-  let fresh: ((('_2, '_3) -> '_4) -> ('_2 -> ('_3 -> '_4))) =
+  let fresh: ('_2 * '_3 -> '_4) -> '_2 -> '_3 -> '_4 =
     fun f arg rest -> f (arg, rest)
   After ANF transformation.
   let fresh rest arg f =
@@ -186,15 +185,15 @@
           let succ prev f arg = prev (fun rest -> f (arg, rest))
           let three = succ two let four = succ three
   After CCovv.
-  let two: ((('_2, '_3) -> '_4) -> ('_2 -> ('_3 -> '_4))) =
+  let two: ('_2 * '_3 -> '_4) -> '_2 -> '_3 -> '_4 =
     fun f a b -> f (a, b)
-  let fresh_1: ((('_2, '_3) -> '_4) -> ('_2 -> ('_3 -> '_4))) =
+  let fresh_1: ('_2 * '_3 -> '_4) -> '_2 -> '_3 -> '_4 =
     fun f arg rest -> f (arg, rest)
-  let succ: ((('_6 -> '_7) -> '_10) -> ((('_3, '_6) -> '_7) -> ('_3 -> '_10))) =
+  let succ: (('_6 -> '_7) -> '_10) -> ('_3 * '_6 -> '_7) -> '_3 -> '_10 =
     fun prev f arg -> prev ((fresh_1 f) arg)
-  let three: ((('_1, ('_6, '_7)) -> '_8) -> ('_1 -> ('_6 -> ('_7 -> '_8)))) =
+  let three: ('_1 * ('_6 * '_7) -> '_8) -> '_1 -> '_6 -> '_7 -> '_8 =
     succ two
-  let four: ((('_1, ('_9, ('_10, '_11))) -> '_12) -> ('_1 -> ('_9 -> ('_10 -> ('_11 -> '_12))))) =
+  let four: ('_1 * ('_9 * ('_10 * '_11)) -> '_12) -> '_1 -> '_9 -> '_10 -> '_11 -> '_12 =
     succ three
   After ANF transformation.
   let two b a f =
@@ -226,20 +225,20 @@
           let four = succ three
           let temp = two (fun x -> x) (1, 2)
   After CCovv.
-  let two: (('_3 -> '_5) -> (('_3, '_3) -> ('_5, '_5))) =
+  let two: ('_3 -> '_5) -> '_3 * '_3 -> '_5 * '_5 =
     fun f (a, b) -> ((f a), (f b))
-  let succ: ((('_3 -> '_5) -> ('_4 -> '_7)) -> (('_3 -> '_5) -> (('_3, '_4) -> 
-            ('_5, '_7)))) =
+  let succ: (('_3 -> '_5) -> '_4 -> '_7) -> ('_3 -> '_5) -> '_3 * '_4 -> 
+            '_5 * '_7 =
     fun prev f (a, rest) -> ((f a), ((prev f) rest))
-  let three: (('_9 -> '_10) -> (('_9, ('_9, '_9)) -> ('_10, ('_10, '_10)))) =
+  let three: ('_9 -> '_10) -> '_9 * ('_9 * '_9) -> '_10 * ('_10 * '_10) =
     succ two
-  let four: (('_11 -> '_12) -> (('_11, ('_11, ('_11, '_11))) -> ('_12, 
-                                                                ('_12, 
-                                                                ('_12, '_12))))) =
+  let four: ('_11 -> '_12) -> '_11 * ('_11 * ('_11 * '_11)) -> '_12 * (
+                                                               '_12 * (
+                                                               '_12 * '_12)) =
     succ three
-  let fresh_1: ('_1 -> '_1) =
+  let fresh_1: '_1 -> '_1 =
     fun x -> x
-  let temp: (int, int) =
+  let temp: int * int =
     (two fresh_1) (1, 2)
   After ANF transformation.
   let two (a, b) f =

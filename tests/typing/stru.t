@@ -5,11 +5,11 @@
   > let main = zed fac
   > EOF
   Parsed.
-  let rec zed: (((int -> int) -> (int -> int)) -> (int -> int)) =
+  let rec zed: ((int -> int) -> int -> int) -> int -> int =
     fun f x -> (f (zed f)) x
-  let fac: ((int -> int) -> (int -> int)) =
+  let fac: (int -> int) -> int -> int =
     fun self n -> (if n = 1 then 1 else n * (self (n - 1)))
-  let main: (int -> int) =
+  let main: int -> int =
     zed fac
 
   $ cat << EOF | ./REPL.exe  -stru -
@@ -18,9 +18,9 @@
   > let main = (id idd) (id 1)
   > EOF
   Parsed.
-  let id: ('_1 -> '_1) =
+  let id: '_1 -> '_1 =
     fun x -> x
-  let idd: ('_1 -> '_1) =
+  let idd: '_1 -> '_1 =
     fun x -> x
   let main: int =
     (id idd) (id 1)
@@ -28,7 +28,7 @@
   > let rec fix f = f (fix f)
   > EOF
   Parsed.
-  let rec fix: (('_3 -> '_3) -> '_3) =
+  let rec fix: ('_3 -> '_3) -> '_3 =
     fun f -> f (fix f) 
 
   $ cat << EOF | ./REPL.exe -stru  -
@@ -37,11 +37,11 @@
   > let main = fix fac
   > EOF
   Parsed.
-  let rec fix: (((int -> int) -> (int -> int)) -> (int -> int)) =
+  let rec fix: ((int -> int) -> int -> int) -> int -> int =
     fun f -> f (fix f)
-  let fac: ((int -> int) -> (int -> int)) =
+  let fac: (int -> int) -> int -> int =
     fun self n -> (if n = 1 then 1 else n * (self (n - 1)))
-  let main: (int -> int) =
+  let main: int -> int =
     fix fac
 
   $ cat << EOF | ./REPL.exe  -stru -
@@ -50,11 +50,11 @@
   > let main = zed fac
   > EOF
   Parsed.
-  let rec zed: (((int -> int) -> (int -> int)) -> (int -> int)) =
+  let rec zed: ((int -> int) -> int -> int) -> int -> int =
     fun f x -> (f (zed f)) x
-  let fac: ((int -> int) -> (int -> int)) =
+  let fac: (int -> int) -> int -> int =
     fun self n -> (if n = 1 then 1 else n * (self (n - 1)))
-  let main: (int -> int) =
+  let main: int -> int =
     zed fac
 
   $ cat << EOF | ./REPL.exe  -stru -
@@ -70,9 +70,9 @@
   > let main = fac
   > EOF
   Parsed.
-  let rec fac: (int -> int) =
+  let rec fac: int -> int =
     fun n -> (if n = 1 then 1 else n * (fac (n - 1)))
-  let main: (int -> int) =
+  let main: int -> int =
     fac
 
   $ cat << EOF | ./REPL.exe  -stru -
@@ -89,9 +89,9 @@
   > let main = add1 13
   > EOF
   Parsed.
-  let add: (int -> (int -> int)) =
+  let add: int -> int -> int =
     fun x y -> x + y
-  let add1: (int -> int) =
+  let add1: int -> int =
     add 1
   let main: int =
     add1 13
@@ -102,7 +102,7 @@
   > let main = add 1
   > EOF
   Parsed.
-  let add: (int -> int) =
+  let add: int -> int =
     fun x -> x + x
   let add1: int =
     add 1
@@ -114,7 +114,7 @@
   > let twice = fun x -> (x,x)
   > EOF
   Parsed.
-  let twice: ('_1 -> ('_1, '_1)) =
+  let twice: '_1 -> '_1 * '_1 =
     fun x -> (x, x) 
 
   $ cat << EOF | ./REPL.exe -stru -
@@ -123,17 +123,17 @@
   >   y
   > EOF
   Parsed.
-  let foo: ('_1 -> ('_3 -> '_3)) =
-    fun x -> let y : ('_2 -> '_2) = fun z -> z in
-    y
+  let foo: '_1 -> '_3 -> '_3 =
+    fun x -> let y : '_2 -> '_2 = fun z -> z in
+    y 
   $ cat << EOF | ./REPL.exe -stru -
   > let foo x =
   >   let y = fun z -> z in
   >   (y 1, y true)
   > EOF
   Parsed.
-  let foo: ('_1 -> (int, bool)) =
-    fun x -> let y : ('_2 -> '_2) = fun z -> z in
+  let foo: '_1 -> int * bool =
+    fun x -> let y : '_2 -> '_2 = fun z -> z in
     ((y 1), (y true))
   $ cat << EOF | ./REPL.exe -stru -
   > let rec fac = fun n -> n*fac
