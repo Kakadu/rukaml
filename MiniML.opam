@@ -17,6 +17,7 @@ depends: [
   "ppx_expect"
   "ppx_show"
   "llvm"
+  "ctypes-foreign"
   "ppx_blob"
   "odoc" {with-doc}
   "ocamlformat" {build}

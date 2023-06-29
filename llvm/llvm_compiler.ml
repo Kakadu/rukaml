@@ -1,15 +1,12 @@
 type cfg = {
-  mutable out : [ `Stdout | `File of string ];
+  mutable out_file : string;
   mutable input_file : string option;
+  mutable dump_ir : bool;
 }
 
 open Miniml
 
 module ToLLVM = struct
-  let codegen typedtree fout =
-    Format.printf "%a\n%!" Compile_lib.ANF2.pp_stru typedtree;
-    Result.ok ()
-
   let run cfg =
     let text =
       match cfg.input_file with
@@ -47,10 +44,10 @@ module ToLLVM = struct
     let anf = Compile_lib.ANF2.(anf_stru typedtree |> simplify_stru) in
     Format.printf "After ANF transformation.\n%!";
     Format.printf "%a\n%!" Compile_lib.ANF2.pp_stru anf;
-    codegen anf cfg.out |> promote_error
+    LLVM_impl.codegen anf cfg.out_file |> promote_error
 end
 
-let cfg = { out = `Stdout; input_file = None }
+let cfg = { out_file = "aaa.ll"; input_file = None; dump_ir = false }
 
 let print_errors = function
   | #Miniml.Parsing.error as e -> Format.printf "%a\n%!" Parsing.pp_error e
@@ -60,10 +57,8 @@ let print_errors = function
 let () =
   Arg.parse
     [
-      ( "-o",
-        Arg.String
-          (function "-" -> cfg.out <- `Stdout | s -> cfg.out <- `File s),
-        "" );
+      ("-o", Arg.String (fun s -> cfg.out_file <- s), " set output file");
+      ("--dump-ir", Arg.String (fun s -> cfg.out_file <- s), " ");
     ]
     (fun s -> cfg.input_file <- Some s)
     "help";

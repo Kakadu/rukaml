@@ -14,10 +14,30 @@
  (preprocess
   (pps ppx_inline_test)))
 
+(library
+ (name LLVM_impl)
+ (public_name MiniML_llvm.impl)
+ (modules LLVM_impl)
+ (libraries
+  llvm
+  llvm.analysis
+  llvm.executionengine
+  llvm.target
+  llvm.scalar_opts
+  llvm.all_backends
+  LL
+  MiniML.cconv
+  MiniML.compile)
+ (inline_tests)
+ (flags
+  (:standard -linkall))
+ (preprocess
+  (pps ppx_inline_test)))
+
 (executable
  (name llvm_compiler)
  (modules llvm_compiler)
- (libraries stdio LL MiniML.frontend MiniML.cconv MiniML.compile))
+ (libraries stdio LL MiniML.frontend MiniML.cconv MiniML.compile LLVM_impl))
 
 (cram
  (deps ./llvm_compiler.exe))

@@ -34,6 +34,7 @@
   ppx_expect
   ppx_show
   llvm
+  ctypes-foreign ; needed for LLVM
   ppx_blob
   (odoc :with-doc)
   (ocamlformat :build)
