@@ -49,19 +49,16 @@
   > EOF
   Parsed: let small n = let half = n in (if half then 0 else 1) + 1123
   After CCovv.
-  let half: '_1 -> '_1 =
-    fun n -> n
   let small: bool -> int =
-    fun n -> (if half n then 0 else 1) + 1123
+    fun n -> let half : bool = n in
+    (if half then 0 else 1) + 1123
   After ANF transformation.
-  let half n =
-    n
   let small n =
-    let temp3 = half n  in
-      let temp4 = (if temp3
+    let half = n in
+      let temp2 = (if half
                   then 0
                   else 1) in
-        (temp4 + 1123)
+        (temp2 + 1123)
 # CPS Factorial
   $ cat << EOF | ./REPL.exe -
   > let rec fack n k =
