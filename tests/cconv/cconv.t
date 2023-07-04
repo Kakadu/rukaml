@@ -118,3 +118,14 @@
   let four = succ three
   let fresh_1 x = x
   let temp = two fresh_1 (1, 2)
+# TODO: Following output is a shit
+  $ cat << EOF | ./REPL.exe - #-vcc
+  > let fresh_1 n =
+  >   let temp = (n=1) in
+  >   temp
+  > EOF
+  Parsed: let fresh_1 n = let temp = n = 1 in temp
+  After CCovv.
+  let temp n = n = 1
+  let fresh_1 n = temp n
+

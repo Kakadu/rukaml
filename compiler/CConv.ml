@@ -278,9 +278,16 @@ let conv ?(standart_globals = standart_globals)
   function
   | is_rec, (PVar v as pat), root ->
     let args, rhs = group_lams root in
-    let saved, last_rhs =
-      Monads.Store.run (helper (String_set.add v standart_globals) rhs) []
-    in
+    let enriched_globals = standart_globals |> String_set.add v in
+    (* let enriched_globals =
+      List.fold_left
+        (fun acc -> function
+          | PVar x -> String_set.add x acc
+          | _ -> failwith "not implemented")
+        enriched_globals
+        args
+    in *)
+    let saved, last_rhs = Monads.Store.run (helper enriched_globals rhs) [] in
     List.rev_append saved [ is_rec, pat, elams args last_rhs ] |> List.map simplify_vb
   | is_rec, (PTuple _ as pat), root ->
     let saved, rhs =
