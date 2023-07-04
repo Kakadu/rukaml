@@ -6,12 +6,12 @@ let pp_error ppf _ = Format.fprintf ppf "error?"
 
 open Miniml
 
-let prepare_llvm anf ~filename:_ =
+let prepare_llvm _anf ~filename:_ =
   print_endline "LLVM backend is running111";
   let context = Llvm.global_context () in
   let builder = Llvm.builder context in
   let the_module = Llvm.create_module context "main" in
-  let module LL = (val LL.make builder the_module) in
+  let module LL = (val LL.make context builder the_module) in
   Result.Ok ()
 
 let compile stru _stru_typed ~filename =

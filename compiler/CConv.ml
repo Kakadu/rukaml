@@ -155,6 +155,10 @@ let conv ?(standart_globals = standart_globals)
     let* old = get in
     put (x :: old)
   in
+  let is_abstraction = function
+    | ELam _ -> true
+    | _ -> false
+  in
   let rec helper globals : Parsetree.expr -> (value_binding list, expr) t =
    fun root_expr ->
     log "Calling helper on @[%a@] and @[%a@]" SS.pp globals Pprint.pp_expr root_expr;
@@ -208,13 +212,8 @@ let conv ?(standart_globals = standart_globals)
       let* e2 = helper globals e2 in
       let* es = helper_list globals es in
       return (etuple e1 e2 es)
-    | ELet (Recursive, PTuple _, _, _) -> failwith "not implemented 2"
-    | ELet (NonRecursive, (PTuple _ as pat), rhs, wher) ->
-      let new_env = String_set.union (vars_from_pattern pat) globals in
-      let* rhs = helper new_env rhs in
-      let* body = helper new_env wher in
-      return (elet pat rhs body)
-    | ELet (isrec, (PVar name as pat), rhs, wher) ->
+    | ELet (isrec, (PVar name as pat), rhs, wher) when is_abstraction rhs ->
+      log "ELet %a" Pprint.pp_expr root_expr;
       let args, rhs =
         match sugarize_let rhs with
         | xs, rhs -> xs, rhs
@@ -265,6 +264,18 @@ let conv ?(standart_globals = standart_globals)
          let* wher = helper (String_set.add name globals) wher in
          let* () = save (isrec, pat, rhs) in
          return wher)
+    | ELet (Recursive, PTuple _, _, _) -> failwith "not implemented 2"
+    | ELet (isrec, (PVar _name as pat), rhs, wher) ->
+      assert (not (is_abstraction rhs));
+      let new_env = String_set.union (vars_from_pattern pat) globals in
+      let* rhs = helper new_env rhs in
+      let* body = helper new_env wher in
+      return (elet ~isrec pat rhs body)
+    | ELet (NonRecursive, (PTuple _ as pat), rhs, wher) ->
+      let new_env = String_set.union (vars_from_pattern pat) globals in
+      let* rhs = helper new_env rhs in
+      let* body = helper new_env wher in
+      return (elet pat rhs body)
   and helper_list globals : Parsetree.expr list -> (value_binding list, expr list) t =
    fun es ->
     List.fold_left
