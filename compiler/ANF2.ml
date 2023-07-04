@@ -18,8 +18,17 @@ and expr =
   | EComplex of c_expr
 
 type vb = Parsetree.rec_flag * string * expr
+(* TODO: only complex expression should be there *)
 
 let make_let_nonrec name rhs wher = ELet (NonRecursive, Parsetree.PVar name, rhs, wher)
+
+let group_abstractions =
+  let rec helper acc = function
+    | EComplex (CAtom (ALam (p, e))) -> helper (p :: acc) e
+    | (EComplex _ | ELet _) as e -> List.rev acc, e
+  in
+  helper []
+;;
 
 [@@@ocaml.warnerror "-11"]
 
@@ -36,77 +45,80 @@ let pp_comma_list eta =
 include struct
   open Format
 
-  let pp =
-    let rec helper ppf = function
-      | ELet (flg, name, CAtom (ALam (arg1, rhs)), wher) ->
-        fprintf
-          ppf
-          "@[<v 2>@[<hov 2>@[let %a%a %a =@]@ "
-          Pprint.pp_flg
-          flg
-          Pprint.pp_pattern
-          name
-          Pprint.pp_pattern
-          arg1;
-        fprintf ppf "@[%a@]@ in@]@ @[%a@]@]" helper rhs helper wher
-      | ELet (_, name, rhs, wher) ->
-        fprintf
-          ppf
-          "@[<v 2>@[let %a = %a in@]@ @[%a@]@]"
-          Pprint.pp_pattern
-          name
-          helper_c
-          rhs
-          helper
-          wher
-      | EComplex (CAtom (AConst c)) -> Pprint.pp_const ppf c
-      | EComplex ea -> helper_c ppf ea
-    and helper_c ppf = function
-      | CApp (APrimitive binop, arg1, [ arg2 ]) when is_infix_binop binop ->
-        fprintf ppf "(%a %s %a)" helper_a arg1 binop helper_a arg2
-      | CApp (f, arg1, args) ->
-        fprintf ppf "@[%a %a %a@]" helper_a f helper_a arg1 (pp_print_list helper_a) args
-      | CAtom a -> helper_a ppf a
-      | CIte (acond, th, el) ->
-        fprintf
-          ppf
-          "@[<v>@[(if %a@]@ @[then %a@]@ @[else %a)@]@]"
-          helper_a
-          acond
-          helper
-          th
-          helper
-          el
-    and helper_a ppf = function
-      | ALam (arg1, EComplex (CAtom (ALam (arg2, EComplex (CAtom (ALam (arg3, e))))))) ->
-        fprintf
-          ppf
-          "@[(fun %a %a %a -> %a)@]"
-          Pprint.pp_pattern
-          arg1
-          Pprint.pp_pattern
-          arg2
-          Pprint.pp_pattern
-          arg3
-          helper
-          e
-      | ALam (arg1, EComplex (CAtom (ALam (arg2, e)))) ->
-        fprintf
-          ppf
-          "@[(fun %a %a -> %a)@]"
-          Pprint.pp_pattern
-          arg1
-          Pprint.pp_pattern
-          arg2
-          helper
-          e
-      | ALam (name, e) -> fprintf ppf "(fun %a -> %a)" Pprint.pp_pattern name helper e
-      | AConst c -> Pprint.pp_const ppf c
-      | APrimitive s | AVar s -> fprintf ppf "%s" s
-      | ATuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
-    in
-    helper
+  let rec helper ppf = function
+    | ELet (flg, name, CAtom (ALam (arg1, rhs)), wher) ->
+      fprintf
+        ppf
+        "@[<v 2>@[<hov 2>@[let %a%a %a =@]@ "
+        Pprint.pp_flg
+        flg
+        Pprint.pp_pattern
+        name
+        Pprint.pp_pattern
+        arg1;
+      fprintf ppf "@[%a@]@ in@]@ @[%a@]@]" helper rhs helper wher
+    | ELet (_, name, rhs, wher) ->
+      fprintf
+        ppf
+        "@[<v 2>@[let %a = %a in@]@ @[%a@]@]"
+        Pprint.pp_pattern
+        name
+        helper_c
+        rhs
+        helper
+        wher
+    | EComplex (CAtom (AConst c)) -> Pprint.pp_const ppf c
+    | EComplex ea -> helper_c ppf ea
+
+  and helper_c ppf = function
+    | CApp (APrimitive binop, arg1, [ arg2 ]) when is_infix_binop binop ->
+      fprintf ppf "(%a %s %a)" helper_a arg1 binop helper_a arg2
+    | CApp (f, arg1, args) ->
+      fprintf ppf "@[%a %a %a@]" helper_a f helper_a arg1 (pp_print_list helper_a) args
+    | CAtom a -> helper_a ppf a
+    | CIte (acond, th, el) ->
+      fprintf
+        ppf
+        "@[<v>@[(if %a@]@ @[then %a@]@ @[else %a)@]@]"
+        helper_a
+        acond
+        helper
+        th
+        helper
+        el
+
+  and helper_a ppf = function
+    | ALam (arg1, EComplex (CAtom (ALam (arg2, EComplex (CAtom (ALam (arg3, e))))))) ->
+      fprintf
+        ppf
+        "@[(fun %a %a %a -> %a)@]"
+        Pprint.pp_pattern
+        arg1
+        Pprint.pp_pattern
+        arg2
+        Pprint.pp_pattern
+        arg3
+        helper
+        e
+    | ALam (arg1, EComplex (CAtom (ALam (arg2, e)))) ->
+      fprintf
+        ppf
+        "@[(fun %a %a -> %a)@]"
+        Pprint.pp_pattern
+        arg1
+        Pprint.pp_pattern
+        arg2
+        helper
+        e
+    | ALam (name, e) -> fprintf ppf "(fun %a -> %a)" Pprint.pp_pattern name helper e
+    | AConst c -> Pprint.pp_const ppf c
+    | APrimitive s | AVar s -> fprintf ppf "%s" s
+    | ATuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
   ;;
+
+  let pp_a = helper_a
+  let pp_c = helper_c
+  let pp = helper
 
   let group_abstractions =
     let rec helper acc = function
