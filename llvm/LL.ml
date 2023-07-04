@@ -15,6 +15,10 @@ module type S = sig
   val build_sdiv : ?name:string -> llvalue -> llvalue -> llvalue [@@inline]
   val build_icmp : ?name:string -> Icmp.t -> llvalue -> llvalue -> llvalue
 
+  val set_metadata :
+    llvalue -> string -> ('a, Format.formatter, unit, unit) format4 -> 'a
+  (** Useful for attaching debug metadata *)
+
   (* ?? *)
 
   val build_ptrtoint : ?name:string -> llvalue -> lltype -> llvalue
@@ -59,6 +63,14 @@ let make context builder module_ =
 
     let build_pointercast ?(name = "") f typ =
       Llvm.build_pointercast f typ name builder
+
+    let set_metadata v kind fmt =
+      Format.kasprintf
+        (fun s ->
+          Llvm.set_metadata v
+            (Llvm.mdkind_id context kind)
+            (Llvm.mdstring context s))
+        fmt
 
     (* Aliases *)
     let const_int = Llvm.const_int

@@ -3,7 +3,7 @@ open Miniml
 
 let failwiths fmt = Format.kasprintf failwith fmt
 let use_logging = false
-let use_logging = true
+(* let use_logging = true *)
 
 let log fmt =
   if use_logging then Format.kasprintf (fun s -> Format.printf "%s\n%!" s) fmt
@@ -96,12 +96,15 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
       | CApp (APrimitive "=", arg1, [ arg2 ]) ->
           let arg1 = gen_a arg1 in
           let arg2 = gen_a arg2 in
-          LL.build_icmp Llvm.Icmp.Eq arg1 arg2
+          let rez = LL.build_icmp Llvm.Icmp.Eq arg1 arg2 in
+          (* LL.set_metadata rez "if_cond_rez" "%s %d" __FILE__ __LINE__; *)
+          Llvm.build_zext rez i64_typ "name" LL.builder
       | CIte (cond, then_, else_) ->
           let cond =
-            LL.build_icmp Llvm.Icmp.Ne ~name:"ifcond"
-              (LL.build_ptrtoint (gen_a cond) i64_typ)
-              (Llvm.const_int i64_typ 0)
+            let cond_rez = gen_a cond in
+            LL.build_icmp Llvm.Icmp.Ne ~name:"ifcond" cond_rez
+              (* (LL.build_ptrtoint (gen_a cond) i64_typ) *)
+              (Llvm.const_int (Llvm.i64_type LL.context) 0)
           in
 
           (* get current function since basic blocks have to be inserted into a function *)
@@ -114,13 +117,15 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
             in
             (f "_then", f "_else", f "_cont")
           in
-          ignore @@ Llvm.build_cond_br cond then_bb else_bb LL.builder;
+          let (_ : Llvm.llvalue) =
+            Llvm.build_cond_br cond then_bb else_bb LL.builder
+          in
           (* then branch *)
           let t =
             Llvm.position_at_end then_bb LL.builder;
             gen then_
           in
-          Llvm.build_br merge_bb LL.builder |> ignore;
+          let (_ : Llvm.llvalue) = Llvm.build_br merge_bb LL.builder in
           let then_bb = Llvm.insertion_block LL.builder in
           (* else branch *)
           let e =
@@ -132,8 +137,6 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
           (* merge point *)
           Llvm.position_at_end merge_bb LL.builder;
           Llvm.build_phi [ (t, then_bb); (e, else_bb) ] "phi_result" LL.builder
-          (* Format.eprintf "ANF: %a\n%!" ANF2.pp_c anf;
-             failwiths "Unsupported case" *)
       | anf ->
           Format.eprintf "ANF: %a\n%!" ANF2.pp_c anf;
           failwiths "Unsupported case %s %d" __FUNCTION__ __LINE__
@@ -141,12 +144,13 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
       | ELet (_, Parsetree.PTuple _, _, _) -> assert false
       | ELet (_, Miniml.Parsetree.PVar name, rhs, wher) ->
           let new_virt = gen_c rhs in
+          (* Llvm.set_metadata new_virt
+             (Llvm.mdkind_id LL.context "stuff")
+             (Llvm.mdstring LL.context "FUCK"); *)
           with_virt_binding ~key:name new_virt ~f:(fun () ->
               let rez = gen wher in
               rez)
       | EComplex c -> gen_c c
-      (* Format.eprintf "ANF: %a\n%!" ANF2.pp anf;
-         failwiths "Unsupported case" *)
     in
 
     let args, body = ANF2.group_abstractions body in
