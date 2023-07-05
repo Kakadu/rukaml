@@ -17,6 +17,8 @@
     assert(A);                   \
   } */
 
+// #define DEBUG
+
 void myputc(int x)
 {
   printf("%d", x);
@@ -26,6 +28,7 @@ void myputc(int x)
 typedef void *(*fun0)(void);
 typedef void *(*fun1)(void *);
 typedef void *(*fun2)(void *, void *);
+typedef void *(*fun3)(void *, void *, void *);
 
 void *rukaml_apply0(void *f)
 {
@@ -44,6 +47,13 @@ void *rukaml_apply2(void *f, void *arg1, void *arg2)
   fun2 foo = (fun2)f;
   return foo(arg1, arg2);
 }
+
+void *rukaml_apply3(void *f, void *arg1, void *arg2, void *arg3)
+{
+  fun3 foo = (fun3)f;
+  return foo(arg1, arg2, arg3);
+}
+
 typedef struct
 {
   void *code;
@@ -56,28 +66,35 @@ rukaml_closure *copy_closure(rukaml_closure *src)
 {
   size_t size = sizeof(rukaml_closure) + sizeof(void *) * src->argsc;
   rukaml_closure *dst = (rukaml_closure *)malloc(size);
+#ifdef DEBUG
+  printf("%s    %p    ~~>     %p\n", __func__, src, dst);
+  fflush(stdout);
+#endif
   return memcpy(dst, src, size);
 }
 
 void *rukaml_alloc_closure(void *func, int32_t argsc)
 {
-  // printf("%s argc = %u\n", __func__, argsc);
-  fflush(stdout);
   rukaml_closure *ans = (rukaml_closure *)malloc(sizeof(rukaml_closure) + sizeof(void *) * argsc);
   //  { .code = func, .argsc = argsc }
   ans->code = func;
   ans->argsc = argsc;
   ans->args_received = 0;
   memset(ans->args, 0, argsc * sizeof(void *));
+#ifdef DEBUG
+  printf("%s argc = %u,   %p\n", __func__, argsc, ans);
+  fflush(stdout);
+#endif
   return ans;
 }
 
 void *rukaml_applyN(void *f, int32_t argc, ...)
 {
   setbuf(stdout, NULL);
-  // printf("%s argc = %u, closure = %p\n", __func__, argc, f);
+#ifdef DEBUG
+  printf("%s argc = %u, closure = %p\n", __func__, argc, f);
   fflush(stdout);
-
+#endif
   va_list argp;
   va_start(argp, argc);
   rukaml_closure *f_closure = copy_closure((rukaml_closure *)f);
@@ -93,11 +110,12 @@ void *rukaml_applyN(void *f, int32_t argc, ...)
     fflush(stdout);
     f_closure->args[f_closure->args_received++] = arg1;
   }
-  /* printf("\n");
-  printf("f->arg_received = %u, f->argc = %u\n",
+#ifdef DEBUG
+  printf("\nf->arg_received = %u, f->argc = %u\n",
          f_closure->args_received,
          f_closure->argsc);
-  fflush(stdout); */
+  fflush(stdout);
+#endif
   va_end(argp);
   if (f_closure->argsc == f_closure->args_received)
   {
@@ -112,8 +130,12 @@ void *rukaml_applyN(void *f, int32_t argc, ...)
     case 2:
       return rukaml_apply2(f_closure->code, f_closure->args[0], f_closure->args[1]);
       break;
+    case 3:
+      return rukaml_apply3(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2]);
+      break;
     default:
-      printf("FUCK\n");
+      printf("FUCK, f_closure->argsc = %u\n", f_closure->argsc);
+      printf("Application of too many arguments is not implemented!");
       assert(false);
     }
   }

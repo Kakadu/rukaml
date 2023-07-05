@@ -6,7 +6,7 @@
   let rec s: ('_3 -> '_5 -> '_6) -> ('_3 -> '_5) -> '_3 -> '_6 =
     fun f g x -> (f x) (g x)
   After ANF transformation.
-  let rec s x g f =
+  let rec s f g x =
     let temp4 = f x  in
       let temp5 = g x  in
         temp4 temp5 
@@ -72,10 +72,10 @@
   let rec fack: int -> (int -> '_12) -> '_12 =
     fun n k -> (if n = 1 then k 1 else (fack (n - 1)) ((fresh_1 n) k))
   After ANF transformation.
-  let fresh_1 m k n =
+  let fresh_1 n k m =
     let temp4 = (n * m) in
       k temp4 
-  let rec fack k n =
+  let rec fack n k =
     let temp8 = (n = 1) in
       (if temp8
       then k 1 
@@ -105,16 +105,16 @@
   let rec fibk: int -> (int -> '_14) -> '_14 =
     fun n k -> (if (< n) 1 then k 1 else (fibk (n - 1)) (((fresh_1 n) k) fibk))
   After ANF transformation.
-  let fresh_2 q k p =
+  let fresh_2 p k q =
     let temp4 = (p + q) in
       k temp4 
-  let fresh_1 p fibk k n =
+  let fresh_1 n k fibk p =
     let temp10 = (n - 2) in
       let temp11 = fibk temp10  in
         let temp12 = fresh_2 p  in
           let temp13 = temp12 k  in
             temp11 temp13 
-  let rec fibk k n =
+  let rec fibk n k =
     let temp17 = (n < 1) in
       (if temp17
       then k 1 
@@ -146,10 +146,10 @@
   let four: ('_1 -> '_12 -> '_13 -> '_14 -> '_15) -> '_1 * ('_12 * ('_13 * '_14)) -> '_15 =
     succ three
   After ANF transformation.
-  let two (a, b) f =
+  let two f (a, b) =
     let temp3 = f a  in
       temp3 b 
-  let succ (a, rest) f prev =
+  let succ prev f (a, rest) =
     let temp8 = f a  in
       let temp9 = prev temp8  in
         temp9 rest 
@@ -167,7 +167,7 @@
   let fresh: ('_2 * '_3 -> '_4) -> '_2 -> '_3 -> '_4 =
     fun f arg rest -> f (arg, rest)
   After ANF transformation.
-  let fresh rest arg f =
+  let fresh f arg rest =
     let temp4 = (arg, rest) in
       f temp4 
 
@@ -193,13 +193,13 @@
   let four: ('_1 * ('_9 * ('_10 * '_11)) -> '_12) -> '_1 -> '_9 -> '_10 -> '_11 -> '_12 =
     succ three
   After ANF transformation.
-  let two b a f =
+  let two f a b =
     let temp4 = (a, b) in
       f temp4 
-  let fresh_1 rest arg f =
+  let fresh_1 f arg rest =
     let temp9 = (arg, rest) in
       f temp9 
-  let succ arg f prev =
+  let succ prev f arg =
     let temp14 = fresh_1 f  in
       let temp15 = temp14 arg  in
         prev temp15 
@@ -238,11 +238,11 @@
   let temp: int * int =
     (two fresh_1) (1, 2)
   After ANF transformation.
-  let two (a, b) f =
+  let two f (a, b) =
     let temp3 = f a  in
       let temp4 = f b  in
         (temp3, temp4)
-  let succ (a, rest) f prev =
+  let succ prev f (a, rest) =
     let temp9 = f a  in
       let temp10 = prev f  in
         let temp11 = temp10 rest  in
@@ -257,3 +257,14 @@
     let temp16 = two fresh_1  in
       let temp17 = (1, 2) in
         temp16 temp17 
+
+  $ cat << EOF | ./REPL.exe - #-vcc -vanf
+  > let foo f x = x
+  > EOF
+  Parsed: let foo f x = x
+  After CCovv.
+  let foo: '_1 -> '_2 -> '_2 =
+    fun f x -> x
+  After ANF transformation.
+  let foo f x =
+    x

@@ -1,4 +1,14 @@
 (* https://www.cs.swarthmore.edu/~jpolitz/cs75/s16/n_anf-tutorial.html *)
+
+let log_enabled = ref false
+let set_logging b = log_enabled := b
+
+let log fmt =
+  if !log_enabled
+  then Format.kasprintf (Format.printf "%s\n%!") fmt
+  else Format.ifprintf Format.std_formatter fmt
+;;
+
 open Miniml
 
 type imm_expr =
@@ -21,6 +31,7 @@ type vb = Parsetree.rec_flag * string * expr
 (* TODO: only complex expression should be there *)
 
 let make_let_nonrec name rhs wher = ELet (NonRecursive, Parsetree.PVar name, rhs, wher)
+let alam name e = ALam (Parsetree.PVar name, e)
 
 let group_abstractions =
   let rec helper acc = function
@@ -123,7 +134,7 @@ include struct
   let group_abstractions =
     let rec helper acc = function
       | EComplex (CAtom (ALam (pat, body))) -> helper (pat :: acc) body
-      | e -> acc, e
+      | e -> List.rev acc, e
     in
     helper []
   ;;
@@ -142,17 +153,67 @@ let simplify : expr -> expr =
   let rec helper_a = function
     | ALam (name, e) -> ALam (name, helper e)
     | x -> x
-  and helper_c = function
-    | CAtom a -> CAtom (helper_a a)
-    | CApp (f, arg1, args) -> CApp (helper_a f, helper_a arg1, List.map helper_a args)
-    | CIte (cond, th, el) -> CIte (helper_a cond, helper th, helper el)
-  and helper = function
-    | EComplex e -> EComplex (helper_c e)
-    | ELet (Parsetree.NonRecursive, PVar name1, body, EComplex (CAtom (AVar name2)))
-      when String.equal name1 name2 -> EComplex (helper_c body)
-    | ELet (flg, name, body, wher) -> ELet (flg, name, helper_c body, helper wher)
+  and helper_c e =
+    let rez =
+      match e with
+      | CAtom a -> CAtom (helper_a a)
+      | CApp (f, arg1, args) -> CApp (helper_a f, helper_a arg1, List.map helper_a args)
+      | CIte (cond, th, el) -> CIte (helper_a cond, helper th, helper el)
+    in
+    (* log "Simpl_c: @[%a@] ~~> @[%a@] " pp_c e pp_c rez; *)
+    rez
+  and helper e =
+    let rez =
+      match e with
+      | EComplex e -> EComplex (helper_c e)
+      | ELet (Parsetree.NonRecursive, PVar name1, body, EComplex (CAtom (AVar name2)))
+        when String.equal name1 name2 -> EComplex (helper_c body)
+      | ELet (flg, name, body, wher) -> ELet (flg, name, helper_c body, helper wher)
+    in
+    (* log "Simpl: @[%a@] ~~> @[%a@] " pp e pp rez; *)
+    rez
   in
-  helper
+  fun e ->
+    (* log "Simplification of @[%a@]" pp e; *)
+    helper e
+;;
+
+let complex_of_atom x = EComplex (CAtom x)
+
+let%expect_test _ =
+  let ex1 =
+    make_let_nonrec
+      "temp1"
+      (CAtom
+         (ALam (PVar "f", complex_of_atom (ALam (PVar "x", complex_of_atom (AVar "x"))))))
+      (complex_of_atom (AVar "temp1"))
+  in
+  Format.printf "%a\n~~>\n%a\n%!" pp ex1 pp (simplify ex1);
+  [%expect {|
+    let temp1 f = (fun x -> x) in
+      temp1
+    ~~>
+    (fun f x -> x) |}];
+  let ex1 =
+    make_let_nonrec
+      "temp1"
+      (CAtom
+         (alam
+            "f"
+            (make_let_nonrec
+               "temp2"
+               (CAtom (alam "x" (complex_of_atom (AVar "x"))))
+               (complex_of_atom (AVar "temp2")))))
+      (complex_of_atom (AVar "temp1"))
+  in
+  Format.printf "%a\n~~>\n%a\n%!" pp ex1 pp (simplify ex1);
+  [%expect
+    {|
+    let temp1 f = let temp2 x = x in
+                    temp2 in
+      temp1
+    ~~>
+    (fun f x -> x) |}]
 ;;
 
 let simplify_vb (flag, name, body) = flag, name, simplify body
@@ -170,8 +231,6 @@ let gensym_s : _ =
   let n = gensym () in
   Printf.sprintf "%s%d" prefix n
 ;;
-
-let complex_of_atom x = EComplex (CAtom x)
 
 let anf =
   (* Standard pitfall: forgot to call continuation *)
@@ -270,10 +329,10 @@ let%expect_test "CPS factorial" =
     else fack (n-1) (fun p -> k (p*n)) |};
   [%expect
     {|
-    let fresh_2 p k n =
+    let fresh_2 n k p =
       let temp4 = (p * n) in
         k temp4
-    let rec fack k n =
+    let rec fack n k =
       let temp8 = (n = 0) in
         (if temp8
         then k 1

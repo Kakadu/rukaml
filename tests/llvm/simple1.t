@@ -13,33 +13,24 @@
     id 4 
   vb id
     formal parameter 0: i64 %0
-  define i64 @id(i64 %0) {
-  entry:
-    call void @myputc(i64 48)
-  }
   vb main
-  define i64 @main() {
-  entry:
-    call void @myputc(i64 48)
-    %0 = call i64 @id(i64 4)
-  }
   $ cat fack.ll | grep 'target datalayout' --invert-match
   ; ModuleID = 'main'
   source_filename = "main"
   
   declare void @myputc(i64)
   
-  declare i64 @rukaml_applyN(i64*, i64, ...)
+  declare i64 @rukaml_applyN(i64, i64, ...)
+  
+  declare i64 @rukaml_alloc_closure(i64, i64)
   
   define i64 @id(i64 %0) {
   entry:
-    call void @myputc(i64 48)
     ret i64 %0
   }
   
   define i64 @main() {
   entry:
-    call void @myputc(i64 48)
     %0 = call i64 @id(i64 4)
     ret i64 %0
   }
@@ -47,5 +38,4 @@
   warning: overriding the module target triple with x86_64-pc-linux-gnu [-Woverride-module]
   1 warning generated.
   $ ./fack.exe
-  4848
   [4]

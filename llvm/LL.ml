@@ -16,8 +16,9 @@ module type S = sig
   val build_icmp : ?name:string -> Icmp.t -> llvalue -> llvalue -> llvalue
 
   val set_metadata :
-    llvalue -> string -> ('a, Format.formatter, unit, unit) format4 -> 'a
-  (** Useful for attaching debug metadata *)
+    llvalue -> string -> ('a, Format.formatter, unit, llvalue) format4 -> 'a
+  (** [set_metadata v kind fmt] sets metadata to value [v] of kind [k].
+      Returns this value [v]. Useful for attaching debugging *)
 
   (* ?? *)
 
@@ -29,6 +30,7 @@ module type S = sig
 
   val const_int : Llvm.lltype -> int -> Llvm.llvalue
   val params : Llvm.llvalue -> Llvm.llvalue array
+  val pp_value : Format.formatter -> llvalue -> unit
 end
 
 let make context builder module_ =
@@ -69,11 +71,13 @@ let make context builder module_ =
         (fun s ->
           Llvm.set_metadata v
             (Llvm.mdkind_id context kind)
-            (Llvm.mdstring context s))
+            (Llvm.mdstring context s);
+          v)
         fmt
 
     (* Aliases *)
     let const_int = Llvm.const_int
     let params = Llvm.params
+    let pp_value ppf x = Format.fprintf ppf "%s" (Llvm.string_of_llvalue x)
   end in
   (module L : S)

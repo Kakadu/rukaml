@@ -41,15 +41,21 @@ type mode = Stru
 type opts =
   { mutable batch : bool
   ; mutable mode : mode
-  ; mutable log_cc : bool
   ; mutable log_parsing : bool
+  ; mutable log_cc : bool
+  ; mutable log_anf : bool
   }
 
 let () =
-  let opts = { batch = false; mode = Stru; log_cc = false; log_parsing = false } in
+  let opts =
+    { batch = false; mode = Stru; log_cc = false; log_parsing = false; log_anf = false }
+  in
   Stdlib.Arg.parse
     [ "-", Stdlib.Arg.Unit (fun () -> opts.batch <- true), " read from stdin"
     ; "-vcc", Stdlib.Arg.Unit (fun () -> opts.log_cc <- true), " verbose logging of CC"
+    ; ( "-vanf"
+      , Stdlib.Arg.Unit (fun () -> opts.log_anf <- true)
+      , " verbose logging of ANF transformation" )
     ; ( "-vp"
       , Stdlib.Arg.Unit (fun () -> opts.log_parsing <- true)
       , " verbose logging of parsing" )
@@ -58,6 +64,7 @@ let () =
     "TODO";
   Parsing.set_logging opts.log_parsing;
   CConv.set_logging opts.log_cc;
+  Compile_lib.ANF2.set_logging opts.log_cc;
   let s = Stdio.In_channel.(input_all stdin) |> String.rstrip in
   let on_error ppf = function
     | #Inferencer.error as e -> Inferencer.pp_error ppf e

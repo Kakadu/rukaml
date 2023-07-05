@@ -61,7 +61,7 @@ let () =
       ("-dump-ir", Arg.String (fun s -> cfg.out_file <- s), " ");
       ( "-vllvm",
         Arg.Unit (fun () -> LLVM_impl.set_verbose true),
-        " verbose output of LLVM backed" );
+        " verbose output of LLVM backend" );
     ]
     (fun s -> cfg.input_file <- Some s)
     "help";
