@@ -58,7 +58,10 @@ let () =
   Arg.parse
     [
       ("-o", Arg.String (fun s -> cfg.out_file <- s), " set output file");
-      ("--dump-ir", Arg.String (fun s -> cfg.out_file <- s), " ");
+      ("-dump-ir", Arg.String (fun s -> cfg.out_file <- s), " ");
+      ( "-vllvm",
+        Arg.Unit (fun () -> LLVM_impl.set_verbose true),
+        " verbose output of LLVM backed" );
     ]
     (fun s -> cfg.input_file <- Some s)
     "help";

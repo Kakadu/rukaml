@@ -2,11 +2,14 @@ open Compile_lib
 open Miniml
 
 let failwiths fmt = Format.kasprintf failwith fmt
-let use_logging = false
-(* let use_logging = true *)
+
+type config = { mutable verbose : bool }
+
+let cfg = { verbose = false }
+let set_verbose b = cfg.verbose <- b
 
 let log fmt =
-  if use_logging then Format.kasprintf (fun s -> Format.printf "%s\n%!" s) fmt
+  if cfg.verbose then Format.kasprintf (fun s -> Format.printf "%s\n%!" s) fmt
   else Format.ifprintf Format.std_formatter fmt
 
 let on_vb (module LL : LL.S) : ANF2.vb -> _ =
@@ -37,14 +40,41 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
     let rec gen_a = function
       | AConst (Miniml.Parsetree.PConst_int n) -> LL.const_int i64_typ n
       | AVar name when Hashtbl.mem virt_of_named_hash name -> virt_of_name name
+      | AVar name ->
+          assert (LL.has_toplevel_func name);
+          let applyN = LL.lookup_func_exn "rukaml_applyN" in
+          let f = LL.lookup_func_exn name in
+          let final_args =
+            let ptr = LL.build_pointercast f (Llvm.pointer_type i64_typ) in
+            (* log "%s %d. ptr  =  %s" __FUNCTION__ __LINE__
+               (Llvm.string_of_llvalue ptr); *)
+            [ ptr; LL.const_int i64_typ 0 ]
+          in
+          (* Llvm.dump_module LL.module_; *)
+          LL.build_call applyN final_args
+          (* failwiths "Unsupported case %s %d" __FUNCTION__ __LINE__ *)
       | anf ->
           Format.eprintf "ANF: %a\n%!" ANF2.pp_a anf;
-          Format.eprintf "virt_of_named_hash.card = %d"
+          Format.eprintf "virt_of_named_hash.card = %d\n%!"
             (Hashtbl.length virt_of_named_hash);
           failwiths "Unsupported case %s %d" __FUNCTION__ __LINE__
     and gen_c anf =
+      let is_fully_applied name args =
+        assert (LL.has_toplevel_func name);
+        let formal_params = LL.params (LL.lookup_func_exn name) in
+        Array.length formal_params = List.length args
+      in
+
       match anf with
       | CAtom a -> gen_a a
+      | CApp (AVar f, arg1, args)
+        when LL.has_toplevel_func f && is_fully_applied f (arg1 :: args) ->
+          (* Full appication of toplevel function. We can omit primitives for partial application and make a direct call  *)
+          let f = LL.lookup_func_exn f in
+          let final_args = List.map gen_a (arg1 :: args) in
+          LL.build_call f final_args
+          (* Format.eprintf "ANF: %a\n%!" ANF2.pp_c anf;
+             failwiths "Unsupported case %s %d" __FUNCTION__ __LINE__ *)
       | CApp (AVar f, arg1, args) when LL.has_toplevel_func f ->
           let generated_args = List.map gen_a (arg1 :: args) in
           List.iteri
@@ -168,14 +198,15 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
       args;
     let bb = Llvm.append_block LL.context "entry" the_function in
     Llvm.position_at_end bb LL.builder;
-    let return_val =
-      let c = Llvm.const_int i64_typ 0x30 in
-      let _ = LL.build_call LL.(lookup_func_exn "myputc") [ c ] in
-      Llvm.const_int i64_typ 0
+
+    let _ =
+      LL.build_call
+        LL.(lookup_func_exn "myputc")
+        [ Llvm.const_int i64_typ 0x30 ]
     in
+    let return_val = gen body in
 
-    let _ = gen body in
-
+    Llvm.dump_value the_function;
     let (_ : Llvm.llvalue) = Llvm.build_ret return_val LL.builder in
 
     (* Validate the generated code, checking for consistency. *)
@@ -265,12 +296,11 @@ let codegen : ANF2.vb list -> _ =
   let _ =
     (* void* lama_applyN(void* f, int32_t, ...) *)
     Llvm.declare_function "rukaml_applyN"
-      (Llvm.var_arg_function_type lama_ptr_type
-         [| lama_ptr_type; lama_int_type |])
+      (Llvm.var_arg_function_type i64_type [| lama_ptr_type; lama_int_type |])
       the_module
   in
-  prepare_main ();
 
+  (* prepare_main (); *)
   List.iter (on_vb (module LL)) anf;
 
   Llvm.print_module out_file the_module;

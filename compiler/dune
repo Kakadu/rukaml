@@ -33,4 +33,17 @@
 (cram
  ;(enabled_if
  ; (= true %{env:RUN_MY_TEST=false}))
- (deps ../REPL.exe ./compiler.exe))
+ (deps ../REPL.exe ./compiler.exe rukaml_stdlib.o))
+
+(rule
+ (targets rukaml_stdlib.o)
+ (deps rukaml_stdlib.c)
+ (action
+  (run
+   gcc
+   %{deps}
+   -c
+   -o
+   %{targets}
+   ;
+   )))
