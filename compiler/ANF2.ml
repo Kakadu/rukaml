@@ -30,6 +30,7 @@ and expr =
 type vb = Parsetree.rec_flag * string * expr
 (* TODO: only complex expression should be there *)
 
+let complex_of_atom x = EComplex (CAtom x)
 let make_let_nonrec name rhs wher = ELet (NonRecursive, Parsetree.PVar name, rhs, wher)
 let alam name e = ALam (Parsetree.PVar name, e)
 
@@ -178,8 +179,6 @@ let simplify : expr -> expr =
     helper e
 ;;
 
-let complex_of_atom x = EComplex (CAtom x)
-
 let%expect_test _ =
   let ex1 =
     make_let_nonrec
@@ -254,7 +253,7 @@ let anf =
     | TLam (pat, body, _) ->
       let name = gensym_s () in
       let body = helper body complex_of_atom in
-      ELet (NonRecursive, PVar name, CAtom (ALam (pat, body)), k (AVar name))
+      make_let_nonrec name (CAtom (ALam (pat, body))) (k (AVar name))
     | TLet (flag, name, _typ, TLam (vname, body, _), wher) ->
       ELet
         ( flag
