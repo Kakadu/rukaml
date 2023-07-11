@@ -11,12 +11,14 @@ let log fmt =
 
 open Miniml
 
+type apat = APname of string
+
 type imm_expr =
   | AConst of Parsetree.const
   | AVar of string
   | APrimitive of string
   | ATuple of imm_expr * imm_expr * imm_expr list
-  | ALam of Parsetree.pattern * expr
+  | ALam of apat * expr
 
 and c_expr =
   | CApp of imm_expr * imm_expr * imm_expr list
@@ -32,7 +34,9 @@ type vb = Parsetree.rec_flag * string * expr
 
 let complex_of_atom x = EComplex (CAtom x)
 let make_let_nonrec name rhs wher = ELet (NonRecursive, Parsetree.PVar name, rhs, wher)
-let alam name e = ALam (Parsetree.PVar name, e)
+let cvar name = CAtom (AVar name)
+let alam name e = ALam (APname name, e)
+let elam name e = complex_of_atom (alam name e)
 
 let group_abstractions =
   let rec helper acc = function
@@ -57,6 +61,10 @@ let pp_comma_list eta =
 include struct
   open Format
 
+  let pp_apat ppf = function
+    | APname s -> pp_print_string ppf s
+  ;;
+
   let rec helper ppf = function
     | ELet (flg, name, CAtom (ALam (arg1, rhs)), wher) ->
       fprintf
@@ -66,7 +74,7 @@ include struct
         flg
         Pprint.pp_pattern
         name
-        Pprint.pp_pattern
+        pp_apat
         arg1;
       fprintf ppf "@[%a@]@ in@]@ @[%a@]@]" helper rhs helper wher
     | ELet (_, name, rhs, wher) ->
@@ -104,25 +112,17 @@ include struct
       fprintf
         ppf
         "@[(fun %a %a %a -> %a)@]"
-        Pprint.pp_pattern
+        pp_apat
         arg1
-        Pprint.pp_pattern
+        pp_apat
         arg2
-        Pprint.pp_pattern
+        pp_apat
         arg3
         helper
         e
     | ALam (arg1, EComplex (CAtom (ALam (arg2, e)))) ->
-      fprintf
-        ppf
-        "@[(fun %a %a -> %a)@]"
-        Pprint.pp_pattern
-        arg1
-        Pprint.pp_pattern
-        arg2
-        helper
-        e
-    | ALam (name, e) -> fprintf ppf "(fun %a -> %a)" Pprint.pp_pattern name helper e
+      fprintf ppf "@[(fun %a %a -> %a)@]" pp_apat arg1 pp_apat arg2 helper e
+    | ALam (name, e) -> fprintf ppf "(fun %a -> %a)" pp_apat name helper e
     | AConst c -> Pprint.pp_const ppf c
     | APrimitive s | AVar s -> fprintf ppf "%s" s
     | ATuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
@@ -143,7 +143,7 @@ include struct
   let pp_vb ppf (flg, name, expr) =
     let pats, body = group_abstractions expr in
     fprintf ppf "@[<v 2>@[let %a%s " Pprint.pp_flg flg name;
-    List.iter (fprintf ppf "%a " Pprint.pp_pattern) pats;
+    List.iter (fprintf ppf "%a " pp_apat) pats;
     fprintf ppf "=@]@ @[%a@]@]" pp body
   ;;
 
@@ -183,8 +183,7 @@ let%expect_test _ =
   let ex1 =
     make_let_nonrec
       "temp1"
-      (CAtom
-         (ALam (PVar "f", complex_of_atom (ALam (PVar "x", complex_of_atom (AVar "x"))))))
+      (CAtom (alam "f" (complex_of_atom (alam "x" (complex_of_atom (AVar "x"))))))
       (complex_of_atom (AVar "temp1"))
   in
   Format.printf "%a\n~~>\n%a\n%!" pp ex1 pp (simplify ex1);
@@ -218,17 +217,93 @@ let%expect_test _ =
 let simplify_vb (flag, name, body) = flag, name, simplify body
 let simplify_stru eta = List.map simplify_vb eta
 
-let gensym =
+let reset_gensym, gensym =
   let n = ref 0 in
-  fun () ->
-    incr n;
-    !n
+  ( (fun () -> n := 0)
+  , fun () ->
+      incr n;
+      !n )
 ;;
 
 let gensym_s : _ =
  fun ?(prefix = "temp") () ->
   let n = gensym () in
   Printf.sprintf "%s%d" prefix n
+;;
+
+let anf_pat pat fin =
+  let access n e = CApp (APrimitive "field", AConst (PConst_int n), [ e ]) in
+  let rec helper pat ident_name k =
+    match pat with
+    | Parsetree.PVar s -> make_let_nonrec s (cvar ident_name) @@ k (AVar ident_name)
+    (* | PTuple (a, b, []) ->
+      let name_a = gensym_s () in
+      let name_b = gensym_s () in
+      make_let_nonrec name_a (access 0 (AVar ident_name))
+      @@ make_let_nonrec name_b (access 1 (AVar ident_name))
+      @@ helper a name_a (fun avar -> helper b name_b (fun bvar -> k (AVar ident_name))) *)
+    | PTuple (a, b, xs) ->
+      let rec loop i ps =
+        match ps with
+        | [] -> k (AVar ident_name)
+        | Parsetree.PVar name_a :: tl ->
+          make_let_nonrec name_a (access i (AVar ident_name)) (loop (1 + i) tl)
+        | h :: tl ->
+          let name_a = gensym_s () in
+          make_let_nonrec
+            name_a
+            (access i (AVar ident_name))
+            (helper h name_a (fun _ -> loop (1 + i) tl))
+      in
+      loop 0 (a :: b :: xs)
+  in
+  match pat with
+  | Parsetree.PVar s -> s, fin
+  | PTuple _ ->
+    let name_p = gensym_s () in
+    name_p, helper pat name_p (fun _ -> fin)
+;;
+
+let test_anf_pat text =
+  reset_gensym ();
+  match
+    let pat = Miniml.Parsing.parse_pat_exn text in
+    anf_pat pat (complex_of_atom (AVar "use_pattern_vars_here")) |> Result.ok
+  with
+  | Result.Error err -> Format.printf "%a\n%!" Inferencer.pp_error err
+  | Ok (pat, e) -> Format.printf "@[<v>%a@]\n%!" pp (elam pat e)
+;;
+
+let%expect_test _ =
+  test_anf_pat "x";
+  [%expect {| (fun x -> use_pattern_vars_here) |}]
+;;
+
+let%expect_test _ =
+  test_anf_pat "(x,y)";
+  [%expect {|
+    (fun temp1 -> let x = field 0 temp1 in
+                    let y = field 1 temp1 in
+                      use_pattern_vars_here) |}]
+;;
+
+let%expect_test _ =
+  test_anf_pat "(x,y,z)";
+  [%expect {|
+    (fun temp1 -> let x = field 0 temp1 in
+                    let y = field 1 temp1 in
+                      let z = field 2 temp1 in
+                        use_pattern_vars_here) |}]
+;;
+
+let%expect_test _ =
+  test_anf_pat "((x,y),z)";
+  [%expect {|
+    (fun temp1 -> let temp2 = field 0 temp1 in
+                    let x = field 0 temp2 in
+                      let y = field 1 temp2 in
+                        let z = field 1 temp1 in
+                          use_pattern_vars_here) |}]
 ;;
 
 let anf =
@@ -250,18 +325,18 @@ let anf =
         helper arg1 (fun arg1 ->
           let name = gensym_s () in
           ELet (NonRecursive, PVar name, CApp (f, arg1, []), k (AVar name))))
-    | TLam (pat, body, _) ->
+    | TLam (PVar pat, body, _) ->
       let name = gensym_s () in
       let body = helper body complex_of_atom in
-      make_let_nonrec name (CAtom (ALam (pat, body))) (k (AVar name))
-    | TLet (flag, name, _typ, TLam (vname, body, _), wher) ->
+      make_let_nonrec name (CAtom (ALam (APname pat, body))) (k (AVar name))
+    | TLet (flag, name, _typ, TLam (PVar vname, body, _), wher) ->
       ELet
         ( flag
         , name
         , (let name = gensym_s () in
            CAtom
              (ALam
-                ( vname
+                ( APname vname
                 , helper body (fun imm ->
                     ELet (NonRecursive, PVar name, CAtom imm, complex_of_atom (AVar name)))
                 )))
@@ -309,6 +384,7 @@ let anf_vb vb : vb =
 let anf_stru = List.map anf_vb
 
 let test_anf text =
+  reset_gensym ();
   let ( let* ) x f = Result.bind x f in
   match
     let stru = Miniml.Parsing.parse_vb_exn text in

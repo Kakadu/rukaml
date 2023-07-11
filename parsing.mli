@@ -43,5 +43,6 @@ type error = [ `Parse_error of string ]
 val pp_error : Format.formatter -> error -> unit
 val parse : string -> (Parsetree.expr, [> error ]) result
 val parse_pack : (dispatch -> 'a Angstrom.t) -> string -> ('a, string) result
+val parse_pat_exn : string -> Parsetree.pattern
 val parse_vb_exn : string -> Parsetree.value_binding
 val parse_structure : string -> (Parsetree.value_binding list, [> error ]) result
