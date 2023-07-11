@@ -231,21 +231,16 @@ let gensym_s : _ =
   Printf.sprintf "%s%d" prefix n
 ;;
 
-let anf_pat pat fin =
+let anf_pat pat ?(kbefore = fun _ -> Fun.id) k =
   let access n e = CApp (APrimitive "field", AConst (PConst_int n), [ e ]) in
+  (* TODO: the use of continuation here is weird, revisit it later. *)
   let rec helper pat ident_name k =
     match pat with
-    | Parsetree.PVar s -> make_let_nonrec s (cvar ident_name) @@ k (AVar ident_name)
-    (* | PTuple (a, b, []) ->
-      let name_a = gensym_s () in
-      let name_b = gensym_s () in
-      make_let_nonrec name_a (access 0 (AVar ident_name))
-      @@ make_let_nonrec name_b (access 1 (AVar ident_name))
-      @@ helper a name_a (fun avar -> helper b name_b (fun bvar -> k (AVar ident_name))) *)
+    | Parsetree.PVar s -> make_let_nonrec s (cvar ident_name) @@ k ()
     | PTuple (a, b, xs) ->
       let rec loop i ps =
         match ps with
-        | [] -> k (AVar ident_name)
+        | [] -> k ()
         | Parsetree.PVar name_a :: tl ->
           make_let_nonrec name_a (access i (AVar ident_name)) (loop (1 + i) tl)
         | h :: tl ->
@@ -258,20 +253,22 @@ let anf_pat pat fin =
       loop 0 (a :: b :: xs)
   in
   match pat with
-  | Parsetree.PVar s -> s, fin
+  | Parsetree.PVar s -> kbefore s (k s)
   | PTuple _ ->
     let name_p = gensym_s () in
-    name_p, helper pat name_p (fun _ -> fin)
+    kbefore name_p (helper pat name_p (fun () -> k name_p))
 ;;
 
 let test_anf_pat text =
   reset_gensym ();
   match
     let pat = Miniml.Parsing.parse_pat_exn text in
-    anf_pat pat (complex_of_atom (AVar "use_pattern_vars_here")) |> Result.ok
+    anf_pat ~kbefore:elam pat (fun _name ->
+      complex_of_atom (AVar "use_pattern_vars_here"))
+    |> Result.ok
   with
   | Result.Error err -> Format.printf "%a\n%!" Inferencer.pp_error err
-  | Ok (pat, e) -> Format.printf "@[<v>%a@]\n%!" pp (elam pat e)
+  | Ok e -> Format.printf "@[<v>%a@]\n%!" pp e
 ;;
 
 let%expect_test _ =
@@ -281,7 +278,8 @@ let%expect_test _ =
 
 let%expect_test _ =
   test_anf_pat "(x,y)";
-  [%expect {|
+  [%expect
+    {|
     (fun temp1 -> let x = field 0 temp1 in
                     let y = field 1 temp1 in
                       use_pattern_vars_here) |}]
@@ -289,7 +287,8 @@ let%expect_test _ =
 
 let%expect_test _ =
   test_anf_pat "(x,y,z)";
-  [%expect {|
+  [%expect
+    {|
     (fun temp1 -> let x = field 0 temp1 in
                     let y = field 1 temp1 in
                       let z = field 2 temp1 in
@@ -298,7 +297,8 @@ let%expect_test _ =
 
 let%expect_test _ =
   test_anf_pat "((x,y),z)";
-  [%expect {|
+  [%expect
+    {|
     (fun temp1 -> let temp2 = field 0 temp1 in
                     let x = field 0 temp2 in
                       let y = field 1 temp2 in
@@ -325,10 +325,12 @@ let anf =
         helper arg1 (fun arg1 ->
           let name = gensym_s () in
           ELet (NonRecursive, PVar name, CApp (f, arg1, []), k (AVar name))))
-    | TLam (PVar pat, body, _) ->
+    | TLam (pat, body, _) ->
+      anf_pat pat ~kbefore:(fun name e -> elam name e) (fun pat -> helper body k)
+    (* | TLam (PVar pat, body, _) ->
       let name = gensym_s () in
       let body = helper body complex_of_atom in
-      make_let_nonrec name (CAtom (ALam (APname pat, body))) (k (AVar name))
+      make_let_nonrec name (CAtom (ALam (APname pat, body))) (k (AVar name)) *)
     | TLet (flag, name, _typ, TLam (PVar vname, body, _), wher) ->
       ELet
         ( flag
@@ -405,17 +407,17 @@ let%expect_test "CPS factorial" =
   [%expect
     {|
     let fresh_2 n k p =
-      let temp4 = (p * n) in
-        k temp4
+      let temp1 = (p * n) in
+        k temp1
     let rec fack n k =
-      let temp8 = (n = 0) in
-        (if temp8
+      let temp3 = (n = 0) in
+        (if temp3
         then k 1
-        else let temp10 = (n - 1) in
-               let temp11 = fack temp10  in
-                 let temp12 = fresh_2 n  in
-                   let temp13 = temp12 k  in
-                     temp11 temp13 ) |}]
+        else let temp5 = (n - 1) in
+               let temp6 = fack temp5  in
+                 let temp7 = fresh_2 n  in
+                   let temp8 = temp7 k  in
+                     temp6 temp8 ) |}]
 ;;
 
 let%expect_test _ =

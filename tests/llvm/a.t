@@ -14,43 +14,43 @@
   > EOF
   After ANF transformation.
   let fresh_1 m k n =
-    let temp4 = (n * m) in
-      k temp4 
+    let temp1 = (n * m) in
+      k temp1 
   let rec fack k n =
-    let temp8 = (n = 1) in
-      (if temp8
+    let temp3 = (n = 1) in
+      (if temp3
       then k 1 
-      else let temp10 = (n - 1) in
-             let u = temp10 in
-               let temp11 = fresh_1 n  in
-                 let temp12 = temp11 k  in
-                   let v = temp12 in
-                     let temp13 = fack v  in
-                       temp13 u )
+      else let temp5 = (n - 1) in
+             let u = temp5 in
+               let temp6 = fresh_1 n  in
+                 let temp7 = temp6 k  in
+                   let v = temp7 in
+                     let temp8 = fack v  in
+                       temp8 u )
   let id x =
     x
   let main =
-    let temp17 = fack id  in
-      temp17 4 
+    let temp11 = fack id  in
+      temp11 4 
   let fresh_1 m k n =
-    let temp4 = (n * m) in
-      k temp4 
+    let temp1 = (n * m) in
+      k temp1 
   let rec fack k n =
-    let temp8 = (n = 1) in
-      (if temp8
+    let temp3 = (n = 1) in
+      (if temp3
       then k 1 
-      else let temp10 = (n - 1) in
-             let u = temp10 in
-               let temp11 = fresh_1 n  in
-                 let temp12 = temp11 k  in
-                   let v = temp12 in
-                     let temp13 = fack v  in
-                       temp13 u )
+      else let temp5 = (n - 1) in
+             let u = temp5 in
+               let temp6 = fresh_1 n  in
+                 let temp7 = temp6 k  in
+                   let v = temp7 in
+                     let temp8 = fack v  in
+                       temp8 u )
   let id x =
     x
   let main =
-    let temp17 = fack id  in
-      temp17 4 
+    let temp11 = fack id  in
+      temp11 4 
 
   $ cat fack.ll | grep 'target datalayout' --invert-match
   ; ModuleID = 'main'
@@ -123,39 +123,39 @@
   > EOF
   After ANF transformation.
   let fresh_1 n k m =
-    let temp4 = (n * m) in
-      k temp4 
+    let temp1 = (n * m) in
+      k temp1 
   let rec fack n k =
-    let temp8 = (n = 1) in
-      (if temp8
+    let temp3 = (n = 1) in
+      (if temp3
       then k 1 
-      else let temp10 = (n - 1) in
-             let temp11 = fack temp10  in
-               let temp12 = fresh_1 n  in
-                 let temp13 = temp12 k  in
-                   temp11 temp13 )
+      else let temp5 = (n - 1) in
+             let temp6 = fack temp5  in
+               let temp7 = fresh_1 n  in
+                 let temp8 = temp7 k  in
+                   temp6 temp8 )
   let fresh_2 x =
     x
   let main =
-    let temp17 = fack 5  in
-      temp17 fresh_2 
+    let temp11 = fack 5  in
+      temp11 fresh_2 
   let fresh_1 n k m =
-    let temp4 = (n * m) in
-      k temp4 
+    let temp1 = (n * m) in
+      k temp1 
   let rec fack n k =
-    let temp8 = (n = 1) in
-      (if temp8
+    let temp3 = (n = 1) in
+      (if temp3
       then k 1 
-      else let temp10 = (n - 1) in
-             let temp11 = fack temp10  in
-               let temp12 = fresh_1 n  in
-                 let temp13 = temp12 k  in
-                   temp11 temp13 )
+      else let temp5 = (n - 1) in
+             let temp6 = fack temp5  in
+               let temp7 = fresh_1 n  in
+                 let temp8 = temp7 k  in
+                   temp6 temp8 )
   let fresh_2 x =
     x
   let main =
-    let temp17 = fack 5  in
-      temp17 fresh_2 
+    let temp11 = fack 5  in
+      temp11 fresh_2 
   $ clang-14 fack.ll ../../compiler/rukaml_stdlib.o -o fack.exe
   warning: overriding the module target triple with x86_64-pc-linux-gnu [-Woverride-module]
   1 warning generated.

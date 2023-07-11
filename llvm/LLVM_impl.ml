@@ -187,7 +187,7 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
   in
   let the_function = Llvm.declare_function name fun_typ LL.module_ in
   List.iteri
-    (fun n (Miniml.Parsetree.PVar key) ->
+    (fun n (ANF2.APname key) ->
       let param = Llvm.param the_function n in
       log "  formal parameter %d: %s" n (Llvm.string_of_llvalue param);
       add_virt_binding ~key param)

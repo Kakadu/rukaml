@@ -7,9 +7,9 @@
     fun f g x -> (f x) (g x)
   After ANF transformation.
   let rec s f g x =
-    let temp4 = f x  in
-      let temp5 = g x  in
-        temp4 temp5 
+    let temp1 = f x  in
+      let temp2 = g x  in
+        temp1 temp2 
 # Zed combinator should trigger occurs check
   $ cat << EOF | ./REPL.exe -
   > let main = fun f -> (fun x -> f (fun v -> x x v)) (fun x -> f (fun v -> x x v))
@@ -55,10 +55,10 @@
   After ANF transformation.
   let small n =
     let half = n in
-      let temp2 = (if half
+      let temp1 = (if half
                   then 0
                   else 1) in
-        (temp2 + 1123)
+        (temp1 + 1123)
 # CPS Factorial
   $ cat << EOF | ./REPL.exe -
   > let rec fack n k =
@@ -73,17 +73,17 @@
     fun n k -> (if n = 1 then k 1 else (fack (n - 1)) ((fresh_1 n) k))
   After ANF transformation.
   let fresh_1 n k m =
-    let temp4 = (n * m) in
-      k temp4 
+    let temp1 = (n * m) in
+      k temp1 
   let rec fack n k =
-    let temp8 = (n = 1) in
-      (if temp8
+    let temp3 = (n = 1) in
+      (if temp3
       then k 1 
-      else let temp10 = (n - 1) in
-             let temp11 = fack temp10  in
-               let temp12 = fresh_1 n  in
-                 let temp13 = temp12 k  in
-                   temp11 temp13 )
+      else let temp5 = (n - 1) in
+             let temp6 = fack temp5  in
+               let temp7 = fresh_1 n  in
+                 let temp8 = temp7 k  in
+                   temp6 temp8 )
 
 # CPS Fibonacci
   $ cat << EOF | ./REPL.exe -
@@ -106,24 +106,24 @@
     fun n k -> (if (< n) 1 then k 1 else (fibk (n - 1)) (((fresh_1 n) k) fibk))
   After ANF transformation.
   let fresh_2 p k q =
-    let temp4 = (p + q) in
-      k temp4 
+    let temp1 = (p + q) in
+      k temp1 
   let fresh_1 n k fibk p =
-    let temp10 = (n - 2) in
-      let temp11 = fibk temp10  in
-        let temp12 = fresh_2 p  in
-          let temp13 = temp12 k  in
-            temp11 temp13 
+    let temp3 = (n - 2) in
+      let temp4 = fibk temp3  in
+        let temp5 = fresh_2 p  in
+          let temp6 = temp5 k  in
+            temp4 temp6 
   let rec fibk n k =
-    let temp17 = (n < 1) in
-      (if temp17
+    let temp8 = (n < 1) in
+      (if temp8
       then k 1 
-      else let temp19 = (n - 1) in
-             let temp20 = fibk temp19  in
-               let temp21 = fresh_1 n  in
-                 let temp22 = temp21 k  in
-                   let temp23 = temp22 fibk  in
-                     temp20 temp23 )
+      else let temp10 = (n - 1) in
+             let temp11 = fibk temp10  in
+               let temp12 = fresh_1 n  in
+                 let temp13 = temp12 k  in
+                   let temp14 = temp13 fibk  in
+                     temp11 temp14 )
 
 # Polyvariadic uncurrying
   $ cat << EOF | ./REPL.exe  -
@@ -146,13 +146,17 @@
   let four: ('_1 -> '_12 -> '_13 -> '_14 -> '_15) -> '_1 * ('_12 * ('_13 * '_14)) -> '_15 =
     succ three
   After ANF transformation.
-  let two f (a, b) =
-    let temp3 = f a  in
-      temp3 b 
-  let succ prev f (a, rest) =
-    let temp8 = f a  in
-      let temp9 = prev temp8  in
-        temp9 rest 
+  let two f temp1 =
+    let a = field 0 temp1 in
+      let b = field 1 temp1 in
+        let temp2 = f a  in
+          temp2 b 
+  let succ prev f temp4 =
+    let a = field 0 temp4 in
+      let rest = field 1 temp4 in
+        let temp5 = f a  in
+          let temp6 = prev temp5  in
+            temp6 rest 
   let three =
     succ two 
   let four =
@@ -168,8 +172,8 @@
     fun f arg rest -> f (arg, rest)
   After ANF transformation.
   let fresh f arg rest =
-    let temp4 = (arg, rest) in
-      f temp4 
+    let temp1 = (arg, rest) in
+      f temp1 
 
 # Polyvariadic currying
   $ cat << EOF | ./REPL.exe -
@@ -194,15 +198,15 @@
     succ three
   After ANF transformation.
   let two f a b =
-    let temp4 = (a, b) in
-      f temp4 
+    let temp1 = (a, b) in
+      f temp1 
   let fresh_1 f arg rest =
-    let temp9 = (arg, rest) in
-      f temp9 
+    let temp3 = (arg, rest) in
+      f temp3 
   let succ prev f arg =
-    let temp14 = fresh_1 f  in
-      let temp15 = temp14 arg  in
-        prev temp15 
+    let temp5 = fresh_1 f  in
+      let temp6 = temp5 arg  in
+        prev temp6 
   let three =
     succ two 
   let four =
@@ -238,15 +242,19 @@
   let temp: int * int =
     (two fresh_1) (1, 2)
   After ANF transformation.
-  let two f (a, b) =
-    let temp3 = f a  in
-      let temp4 = f b  in
-        (temp3, temp4)
-  let succ prev f (a, rest) =
-    let temp9 = f a  in
-      let temp10 = prev f  in
-        let temp11 = temp10 rest  in
-          (temp9, temp11)
+  let two f temp1 =
+    let a = field 0 temp1 in
+      let b = field 1 temp1 in
+        let temp2 = f a  in
+          let temp3 = f b  in
+            (temp2, temp3)
+  let succ prev f temp5 =
+    let a = field 0 temp5 in
+      let rest = field 1 temp5 in
+        let temp6 = f a  in
+          let temp7 = prev f  in
+            let temp8 = temp7 rest  in
+              (temp6, temp8)
   let three =
     succ two 
   let four =
@@ -254,9 +262,9 @@
   let fresh_1 x =
     x
   let temp =
-    let temp16 = two fresh_1  in
-      let temp17 = (1, 2) in
-        temp16 temp17 
+    let temp12 = two fresh_1  in
+      let temp13 = (1, 2) in
+        temp12 temp13 
 
   $ cat << EOF | ./REPL.exe - #-vcc -vanf
   > let foo f x = x
