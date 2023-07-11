@@ -62,6 +62,10 @@
   
   declare i64 @rukaml_alloc_closure(i64, i64)
   
+  declare i64 @rukaml_alloc_pair(i64, i64)
+  
+  declare i64 @rukaml_field(i64, i64)
+  
   define i64 @fresh_1(i64 %0, i64 %1, i64 %2) {
   entry:
     %3 = mul i64 %2, %0

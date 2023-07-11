@@ -343,8 +343,15 @@ let anf =
                     ELet (NonRecursive, PVar name, CAtom imm, complex_of_atom (AVar name)))
                 )))
         , helper wher complex_of_atom )
+    | TLet (_, (PTuple _ as pat), _typ, rhs, wher) ->
+      helper rhs (fun imm_rhs ->
+        anf_pat
+          ~kbefore:(fun name -> make_let_nonrec name (CAtom imm_rhs))
+          pat
+          (fun _ -> helper wher k))
     | TLet (flag, name, _typ, rhs, wher) ->
       (* NOTE: CPS in this part is tricky *)
+      (* TODO: should we merge this case to the upper one? *)
       helper rhs (fun imm_rhs -> ELet (flag, name, CAtom imm_rhs, helper wher k))
     | TIf (econd, eth, el, _) ->
       helper econd (fun eimm ->

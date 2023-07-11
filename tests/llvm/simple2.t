@@ -28,6 +28,10 @@
   
   declare i64 @rukaml_alloc_closure(i64, i64)
   
+  declare i64 @rukaml_alloc_pair(i64, i64)
+  
+  declare i64 @rukaml_field(i64, i64)
+  
   define i64 @id(i64 %0) {
   entry:
     ret i64 %0

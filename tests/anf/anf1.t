@@ -39,8 +39,10 @@
     a + b
   After ANF transformation.
   let sum x =
-    let (a, b) = x in
-      (a + b)
+    let temp1 = x in
+      let a = field 0 temp1 in
+        let b = field 1 temp1 in
+          (a + b)
 
   $ cat << EOF | ./REPL.exe -
   > let small n =

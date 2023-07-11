@@ -51,6 +51,12 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
           [ ptr; LL.const_int i64_typ formal_params_count ]
         in
         LL.build_call alloc_closure final_args
+    | ATuple (a, b, []) ->
+        let a = gen_a a in
+        let b = gen_a b in
+        let alloc = LL.lookup_func_exn "rukaml_alloc_pair" in
+        LL.build_call alloc [ a; b ]
+        (* assert false *)
     | anf ->
         Format.eprintf "ANF: %a\n%!" ANF2.pp_a anf;
         Format.eprintf "virt_of_named_hash.card = %d\n%!"
@@ -65,6 +71,10 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
 
     match anf with
     | CAtom a -> gen_a a
+    | CApp (APrimitive "field", AConst (PConst_int n), [ what ]) ->
+        let source = gen_a what in
+        let accessor = LL.lookup_func_exn "rukaml_field" in
+        LL.build_call accessor [ LL.const_int i64_typ n; source ]
     | CApp (AVar f, arg1, args)
       when LL.has_toplevel_func f && is_fully_applied f (arg1 :: args) ->
         (* Full appication of toplevel function. We can omit primitives for partial application and make a direct call  *)
@@ -298,6 +308,18 @@ let codegen : ANF2.vb list -> _ =
   in
   let _ =
     Llvm.declare_function "rukaml_alloc_closure"
+      (Llvm.function_type lama_int_type [| lama_int_type; lama_int_type |])
+      the_module
+  in
+  let _ =
+    Llvm.declare_function "rukaml_alloc_pair"
+      (Llvm.function_type lama_int_type [| lama_int_type; lama_int_type |])
+      the_module
+  in
+
+  let _ =
+    Llvm.declare_function "rukaml_field"
+      (* TODO: Should first argument be untagged?  *)
       (Llvm.function_type lama_int_type [| lama_int_type; lama_int_type |])
       the_module
   in

@@ -34,3 +34,30 @@
     succ two 
   let four =
     succ three 
+
+# let (_,_) = ...
+  $ cat << EOF | ./REPL.exe -
+  > let mydiv a b = (a+b, a)
+  > let f a b = 
+  >    let (u,v) = mydiv a b in 
+  >    u+v
+  > EOF
+  Parsed: let mydiv a b = (a + b, a)
+          let f a b = let (u, v) = mydiv a b in u + v
+  After CCovv.
+  let mydiv: int -> int -> int * int =
+    fun a b -> ((a + b), a)
+  let f: int -> int -> int =
+    fun a b -> let (u, v) : int * int = (mydiv a) b in
+    u + v
+  After ANF transformation.
+  let mydiv a b =
+    let temp1 = (a + b) in
+      (temp1, a)
+  let f a b =
+    let temp3 = mydiv a  in
+      let temp4 = temp3 b  in
+        let temp5 = temp4 in
+          let u = field 0 temp5 in
+            let v = field 1 temp5 in
+              (u + v)

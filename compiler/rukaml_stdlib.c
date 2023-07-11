@@ -73,6 +73,20 @@ rukaml_closure *copy_closure(rukaml_closure *src)
   return memcpy(dst, src, size);
 }
 
+void *rukaml_alloc_pair(void* l, void *r) 
+{
+  size_t *rez = malloc(3 * sizeof(void*));
+  (rez)[0] = 0; // tag
+  (rez)[1] = l;
+  (rez)[2] = r;
+  return rez+1;
+}
+
+void *rukaml_field(int n, void **r)
+{
+  return r[n];
+}
+
 void *rukaml_alloc_closure(void *func, int32_t argsc)
 {
   rukaml_closure *ans = (rukaml_closure *)malloc(sizeof(rukaml_closure) + sizeof(void *) * argsc);
