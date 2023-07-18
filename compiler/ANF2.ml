@@ -27,6 +27,7 @@ and c_expr =
 
 and expr =
   | ELet of Parsetree.rec_flag * Parsetree.pattern * c_expr * expr
+  (* Maybe recursive flag is not required? *)
   | EComplex of c_expr
 
 type vb = Parsetree.rec_flag * string * expr
