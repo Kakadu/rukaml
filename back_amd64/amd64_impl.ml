@@ -29,7 +29,7 @@ let print_prologue ppf name =
   fprintf ppf "%!"
 
 let print_epilogue ppf name =
-  printfn ppf "  mov rsp, rbp";
+  (* printfn ppf "  mov rsp, rbp"; *)
   printfn ppf "  pop rbp";
   printfn ppf "  ret  ;;;; %s" name;
   fprintf ppf "%!"
@@ -44,6 +44,7 @@ module Loc_of_ident : sig
   val remove : string -> unit
   val alloc_and_store : string -> unit
   val alloc_temp : unit -> string
+  val keys : unit -> string
 end = struct
   type t = (string, int) Hashtbl.t
 
@@ -78,6 +79,9 @@ end = struct
     let name = gensym () in
     alloc_and_store name;
     name
+
+  let keys () =
+    Hashtbl.to_seq_keys store |> Seq.fold_left (fun acc x -> acc ^ " " ^ x) ""
 end
 
 type dest = DReg of string | DStack_var of string
@@ -107,7 +111,7 @@ let generate_body ppf body =
         dealloc_var ppf name
     | ELet (_, PTuple (_, _, _), _, _) -> assert false
   and helper_c (dest : dest) = function
-    | CApp (APrimitive "+", arg1, [ arg2 ]) ->
+    | CApp (APrimitive (("+" | "*") as prim), arg1, [ arg2 ]) ->
         let left_name = LoI.alloc_temp () in
         printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
         let left_dest = DStack_var left_name in
@@ -118,19 +122,27 @@ let generate_body ppf body =
         helper_a right_dest arg2;
         printfn ppf "  mov rax, %a" pp_dest left_dest;
         printfn ppf "  mov rbx, %a" pp_dest right_dest;
-        printfn ppf "  add rbx, rax";
+        (match prim with
+        | "+" -> printfn ppf "  add  rbx, rax"
+        | "*" -> printfn ppf "  imul rbx, rax"
+        | op -> printfn ppf ";;; TODO %s. %s %d" op __FUNCTION__ __LINE__);
         printfn ppf "  mov %a, rbx" pp_dest dest;
         dealloc_var ppf right_name;
         dealloc_var ppf left_name
-    | CApp (AVar f, AVar arg, []) ->
+    | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), [])
+      ->
+        let aname = LoI.alloc_temp () in
+        printfn ppf "  sub rsp, 8 ; allocate for var %S" aname;
+        helper_a (DStack_var aname) arg;
+        (* TODO: distinguish global functions and arguments *)
+        printfn ppf "  call %s" f;
+        dealloc_var ppf aname
         (* Need to worry about caller-save registers here  *)
-        printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__
     | CApp _ -> printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__
-    (* printfn ppf "; @[%a@]" Compile_lib.ANF2.pp_c expr *)
     | _ -> printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__
   and helper_a (dest : dest) = function
     | AConst (Miniml.Parsetree.PConst_int n) ->
-        printfn ppf "  mov %a, %d" pp_dest dest n
+        printfn ppf "  mov qword %a,  %d" pp_dest dest n
     | AVar vname ->
         (* We use temprarily rdx because we can't move from stack to stack *)
         printfn ppf "  mov rdx, [rsp+%d*8] " (LoI.lookup_exn vname);
@@ -167,6 +179,8 @@ iterate:
   ret
 |}
 
+let use_custom_main = false
+
 let codegen anf file =
   log "Going to generate code here %s %d" __FUNCTION__ __LINE__;
   log "ANF: @[%a@]" Compile_lib.ANF2.pp_stru anf;
@@ -189,11 +203,25 @@ let codegen anf file =
           syscall
           ret |};
       put_print_hex ppf;
+
+      printfn ppf
+        {|_start:
+        push    rbp
+        mov     rbp, rsp   ; prologue
+        push 5
+        call sq
+        add rsp, 8
+        mov rdi, rax    ; rdi stores return code
+        mov rax, 60     ; exit syscall
+        syscall|};
+
       let open Compile_lib in
       anf
       |> List.iter (fun (_flg, name, expr) ->
              if Loc_of_ident.size () <> 0 then
-               failwiths "There are left over variables (before function )... ";
+               failwiths
+                 "There are left over variables (before function %s): %s " name
+                 (Loc_of_ident.keys ());
              printfn ppf "";
 
              (* print_prologue ppf name; *)
@@ -202,11 +230,14 @@ let codegen anf file =
                 (Loc_of_ident.size ()) name; *)
 
              (* printfn ppf "  sub rsp, %d" (8 * Loc_of_ident.size ()); *)
-             (if name = "main" then
-              printfn ppf
-                {|_start:
+             (if use_custom_main && name = "main" then
+                printfn ppf
+                  {|_start:
+                    push    rbp
+                    mov     rbp, rsp   ; prologue
                     push 5
-                    call _double
+                    call double
+                    add rsp, 8 ; pop 5
                     mov rdi, rax
                     call print_hex
                     call print_newline
@@ -217,24 +248,36 @@ let codegen anf file =
                     mov rax, 60
                     xor rdi, rdi
                     syscall|}
-             else
-               let () = printfn ppf "_%s:" name in
-               let pats, body = ANF2.group_abstractions expr in
+              else
+                let () = printfn ppf "%s:" name in
 
-               List.iter
-                 (function
-                   | ANF2.APname name ->
-                       let n = Loc_of_ident.alloc_more () in
-                       Loc_of_ident.put name n
-                       (* printfn ppf "\t; Variable %S allocated on stack" name *))
-                 pats;
-               generate_body ppf body;
+                let pats, body = ANF2.group_abstractions expr in
 
-               List.iter
-                 (function ANF2.APname name -> dealloc_var ppf name)
-                 (List.rev pats);
+                List.iter
+                  (function
+                    | ANF2.APname name ->
+                        let n = Loc_of_ident.alloc_more () in
+                        Loc_of_ident.put name n
+                        (* printfn ppf "\t; Variable %S allocated on stack" name *))
+                  pats;
+                printfn ppf "  push rbp";
+                printfn ppf "  mov  rbp, rsp";
+                let rbp_goes_here = Loc_of_ident.alloc_temp () in
+                let rsi_goes_here = Loc_of_ident.alloc_temp () in
+                generate_body ppf body;
+                Loc_of_ident.remove rsi_goes_here;
+                Loc_of_ident.remove rbp_goes_here;
 
-               print_epilogue ppf name);
+                let () =
+                  (* deallocation from stack should be done by caller  *)
+                  List.iter
+                    (function
+                      | ANF2.APname name ->
+                          Loc_of_ident.remove name (* dealloc_var ppf name *))
+                    (List.rev pats)
+                in
+
+                print_epilogue ppf name);
              ());
       Format.pp_print_flush ppf ());
 

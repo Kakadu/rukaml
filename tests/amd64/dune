@@ -1,4 +1,5 @@
 (cram
+ (applies_to run)
  (deps
   (package MiniML)
   (package MiniML_amd64)
@@ -11,4 +12,26 @@
   ;
   ../llvm/fack.ml
   ;
+  ;double.exe
   ))
+
+(cram
+ (applies_to)
+ (deps double.exe))
+
+(rule
+ (targets double.asm double.exe)
+ (deps double.ml)
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_amd64/amd64_compiler.exe
+    double.ml
+    -o
+    double.asm)
+   (run nasm -g -F dwarf -felf64 double.asm -o double.o)
+   (run ld -o double.exe double.o))))
+
+;-g -F dwarf
