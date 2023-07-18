@@ -46,7 +46,7 @@ module ToLLVM = struct
     Amd64_impl.codegen anf cfg.out_file |> promote_error
 end
 
-let cfg = { out_file = "aaa.ll"; input_file = None }
+let cfg = { out_file = "a.out"; input_file = None }
 
 let print_errors = function
   | #Miniml.Parsing.error as e -> Format.printf "%a\n%!" Parsing.pp_error e
@@ -57,10 +57,10 @@ let () =
   Arg.parse
     [
       ("-o", Arg.String (fun s -> cfg.out_file <- s), " set output file");
-      (* ("-dump-ir", Arg.String (fun s -> cfg.out_file <- s), " "); *)
-      ( "-vllvm",
+      ("-", Arg.Unit (fun () -> cfg.input_file <- None), " read from stdin");
+      ( "-vamd64",
         Arg.Unit (fun () -> Amd64_impl.set_verbose true),
-        " verbose output of LLVM backend" );
+        " verbose output of Amd64 backend" );
     ]
     (fun s -> cfg.input_file <- Some s)
     "help";

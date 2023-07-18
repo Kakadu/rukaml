@@ -1,7 +1,9 @@
 (env
  (dev
   (flags
-   (:standard -warn-error -26-27-39))))
+   (:standard -warn-error -26-27-39))
+  (ocamlopt_flags
+   (:standard -S))))
 
 (library
  (name amd64_impl)
