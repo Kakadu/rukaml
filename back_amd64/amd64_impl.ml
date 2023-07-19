@@ -1,4 +1,8 @@
-(* https://flint.cs.yale.edu/cs421/papers/x86-asm/asm.html *)
+(* https://flint.cs.yale.edu/cs421/papers/x86-asm/asm.html
+   https://jvns.ca/blog/2021/05/17/how-to-look-at-the-stack-in-gdb
+   https://en.wikipedia.org/wiki/X86_calling_conventions
+   https://github.com/jhucompilers/fall2022/tree/gh-pages/lectures
+*)
 
 (* We are using Intel syntax !! *)
 
