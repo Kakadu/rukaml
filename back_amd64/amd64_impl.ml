@@ -186,7 +186,7 @@ iterate:
 let use_custom_main = false
 
 let codegen anf file =
-  log "Going to generate code here %s %d" __FUNCTION__ __LINE__;
+  (* log "Going to generate code here %s %d" __FUNCTION__ __LINE__; *)
   log "ANF: @[%a@]" Compile_lib.ANF2.pp_stru anf;
 
   Stdio.Out_channel.with_file file ~f:(fun ch ->
@@ -208,16 +208,26 @@ let codegen anf file =
           ret |};
       put_print_hex ppf;
 
-      printfn ppf
-        {|_start:
-        push    rbp
-        mov     rbp, rsp   ; prologue
-        push 5
-        call sq
-        add rsp, 8
-        mov rdi, rax    ; rdi stores return code
-        mov rax, 60     ; exit syscall
-        syscall|};
+      if use_custom_main then
+        printfn ppf
+          {|_start:
+              push    rbp
+              mov     rbp, rsp   ; prologue
+              push 5
+              call sq
+              add rsp, 8
+              mov rdi, rax    ; rdi stores return code
+              mov rax, 60     ; exit syscall
+              syscall|}
+      else
+        printfn ppf
+          {|_start:
+              push    rbp
+              mov     rbp, rsp   ; prologue
+              call main
+              mov rdi, rax    ; rdi stores return code
+              mov rax, 60     ; exit syscall
+              syscall|};
 
       let open Compile_lib in
       anf
