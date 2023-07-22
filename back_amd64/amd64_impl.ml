@@ -43,6 +43,7 @@ module Loc_of_ident : sig
 
   val size : unit -> int
   val lookup_exn : string -> int
+  val has_key : string -> bool
   val alloc_more : unit -> int
   val put : string -> int -> unit
   val remove : string -> unit
@@ -55,6 +56,7 @@ end = struct
   let store : t = Hashtbl.create 23
   let size () = Hashtbl.length store
   let allocated = ref 0
+  let has_key name = Hashtbl.mem store name
 
   let lookup_exn name =
     let saved = Hashtbl.find store name in
@@ -94,7 +96,7 @@ let pp_dest ppf = function
   | DReg s -> fprintf ppf "%s" s
   | DStack_var v ->
       (* 8 for 64 bit, 4 for 32bit *)
-      fprintf ppf "[%d+rsp]" (8 * Loc_of_ident.lookup_exn v)
+      fprintf ppf "[8*%d+rsp]" (Loc_of_ident.lookup_exn v)
 
 let dealloc_var ppf name =
   Loc_of_ident.remove name;
@@ -115,6 +117,44 @@ let generate_body ppf body =
         dealloc_var ppf name
     | ELet (_, PTuple (_, _, _), _, _) -> assert false
   and helper_c (dest : dest) = function
+    | CIte (AConst (Miniml.Parsetree.PConst_bool true), bth, _bel) ->
+        helper dest bth
+    | CIte (AConst (Miniml.Parsetree.PConst_bool false), _bth, bel) ->
+        helper dest bel
+    | CIte (AVar econd, bth, bel) when LoI.has_key econd ->
+        printfn ppf "  mov rdx, [rsp+%d*8] " (LoI.lookup_exn econd);
+        printfn ppf "  cmp rdx, 0";
+        let th_lab = Printf.sprintf "lab_then_%d" (gensym ()) in
+        let fin_lab = Printf.sprintf "lab_endif_%d" (gensym ()) in
+        printfn ppf "  je %s" th_lab;
+        helper dest bel;
+        printfn ppf "  jmp %s" fin_lab;
+        printfn ppf "  %s:" th_lab;
+        helper dest bth;
+        printfn ppf "  %s:" fin_lab
+    | CApp (APrimitive "=", arg1, [ arg2 ]) ->
+        let left_name = LoI.alloc_temp () in
+        printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
+        let left_dest = DStack_var left_name in
+        helper_a left_dest arg1;
+        let right_name = LoI.alloc_temp () in
+        printfn ppf "  sub rsp, 8 ; allocate for var %S" right_name;
+        let right_dest = DStack_var right_name in
+        helper_a right_dest arg2;
+        printfn ppf "  mov rax, %a" pp_dest left_dest;
+        printfn ppf "  mov rbx, %a" pp_dest right_dest;
+        printfn ppf "  cmp rax, rbx";
+        let eq_lab = Printf.sprintf "lab_%d" (gensym ()) in
+        let exit_lab = Printf.sprintf "lab_%d" (gensym ()) in
+        printfn ppf "  je %s" eq_lab;
+        printfn ppf "  mov qword %a, 0" pp_dest dest;
+        printfn ppf "  jmp %s" exit_lab;
+        printfn ppf "  %s:" eq_lab;
+        printfn ppf "    mov qword %a, 1" pp_dest dest;
+        printfn ppf "    jmp %s" exit_lab;
+        printfn ppf "  %s:" exit_lab;
+        dealloc_var ppf right_name;
+        dealloc_var ppf left_name
     | CApp (APrimitive (("+" | "*") as prim), arg1, [ arg2 ]) ->
         let left_name = LoI.alloc_temp () in
         printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
@@ -143,8 +183,13 @@ let generate_body ppf body =
         dealloc_var ppf aname
         (* Need to worry about caller-save registers here  *)
     | CApp _ -> printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__
-    | _ -> printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__
+    | CAtom atom -> helper_a dest atom
+    | rest ->
+        printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
+        printfn ppf "; @[<h>%a@]" pp_c rest
   and helper_a (dest : dest) = function
+    | AConst (Miniml.Parsetree.PConst_bool true) ->
+        printfn ppf "  mov qword %a, 1" pp_dest dest
     | AConst (Miniml.Parsetree.PConst_int n) ->
         printfn ppf "  mov qword %a,  %d" pp_dest dest n
     | AVar vname ->

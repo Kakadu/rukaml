@@ -1,5 +1,5 @@
 (cram
- (applies_to run)
+ (applies_to run fac)
  (deps
   (package MiniML)
   (package MiniML_amd64)
