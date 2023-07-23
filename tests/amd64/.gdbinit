@@ -1,2 +1,5 @@
-b _start 
-r 
+set disassembly-flavor intel
+b main
+layout asm
+layout reg
+r

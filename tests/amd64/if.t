@@ -1,21 +1,17 @@
   $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 -
-  > let sq y = y * y
-  > let double x = x+x
-  > let main = sq 7
+  > let main = if 0=1 then 10 else 20
   > EOF
   After ANF transformation.
-  let sq y =
-    (y * y)
-  let double x =
-    (x + x)
   let main =
-    sq 7 
-  ANF: let sq y =
-         (y * y)
-       let double x =
-         (x + x)
-       let main =
-         sq 7 
+    let temp1 = (0 = 1) in
+      (if temp1
+      then 10
+      else 20)
+  ANF: let main =
+         let temp1 = (0 = 1) in
+           (if temp1
+           then 10
+           else 20)
 
 ; generated code for amd64
   $ cat program.asm | nl -ba
@@ -65,54 +61,37 @@
       44	
       45		; @[{stack||stack}@]
       46	
-      47	sq:
+      47	main:
       48	  push rbp
       49	  mov  rbp, rsp
-      50	  sub rsp, 8 ; allocate for var "__temp3"
-      51	  mov rdx, [rsp+3*8] 
-      52	  mov [8*0+rsp], rdx ; access a var "y"
+      50	  sub rsp, 8 ; allocate for var "temp1"
+      51	  sub rsp, 8 ; allocate for var "__temp3"
+      52	  mov qword [8*0+rsp],  0
       53	  sub rsp, 8 ; allocate for var "__temp4"
-      54	  mov rdx, [rsp+4*8] 
-      55	  mov [8*0+rsp], rdx ; access a var "y"
-      56	  mov rax, [8*1+rsp]
-      57	  mov rbx, [8*0+rsp]
-      58	  imul rbx, rax
-      59	  mov rax, rbx
-      60	  add rsp, 8 ; deallocate var "__temp4"
-      61	  add rsp, 8 ; deallocate var "__temp3"
-      62	  pop rbp
-      63	  ret  ;;;; sq
-      64	
-      65		; @[{stack||stack}@]
-      66	double:
-      67	  push rbp
-      68	  mov  rbp, rsp
-      69	  sub rsp, 8 ; allocate for var "__temp7"
-      70	  mov rdx, [rsp+3*8] 
-      71	  mov [8*0+rsp], rdx ; access a var "x"
-      72	  sub rsp, 8 ; allocate for var "__temp8"
-      73	  mov rdx, [rsp+4*8] 
-      74	  mov [8*0+rsp], rdx ; access a var "x"
-      75	  mov rax, [8*1+rsp]
-      76	  mov rbx, [8*0+rsp]
-      77	  add  rbx, rax
-      78	  mov rax, rbx
-      79	  add rsp, 8 ; deallocate var "__temp8"
-      80	  add rsp, 8 ; deallocate var "__temp7"
-      81	  pop rbp
-      82	  ret  ;;;; double
-      83	
-      84		; @[{stack||stack}@]
-      85	main:
-      86	  push rbp
-      87	  mov  rbp, rsp
-      88	  sub rsp, 8 ; allocate for var "__temp11"
-      89	  mov qword [8*0+rsp],  7
-      90	  call sq
-      91	  add rsp, 8 ; deallocate var "__temp11"
-      92	  mov rax, rax
-      93	  pop rbp
-      94	  ret  ;;;; main
+      54	  mov qword [8*0+rsp],  1
+      55	  mov rax, [8*1+rsp]
+      56	  mov rbx, [8*0+rsp]
+      57	  cmp rax, rbx
+      58	  je lab_3
+      59	  mov qword [8*2+rsp], 0
+      60	  jmp lab_4
+      61	  lab_3:
+      62	    mov qword [8*2+rsp], 1
+      63	    jmp lab_4
+      64	  lab_4:
+      65	  add rsp, 8 ; deallocate var "__temp4"
+      66	  add rsp, 8 ; deallocate var "__temp3"
+      67	  mov rdx, [rsp+0*8] 
+      68	  cmp rdx, 0
+      69	  je lab_then_5
+      70	  mov qword rax,  10
+      71	  jmp lab_endif_6
+      72	  lab_then_5:
+      73	  mov qword rax,  20
+      74	  lab_endif_6:
+      75	  add rsp, 8 ; deallocate var "temp1"
+      76	  pop rbp
+      77	  ret  ;;;; main
 
   $ nasm -felf64 program.asm -o program.o && ld -o program.exe program.o && chmod u+x program.exe && ./program.exe
-  [49]
+  [20]

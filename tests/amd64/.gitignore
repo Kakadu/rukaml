@@ -1,2 +1,4 @@
+*.exe
 double.asm
-double.exe
+fac.asm
+if.asm

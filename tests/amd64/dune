@@ -1,5 +1,5 @@
 (cram
- (applies_to run fac)
+ (applies_to run fac fib if)
  (deps
   (package MiniML)
   (package MiniML_amd64)
@@ -17,7 +17,7 @@
 
 (cram
  (applies_to)
- (deps double.exe))
+ (deps double.exe if.exe))
 
 (rule
  (targets double.asm double.exe)
@@ -34,4 +34,26 @@
    (run nasm -g -F dwarf -felf64 double.asm -o double.o)
    (run ld -o double.exe double.o))))
 
-;-g -F dwarf
+(rule
+ (targets if.asm if.exe)
+ (deps
+  (:src if.ml))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o if.asm)
+   (run nasm -g -F dwarf -felf64 if.asm -o if.o)
+   (run ld -o if.exe if.o))))
+
+(rule
+ (targets fac.asm fac.exe)
+ (deps
+  (:src fac.ml))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o fac.asm)
+   (run nasm -g -F dwarf -felf64 fac.asm -o if.o)
+   (run ld -o fac.exe if.o))))
