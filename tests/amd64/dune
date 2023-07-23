@@ -1,5 +1,5 @@
 (cram
- (applies_to run fac fib if)
+ (applies_to run fac fib if fack)
  (deps
   (package MiniML)
   (package MiniML_amd64)

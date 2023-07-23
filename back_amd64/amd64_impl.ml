@@ -101,19 +101,34 @@ end = struct
     Format.fprintf ppf "%s" (Buffer.contents b)
 end
 
+let list_take_n n xs =
+  let rec helper n forw xs =
+    if n = 0 then (List.rev forw, xs)
+    else
+      match xs with
+      | [] -> failwith "bad argument"
+      | h :: tl -> helper (n - 1) (h :: forw) tl
+  in
+  helper n [] xs
+
+let list_take n xs =
+  (* TODO: it's not optimal *)
+  fst (list_take_n n xs)
+
 type dest = DReg of string | DStack_var of string
 
 let pp_dest ppf = function
   | DReg s -> fprintf ppf "%s" s
   | DStack_var v ->
+      let shift = Loc_of_ident.lookup_exn v in
       (* 8 for 64 bit, 4 for 32bit *)
-      fprintf ppf "[8*%d+rsp]" (Loc_of_ident.lookup_exn v)
+      if shift = 0 then fprintf ppf "[rsp]" else fprintf ppf "[8*%d+rsp]" shift
 
 let dealloc_var ppf name =
   Loc_of_ident.remove name;
   printfn ppf "  add rsp, 8 ; deallocate var %S" name
 
-let generate_body ppf body =
+let generate_body is_toplevel ppf body =
   let open Compile_lib.ANF2 in
   let open Miniml.Parsetree in
   let module LoI = Loc_of_ident in
@@ -144,6 +159,62 @@ let generate_body ppf body =
         printfn ppf "  %s:" el_lab;
         helper dest bel;
         printfn ppf "  %s:" fin_lab
+    | CApp (AVar f, arg1, args) when is_toplevel f <> None ->
+        let expected_arity = Option.get (is_toplevel f) in
+        let formal_arity = 1 + List.length args in
+
+        printfn ppf "\t; expected_arity = %d\n\t; formal_arity = %d"
+          expected_arity formal_arity;
+        printfn ppf "\t; calling %S" f;
+        if expected_arity = formal_arity then (
+          printfn ppf "  ; expected_arity = formal_arity = %d" formal_arity;
+          let formal_locs =
+            List.init formal_arity (fun i ->
+                let name = LoI.alloc_temp () in
+                printfn ppf
+                  "  sub rsp, 8 ; allocate for argument %d (name = %s)" i name;
+                name)
+          in
+          let () =
+            List.iter2
+              (fun name arg -> helper_a (DStack_var name) arg)
+              formal_locs (arg1 :: args)
+          in
+          printfn ppf "  call %s" f;
+          List.iter (dealloc_var ppf) formal_locs;
+          printfn ppf "  mov %a, rax" pp_dest dest)
+        else if formal_arity < expected_arity then (
+          let wfname = LoI.alloc_temp () in
+          printfn ppf "  sub rsp, 8 ; allocate wrapper for func %s" wfname;
+          printfn ppf "  mov rdi, %s" f;
+          printfn ppf "  mov rsi, %d" formal_arity;
+          printfn ppf "  call rukaml_alloc_closure";
+          printfn ppf "  mov %a, eax" pp_dest (DStack_var wfname);
+          let formal_locs =
+            List.init formal_arity (fun i ->
+                let name = LoI.alloc_temp () in
+                printfn ppf
+                  "  sub rsp, 8 ; allocate for argument %d (name = %s)" i name;
+                name)
+          in
+          List.iter2
+            (fun loc arg -> helper_a (DStack_var loc) arg)
+            formal_locs (arg1 :: args);
+          printfn ppf "  mov rdi, %a" pp_dest (DStack_var wfname);
+          assert (formal_arity < 6);
+          (* See calling convention *)
+          List.iter2
+            (fun loc rname ->
+              printfn ppf "  mov %s, %a" rname pp_dest (DStack_var loc))
+            formal_locs
+            (list_take (List.length formal_locs)
+               [ "rsi"; "rdx"; "rcx"; "r8"; "r9" ]);
+          printfn ppf "  call rukaml_apply%d" formal_arity;
+          printfn ppf "  mov %a, eax" pp_dest dest;
+
+          let () = List.iter (fun name -> dealloc_var ppf name) formal_locs in
+          dealloc_var ppf wfname)
+        else failwith "Arity mismatch: over application"
     | CApp (APrimitive "=", arg1, [ arg2 ]) ->
         let left_name = LoI.alloc_temp () in
         printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
@@ -207,11 +278,20 @@ let generate_body ppf body =
         dealloc_var ppf left_name
     | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), [])
       ->
+        assert (Option.is_none (is_toplevel f));
         let aname = LoI.alloc_temp () in
         printfn ppf "  sub rsp, 8 ; allocate for var %S" aname;
         helper_a (DStack_var aname) arg;
-        (* TODO: distinguish global functions and arguments *)
-        printfn ppf "  call %s" f;
+
+        printfn ppf "  mov rdi, %a" pp_dest (DStack_var f);
+        let argc = 1 in
+        (* See calling convention *)
+        List.iter2
+          (fun loc rname ->
+            printfn ppf "mov %s, %a" rname pp_dest (DStack_var loc))
+          [ aname ]
+          (list_take argc [ "rsi"; "rdx"; "rcx"; "r8"; "r9" ]);
+        printfn ppf "  call rukaml_apply%d" 1;
         dealloc_var ppf aname;
         printfn ppf "  mov %a, rax" pp_dest dest
         (* Need to worry about caller-save registers here  *)
@@ -235,6 +315,16 @@ let generate_body ppf body =
   in
 
   helper (DReg "rax") body
+
+let put_print_newline ppf =
+  printfn ppf
+    {|print_newline:
+          mov rax, 1 ; 'write' syscall identifier
+          mov rdi, 1 ; stdout file descriptor
+          mov rsi, newline_char ; where do we take data from
+          mov rdx, 1 ; the amount of bytes to write
+          syscall
+          ret |}
 
 let put_print_hex ppf =
   printfn ppf
@@ -265,28 +355,46 @@ iterate:
 
 let use_custom_main = false
 
-let codegen anf file =
+let codegen ?(wrap_main_into_start = true) anf file =
   (* log "Going to generate code here %s %d" __FUNCTION__ __LINE__; *)
   log "ANF: @[%a@]" Compile_lib.ANF2.pp_stru anf;
+
+  let is_toplevel =
+    let hash = Hashtbl.create (List.length anf) in
+    List.iter
+      (fun (_, name, body) ->
+        let pats, _ = Compile_lib.ANF2.group_abstractions body in
+        let argc = List.length pats in
+        assert (argc >= 1 || name = "main");
+        Hashtbl.add hash name argc)
+      anf;
+
+    fun name ->
+      match Hashtbl.find hash name with
+      | n -> Some n
+      | exception Not_found -> None
+  in
 
   Stdio.Out_channel.with_file file ~f:(fun ch ->
       let ppf = Format.formatter_of_out_channel ch in
 
-      printfn ppf
-        {|section .data
+      if use_custom_main then
+        printfn ppf
+          {|section .data
             newline_char: db 10
             codes: db '0123456789abcdef' |};
       printfn ppf "section .text";
-      printfn ppf "global _start";
-      printfn ppf
-        {|print_newline:
-          mov rax, 1 ; 'write' syscall identifier
-          mov rdi, 1 ; stdout file descriptor
-          mov rsi, newline_char ; where do we take data from
-          mov rdx, 1 ; the amount of bytes to write
-          syscall
-          ret |};
-      put_print_hex ppf;
+      (* printfn ppf "global _start"; *)
+      if use_custom_main then (
+        put_print_newline ppf;
+        put_print_hex ppf);
+
+      (* externs *)
+      printfn ppf "extern rukaml_alloc_closure";
+      printfn ppf "extern rukaml_apply1";
+      printfn ppf "extern rukaml_apply2";
+      printfn ppf "extern rukaml_apply3";
+      printfn ppf "";
 
       if use_custom_main then
         printfn ppf
@@ -299,7 +407,7 @@ let codegen anf file =
               mov rdi, rax    ; rdi stores return code
               mov rax, 60     ; exit syscall
               syscall|}
-      else
+      else if wrap_main_into_start then
         printfn ppf
           {|_start:
               push    rbp
@@ -359,7 +467,7 @@ let codegen anf file =
                printfn ppf "  push rbp";
                printfn ppf "  mov  rbp, rsp";
                let rbp_goes_here = Loc_of_ident.alloc_temp () in
-               generate_body ppf body;
+               generate_body is_toplevel ppf body;
                Loc_of_ident.remove rbp_goes_here;
                Loc_of_ident.remove rsi_goes_here;
 
