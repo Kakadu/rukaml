@@ -8,7 +8,7 @@
   ;%{project_root}/llvm/llvm_backend.cmxs # issues with linksing C code
   ;%{project_root}/llvm/llvm_compiler.exe
   %{project_root}/back_amd64/amd64_compiler.exe
-  %{project_root}/compiler/rukaml_stdlib.o
+  %{project_root}/back_amd64/rukaml_stdlib.o
   ;
   ../llvm/fack.ml
   ;
@@ -17,7 +17,7 @@
 
 (cram
  (applies_to)
- (deps double.exe if.exe))
+ (deps double.exe if.exe app1.exe))
 
 (rule
  (targets double.asm double.exe)
@@ -57,3 +57,16 @@
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o fac.asm)
    (run nasm -g -F dwarf -felf64 fac.asm -o if.o)
    (run ld -o fac.exe if.o))))
+
+(rule
+ (targets app1.asm app1.exe)
+ (deps
+  (:src app1.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o app1.asm)
+   (run nasm -g -F dwarf -felf64 app1.asm -o app1.o)
+   (run gcc -o app1.exe %{stdlib} app1.o))))

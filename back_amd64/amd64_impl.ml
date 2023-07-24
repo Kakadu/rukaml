@@ -187,9 +187,9 @@ let generate_body is_toplevel ppf body =
           let wfname = LoI.alloc_temp () in
           printfn ppf "  sub rsp, 8 ; allocate wrapper for func %s" wfname;
           printfn ppf "  mov rdi, %s" f;
-          printfn ppf "  mov rsi, %d" formal_arity;
+          printfn ppf "  mov rsi, %d" expected_arity;
           printfn ppf "  call rukaml_alloc_closure";
-          printfn ppf "  mov %a, eax" pp_dest (DStack_var wfname);
+          printfn ppf "  mov %a, rax" pp_dest (DStack_var wfname);
           let formal_locs =
             List.init formal_arity (fun i ->
                 let name = LoI.alloc_temp () in
@@ -201,16 +201,17 @@ let generate_body is_toplevel ppf body =
             (fun loc arg -> helper_a (DStack_var loc) arg)
             formal_locs (arg1 :: args);
           printfn ppf "  mov rdi, %a" pp_dest (DStack_var wfname);
-          assert (formal_arity < 6);
+          printfn ppf "  mov rsi, %d" formal_arity;
+          assert (formal_arity < 5);
           (* See calling convention *)
           List.iter2
             (fun loc rname ->
               printfn ppf "  mov %s, %a" rname pp_dest (DStack_var loc))
             formal_locs
-            (list_take (List.length formal_locs)
-               [ "rsi"; "rdx"; "rcx"; "r8"; "r9" ]);
-          printfn ppf "  call rukaml_apply%d" formal_arity;
-          printfn ppf "  mov %a, eax" pp_dest dest;
+            (list_take (List.length formal_locs) [ "rdx"; "rcx"; "r8"; "r9" ]);
+          printfn ppf "  mov al, 0";
+          printfn ppf "  call rukaml_applyN";
+          printfn ppf "  mov %a, rax" pp_dest dest;
 
           let () = List.iter (fun name -> dealloc_var ppf name) formal_locs in
           dealloc_var ppf wfname)
@@ -283,18 +284,13 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  sub rsp, 8 ; allocate for var %S" aname;
         helper_a (DStack_var aname) arg;
 
+        printfn ppf "  mov rax, 0  ; no float arguments";
         printfn ppf "  mov rdi, %a" pp_dest (DStack_var f);
-        let argc = 1 in
-        (* See calling convention *)
-        List.iter2
-          (fun loc rname ->
-            printfn ppf "mov %s, %a" rname pp_dest (DStack_var loc))
-          [ aname ]
-          (list_take argc [ "rsi"; "rdx"; "rcx"; "r8"; "r9" ]);
-        printfn ppf "  call rukaml_apply%d" 1;
+        printfn ppf "  mov rsi, 1";
+        printfn ppf "  mov rdx, %a" pp_dest (DStack_var aname);
+        printfn ppf "  call rukaml_applyN";
         dealloc_var ppf aname;
         printfn ppf "  mov %a, rax" pp_dest dest
-        (* Need to worry about caller-save registers here  *)
     | CApp _ as anf ->
         printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
         printfn ppf ";;; %a" pp_c anf
@@ -391,9 +387,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
 
       (* externs *)
       printfn ppf "extern rukaml_alloc_closure";
-      printfn ppf "extern rukaml_apply1";
-      printfn ppf "extern rukaml_apply2";
-      printfn ppf "extern rukaml_apply3";
+      printfn ppf "extern rukaml_applyN";
       printfn ppf "";
 
       if use_custom_main then
@@ -434,8 +428,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
 
              (* printfn ppf "  sub rsp, %d" (8 * Loc_of_ident.size ()); *)
              (if use_custom_main && name = "main" then
-              printfn ppf
-                {|_start:
+                printfn ppf
+                  {|_start:
                     push    rbp
                     mov     rbp, rsp   ; prologue
                     push 5
@@ -451,36 +445,37 @@ let codegen ?(wrap_main_into_start = true) anf file =
                     mov rax, 60
                     xor rdi, rdi
                     syscall|}
-             else
-               let () = printfn ppf "@[<h>%s:@]" name in
+              else
+                let () = printfn ppf "GLOBAL %s" name in
+                let () = printfn ppf "@[<h>%s:@]" name in
 
-               let pats, body = ANF2.group_abstractions expr in
+                let pats, body = ANF2.group_abstractions expr in
 
-               List.iter
-                 (function
-                   | ANF2.APname name ->
-                       let n = Loc_of_ident.alloc_more () in
-                       Loc_of_ident.put name n
-                       (* printfn ppf "\t; Variable %S allocated on stack" name *))
-                 pats;
-               let rsi_goes_here = Loc_of_ident.alloc_temp () in
-               printfn ppf "  push rbp";
-               printfn ppf "  mov  rbp, rsp";
-               let rbp_goes_here = Loc_of_ident.alloc_temp () in
-               generate_body is_toplevel ppf body;
-               Loc_of_ident.remove rbp_goes_here;
-               Loc_of_ident.remove rsi_goes_here;
+                List.iter
+                  (function
+                    | ANF2.APname name ->
+                        let n = Loc_of_ident.alloc_more () in
+                        Loc_of_ident.put name n
+                        (* printfn ppf "\t; Variable %S allocated on stack" name *))
+                  pats;
+                let rsi_goes_here = Loc_of_ident.alloc_temp () in
+                printfn ppf "  push rbp";
+                printfn ppf "  mov  rbp, rsp";
+                let rbp_goes_here = Loc_of_ident.alloc_temp () in
+                generate_body is_toplevel ppf body;
+                Loc_of_ident.remove rbp_goes_here;
+                Loc_of_ident.remove rsi_goes_here;
 
-               let () =
-                 (* deallocation from stack should be done by caller  *)
-                 List.iter
-                   (function
-                     | ANF2.APname name ->
-                         Loc_of_ident.remove name (* dealloc_var ppf name *))
-                   (List.rev pats)
-               in
+                let () =
+                  (* deallocation from stack should be done by caller  *)
+                  List.iter
+                    (function
+                      | ANF2.APname name ->
+                          Loc_of_ident.remove name (* dealloc_var ppf name *))
+                    (List.rev pats)
+                in
 
-               print_epilogue ppf name);
+                print_epilogue ppf name);
              ());
       Format.pp_print_flush ppf ());
 
