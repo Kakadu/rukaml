@@ -66,7 +66,7 @@ main:
   call rukaml_alloc_closure
   mov [rsp], rax
   sub rsp, 8 ; allocate for argument 0 (name = __temp12)
-  mov qword [rsp],  11
+  mov qword [rsp],  10
   mov rdi, [8*1+rsp]
   mov rsi, 1
   mov rdx, [rsp]
@@ -76,7 +76,7 @@ main:
   add rsp, 8 ; deallocate var "__temp12"
   add rsp, 8 ; deallocate var "__temp11"
   sub rsp, 8 ; allocate for var "__temp13"
-  mov qword [rsp],  12
+  mov qword [rsp],  204
   mov rax, 0  ; no float arguments
   mov rdi, [8*1+rsp]
   mov rsi, 1

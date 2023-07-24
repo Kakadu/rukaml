@@ -61,9 +61,12 @@ end = struct
   let has_key name = Hashtbl.mem store name
 
   let lookup_exn name =
-    let saved = Hashtbl.find store name in
-    assert (!allocated >= saved);
-    !allocated - saved
+    try
+      let saved = Hashtbl.find store name in
+      assert (!allocated >= saved);
+      !allocated - saved
+    with Not_found ->
+      failwiths "Loc_of_ident.lokkup_exn: name %S is absent" name
 
   let alloc_more () =
     incr allocated;
@@ -128,6 +131,13 @@ let dealloc_var ppf name =
   Loc_of_ident.remove name;
   printfn ppf "  add rsp, 8 ; deallocate var %S" name
 
+let alloc_closure ppf name arity =
+  printfn ppf "  mov rdi, %s" name;
+  printfn ppf "  mov rsi, %d" arity;
+  printfn ppf "  call rukaml_alloc_closure"
+
+(** 
+    Argument [is_toplevel] returns None or Some arity. *)
 let generate_body is_toplevel ppf body =
   let open Compile_lib.ANF2 in
   let open Miniml.Parsetree in
@@ -303,10 +313,15 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  mov qword %a, 1" pp_dest dest
     | AConst (Miniml.Parsetree.PConst_int n) ->
         printfn ppf "  mov qword %a,  %d" pp_dest dest n
-    | AVar vname ->
-        (* We use temprarily rdx because we can't move from stack to stack *)
-        printfn ppf "  mov rdx, [rsp+%d*8] " (LoI.lookup_exn vname);
-        printfn ppf "  mov %a, rdx ; access a var %S" pp_dest dest vname
+    | AVar vname -> (
+        match is_toplevel vname with
+        | None ->
+            (* We use temprarily rdx because we can't move from stack to stack *)
+            printfn ppf "  mov rdx, [rsp+%d*8] " (LoI.lookup_exn vname);
+            printfn ppf "  mov %a, rdx ; access a var %S" pp_dest dest vname
+        | Some arity ->
+            alloc_closure ppf vname arity;
+            printfn ppf "  mov %a, rax" pp_dest dest)
     | _ -> printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__
   in
 
@@ -391,6 +406,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
       printfn ppf "";
 
       if use_custom_main then
+        (* TODO: use exit_group syscall (231)
+           https://filippo.io/linux-syscall-table/ *)
         printfn ppf
           {|_start:
               push    rbp

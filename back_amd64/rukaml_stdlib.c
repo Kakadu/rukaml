@@ -18,7 +18,7 @@
     assert(A);                   \
   } */
 
-// #define DEBUG
+#define DEBUG
 
 void myputc(int x)
 {
@@ -52,6 +52,7 @@ void *rukaml_apply1(void *f, void *arg1)
 void *rukaml_apply2(void *f, void *arg1, void *arg2)
 {
   fun8 foo = (fun8)f;
+  printf("call %s with code ptr = %" PRIx64 "\n", __func__, (uint64_t)f);
   return foo(0, 0, 0, 0, 0, 0, arg1, arg2);
 }
 
@@ -94,17 +95,26 @@ void *rukaml_field(int n, void **r)
   return r[n];
 }
 
+int64_t myadd(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t a, int64_t b)
+{
+  printf("a = %ld, b = %ld\n", a, b);
+  return a * b;
+}
+
 void *rukaml_alloc_closure(void *func, int32_t argsc)
 {
   rukaml_closure *ans = (rukaml_closure *)malloc(sizeof(rukaml_closure) + sizeof(void *) * argsc);
   //  { .code = func, .argsc = argsc }
   ans->code = func;
-  // printf("store code ptr = %" PRIx64 "\n", ans->code);
+  ans->code = &myadd;
+#ifdef DEBUG
+  printf("store code ptr = %" PRIx64 "\n", (uint64_t)(ans->code));
+#endif
   ans->argsc = argsc;
   ans->args_received = 0;
   memset(ans->args, 0, argsc * sizeof(void *));
 #ifdef DEBUG
-  printf("%s argc = %u,   %" PRIx64 "\n\n", __func__, argsc, ans);
+  printf("%s argc = %u,   %" PRIx64 "\n\n", __func__, argsc, (uint64_t)ans);
   fflush(stdout);
 #endif
   return ans;
@@ -114,8 +124,8 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
 {
   setbuf(stdout, NULL);
 #ifdef DEBUG
-  printf("%s argc = %lu, closure = %" PRIx64 "\n\n", __func__, argc, f);
-  printf("\tsaved code ptr = %" PRIx64 "\n", ((rukaml_closure *)f)->code);
+  printf("%s argc = %lu, closure = %" PRIx64 "\n\n", __func__, argc, (uint64_t)f);
+  printf("\tsaved code ptr = %" PRIx64 "\n", (uint64_t)(((rukaml_closure *)f)->code));
   fflush(stdout);
 #endif
   va_list argp;
@@ -123,7 +133,7 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
   // rukaml_closure *f_closure = copy_closure((rukaml_closure *)f);
   rukaml_closure *f_closure = f;
 #ifdef DEBUG
-  printf("\nf->arg_received = %u, f->argc = %u\n",
+  printf("\nf->arg_received = %lu, f->argc = %lu\n",
          f_closure->args_received,
          f_closure->argsc);
   fflush(stdout);
@@ -141,7 +151,7 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
     f_closure->args[f_closure->args_received++] = arg1;
   }
 #ifdef DEBUG
-  printf("\nf->arg_received = %u, f->argc = %u\n",
+  printf("\nf->arg_received = %lu, f->argc = %lu\n",
          f_closure->args_received,
          f_closure->argsc);
   fflush(stdout);
