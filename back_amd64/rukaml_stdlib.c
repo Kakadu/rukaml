@@ -19,6 +19,7 @@
   } */
 
 #define DEBUG
+#undef DEBUG
 
 void myputc(int x)
 {
@@ -45,6 +46,9 @@ void *rukaml_apply0(void *f)
 // Others will go on stack
 void *rukaml_apply1(void *f, void *arg1)
 {
+#ifdef DEBUG
+  printf("%s f = %" PRIx64 ", arg = %" PRIx64 "\n", __func__, f, arg1);
+#endif
   fun7 foo = (fun7)f;
   return foo(0, 0, 0, 0, 0, 0, arg1);
 }
@@ -106,7 +110,7 @@ void *rukaml_alloc_closure(void *func, int32_t argsc)
   rukaml_closure *ans = (rukaml_closure *)malloc(sizeof(rukaml_closure) + sizeof(void *) * argsc);
   //  { .code = func, .argsc = argsc }
   ans->code = func;
-  ans->code = &myadd;
+  // ans->code = &myadd;
 #ifdef DEBUG
   printf("store code ptr = %" PRIx64 "\n", (uint64_t)(ans->code));
 #endif
@@ -120,18 +124,19 @@ void *rukaml_alloc_closure(void *func, int32_t argsc)
   return ans;
 }
 
+#include <unistd.h>
+
 void *rukaml_applyN(void *f, int64_t argc, ...)
 {
-  setbuf(stdout, NULL);
+  write(STDERR_FILENO, "HERE\n", 5);
 #ifdef DEBUG
   printf("%s argc = %lu, closure = %" PRIx64 "\n\n", __func__, argc, (uint64_t)f);
   printf("\tsaved code ptr = %" PRIx64 "\n", (uint64_t)(((rukaml_closure *)f)->code));
-  fflush(stdout);
 #endif
   va_list argp;
   va_start(argp, argc);
-  // rukaml_closure *f_closure = copy_closure((rukaml_closure *)f);
-  rukaml_closure *f_closure = f;
+  rukaml_closure *f_closure = copy_closure((rukaml_closure *)f);
+  // rukaml_closure *f_closure = f;
 #ifdef DEBUG
   printf("\nf->arg_received = %lu, f->argc = %lu\n",
          f_closure->args_received,

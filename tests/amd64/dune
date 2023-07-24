@@ -69,4 +69,4 @@
   (progn
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o app1.asm)
    (run nasm -g -F dwarf -felf64 app1.asm -o app1.o)
-   (run gcc -o app1.exe %{stdlib} app1.o))))
+   (run gcc -g -o app1.exe %{stdlib} app1.o))))

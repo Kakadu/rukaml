@@ -136,7 +136,7 @@ let alloc_closure ppf name arity =
   printfn ppf "  mov rsi, %d" arity;
   printfn ppf "  call rukaml_alloc_closure"
 
-(** 
+(**
     Argument [is_toplevel] returns None or Some arity. *)
 let generate_body is_toplevel ppf body =
   let open Compile_lib.ANF2 in
@@ -445,8 +445,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
 
              (* printfn ppf "  sub rsp, %d" (8 * Loc_of_ident.size ()); *)
              (if use_custom_main && name = "main" then
-                printfn ppf
-                  {|_start:
+              printfn ppf
+                {|_start:
                     push    rbp
                     mov     rbp, rsp   ; prologue
                     push 5
@@ -462,37 +462,37 @@ let codegen ?(wrap_main_into_start = true) anf file =
                     mov rax, 60
                     xor rdi, rdi
                     syscall|}
-              else
-                let () = printfn ppf "GLOBAL %s" name in
-                let () = printfn ppf "@[<h>%s:@]" name in
+             else
+               let () = printfn ppf "GLOBAL %s" name in
+               let () = printfn ppf "@[<h>%s:@]" name in
 
-                let pats, body = ANF2.group_abstractions expr in
+               let pats, body = ANF2.group_abstractions expr in
 
-                List.iter
-                  (function
-                    | ANF2.APname name ->
-                        let n = Loc_of_ident.alloc_more () in
-                        Loc_of_ident.put name n
-                        (* printfn ppf "\t; Variable %S allocated on stack" name *))
-                  pats;
-                let rsi_goes_here = Loc_of_ident.alloc_temp () in
-                printfn ppf "  push rbp";
-                printfn ppf "  mov  rbp, rsp";
-                let rbp_goes_here = Loc_of_ident.alloc_temp () in
-                generate_body is_toplevel ppf body;
-                Loc_of_ident.remove rbp_goes_here;
-                Loc_of_ident.remove rsi_goes_here;
+               List.iter
+                 (function
+                   | ANF2.APname name ->
+                       let n = Loc_of_ident.alloc_more () in
+                       Loc_of_ident.put name n
+                       (* printfn ppf "\t; Variable %S allocated on stack" name *))
+                 pats;
+               let rsi_goes_here = Loc_of_ident.alloc_temp () in
+               printfn ppf "  push rbp";
+               printfn ppf "  mov  rbp, rsp";
+               let rbp_goes_here = Loc_of_ident.alloc_temp () in
+               generate_body is_toplevel ppf body;
+               Loc_of_ident.remove rbp_goes_here;
+               Loc_of_ident.remove rsi_goes_here;
 
-                let () =
-                  (* deallocation from stack should be done by caller  *)
-                  List.iter
-                    (function
-                      | ANF2.APname name ->
-                          Loc_of_ident.remove name (* dealloc_var ppf name *))
-                    (List.rev pats)
-                in
+               let () =
+                 (* deallocation from stack should be done by caller  *)
+                 List.iter
+                   (function
+                     | ANF2.APname name ->
+                         Loc_of_ident.remove name (* dealloc_var ppf name *))
+                   (List.rev pats)
+               in
 
-                print_epilogue ppf name);
+               print_epilogue ppf name);
              ());
       Format.pp_print_flush ppf ());
 

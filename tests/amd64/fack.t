@@ -12,10 +12,10 @@ $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 -
 > let foo n  = if n=0 then sum else prod
 > let main = app (foo 5) 10 20
 > EOF
+> let main = (if 0=1 then sum else prod) 10 204
   $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 --no-start -
-  > let sum a b = a+b
   > let prod a b = a * b
-  > let main = (if 0=1 then sum else prod) 10 204
+  > let main = if 0=0 then prod 10 204 else 42
   > EOF
   After ANF transformation.
   let sum a b =
