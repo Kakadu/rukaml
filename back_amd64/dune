@@ -33,3 +33,17 @@
  (libraries MiniML_amd64.backend)
  (site
   (MiniML plugins)))
+
+(rule
+ (targets rukaml_stdlib.o)
+ (deps rukaml_stdlib.c)
+ (action
+  (run
+   gcc
+   -g
+   %{deps}
+   -c
+   -o
+   %{targets}
+   ;
+   )))
