@@ -21,9 +21,9 @@
 #define DEBUG
 #undef DEBUG
 
-void myputc(int x)
+void rukaml_print_int(int x)
 {
-  printf("%d", x);
+  printf("%d\n", x);
   fflush(stdout);
 }
 
@@ -56,7 +56,9 @@ void *rukaml_apply1(void *f, void *arg1)
 void *rukaml_apply2(void *f, void *arg1, void *arg2)
 {
   fun8 foo = (fun8)f;
+#ifdef DEBUG
   printf("call %s with code ptr = %" PRIx64 "\n", __func__, (uint64_t)f);
+#endif
   return foo(0, 0, 0, 0, 0, 0, arg1, arg2);
 }
 
@@ -128,8 +130,9 @@ void *rukaml_alloc_closure(void *func, int32_t argsc)
 
 void *rukaml_applyN(void *f, int64_t argc, ...)
 {
-  write(STDERR_FILENO, "HERE\n", 5);
+
 #ifdef DEBUG
+  write(STDERR_FILENO, "HERE\n", 5);
   printf("%s argc = %lu, closure = %" PRIx64 "\n\n", __func__, argc, (uint64_t)f);
   printf("\tsaved code ptr = %" PRIx64 "\n", (uint64_t)(((rukaml_closure *)f)->code));
 #endif
