@@ -19,7 +19,7 @@
   } */
 
 #define DEBUG
-#undef DEBUG
+// #undef DEBUG
 
 void rukaml_print_int(int x)
 {

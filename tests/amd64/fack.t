@@ -14,8 +14,12 @@ $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 -
 > EOF
 > let main = (if 0=1 then sum else prod) 10 204
   $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 --no-start -
-  > let prod a b = a * b
-  > let main = if 0=0 then prod 10 204 else 42
+  > let rec fac n = if n = 1 then 1 else n * fac (n-1)
+  > let rec fack n k = if n=1 then 1 else k 1
+  > let id u = u
+  > let main =
+  >   let rez2 = fack 1 id in
+  >   0
   > EOF
   After ANF transformation.
   let sum a b =
