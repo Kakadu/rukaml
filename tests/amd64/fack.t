@@ -105,3 +105,5 @@ $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 -
   /usr/bin/ld: warning: creating DT_TEXTREL in a PIE
   $ chmod u+x program.exe && ./program.exe
   [214]
+
+  $

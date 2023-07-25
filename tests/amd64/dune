@@ -70,3 +70,15 @@
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o app1.asm)
    (run nasm -g -F dwarf -felf64 app1.asm -o app1.o)
    (run gcc -g -o app1.exe %{stdlib} app1.o))))
+
+(rule
+ (targets hack.exe)
+ (deps
+  (:src hack.asm)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run nasm -g -F dwarf -felf64 hack.asm -o hack.o)
+   (run gcc -g -o hack.exe %{stdlib} hack.o))))
