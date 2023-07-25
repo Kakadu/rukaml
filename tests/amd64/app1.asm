@@ -117,7 +117,7 @@ loop:
   mov rdx, [rsp+7*8] 
   mov [rsp], rdx ; access a var "n"
   sub rsp, 8 ; allocate for var "__temp14"
-  mov qword [rsp],  0
+  mov qword [rsp],  10
   mov rax, [8*1+rsp]
   mov rbx, [rsp]
   cmp rax, rbx

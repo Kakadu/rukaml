@@ -3,7 +3,7 @@
 
 let rec loop n j =
   let t = print n in
-  if n=0
+  if n=10
   then (let v = print 53 in 1)
   else ( loop (n+1) j)
 
