@@ -6,6 +6,19 @@
 
 (* We are using Intel syntax !! *)
 
+(* NOTE: Possible fuckups
+
+   1) Exit code is not any possible int. See https://tldp.org/LDP/abs/html/exitcodes.html
+   2) We have runtime that could call back rukaml function after full partiall application.
+   This means that SYSV calling convention clashes with stdcall-ish. So, in runtime we call
+   the rukaml function with 6 zero arguments and real ones, to make real ones to go to the
+   stack explicitly
+   3) It's easy to forget that after function prologue argments start from RSP+2*8
+   (RBP and code ptr take two words)
+   4) arguments go to the stack from rigth to the left (unexpected order)
+   5) Variadic functions should AL:=0 to say that we don't have floating arguments.
+*)
+
 let failwiths fmt = Format.kasprintf failwith fmt
 
 type config = { mutable verbose : bool }
