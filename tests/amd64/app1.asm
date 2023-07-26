@@ -19,7 +19,7 @@ fac:
   mov  rbp, rsp
   sub rsp, 8 ; allocate for var "temp1"
   sub rsp, 8 ; allocate for var "__temp3"
-  mov rdx, [rsp+5*8] 
+  mov rdx, [rsp+4*8] 
   mov [rsp], rdx ; access a var "n"
   sub rsp, 8 ; allocate for var "__temp4"
   mov qword [rsp],  1
@@ -43,7 +43,7 @@ fac:
   lab_then_19:
   sub rsp, 8 ; allocate for var "temp3"
   sub rsp, 8 ; allocate for var "__temp5"
-  mov rdx, [rsp+6*8] 
+  mov rdx, [rsp+5*8] 
   mov [rsp], rdx ; access a var "n"
   mov rax, [rsp]
   dec rax
@@ -71,7 +71,7 @@ fac:
   add rsp, 8 ; deallocate var "__temp6"
   sub rsp, 8 ; allocate for var "temp5"
   sub rsp, 8 ; allocate for var "__temp8"
-  mov rdx, [rsp+7*8] 
+  mov rdx, [rsp+8*8] 
   mov [rsp], rdx ; access a var "u"
   mov rax, 0  ; no float arguments
   mov rdi, [8*2+rsp]
@@ -84,7 +84,7 @@ fac:
   mov rdx, [rsp+1*8] 
   mov [rsp], rdx ; access a var "temp5"
   sub rsp, 8 ; allocate for var "__temp10"
-  mov rdx, [rsp+9*8] 
+  mov rdx, [rsp+8*8] 
   mov [rsp], rdx ; access a var "n"
   mov rax, [8*1+rsp]
   mov rbx, [rsp]
@@ -106,7 +106,7 @@ loop:
   push rbp
   mov  rbp, rsp
   sub rsp, 8 ; allocate for var "temp7"
-  mov rdi, [8*4+rsp]
+  mov rdi, [8*3+rsp]
   call rukaml_print_int ; short
   mov [rsp], rax
   sub rsp, 8 ; allocate for var "t"
@@ -114,7 +114,7 @@ loop:
   mov [rsp], rdx ; access a var "temp7"
   sub rsp, 8 ; allocate for var "temp8"
   sub rsp, 8 ; allocate for var "__temp13"
-  mov rdx, [rsp+7*8] 
+  mov rdx, [rsp+6*8] 
   mov [rsp], rdx ; access a var "n"
   sub rsp, 8 ; allocate for var "__temp14"
   mov qword [rsp],  10
@@ -150,7 +150,7 @@ loop:
   lab_then_23:
   sub rsp, 8 ; allocate for var "temp10"
   sub rsp, 8 ; allocate for var "__temp16"
-  mov rdx, [rsp+8*8] 
+  mov rdx, [rsp+7*8] 
   mov [rsp], rdx ; access a var "n"
   sub rsp, 8 ; allocate for var "__temp17"
   mov qword [rsp],  1
@@ -181,7 +181,7 @@ loop:
   add rsp, 8 ; deallocate var "__temp19"
   add rsp, 8 ; deallocate var "__temp18"
   sub rsp, 8 ; allocate for var "__temp20"
-  mov rdx, [rsp+8*8] 
+  mov rdx, [rsp+9*8] 
   mov [rsp], rdx ; access a var "j"
   mov rax, 0  ; no float arguments
   mov rdi, [8*1+rsp]

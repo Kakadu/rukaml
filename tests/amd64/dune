@@ -32,7 +32,7 @@
     -o
     double.asm)
    (run nasm -g -F dwarf -felf64 double.asm -o double.o)
-   (run ld -o double.exe double.o))))
+   (run gcc -g -o double.exe double.o))))
 
 (rule
  (targets if.asm if.exe)
@@ -44,19 +44,33 @@
   (progn
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o if.asm)
    (run nasm -g -F dwarf -felf64 if.asm -o if.o)
-   (run ld -o if.exe if.o))))
+   (run gcc -g -o if.exe if.o))))
 
 (rule
  (targets fac.asm fac.exe)
  (deps
-  (:src fac.ml))
+  (:src fac.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
   (progn
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o fac.asm)
-   (run nasm -g -F dwarf -felf64 fac.asm -o if.o)
-   (run ld -o fac.exe if.o))))
+   (run nasm -g -F dwarf -felf64 fac.asm -o fac.o)
+   (run gcc -g -o fac.exe %{stdlib} fac.o))))
+
+(rule
+ (targets fack.asm fack.exe)
+ (deps
+  (:src fack.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o fack.asm)
+   (run nasm -g -F dwarf -felf64 fack.asm -o fack.o)
+   (run gcc -g -o fack.exe %{stdlib} fack.o))))
 
 (rule
  (targets app1.asm app1.exe)
