@@ -59,8 +59,7 @@ void *rukaml_apply2(void *f, void *arg1, void *arg2)
 #ifdef DEBUG
   printf("call %s with code ptr = %" PRIx64 "\n", __func__, (uint64_t)f);
 #endif
-  return foo(0, 0, 0, 0, 0, 0, arg2, arg1);
-  // TODO: Additional arguments are right to left!!
+  return foo(0, 0, 0, 0, 0, 0, arg1, arg2);
 }
 
 void *rukaml_apply3(void *f, void *arg1, void *arg2, void *arg3)

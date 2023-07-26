@@ -202,9 +202,10 @@ let generate_body is_toplevel ppf body =
                 name)
           in
           let () =
-            List.iter2
-              (fun name arg -> helper_a (DStack_var name) arg)
-              formal_locs (arg1 :: args)
+            List.rev (arg1 :: args)
+            |> List.iter2
+                 (fun name arg -> helper_a (DStack_var name) arg)
+                 formal_locs
           in
           printfn ppf "  call %s" f;
           List.iter (dealloc_var ppf) formal_locs;
@@ -487,13 +488,13 @@ let codegen ?(wrap_main_into_start = true) anf file =
 
                let pats, body = ANF2.group_abstractions expr in
 
-               List.iter
-                 (function
-                   | ANF2.APname name ->
-                       let n = Loc_of_ident.alloc_more () in
-                       Loc_of_ident.put name n
-                       (* printfn ppf "\t; Variable %S allocated on stack" name *))
-                 pats;
+               (* We are doing reverse to be more look like UNIX calling conversion.
+                  So the 1st argument is closer to the top of the stach than the last arg
+               *)
+               List.rev pats
+               |> List.iter (function ANF2.APname name ->
+                      let n = Loc_of_ident.alloc_more () in
+                      Loc_of_ident.put name n);
                let rsi_goes_here = Loc_of_ident.alloc_temp () in
                printfn ppf "  push rbp";
                printfn ppf "  mov  rbp, rsp";
