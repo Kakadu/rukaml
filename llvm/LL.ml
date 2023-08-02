@@ -6,7 +6,7 @@ module type S = sig
   val module_ : Llvm.llmodule
   val builder : Llvm.llbuilder
   val build_store : Llvm.llvalue -> Llvm.llvalue -> Llvm.llvalue
-  val build_call : ?name:string -> llvalue -> llvalue list -> llvalue
+  val build_call : ?name:string -> lltype -> llvalue -> llvalue list -> llvalue
   val lookup_func_exn : string -> llvalue
   val has_toplevel_func : string -> bool
   val build_add : ?name:string -> llvalue -> llvalue -> llvalue
@@ -40,8 +40,10 @@ let make context builder module_ =
     let module_ = module_
     let build_store a b = Llvm.build_store a b builder
 
-    let build_call ?(name = "") f args =
-      build_call f (Array.of_list args) name builder
+    let build_call ?(name = "") fntyp f args =
+      build_call2 fntyp f  (Array.of_list args) name builder
+      (* build_call f  (Array.of_list args) name builder *)
+      [@@ocaml.warnerror "-3"]
 
     let has_toplevel_func fname =
       match lookup_function fname module_ with Some _ -> true | None -> false

@@ -112,7 +112,6 @@
     %3 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %2, i64 1, i64 4)
     ret i64 %3
   }
-
   $ clang-14 fack.ll ../../compiler/rukaml_stdlib.o -o fack.exe
   warning: overriding the module target triple with x86_64-pc-linux-gnu [-Woverride-module]
   1 warning generated.
@@ -120,7 +119,7 @@
   [24]
 
 
-  $ cat << EOF | ../../llvm/llvm_compiler.exe -o fack.ll
+  $ cat << EOF | ../../llvm/llvm_compiler.exe -o fack.ll #-vllvm
   > let rec fack n k =
   >   if n=1 then k 1 else fack (n-1) (fun m -> k (n*m))
   > let main = fack 5 (fun x -> x)

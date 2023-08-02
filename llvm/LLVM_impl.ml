@@ -2,6 +2,8 @@ open Compile_lib
 open ANF2
 open Miniml
 
+[@@@ocaml.warnerror "-3"]
+
 let failwiths fmt = Format.kasprintf failwith fmt
 
 type config = { mutable verbose : bool }
@@ -15,10 +17,27 @@ let log fmt =
 let set_verbose b = cfg.verbose <- b
 (* log "setting verbose output of LLVM_impl" *)
 
-let on_vb (module LL : LL.S) : ANF2.vb -> _ =
+module type TOP_DEFS = sig
+  val add : string -> Llvm.lltype -> unit
+  val find_typ_exn : string -> Llvm.lltype
+end
+
+module String_map = Map.Make (String)
+
+module Top_defs = struct
+  let store : Llvm.lltype String_map.t ref = ref String_map.empty
+  let add name typ = store := String_map.add name typ !store
+  let find_typ_exn name = String_map.find name !store
+end
+
+let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF2.vb -> _ =
  fun (_flg, name, body) ->
   log "vb %s" name;
 
+  let top_look_exn name =
+    try (LL.lookup_func_exn name, TD.find_typ_exn name)
+    with Not_found -> failwiths "Toplevel name %S not found" name
+  in
   (* It looks like number of arguments is a number of abstractions.
      because we can return functions; for example `(fun _ -> fac)` *)
   let virt_of_named_hash : (_, Llvm.llvalue) Hashtbl.t = Hashtbl.create 23 in
@@ -43,19 +62,22 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
     | AVar name when Hashtbl.mem virt_of_named_hash name -> virt_of_name name
     | AVar name ->
         assert (LL.has_toplevel_func name);
-        let alloc_closure = LL.lookup_func_exn "rukaml_alloc_closure" in
-        let f = LL.lookup_func_exn name in
-        let formal_params_count = LL.params f |> Array.length in
+        let alloc_closure, typ = top_look_exn "rukaml_alloc_closure" in
+
+        log "%s %d" __FILE__ __LINE__;
+        log "typ of alloc_closure = %S" (Llvm.string_of_lltype typ);
         let final_args =
+          let f = LL.lookup_func_exn name in
+          let formal_params_count = LL.params f |> Array.length in
           let ptr = LL.build_pointercast f i64_typ in
           [ ptr; LL.const_int i64_typ formal_params_count ]
         in
-        LL.build_call alloc_closure final_args
+        LL.build_call typ alloc_closure final_args
     | ATuple (a, b, []) ->
         let a = gen_a a in
         let b = gen_a b in
-        let alloc = LL.lookup_func_exn "rukaml_alloc_pair" in
-        LL.build_call alloc [ a; b ]
+        let alloc, typ = top_look_exn "rukaml_alloc_pair" in
+        LL.build_call typ alloc [ a; b ]
         (* assert false *)
     | anf ->
         Format.eprintf "ANF: %a\n%!" ANF2.pp_a anf;
@@ -73,14 +95,15 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
     | CAtom a -> gen_a a
     | CApp (APrimitive "field", AConst (PConst_int n), [ what ]) ->
         let source = gen_a what in
-        let accessor = LL.lookup_func_exn "rukaml_field" in
-        LL.build_call accessor [ LL.const_int i64_typ n; source ]
-    | CApp (AVar f, arg1, args)
-      when LL.has_toplevel_func f && is_fully_applied f (arg1 :: args) ->
+        let accessor, accessor_typ = top_look_exn "rukaml_field" in
+        LL.build_call accessor_typ accessor [ LL.const_int i64_typ n; source ]
+    | CApp (AVar fname, arg1, args)
+      when LL.has_toplevel_func fname && is_fully_applied fname (arg1 :: args)
+      ->
         (* Full appication of toplevel function. We can omit primitives for partial application and make a direct call  *)
-        let f = LL.lookup_func_exn f in
+        let f, ftyp = top_look_exn fname in
         let final_args = List.map gen_a (arg1 :: args) in
-        LL.build_call f final_args
+        LL.build_call ftyp f final_args
         (* Format.eprintf "ANF: %a\n%!" ANF2.pp_c anf;
            failwiths "Unsupported case %s %d" __FUNCTION__ __LINE__ *)
     | CApp (AVar f, arg1, args) when LL.has_toplevel_func f ->
@@ -92,9 +115,9 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
         let f = LL.lookup_func_exn f in
 
         let fptr =
-          let alloc_closure = LL.lookup_func_exn "rukaml_alloc_closure" in
+          let alloc_closure, alloc_typ = top_look_exn "rukaml_alloc_closure" in
           let formal_argsc = LL.params f |> Array.length in
-          LL.build_call alloc_closure
+          LL.build_call alloc_typ alloc_closure
             [
               LL.build_pointercast f i64_typ; LL.const_int i64_typ formal_argsc;
             ]
@@ -104,11 +127,12 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
           :: LL.const_int i64_typ (List.length generated_args)
           :: generated_args
         in
-        let applyN = LL.lookup_func_exn "rukaml_applyN" in
+        let applyN, typ = top_look_exn "rukaml_applyN" in
 
         (* log "%s %d. applyN  =  %s" __FUNCTION__ __LINE__
            (Llvm.string_of_llvalue applyN); *)
-        let rez = LL.build_call applyN final_args in
+        log "%s %d" __FILE__ __LINE__;
+        let rez = LL.build_call typ applyN final_args in
         (* let (_ : Llvm.llvalue) =
              LL.set_metadata rez "result_of_partial_application" ""
            in *)
@@ -120,8 +144,8 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
           :: LL.const_int i64_typ (List.length generated_args)
           :: generated_args
         in
-        let applyN = LL.lookup_func_exn "rukaml_applyN" in
-        let rez = LL.build_call applyN final_args in
+        let applyN, typ = top_look_exn "rukaml_applyN" in
+        let rez = LL.build_call typ applyN final_args in
         (* let (_ : Llvm.llvalue) =
              LL.set_metadata rez "result_of_application_of_localvar" ""
            in *)
@@ -206,7 +230,8 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
   Llvm.position_at_end bb LL.builder;
 
   let __ _ =
-    LL.build_call LL.(lookup_func_exn "myputc") [ Llvm.const_int i64_typ 0x30 ]
+    let f = LL.lookup_func_exn "myputc" in
+    LL.build_call (TD.find_typ_exn "myputc") f [ Llvm.const_int i64_typ 0x30 ]
   in
   let return_val = gen body in
   let (_ : Llvm.llvalue) = Llvm.build_ret return_val LL.builder in
@@ -217,7 +242,7 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
 
   (* Validate the generated code, checking for consistency. *)
   (match Llvm_analysis.verify_function the_function with
-  | true -> ()
+  | true -> TD.add name fun_typ
   | false ->
       Stdlib.Format.printf "invalid function generated\n%s\n"
         (Llvm.string_of_llvalue the_function);
@@ -232,100 +257,100 @@ let codegen : ANF2.vb list -> _ =
   Format.printf "%a\n%!" Compile_lib.ANF2.pp_stru anf;
 
   let context = Llvm.global_context () in
+  (* Llvm.set_opaque_pointers context false; *)
   let builder = Llvm.builder context in
   let () = assert (Llvm_executionengine.initialize ()) in
   let the_module = Llvm.create_module context "main" in
-  let the_execution_engine = Llvm_executionengine.create the_module in
-  let the_fpm = Llvm.PassManager.create_function the_module in
+  (* let the_execution_engine = Llvm_executionengine.create the_module in *)
+  (* let the_fpm = Llvm.PassManager.create_function the_module in *)
   let module LL = (val LL.make context builder the_module) in
-  let i64_type = Llvm.i64_type context in
-  (* let i32_type = Llvm.i32_type context in *)
-  let lama_int_type = i64_type in
-  let lama_ptr_type = Llvm.pointer_type lama_int_type in
+  let lama_int_type = Llvm.i64_type LL.context in
 
-  let prepare_main () =
-    let ft =
-      (* TODO main has special args *)
-      let args = Array.make 0 lama_ptr_type in
-      (* Llvm.function_type lama_ptr_type args *)
-      Llvm.function_type lama_int_type args
-    in
-    let the_function = Llvm.declare_function "main" ft the_module in
-    (* Set names for all arguments. *)
-    (* Base.Array.iteri (Llvm.params the_function) ~f:(fun i a ->
-        let name = List.nth args i in
-        Llvm.set_value_name name a;
-        Base.Hashtbl.add_exn named_values ~key:name ~data:a); *)
-    (* Create a new basic block to start insertion into. *)
-    let bb = Llvm.append_block context "entry" the_function in
-    Llvm.position_at_end bb builder;
-    (* Add all arguments to the symbol table and create their allocas. *)
-    (* Finish off the function. *)
-    let return_val =
-      (* let temp = Llvm.build_alloca lama_ptr_type "a" builder in
-         let body = codegen_expr body in
-         (* let body = Llvm.build_inttoptr body lama_ptr_type "aa" builder in *)
-         let _ = Llvm.build_store body temp builder in
-         let tt = Llvm.build_load temp "b" builder in *)
-      let c = Llvm.const_int lama_int_type 0x30 in
-      (* let __ () =
-           Llvm.(
-             build_call
-               (lookup_function "printf" the_module |> Option.get)
-               [| const_stringz context "%d"; c |])
-             "" builder
-         in *)
-      let _ = LL.build_call LL.(lookup_func_exn "myputc") [ c ] in
+  (* let lama_ptr_type = Llvm.pointer_type2 context in *)
 
-      Llvm.const_int lama_int_type 0
-    in
-    let (_ : Llvm.llvalue) = Llvm.build_ret return_val builder in
-    (* Validate the generated code, checking for consistency. *)
-    (* Llvm.dump_module the_module; *)
-    (* log "%s %d" __FILE__ __LINE__; *)
-    (match Llvm_analysis.verify_function the_function with
-    | true -> ()
-    | false ->
-        Stdlib.Format.printf "invalid function generated\n%s\n"
-          (Llvm.string_of_llvalue the_function);
-        Llvm_analysis.assert_valid_function the_function);
-    (* Optimize the function. *)
-    let (_ : bool) = Llvm.PassManager.run_function the_function the_fpm in
-    (* Llvm.dump_value the_function; *)
-    ()
-  in
+  (* let prepare_main () =
+       let ft =
+         (* TODO main has special args *)
+         let args = Array.make 0 lama_ptr_type in
+         (* Llvm.function_type lama_ptr_type args *)
+         Llvm.function_type lama_int_type args
+       in
+       let the_function = Llvm.declare_function "main" ft the_module in
+       (* Set names for all arguments. *)
+       (* Base.Array.iteri (Llvm.params the_function) ~f:(fun i a ->
+           let name = List.nth args i in
+           Llvm.set_value_name name a;
+           Base.Hashtbl.add_exn named_values ~key:name ~data:a); *)
+       (* Create a new basic block to start insertion into. *)
+       let bb = Llvm.append_block context "entry" the_function in
+       Llvm.position_at_end bb builder;
+       (* Add all arguments to the symbol table and create their allocas. *)
+       let return_val =
+         let c = Llvm.const_int lama_int_type 0x30 in
+         let _ =
+           let f = LL.lookup_func_exn "myputc" in
+           LL.build_call (Llvm.type_of f) f [ c ]
+         in
+         Llvm.const_int lama_int_type 0
+       in
+       let (_ : Llvm.llvalue) = Llvm.build_ret return_val builder in
+       (* Validate the generated code, checking for consistency. *)
+       (match Llvm_analysis.verify_function the_function with
+       | true -> ()
+       | false ->
+           Stdlib.Format.printf "invalid function generated\n%s\n"
+             (Llvm.string_of_llvalue the_function);
+           Llvm_analysis.assert_valid_function the_function);
+       (* Optimize the function. *)
+       let (_ : bool) = Llvm.PassManager.run_function the_function the_fpm in
+       ()
+     in *)
   let _ =
-    Llvm.declare_function "myputc"
-      (Llvm.function_type (Llvm.void_type context) [| lama_int_type |])
-      the_module
+    let name = "myputc" in
+    let typ = Llvm.function_type (Llvm.void_type context) [| lama_int_type |] in
+    Top_defs.add name typ;
+    Llvm.declare_function name typ the_module
   in
   let _ =
     (* void* lama_applyN(void* f, int32_t, ...) *)
-    Llvm.declare_function "rukaml_applyN"
-      (Llvm.var_arg_function_type lama_int_type
-         [| lama_int_type; lama_int_type |])
-      the_module
+    let name = "rukaml_applyN" in
+    let typ =
+      Llvm.var_arg_function_type lama_int_type
+        [| lama_int_type; lama_int_type |]
+    in
+    Top_defs.add name typ;
+    Llvm.declare_function name typ the_module
   in
   let _ =
-    Llvm.declare_function "rukaml_alloc_closure"
-      (Llvm.function_type lama_int_type [| lama_int_type; lama_int_type |])
-      the_module
+    let name = "rukaml_alloc_closure" in
+    let typ =
+      Llvm.function_type lama_int_type [| lama_int_type; lama_int_type |]
+    in
+    Top_defs.add name typ;
+    Llvm.declare_function name typ the_module
   in
   let _ =
-    Llvm.declare_function "rukaml_alloc_pair"
-      (Llvm.function_type lama_int_type [| lama_int_type; lama_int_type |])
-      the_module
+    let name = "rukaml_alloc_pair" in
+    let typ =
+      Llvm.function_type lama_int_type [| lama_int_type; lama_int_type |]
+    in
+    Top_defs.add name typ;
+    Llvm.declare_function name typ the_module
   in
 
   let _ =
-    Llvm.declare_function "rukaml_field"
+    let name = "rukaml_field" in
+    let typ =
       (* TODO: Should first argument be untagged?  *)
-      (Llvm.function_type lama_int_type [| lama_int_type; lama_int_type |])
-      the_module
+      Llvm.function_type lama_int_type [| lama_int_type; lama_int_type |]
+    in
+    Top_defs.add name typ;
+    Llvm.declare_function name typ the_module
   in
   (* prepare_main (); *)
-  List.iter (on_vb (module LL)) anf;
+  List.iter (on_vb (module LL) (module Top_defs : TOP_DEFS)) anf;
 
   Llvm.print_module out_file the_module;
+  Llvm.dispose_module the_module;
 
   Result.ok ()
