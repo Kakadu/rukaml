@@ -21,6 +21,51 @@
 #define DEBUG
 #undef DEBUG
 
+const int HEAP_SIZE = 160;
+struct gc_data
+{
+  uint64_t ebp;
+  void *main_bank;
+  void *main_bank_fin;
+  void *backup_bank;
+  int allocated_words;
+};
+
+static struct gc_data GC;
+
+void rukaml_initialize(uint64_t ebp)
+{
+  GC.ebp = ebp;
+  printf("%s. EBP=0x%lX\n", __func__, GC.ebp);
+  const uint64_t size = sizeof(void *) * HEAP_SIZE;
+  GC.main_bank = malloc(size);
+  GC.main_bank_fin = GC.main_bank + size;
+  printf("main bank: 0x%lX..0x%lX\n", GC.main_bank, GC.main_bank_fin);
+  GC.backup_bank = malloc(sizeof(void *) * HEAP_SIZE);
+  GC.allocated_words = 0;
+}
+
+void rukaml_gc_compact(uint64_t rsp)
+{
+  assert(GC.ebp > rsp);
+  printf("%s. EBP=0x%lX, RSP=0x%lX\n", __func__, GC.ebp, rsp);
+  printf("stack width = 0x%lX / 8\n", GC.ebp - rsp);
+
+  uint64_t cur = GC.ebp;
+  while (cur > rsp)
+  {
+    // looking for pointers, that are in the current bank
+    int64_t obj = *((uint64_t *)cur);
+    // printf("obj = 0x%lX, addr = 0x%lX\n", obj, cur);
+    cur -= 8;
+
+    if (GC.main_bank <= obj && obj < GC.main_bank_fin)
+    {
+      printf("0x%lX a candidate?\n", obj);
+    }
+  }
+}
+
 void rukaml_print_int(int x)
 {
   printf("%d\n", x);
@@ -89,10 +134,19 @@ rukaml_closure *copy_closure(rukaml_closure *src)
 
 void *rukaml_alloc_pair(void *l, void *r)
 {
-  void **rez = malloc(3 * sizeof(void *));
+  if (GC.allocated_words + 3 > HEAP_SIZE)
+  {
+    fprintf(stderr, "Not enough memory\n");
+    exit(1);
+  }
+  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
+  // void **rez = malloc(3 * sizeof(void *));
+  GC.allocated_words += 3;
+  rez[0] = 0;
   (rez)[0] = 0; // tag
   (rez)[1] = l;
   (rez)[2] = r;
+  printf("A pair %lX created. Allocated words = %u\n", rez + 1, GC.allocated_words);
   return rez + 1;
 }
 

@@ -1,5 +1,5 @@
 (cram
- (applies_to run fac fib if fack print)
+ (applies_to run fac fib if fack print tuples)
  (deps
   (package MiniML)
   (package MiniML_amd64)

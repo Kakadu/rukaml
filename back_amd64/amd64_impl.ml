@@ -333,10 +333,20 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  call rukaml_applyN";
         dealloc_var ppf aname;
         printfn ppf "  mov %a, rax" pp_dest dest
+    | CApp (APrimitive "field", AConst (PConst_int n), [ (AVar _ as cont) ]) ->
+        helper_a (DReg "rsi") cont;
+        printfn ppf "  mov rdi, %d" n;
+        printfn ppf "  call rukaml_field";
+        printfn ppf "  mov %a, rax" pp_dest dest
+    | CApp (AVar "gc_compact", AUnit, []) ->
+        printfn ppf "  mov rdi, rsp";
+        printfn ppf "  mov rsi, 0";
+        printfn ppf "  call rukaml_gc_compact"
+        (* printfn ppf "  mov qword %a, 0" pp_dest dest *)
+    | CAtom atom -> helper_a dest atom
     | CApp _ as anf ->
         printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
         printfn ppf ";;; %a" pp_c anf
-    | CAtom atom -> helper_a dest atom
     | rest ->
         printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
         printfn ppf "; @[<h>%a@]" pp_c rest
@@ -354,7 +364,15 @@ let generate_body is_toplevel ppf body =
         | Some arity ->
             alloc_closure ppf vname arity;
             printfn ppf "  mov %a, rax" pp_dest dest)
-    | _ -> printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__
+    | ATuple (a, b, []) ->
+        helper_a (DReg "rdi") a;
+        helper_a (DReg "rsi") b;
+        printfn ppf "  call rukaml_alloc_pair";
+        printfn ppf "  mov %a, rax" pp_dest dest
+    | AUnit -> printfn ppf "mov qword %a, 0" pp_dest dest
+    | atom ->
+        printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
+        printfn ppf ";;; @[`%a`@]" pp_a atom
   in
 
   helper (DReg "rax") body
@@ -433,9 +451,17 @@ let codegen ?(wrap_main_into_start = true) anf file =
         put_print_hex ppf);
 
       (* externs *)
-      printfn ppf "extern rukaml_alloc_closure";
-      printfn ppf "extern rukaml_print_int";
-      printfn ppf "extern rukaml_applyN";
+      List.iter (printfn ppf "extern %s")
+        [
+          "rukaml_alloc_closure";
+          "rukaml_print_int";
+          "rukaml_applyN";
+          "rukaml_field";
+          (* printfn ppf "extern rukaml_alloc_tuple"; *)
+          "rukaml_alloc_pair";
+          "rukaml_initialize";
+          "rukaml_gc_compact";
+        ];
       printfn ppf "";
 
       if use_custom_main then
@@ -478,8 +504,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
 
              (* printfn ppf "  sub rsp, %d" (8 * Loc_of_ident.size ()); *)
              (if use_custom_main && name = "main" then
-              printfn ppf
-                {|_start:
+                printfn ppf
+                  {|_start:
                     push    rbp
                     mov     rbp, rsp   ; prologue
                     push 5
@@ -495,37 +521,40 @@ let codegen ?(wrap_main_into_start = true) anf file =
                     mov rax, 60
                     xor rdi, rdi
                     syscall|}
-             else
-               let () = printfn ppf "GLOBAL %s" name in
-               let () = printfn ppf "@[<h>%s:@]" name in
+              else
+                let () = printfn ppf "GLOBAL %s" name in
+                let () = printfn ppf "@[<h>%s:@]" name in
 
-               let pats, body = ANF2.group_abstractions expr in
+                let pats, body = ANF2.group_abstractions expr in
 
-               (* We are doing reverse to be more look like UNIX calling conversion.
-                  So the 1st argument is closer to the top of the stach than the last arg
-               *)
-               List.rev pats
-               |> List.iter (function ANF2.APname name ->
-                      let n = Loc_of_ident.alloc_more () in
-                      Loc_of_ident.put name n);
-               let rsi_goes_here = Loc_of_ident.alloc_temp () in
-               printfn ppf "  push rbp";
-               printfn ppf "  mov  rbp, rsp";
-               let rbp_goes_here = Loc_of_ident.alloc_temp () in
-               generate_body is_toplevel ppf body;
-               Loc_of_ident.remove rbp_goes_here;
-               Loc_of_ident.remove rsi_goes_here;
+                (* We are doing reverse to be more look like UNIX calling conversion.
+                   So the 1st argument is closer to the top of the stach than the last arg
+                *)
+                List.rev pats
+                |> List.iter (function ANF2.APname name ->
+                       let n = Loc_of_ident.alloc_more () in
+                       Loc_of_ident.put name n);
+                let rsi_goes_here = Loc_of_ident.alloc_temp () in
+                printfn ppf "  push rbp";
+                printfn ppf "  mov  rbp, rsp";
+                if name = "main" then (
+                  printfn ppf "mov rdi, rsp";
+                  printfn ppf "call rukaml_initialize");
+                let rbp_goes_here = Loc_of_ident.alloc_temp () in
+                generate_body is_toplevel ppf body;
+                Loc_of_ident.remove rbp_goes_here;
+                Loc_of_ident.remove rsi_goes_here;
 
-               let () =
-                 (* deallocation from stack should be done by caller  *)
-                 List.iter
-                   (function
-                     | ANF2.APname name ->
-                         Loc_of_ident.remove name (* dealloc_var ppf name *))
-                   (List.rev pats)
-               in
+                let () =
+                  (* deallocation from stack should be done by caller  *)
+                  List.iter
+                    (function
+                      | ANF2.APname name ->
+                          Loc_of_ident.remove name (* dealloc_var ppf name *))
+                    (List.rev pats)
+                in
 
-               print_epilogue ppf name);
+                print_epilogue ppf name);
              ());
       Format.pp_print_flush ppf ());
 
