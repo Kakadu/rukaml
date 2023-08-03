@@ -21,14 +21,28 @@
 #define DEBUG
 #undef DEBUG
 
+#define HEADER(size, tag) ((size << 10) + (tag % 256))
+#define SIZE(ptr) (*((uint64_t *)ptr - 1) >> 10)
+#define TAG(ptr) (*((uint64_t *)ptr) & 0xFF)
+#define FIELD(ptr, n) ((uint64_t *)ptr + n)
+
+// normal 00, gray 01, black 11
+#define MAKE_WHITE(ptr) (*ptr = (*ptr & ~(0b11 << 8)))
+#define MAKE_GRAY(ptr) (*ptr = (*ptr | (0b01 << 8)))
+#define MAKE_BLACK(ptr) (*ptr = (*ptr | (0b11 << 8)))
+
 const int HEAP_SIZE = 160;
+const uint8_t Tuple_tag = 0;
+const uint8_t Forward_tag = 250;
+
 struct gc_data
 {
   uint64_t ebp;
   void *main_bank;
   void *main_bank_fin;
   void *backup_bank;
-  int allocated_words;
+  void *backup_bank_fin;
+  uint64_t allocated_words;
 };
 
 static struct gc_data GC;
@@ -40,9 +54,39 @@ void rukaml_initialize(uint64_t ebp)
   const uint64_t size = sizeof(void *) * HEAP_SIZE;
   GC.main_bank = malloc(size);
   GC.main_bank_fin = GC.main_bank + size;
-  printf("main bank: 0x%lX..0x%lX\n", GC.main_bank, GC.main_bank_fin);
+  printf("main bank: 0x%lX..0x%lX\n", (uint64_t)GC.main_bank, (uint64_t)GC.main_bank_fin);
   GC.backup_bank = malloc(sizeof(void *) * HEAP_SIZE);
   GC.allocated_words = 0;
+}
+
+static bool is_old_bank(uint64_t *ptr)
+{
+  return (uint64_t)GC.main_bank <= ptr && ptr < (uint64_t)GC.main_bank_fin;
+}
+
+static bool is_backup_bank(uint64_t *ptr)
+{
+  return (uint64_t)GC.backup_bank <= ptr && ptr < (uint64_t)GC.backup_bank_fin;
+}
+
+void dfs(uint64_t *allocated, uint64_t *root)
+{
+  if (is_backup_bank(root))
+    return;
+  assert(is_old_bank(root));
+  uint64_t size = SIZE(root);
+  uint8_t tag = TAG(root);
+  if (tag == Forward_tag)
+    return;
+
+  uint64_t *new_loc = GC.backup_bank;
+  *new_loc = HEADER(size, tag);
+  *allocated += size + 1;
+  printf("Copying %lX to %lX\n", root, new_loc);
+  *(root - 1) = new_loc - 1;
+
+  for (uint8_t i = 0; i < size; ++i)
+    dfs(allocated, FIELD(root, i));
 }
 
 void rukaml_gc_compact(uint64_t rsp)
@@ -52,6 +96,8 @@ void rukaml_gc_compact(uint64_t rsp)
   printf("stack width = 0x%lX / 8\n", GC.ebp - rsp);
 
   uint64_t cur = GC.ebp;
+  uint64_t new_size = 0;
+
   while (cur > rsp)
   {
     // looking for pointers, that are in the current bank
@@ -59,9 +105,10 @@ void rukaml_gc_compact(uint64_t rsp)
     // printf("obj = 0x%lX, addr = 0x%lX\n", obj, cur);
     cur -= 8;
 
-    if (GC.main_bank <= obj && obj < GC.main_bank_fin)
+    if ((uint64_t)GC.main_bank <= obj && obj < (uint64_t)GC.main_bank_fin)
     {
       printf("0x%lX a candidate?\n", obj);
+      dfs(&new_size, (uint64_t *)obj);
     }
   }
 }
@@ -142,11 +189,11 @@ void *rukaml_alloc_pair(void *l, void *r)
   uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
   // void **rez = malloc(3 * sizeof(void *));
   GC.allocated_words += 3;
-  rez[0] = 0;
+  rez[0] = HEADER(2, Tuple_tag);
   (rez)[0] = 0; // tag
   (rez)[1] = l;
   (rez)[2] = r;
-  printf("A pair %lX created. Allocated words = %u\n", rez + 1, GC.allocated_words);
+  printf("A pair %lX created. Allocated words = %u\n", (uint64_t)(rez + 1), GC.allocated_words);
   return rez + 1;
 }
 
