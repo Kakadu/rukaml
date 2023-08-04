@@ -342,7 +342,10 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  mov rdi, rsp";
         printfn ppf "  mov rsi, 0";
         printfn ppf "  call rukaml_gc_compact"
-        (* printfn ppf "  mov qword %a, 0" pp_dest dest *)
+    | CApp (AVar "gc_stats", AUnit, []) ->
+        printfn ppf "  mov rdi, 0";
+        printfn ppf "  mov rsi, 0";
+        printfn ppf "  call rukaml_gc_print_stats"
     | CAtom atom -> helper_a dest atom
     | CApp _ as anf ->
         printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
@@ -461,6 +464,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
           "rukaml_alloc_pair";
           "rukaml_initialize";
           "rukaml_gc_compact";
+          "rukaml_gc_print_stats";
         ];
       printfn ppf "";
 

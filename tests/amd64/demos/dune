@@ -1,6 +1,6 @@
 (cram
  (applies_to)
- (deps double.exe if.exe app1.exe))
+ (deps double.exe if.exe app1.exe gc1.exe))
 
 (rule
  (targets double.asm double.exe)
@@ -54,6 +54,19 @@
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o fack.asm)
    (run nasm -g -F dwarf -felf64 fack.asm -o fack.o)
    (run gcc -g -o fack.exe %{stdlib} fack.o))))
+
+(rule
+ (targets gc1.asm gc1.exe)
+ (deps
+  (:src gc1.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o gc1.asm)
+   (run nasm -g -F dwarf -felf64 gc1.asm -o gc1.o)
+   (run gcc -g -o gc1.exe %{stdlib} gc1.o))))
 
 (rule
  (targets app1.asm app1.exe)
