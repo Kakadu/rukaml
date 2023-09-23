@@ -518,6 +518,8 @@ let start_env =
   |> TypeEnv.extend ("-", int_arith_scheme)
   |> TypeEnv.extend ("*", int_arith_scheme)
   |> TypeEnv.extend ("/", int_arith_scheme)
+  |> TypeEnv.extend ("gc_compact", Scheme.make_mono (tarrow unit_typ unit_typ))
+  |> TypeEnv.extend ("gc_stats", Scheme.make_mono (tarrow unit_typ unit_typ))
 ;;
 
 let w e =

@@ -1,0 +1,94 @@
+(cram
+ (applies_to)
+ (deps double.exe if.exe app1.exe gc1.exe))
+
+(rule
+ (targets double.asm double.exe)
+ (deps double.ml)
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_amd64/amd64_compiler.exe
+    double.ml
+    -o
+    double.asm)
+   (run nasm -g -F dwarf -felf64 double.asm -o double.o)
+   (run gcc -g -o double.exe double.o))))
+
+(rule
+ (targets if.asm if.exe)
+ (deps
+  (:src if.ml))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o if.asm)
+   (run nasm -g -F dwarf -felf64 if.asm -o if.o)
+   (run gcc -g -o if.exe if.o))))
+
+(rule
+ (targets fac.asm fac.exe)
+ (deps
+  (:src fac.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o fac.asm)
+   (run nasm -g -F dwarf -felf64 fac.asm -o fac.o)
+   (run gcc -g -o fac.exe %{stdlib} fac.o))))
+
+(rule
+ (targets fack.asm fack.exe)
+ (deps
+  (:src fack.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o fack.asm)
+   (run nasm -g -F dwarf -felf64 fack.asm -o fack.o)
+   (run gcc -g -o fack.exe %{stdlib} fack.o))))
+
+(rule
+ (targets gc1.asm gc1.exe)
+ (deps
+  (:src gc1.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o gc1.asm)
+   (run nasm -g -F dwarf -felf64 gc1.asm -o gc1.o)
+   (run gcc -g -o gc1.exe %{stdlib} gc1.o))))
+
+(rule
+ (targets app1.asm app1.exe)
+ (deps
+  (:src app1.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o app1.asm)
+   (run nasm -g -F dwarf -felf64 app1.asm -o app1.o)
+   (run gcc -g -o app1.exe %{stdlib} app1.o))))
+
+(rule
+ (targets hack.exe)
+ (deps
+  (:src hack.asm)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run nasm -g -F dwarf -felf64 hack.asm -o hack.o)
+   (run gcc -g -o hack.exe %{stdlib} hack.o))))

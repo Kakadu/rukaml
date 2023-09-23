@@ -1,7 +1,16 @@
 (cram
+ (applies_to run fac fib if fack print tuples)
  (deps
   (package MiniML)
   (package MiniML_amd64)
-  ;(package MiniML_llvm)
+  ;(package minimlc)
+  %{project_root}/compiler.exe
+  ;%{project_root}/llvm/llvm_backend.cmxs # issues with linksing C code
+  ;%{project_root}/llvm/llvm_compiler.exe
+  %{project_root}/back_amd64/amd64_compiler.exe
+  %{project_root}/back_amd64/rukaml_stdlib.o
   ;
+  ../llvm/fack.ml
+  ;
+  ;double.exe
   ))

@@ -14,6 +14,7 @@ open Miniml
 type apat = APname of string
 
 type imm_expr =
+  | AUnit
   | AConst of Parsetree.const
   | AVar of string
   | APrimitive of string
@@ -27,6 +28,7 @@ and c_expr =
 
 and expr =
   | ELet of Parsetree.rec_flag * Parsetree.pattern * c_expr * expr
+  (* Maybe recursive flag is not required? *)
   | EComplex of c_expr
 
 type vb = Parsetree.rec_flag * string * expr
@@ -126,6 +128,7 @@ include struct
     | AConst c -> Pprint.pp_const ppf c
     | APrimitive s | AVar s -> fprintf ppf "%s" s
     | ATuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
+    | AUnit -> fprintf ppf "()"
   ;;
 
   let pp_a = helper_a
@@ -362,12 +365,13 @@ let anf =
           (k (AVar name)))
     | TVar ("=", _) -> k (APrimitive "=")
     | TVar (name, _) -> k (AVar name)
+    | TUnit -> k AUnit
     | TTuple (ea, eb, [], _) ->
       helper ea (fun aimm ->
         helper eb (fun bimm ->
           let name = gensym_s () in
           make_let_nonrec name (CAtom (ATuple (aimm, bimm, []))) (k (AVar name))))
-    | (TTuple (_, _, _ :: _, _) | _) as m ->
+    | TTuple (_, _, _ :: _, _) as m ->
       Format.eprintf "%a\n%!" Typedtree.pp_expr m;
       Format.kasprintf
         failwith
