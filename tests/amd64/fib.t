@@ -39,148 +39,157 @@
        2	extern rukaml_alloc_closure
        3	extern rukaml_print_int
        4	extern rukaml_applyN
-       5	
-       6	_start:
-       7	              push    rbp
-       8	              mov     rbp, rsp   ; prologue
-       9	              call main
-      10	              mov rdi, rax    ; rdi stores return code
-      11	              mov rax, 60     ; exit syscall
-      12	              syscall
-      13	
-      14		; @[{stack||stack}@]
-      15	GLOBAL fib
-      16	
-      17	fib:
-      18	  push rbp
-      19	  mov  rbp, rsp
-      20	  sub rsp, 8 ; allocate for var "temp1"
-      21	  sub rsp, 8 ; allocate for var "__temp3"
-      22	  mov rdx, [rsp+4*8] 
-      23	  mov [rsp], rdx ; access a var "n"
-      24	  sub rsp, 8 ; allocate for var "__temp4"
-      25	  mov qword [rsp],  0
-      26	  mov rax, [8*1+rsp]
-      27	  mov rbx, [rsp]
-      28	  cmp rax, rbx
-      29	  je lab_11
-      30	  mov qword [8*2+rsp], 0
-      31	  jmp lab_12
-      32	  lab_11:
-      33	    mov qword [8*2+rsp], 1
-      34	    jmp lab_12
-      35	  lab_12:
-      36	  add rsp, 8 ; deallocate var "__temp4"
-      37	  add rsp, 8 ; deallocate var "__temp3"
-      38	  mov rdx, [rsp+0*8] 
-      39	  cmp rdx, 0
-      40	  je lab_then_13
-      41	  mov qword rax,  0
-      42	  jmp lab_endif_14
-      43	  lab_then_13:
-      44	  sub rsp, 8 ; allocate for var "temp3"
-      45	  sub rsp, 8 ; allocate for var "__temp5"
-      46	  mov rdx, [rsp+5*8] 
-      47	  mov [rsp], rdx ; access a var "n"
-      48	  sub rsp, 8 ; allocate for var "__temp6"
-      49	  mov qword [rsp],  1
-      50	  mov rax, [8*1+rsp]
-      51	  mov rbx, [rsp]
-      52	  cmp rax, rbx
-      53	  je lab_15
-      54	  mov qword [8*2+rsp], 0
-      55	  jmp lab_16
-      56	  lab_15:
-      57	    mov qword [8*2+rsp], 1
-      58	    jmp lab_16
-      59	  lab_16:
-      60	  add rsp, 8 ; deallocate var "__temp6"
-      61	  add rsp, 8 ; deallocate var "__temp5"
-      62	  mov rdx, [rsp+0*8] 
-      63	  cmp rdx, 0
-      64	  je lab_then_17
-      65	  mov qword rax,  1
-      66	  jmp lab_endif_18
-      67	  lab_then_17:
-      68	  sub rsp, 8 ; allocate for var "temp5"
-      69	  sub rsp, 8 ; allocate for var "__temp7"
-      70	  mov rdx, [rsp+6*8] 
-      71	  mov [rsp], rdx ; access a var "n"
-      72	  mov rax, [rsp]
-      73	  mov qword rbx, 2
-      74	  sub rax, rbx
-      75	  mov [8*1+rsp], rax
-      76	  add rsp, 8 ; deallocate var "__temp7"
-      77	  sub rsp, 8 ; allocate for var "temp6"
-      78		; expected_arity = 1
-      79		; formal_arity = 1
-      80		; calling "fib"
-      81	  ; expected_arity = formal_arity = 1
-      82	  sub rsp, 8 ; allocate for argument 0 (name = __temp8)
-      83	  mov rdx, [rsp+2*8] 
-      84	  mov [rsp], rdx ; access a var "temp5"
-      85	  call fib
-      86	  add rsp, 8 ; deallocate var "__temp8"
-      87	  mov [rsp], rax
-      88	  sub rsp, 8 ; allocate for var "temp7"
-      89	  sub rsp, 8 ; allocate for var "__temp9"
-      90	  mov rdx, [rsp+8*8] 
-      91	  mov [rsp], rdx ; access a var "n"
-      92	  mov rax, [rsp]
-      93	  dec rax
-      94	  mov [8*1+rsp], rax
-      95	  add rsp, 8 ; deallocate var "__temp9"
-      96	  sub rsp, 8 ; allocate for var "temp8"
-      97		; expected_arity = 1
-      98		; formal_arity = 1
-      99		; calling "fib"
-     100	  ; expected_arity = formal_arity = 1
-     101	  sub rsp, 8 ; allocate for argument 0 (name = __temp10)
-     102	  mov rdx, [rsp+2*8] 
-     103	  mov [rsp], rdx ; access a var "temp7"
-     104	  call fib
-     105	  add rsp, 8 ; deallocate var "__temp10"
-     106	  mov [rsp], rax
-     107	  sub rsp, 8 ; allocate for var "__temp11"
-     108	  mov rdx, [rsp+3*8] 
-     109	  mov [rsp], rdx ; access a var "temp6"
-     110	  sub rsp, 8 ; allocate for var "__temp12"
-     111	  mov rdx, [rsp+2*8] 
-     112	  mov [rsp], rdx ; access a var "temp8"
-     113	  mov rax, [8*1+rsp]
-     114	  mov rbx, [rsp]
-     115	  add  rbx, rax
-     116	  mov rax, rbx
-     117	  add rsp, 8 ; deallocate var "__temp12"
-     118	  add rsp, 8 ; deallocate var "__temp11"
-     119	  add rsp, 8 ; deallocate var "temp8"
-     120	  add rsp, 8 ; deallocate var "temp7"
-     121	  add rsp, 8 ; deallocate var "temp6"
-     122	  add rsp, 8 ; deallocate var "temp5"
-     123	  lab_endif_18:
-     124	  add rsp, 8 ; deallocate var "temp3"
-     125	  lab_endif_14:
-     126	  add rsp, 8 ; deallocate var "temp1"
-     127	  pop rbp
-     128	  ret  ;;;; fib
-     129	
-     130		; @[{stack||stack}@]
-     131	GLOBAL main
-     132	main:
-     133	  push rbp
-     134	  mov  rbp, rsp
-     135		; expected_arity = 1
-     136		; formal_arity = 1
-     137		; calling "fib"
-     138	  ; expected_arity = formal_arity = 1
-     139	  sub rsp, 8 ; allocate for argument 0 (name = __temp15)
-     140	  mov qword [rsp],  8
-     141	  call fib
-     142	  add rsp, 8 ; deallocate var "__temp15"
-     143	  mov rax, rax
-     144	  pop rbp
-     145	  ret  ;;;; main
+       5	extern rukaml_field
+       6	extern rukaml_alloc_pair
+       7	extern rukaml_initialize
+       8	extern rukaml_gc_compact
+       9	extern rukaml_gc_print_stats
+      10	
+      11	_start:
+      12	              push    rbp
+      13	              mov     rbp, rsp   ; prologue
+      14	              call main
+      15	              mov rdi, rax    ; rdi stores return code
+      16	              mov rax, 60     ; exit syscall
+      17	              syscall
+      18	
+      19		; @[{stack||stack}@]
+      20	GLOBAL fib
+      21	
+      22	fib:
+      23	  push rbp
+      24	  mov  rbp, rsp
+      25	  sub rsp, 8 ; allocate for var "temp1"
+      26	  sub rsp, 8 ; allocate for var "__temp3"
+      27	  mov rdx, [rsp+4*8] 
+      28	  mov [rsp], rdx ; access a var "n"
+      29	  sub rsp, 8 ; allocate for var "__temp4"
+      30	  mov qword [rsp],  0
+      31	  mov rax, [8*1+rsp]
+      32	  mov rbx, [rsp]
+      33	  cmp rax, rbx
+      34	  je lab_11
+      35	  mov qword [8*2+rsp], 0
+      36	  jmp lab_12
+      37	  lab_11:
+      38	    mov qword [8*2+rsp], 1
+      39	    jmp lab_12
+      40	  lab_12:
+      41	  add rsp, 8 ; deallocate var "__temp4"
+      42	  add rsp, 8 ; deallocate var "__temp3"
+      43	  mov rdx, [rsp+0*8] 
+      44	  cmp rdx, 0
+      45	  je lab_then_13
+      46	  mov qword rax,  0
+      47	  jmp lab_endif_14
+      48	  lab_then_13:
+      49	  sub rsp, 8 ; allocate for var "temp3"
+      50	  sub rsp, 8 ; allocate for var "__temp5"
+      51	  mov rdx, [rsp+5*8] 
+      52	  mov [rsp], rdx ; access a var "n"
+      53	  sub rsp, 8 ; allocate for var "__temp6"
+      54	  mov qword [rsp],  1
+      55	  mov rax, [8*1+rsp]
+      56	  mov rbx, [rsp]
+      57	  cmp rax, rbx
+      58	  je lab_15
+      59	  mov qword [8*2+rsp], 0
+      60	  jmp lab_16
+      61	  lab_15:
+      62	    mov qword [8*2+rsp], 1
+      63	    jmp lab_16
+      64	  lab_16:
+      65	  add rsp, 8 ; deallocate var "__temp6"
+      66	  add rsp, 8 ; deallocate var "__temp5"
+      67	  mov rdx, [rsp+0*8] 
+      68	  cmp rdx, 0
+      69	  je lab_then_17
+      70	  mov qword rax,  1
+      71	  jmp lab_endif_18
+      72	  lab_then_17:
+      73	  sub rsp, 8 ; allocate for var "temp5"
+      74	  sub rsp, 8 ; allocate for var "__temp7"
+      75	  mov rdx, [rsp+6*8] 
+      76	  mov [rsp], rdx ; access a var "n"
+      77	  mov rax, [rsp]
+      78	  mov qword rbx, 2
+      79	  sub rax, rbx
+      80	  mov [8*1+rsp], rax
+      81	  add rsp, 8 ; deallocate var "__temp7"
+      82	  sub rsp, 8 ; allocate for var "temp6"
+      83		; expected_arity = 1
+      84		; formal_arity = 1
+      85		; calling "fib"
+      86	  ; expected_arity = formal_arity = 1
+      87	  sub rsp, 8 ; allocate for argument 0 (name = __temp8)
+      88	  mov rdx, [rsp+2*8] 
+      89	  mov [rsp], rdx ; access a var "temp5"
+      90	  call fib
+      91	  add rsp, 8 ; deallocate var "__temp8"
+      92	  mov [rsp], rax
+      93	  sub rsp, 8 ; allocate for var "temp7"
+      94	  sub rsp, 8 ; allocate for var "__temp9"
+      95	  mov rdx, [rsp+8*8] 
+      96	  mov [rsp], rdx ; access a var "n"
+      97	  mov rax, [rsp]
+      98	  dec rax
+      99	  mov [8*1+rsp], rax
+     100	  add rsp, 8 ; deallocate var "__temp9"
+     101	  sub rsp, 8 ; allocate for var "temp8"
+     102		; expected_arity = 1
+     103		; formal_arity = 1
+     104		; calling "fib"
+     105	  ; expected_arity = formal_arity = 1
+     106	  sub rsp, 8 ; allocate for argument 0 (name = __temp10)
+     107	  mov rdx, [rsp+2*8] 
+     108	  mov [rsp], rdx ; access a var "temp7"
+     109	  call fib
+     110	  add rsp, 8 ; deallocate var "__temp10"
+     111	  mov [rsp], rax
+     112	  sub rsp, 8 ; allocate for var "__temp11"
+     113	  mov rdx, [rsp+3*8] 
+     114	  mov [rsp], rdx ; access a var "temp6"
+     115	  sub rsp, 8 ; allocate for var "__temp12"
+     116	  mov rdx, [rsp+2*8] 
+     117	  mov [rsp], rdx ; access a var "temp8"
+     118	  mov rax, [8*1+rsp]
+     119	  mov rbx, [rsp]
+     120	  add  rbx, rax
+     121	  mov rax, rbx
+     122	  add rsp, 8 ; deallocate var "__temp12"
+     123	  add rsp, 8 ; deallocate var "__temp11"
+     124	  add rsp, 8 ; deallocate var "temp8"
+     125	  add rsp, 8 ; deallocate var "temp7"
+     126	  add rsp, 8 ; deallocate var "temp6"
+     127	  add rsp, 8 ; deallocate var "temp5"
+     128	  lab_endif_18:
+     129	  add rsp, 8 ; deallocate var "temp3"
+     130	  lab_endif_14:
+     131	  add rsp, 8 ; deallocate var "temp1"
+     132	  pop rbp
+     133	  ret  ;;;; fib
+     134	
+     135		; @[{stack||stack}@]
+     136	GLOBAL main
+     137	main:
+     138	  push rbp
+     139	  mov  rbp, rsp
+     140	mov rdi, rsp
+     141	call rukaml_initialize
+     142		; expected_arity = 1
+     143		; formal_arity = 1
+     144		; calling "fib"
+     145	  ; expected_arity = formal_arity = 1
+     146	  sub rsp, 8 ; allocate for argument 0 (name = __temp15)
+     147	  mov qword [rsp],  8
+     148	  call fib
+     149	  add rsp, 8 ; deallocate var "__temp15"
+     150	  mov rax, rax
+     151	  pop rbp
+     152	  ret  ;;;; main
 
   $ nasm -felf64 program.asm -o program.o && ld -o program.exe program.o && chmod u+x program.exe && ./program.exe
   ld: warning: cannot find entry symbol _start; defaulting to 0000000000401000
-  [21]
+  ld: program.o: in function `main':
+  program.asm:(.text+0x1a7): undefined reference to `rukaml_initialize'
+  [1]
