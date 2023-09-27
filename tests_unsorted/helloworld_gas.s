@@ -1,14 +1,17 @@
-# Enforce Intel syntax
-.intel_syntax noprefix
+        .global _start
+        .data
+message:
+        .ascii  "hello, world!\n" # strlen = 14
+        .text
+_start:
+        # write(1, message, 13)
+        mov     $1, %rax                # system call 1 is write
+        mov     $1, %rdi                # file handle 1 is stdout
+        mov     $message, %rsi          # address of string to output
+        mov     $0xe, %rdx              # number of bytes
+        syscall                         # invoke operating system to do the write
 
-# Call the "write" system function (man 2 write)
-# ssize_t write(int fd, const void *buf, size_t count);
-mov rax, 1							# Store the "write" system call number 0x1 for Linux or 0x2000004 for macOS
-# Put the function arguments in the rdi, rsi, rdx, r10, r8, r9 registers
-mov rdi, 1							# Store where to write stdin which is 0x1 for Linux and macOS
-lea rsi, [rip + 0xa]				# Store the location of the string to write (0xa instructions from the current instruction pointer)
-mov rdx, 17							# Store the length of the string
-# Call the function
-syscall
-ret
-.string "Hello, Your Name\n"
+        # exit(0)
+        #mov     $60, %rax               # system call 60 is exit
+        #xor     %rdi, %rdi              # we want return code 0
+        #syscall                         # invoke operating system to exit

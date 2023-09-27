@@ -1,9 +1,8 @@
   $ as helloworld_gas.s -o hello1.o
   $ ld -o hello hello1.o
-  ld: warning: cannot find entry symbol _start; defaulting to 0000000000401000
-  $ ./hello
-  Hello, Your Name
-  Segmentation fault
+  $ ./hello #| xargs -l echo  2>/dev/null   | sed 's/Segmentation/11111/g'
+  hello, world!
+  Segmentation fault (core dumped)
   [139]
   $ objdump -M intel -D hello1.o
   
@@ -12,21 +11,18 @@
   
   Disassembly of section .text:
   
-  0000000000000000 <.text>:
+  0000000000000000 <_start>:
      0:	48 c7 c0 01 00 00 00 	mov    rax,0x1
      7:	48 c7 c7 01 00 00 00 	mov    rdi,0x1
-     e:	48 8d 35 0a 00 00 00 	lea    rsi,[rip+0xa]        # 0x1f
-    15:	48 c7 c2 11 00 00 00 	mov    rdx,0x11
+     e:	48 c7 c6 00 00 00 00 	mov    rsi,0x0
+    15:	48 c7 c2 0e 00 00 00 	mov    rdx,0xe
     1c:	0f 05                	syscall
-    1e:	c3                   	ret
-    1f:	48                   	rex.W
-    20:	65 6c                	gs ins BYTE PTR es:[rdi],dx
-    22:	6c                   	ins    BYTE PTR es:[rdi],dx
-    23:	6f                   	outs   dx,DWORD PTR ds:[rsi]
-    24:	2c 20                	sub    al,0x20
-    26:	59                   	pop    rcx
-    27:	6f                   	outs   dx,DWORD PTR ds:[rsi]
-    28:	75 72                	jne    0x9c
-    2a:	20 4e 61             	and    BYTE PTR [rsi+0x61],cl
-    2d:	6d                   	ins    DWORD PTR es:[rdi],dx
-    2e:	65 0a 00             	or     al,BYTE PTR gs:[rax]
+  
+  Disassembly of section .data:
+  
+  0000000000000000 <message>:
+     0:	68 65 6c 6c 6f       	push   0x6f6c6c65
+     5:	2c 20                	sub    al,0x20
+     7:	77 6f                	ja     78 <message+0x78>
+     9:	72 6c                	jb     77 <message+0x77>
+     b:	64 21 0a             	and    DWORD PTR fs:[rdx],ecx

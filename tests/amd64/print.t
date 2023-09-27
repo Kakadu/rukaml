@@ -169,5 +169,6 @@
   /usr/bin/ld: NOTE: This behaviour is deprecated and will be removed in a future version of the linker
   /usr/bin/ld: program.o: warning: relocation in read-only section `.text'
   /usr/bin/ld: warning: creating DT_TEXTREL in a PIE
+$ ulimit -c 0
   $ chmod u+x program.exe && ./program.exe
   48
