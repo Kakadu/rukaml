@@ -1,2 +1,27 @@
 (cram
- (deps hello1.s))
+ (applies_to 001helloworld_gas)
+ (deps helloworld_gas.s))
+
+(cram
+ (applies_to 002helloworld_nasm)
+ (deps helloworld_nasm.s))
+
+(cram
+ (applies_to 003helloworld)
+ (deps helloworld.s))
+
+(cram
+ (applies_to 004fac)
+ (deps
+  004fac.c
+  004fac_main.s
+  ;
+  ))
+
+(cram
+ (applies_to 005fac)
+ (deps
+  005print_int.c
+  005fac.s
+  ;
+  ))

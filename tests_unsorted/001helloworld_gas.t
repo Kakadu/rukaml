@@ -1,5 +1,10 @@
-  $ as hello1.s -o hello1.o
-$ ls
+  $ as helloworld_gas.s -o hello1.o
+  $ ld -o hello hello1.o
+  ld: warning: cannot find entry symbol _start; defaulting to 0000000000401000
+  $ ./hello
+  Hello, Your Name
+  Segmentation fault
+  [139]
   $ objdump -M intel -D hello1.o
   
   hello1.o:     file format elf64-x86-64
