@@ -1,10 +1,10 @@
-  $ as helloworld_gas.s -o hello1.o
+  $ as  helloworld_gas.s -o hello1.o
   $ ld -o hello hello1.o
   $ ./hello #| xargs -l echo  2>/dev/null   | sed 's/Segmentation/11111/g'
   hello, world!
-  Segmentation fault
+  Segmentation fault (core dumped)
   [139]
-  $ objdump -M intel -D hello1.o
+  $ objdump --dwarf=decodedline  -M intel -D hello1.o
   
   hello1.o:     file format elf64-x86-64
   

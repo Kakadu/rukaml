@@ -14,3 +14,16 @@
   ;
   ;double.exe
   ))
+
+(rule
+ (targets print.asm print.exe)
+ (deps
+  print.ml
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe print.ml -o print.asm)
+   (run nasm -g -F dwarf -felf64 print.asm -o print.o)
+   (run gcc -g print.o %{stdlib} -o print.exe))))

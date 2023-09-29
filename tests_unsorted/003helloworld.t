@@ -1,4 +1,4 @@
-  $ nasm -felf64 helloworld.s -o hello.o
+  $ nasm -felf64 003hello.s -o hello.o
   $ ld -o hello hello.o
   $ chmod u+x hello
   $ ./hello

@@ -3,7 +3,7 @@
   $ chmod u+x hello
   $ ./hello
   hello, world!
-  Segmentation fault
+  Segmentation fault (core dumped)
   [139]
   $ objdump -M intel -D hello.o
   

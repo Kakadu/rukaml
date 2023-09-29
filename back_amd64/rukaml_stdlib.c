@@ -201,7 +201,8 @@ void rukaml_gc_print_stats(void)
 
 void rukaml_print_int(int x)
 {
-  printf("%d\n", x);
+  printf("%s %d\n", x, __func__);
+  // putchar(0x30 + x);
   fflush(stdout);
 }
 

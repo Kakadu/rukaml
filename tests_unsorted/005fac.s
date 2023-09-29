@@ -1,34 +1,40 @@
-global main
-
-extern print_int
 section .text
-main:
-    mov rdi, 5    ; first arg
-    call print_int
+extern print_int
 
-    push 6       ; 6! == 720
-    call fac
-    popq
+_start:
+  push    rbp
+  mov     rbp, rsp   ; prologue
+  call main
+  mov rdi, rax    ; rdi stores return code
+  mov rax, 60     ; exit syscall
+  syscall
 
-    mov rdi, rax
-    call print_int
-
-    mov rdi, 0    ; PITFALL
-    mov rax, 60   ; 'exit' syscall number
-    syscall
-
-
-global fac
+; copy-paste from Godbolt
 fac:
-    ;je lab_10
-    mov rcx, 1
-    mov rbx, [rsp+8]
-loop:
-    cmp rbx, 1
-    je endloop
-    imul rcx, rbx
-    dec rbx
-    jmp loop
-endloop:
-    mov rax, rcx
-    ret
+  sub     rsp, 24
+  mov     dword [rsp+12], edi
+  cmp     dword [rsp+12], 1
+  jle     .L2
+  mov     eax,  [rsp+12]
+  sub     eax, 1
+  mov     edi, eax
+  call    fac
+  imul    eax,  dword [rsp+12]
+  jmp     .L4
+.L2:
+  mov     eax, 1
+.L4:
+  add     rsp, 24
+  ret
+
+
+GLOBAL main
+main:
+  push rbp
+  mov  rbp, rsp
+  mov rdi, 4
+  call fac
+  mov  edi, eax
+  call print_int
+  pop rbp
+  ret  ;;;; main

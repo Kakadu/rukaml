@@ -2,7 +2,7 @@
   > let rec fac n =
   >   if n=1 then 1 else n * fac (n-1)
   > let main =
-  >   let t = print (fac 5) in
+  >   let t = print (fac 6) in
   >   0
   > EOF
   After ANF transformation.

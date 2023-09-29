@@ -8,7 +8,7 @@
 
 (cram
  (applies_to 003helloworld)
- (deps helloworld.s))
+ (deps 003hello.s))
 
 (cram
  (applies_to 004fac)

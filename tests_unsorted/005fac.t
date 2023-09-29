@@ -1,12 +1,10 @@
   $ gcc 005print_int.c -c -o print_int.o
   $ nasm -felf64 005fac.s -o fac.o
-  005fac.s:11: warning: label alone on a line without a colon might be in error [-w+label-orphan]
   $ gcc fac.o print_int.o -o 005.exe
   /usr/bin/ld: warning: fac.o: missing .note.GNU-stack section implies executable stack
   /usr/bin/ld: NOTE: This behaviour is deprecated and will be removed in a future version of the linker
   $ ./005.exe
-  print_int 5
-  print_int 720
+  print_int 24
   $ echo $?
   0
   $ objdump -M intel -D fac.o
@@ -16,30 +14,39 @@
   
   Disassembly of section .text:
   
-  0000000000000000 <main>:
-     0:	bf 05 00 00 00       	mov    edi,0x5
-     5:	e8 00 00 00 00       	call   a <main+0xa>
-     a:	6a 06                	push   0x6
-     c:	e8 14 00 00 00       	call   25 <fac>
+  0000000000000000 <_start>:
+     0:	55                   	push   rbp
+     1:	48 89 e5             	mov    rbp,rsp
+     4:	e8 38 00 00 00       	call   41 <main>
+     9:	48 89 c7             	mov    rdi,rax
+     c:	b8 3c 00 00 00       	mov    eax,0x3c
+    11:	0f 05                	syscall
   
-  0000000000000011 <popq>:
-    11:	48 89 c7             	mov    rdi,rax
-    14:	e8 00 00 00 00       	call   19 <popq+0x8>
-    19:	bf 00 00 00 00       	mov    edi,0x0
-    1e:	b8 3c 00 00 00       	mov    eax,0x3c
-    23:	0f 05                	syscall
+  0000000000000013 <fac>:
+    13:	48 83 ec 18          	sub    rsp,0x18
+    17:	89 7c 24 0c          	mov    DWORD PTR [rsp+0xc],edi
+    1b:	83 7c 24 0c 01       	cmp    DWORD PTR [rsp+0xc],0x1
+    20:	7e 15                	jle    37 <fac.L2>
+    22:	8b 44 24 0c          	mov    eax,DWORD PTR [rsp+0xc]
+    26:	83 e8 01             	sub    eax,0x1
+    29:	89 c7                	mov    edi,eax
+    2b:	e8 e3 ff ff ff       	call   13 <fac>
+    30:	0f af 44 24 0c       	imul   eax,DWORD PTR [rsp+0xc]
+    35:	eb 05                	jmp    3c <fac.L4>
   
-  0000000000000025 <fac>:
-    25:	b9 01 00 00 00       	mov    ecx,0x1
-    2a:	48 8b 5c 24 08       	mov    rbx,QWORD PTR [rsp+0x8]
+  0000000000000037 <fac.L2>:
+    37:	b8 01 00 00 00       	mov    eax,0x1
   
-  000000000000002f <loop>:
-    2f:	48 83 fb 01          	cmp    rbx,0x1
-    33:	74 09                	je     3e <endloop>
-    35:	48 0f af cb          	imul   rcx,rbx
-    39:	48 ff cb             	dec    rbx
-    3c:	eb f1                	jmp    2f <loop>
+  000000000000003c <fac.L4>:
+    3c:	48 83 c4 18          	add    rsp,0x18
+    40:	c3                   	ret
   
-  000000000000003e <endloop>:
-    3e:	48 89 c8             	mov    rax,rcx
-    41:	c3                   	ret
+  0000000000000041 <main>:
+    41:	55                   	push   rbp
+    42:	48 89 e5             	mov    rbp,rsp
+    45:	bf 04 00 00 00       	mov    edi,0x4
+    4a:	e8 c4 ff ff ff       	call   13 <fac>
+    4f:	89 c7                	mov    edi,eax
+    51:	e8 00 00 00 00       	call   56 <main+0x15>
+    56:	5d                   	pop    rbp
+    57:	c3                   	ret
