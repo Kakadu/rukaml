@@ -5,10 +5,8 @@
   > let fresh_1 m k n = k (n * m)
   > let rec fack k n =
   >   if n=1
-  >     then k 1
-  >     else let u = n-1 in
-  >          let v = fresh_1 n k in
-  >          fack v u
+  >   then k 1
+  >   else fack (fresh_1 n k) (n-1)
   > let id x = x
   > let main = fack id 4
   > EOF
@@ -20,13 +18,11 @@
     let temp3 = (n = 1) in
       (if temp3
       then k 1 
-      else let temp5 = (n - 1) in
-             let u = temp5 in
-               let temp6 = fresh_1 n  in
-                 let temp7 = temp6 k  in
-                   let v = temp7 in
-                     let temp8 = fack v  in
-                       temp8 u )
+      else let temp5 = fresh_1 n  in
+             let temp6 = temp5 k  in
+               let temp7 = fack temp6  in
+                 let temp8 = (n - 1) in
+                   temp7 temp8 )
   let id x =
     x
   let main =
@@ -39,13 +35,11 @@
     let temp3 = (n = 1) in
       (if temp3
       then k 1 
-      else let temp5 = (n - 1) in
-             let u = temp5 in
-               let temp6 = fresh_1 n  in
-                 let temp7 = temp6 k  in
-                   let v = temp7 in
-                     let temp8 = fack v  in
-                       temp8 u )
+      else let temp5 = fresh_1 n  in
+             let temp6 = temp5 k  in
+               let temp7 = fack temp6  in
+                 let temp8 = (n - 1) in
+                   temp7 temp8 )
   let id x =
     x
   let main =
@@ -85,13 +79,13 @@
     ret i64 %phi_result
   
   fack_else:                                        ; preds = %entry
-    %3 = sub i64 %1, 1
-    %4 = call i64 @rukaml_alloc_closure(i64 ptrtoint (i64 (i64, i64, i64)* @fresh_1 to i64), i64 3)
-    %5 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %4, i64 1, i64 %1)
-    %6 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %5, i64 1, i64 %0)
-    %7 = call i64 @rukaml_alloc_closure(i64 ptrtoint (i64 (i64, i64)* @fack to i64), i64 2)
-    %8 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %7, i64 1, i64 %6)
-    %9 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %8, i64 1, i64 %3)
+    %3 = call i64 @rukaml_alloc_closure(i64 ptrtoint (i64 (i64, i64, i64)* @fresh_1 to i64), i64 3)
+    %4 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %3, i64 1, i64 %1)
+    %5 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %4, i64 1, i64 %0)
+    %6 = call i64 @rukaml_alloc_closure(i64 ptrtoint (i64 (i64, i64)* @fack to i64), i64 2)
+    %7 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %6, i64 1, i64 %5)
+    %8 = sub i64 %1, 1
+    %9 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %7, i64 1, i64 %8)
     br label %fack_cont
   
   fack_then:                                        ; preds = %entry

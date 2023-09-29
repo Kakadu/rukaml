@@ -11,9 +11,7 @@
     x
   let main =
     id 4 
-  vb id
     formal parameter 0: i64 %0
-  vb main
   $ cat fack.ll | grep 'target datalayout' --invert-match
   ; ModuleID = 'main'
   source_filename = "main"
