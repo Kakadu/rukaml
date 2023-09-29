@@ -20,7 +20,7 @@
     return X;
   }
   int main() { return test(1); }
-  $ clang -S -emit-llvm -O0 -Xclang -disable-O0-optnone test.c
+  $ clang-14 -S -emit-llvm -O0 -Xclang -disable-O0-optnone test.c
   $ cat test.ll | grep -E 'source_filename|target datalayout|ModuleID|target triple|llvm.module.flags|llvm.ident|attributes #0|![0-9] =|^$' --invert-match
   @G = dso_local global i32 0, align 4
   @H = dso_local global i32 0, align 4
@@ -52,7 +52,7 @@
     %2 = call i32 @test(i1 noundef zeroext true)
     ret i32 %2
   }
-  $ llvm-as < test.ll | opt -mem2reg | llvm-dis | grep -E 'source_filename|target datalayout|ModuleID|target triple|llvm.module.flags|llvm.ident|attributes #0|![0-9] =|^$' --invert-match
+  $ llvm-as-14 < test.ll | opt-14 -mem2reg | llvm-dis-14 | grep -E 'source_filename|target datalayout|ModuleID|target triple|llvm.module.flags|llvm.ident|attributes #0|![0-9] =|^$' --invert-match
   @G = dso_local global i32 0, align 4
   @H = dso_local global i32 0, align 4
   ; Function Attrs: noinline nounwind uwtable

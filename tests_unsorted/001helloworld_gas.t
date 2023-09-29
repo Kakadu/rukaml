@@ -2,7 +2,7 @@
   $ ld -o hello hello1.o
   $ ./hello #| xargs -l echo  2>/dev/null   | sed 's/Segmentation/11111/g'
   hello, world!
-  Segmentation fault (core dumped)
+  Segmentation fault
   [139]
   $ objdump -M intel -D hello1.o
   

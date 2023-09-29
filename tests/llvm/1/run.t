@@ -12,7 +12,7 @@
     else return n * fac(n-1);
   }
   int main() { return fac(5); }
-  $ clang -S -emit-llvm -O0 fac.c
+  $ clang-14 -S -emit-llvm -O0 fac.c
   $ cat fac.ll | grep -E 'source_filename|target datalayout|ModuleID|target triple|llvm.module.flags|llvm.ident|attributes #0|![0-9] =' --invert-match
   
   ; Function Attrs: noinline nounwind optnone uwtable
@@ -53,7 +53,7 @@
   
   
   
-  $ clang -S -emit-llvm -O1 fac.c
+  $ clang-14 -S -emit-llvm -O1 fac.c
   $ cat fac.ll  | grep -E 'target datalayout|ModuleID|target triple|llvm.module.flags|llvm.ident|attributes #0|![0-9] =' --invert-match
   source_filename = "fac.c"
   
