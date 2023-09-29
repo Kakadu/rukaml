@@ -275,10 +275,10 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  je %s" eq_lab;
         printfn ppf "  mov qword %a, 0" pp_dest dest;
         printfn ppf "  jmp %s" exit_lab;
-        printfn ppf "  %s:" eq_lab;
-        printfn ppf "    mov qword %a, 1" pp_dest dest;
-        printfn ppf "    jmp %s" exit_lab;
-        printfn ppf "  %s:" exit_lab;
+        printfn ppf "%s:" eq_lab;
+        printfn ppf "  mov qword %a, 1" pp_dest dest;
+        printfn ppf "  jmp %s" exit_lab;
+        printfn ppf "%s:" exit_lab;
         dealloc_var ppf right_name;
         dealloc_var ppf left_name
     | CApp (APrimitive "-", arg1, [ AConst (PConst_int 1) ]) ->
@@ -498,8 +498,9 @@ let codegen ?(wrap_main_into_start = true) anf file =
                failwiths
                  "There are left over variables (before function %s): %s " name
                  (Loc_of_ident.keys ());
-             printfn ppf "";
-             fprintf ppf "\t; %a\n" Loc_of_ident.pp ();
+
+             (* printfn ppf "";
+                fprintf ppf "\t; %a\n" Loc_of_ident.pp (); *)
 
              (* print_prologue ppf name; *)
 
@@ -542,8 +543,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
                 printfn ppf "  push rbp";
                 printfn ppf "  mov  rbp, rsp";
                 if name = "main" then (
-                  printfn ppf "mov rdi, rsp";
-                  printfn ppf "call rukaml_initialize");
+                  printfn ppf "  mov rdi, rsp";
+                  printfn ppf "  call rukaml_initialize");
                 let rbp_goes_here = Loc_of_ident.alloc_temp () in
                 generate_body is_toplevel ppf body;
                 Loc_of_ident.remove rbp_goes_here;

@@ -61,222 +61,214 @@
        8	extern rukaml_gc_compact
        9	extern rukaml_gc_print_stats
       10	
-      11	
-      12		; @[{stack||stack}@]
-      13	GLOBAL fresh_1
-      14	
-      15	fresh_1:
-      16	  push rbp
-      17	  mov  rbp, rsp
-      18	  sub rsp, 8 ; allocate for var "temp1"
-      19	  sub rsp, 8 ; allocate for var "__temp3"
-      20	  mov rdx, [rsp+4*8] 
-      21	  mov [rsp], rdx ; access a var "n"
-      22	  sub rsp, 8 ; allocate for var "__temp4"
-      23	  mov rdx, [rsp+7*8] 
-      24	  mov [rsp], rdx ; access a var "m"
-      25	  mov rax, [8*1+rsp]
-      26	  mov rbx, [rsp]
-      27	  imul rbx, rax
-      28	  mov [8*2+rsp], rbx
-      29	  add rsp, 8 ; deallocate var "__temp4"
-      30	  add rsp, 8 ; deallocate var "__temp3"
-      31	  sub rsp, 8 ; allocate for var "__temp5"
-      32	  mov rdx, [rsp+1*8] 
-      33	  mov [rsp], rdx ; access a var "temp1"
-      34	  mov rax, 0  ; no float arguments
-      35	  mov rdi, [8*5+rsp]
-      36	  mov rsi, 1
-      37	  mov rdx, [rsp]
-      38	  call rukaml_applyN
-      39	  add rsp, 8 ; deallocate var "__temp5"
-      40	  mov rax, rax
-      41	  add rsp, 8 ; deallocate var "temp1"
-      42	  pop rbp
-      43	  ret  ;;;; fresh_1
-      44	
-      45		; @[{stack||stack}@]
-      46	GLOBAL fack
-      47	fack:
-      48	  push rbp
-      49	  mov  rbp, rsp
-      50	  sub rsp, 8 ; allocate for var "temp3"
-      51	  sub rsp, 8 ; allocate for var "__temp8"
-      52	  mov rdx, [rsp+4*8] 
-      53	  mov [rsp], rdx ; access a var "n"
-      54	  sub rsp, 8 ; allocate for var "__temp9"
-      55	  mov qword [rsp],  1
-      56	  mov rax, [8*1+rsp]
-      57	  mov rbx, [rsp]
-      58	  cmp rax, rbx
-      59	  je lab_14
-      60	  mov qword [8*2+rsp], 0
-      61	  jmp lab_15
-      62	  lab_14:
-      63	    mov qword [8*2+rsp], 1
-      64	    jmp lab_15
-      65	  lab_15:
-      66	  add rsp, 8 ; deallocate var "__temp9"
-      67	  add rsp, 8 ; deallocate var "__temp8"
-      68	  mov rdx, [rsp+0*8] 
-      69	  cmp rdx, 0
-      70	  je lab_then_16
-      71	  sub rsp, 8 ; allocate for var "__temp10"
-      72	  mov qword [rsp],  1
-      73	  mov rax, 0  ; no float arguments
-      74	  mov rdi, [8*5+rsp]
-      75	  mov rsi, 1
-      76	  mov rdx, [rsp]
-      77	  call rukaml_applyN
-      78	  add rsp, 8 ; deallocate var "__temp10"
-      79	  mov rax, rax
-      80	  jmp lab_endif_17
-      81	  lab_then_16:
-      82	  sub rsp, 8 ; allocate for var "temp5"
-      83	  sub rsp, 8 ; allocate for var "__temp11"
-      84	  mov rdx, [rsp+5*8] 
-      85	  mov [rsp], rdx ; access a var "n"
-      86	  mov rax, [rsp]
-      87	  dec rax
-      88	  mov [8*1+rsp], rax
-      89	  add rsp, 8 ; deallocate var "__temp11"
-      90	  sub rsp, 8 ; allocate for var "temp6"
-      91		; expected_arity = 2
-      92		; formal_arity = 1
-      93		; calling "fack"
-      94	  sub rsp, 8 ; allocate wrapper for func __temp12
-      95	  mov rdi, fack
-      96	  mov rsi, 2
-      97	  call rukaml_alloc_closure
-      98	  mov [rsp], rax
-      99	  sub rsp, 8 ; allocate for argument 0 (name = __temp13)
-     100	  mov rdx, [rsp+3*8] 
-     101	  mov [rsp], rdx ; access a var "temp5"
-     102	  mov rdi, [8*1+rsp]
-     103	  mov rsi, 1
-     104	  mov rdx, [rsp]
-     105	  mov al, 0
-     106	  call rukaml_applyN
-     107	  mov [8*2+rsp], rax
-     108	  add rsp, 8 ; deallocate var "__temp13"
-     109	  add rsp, 8 ; deallocate var "__temp12"
-     110	  sub rsp, 8 ; allocate for var "temp7"
-     111		; expected_arity = 3
-     112		; formal_arity = 1
-     113		; calling "fresh_1"
-     114	  sub rsp, 8 ; allocate wrapper for func __temp14
-     115	  mov rdi, fresh_1
-     116	  mov rsi, 3
-     117	  call rukaml_alloc_closure
-     118	  mov [rsp], rax
-     119	  sub rsp, 8 ; allocate for argument 0 (name = __temp15)
-     120	  mov rdx, [rsp+8*8] 
-     121	  mov [rsp], rdx ; access a var "n"
-     122	  mov rdi, [8*1+rsp]
-     123	  mov rsi, 1
-     124	  mov rdx, [rsp]
-     125	  mov al, 0
-     126	  call rukaml_applyN
-     127	  mov [8*2+rsp], rax
-     128	  add rsp, 8 ; deallocate var "__temp15"
-     129	  add rsp, 8 ; deallocate var "__temp14"
-     130	  sub rsp, 8 ; allocate for var "temp8"
-     131	  sub rsp, 8 ; allocate for var "__temp16"
-     132	  mov rdx, [rsp+9*8] 
-     133	  mov [rsp], rdx ; access a var "k"
-     134	  mov rax, 0  ; no float arguments
-     135	  mov rdi, [8*2+rsp]
-     136	  mov rsi, 1
-     137	  mov rdx, [rsp]
-     138	  call rukaml_applyN
-     139	  add rsp, 8 ; deallocate var "__temp16"
-     140	  mov [rsp], rax
-     141	  sub rsp, 8 ; allocate for var "__temp17"
-     142	  mov rdx, [rsp+1*8] 
-     143	  mov [rsp], rdx ; access a var "temp8"
-     144	  mov rax, 0  ; no float arguments
-     145	  mov rdi, [8*3+rsp]
-     146	  mov rsi, 1
-     147	  mov rdx, [rsp]
-     148	  call rukaml_applyN
-     149	  add rsp, 8 ; deallocate var "__temp17"
-     150	  mov rax, rax
-     151	  add rsp, 8 ; deallocate var "temp8"
-     152	  add rsp, 8 ; deallocate var "temp7"
-     153	  add rsp, 8 ; deallocate var "temp6"
-     154	  add rsp, 8 ; deallocate var "temp5"
-     155	  lab_endif_17:
-     156	  add rsp, 8 ; deallocate var "temp3"
-     157	  pop rbp
-     158	  ret  ;;;; fack
-     159	
-     160		; @[{stack||stack}@]
-     161	GLOBAL id
-     162	id:
-     163	  push rbp
-     164	  mov  rbp, rsp
-     165	  mov rdx, [rsp+2*8] 
-     166	  mov rax, rdx ; access a var "u"
-     167	  pop rbp
-     168	  ret  ;;;; id
-     169	
-     170		; @[{stack||stack}@]
-     171	GLOBAL main
-     172	main:
-     173	  push rbp
-     174	  mov  rbp, rsp
-     175	mov rdi, rsp
-     176	call rukaml_initialize
-     177	  sub rsp, 8 ; allocate for var "temp11"
-     178		; expected_arity = 2
-     179		; formal_arity = 1
-     180		; calling "fack"
-     181	  sub rsp, 8 ; allocate wrapper for func __temp22
-     182	  mov rdi, fack
-     183	  mov rsi, 2
-     184	  call rukaml_alloc_closure
-     185	  mov [rsp], rax
-     186	  sub rsp, 8 ; allocate for argument 0 (name = __temp23)
-     187	  mov qword [rsp],  5
-     188	  mov rdi, [8*1+rsp]
-     189	  mov rsi, 1
-     190	  mov rdx, [rsp]
-     191	  mov al, 0
-     192	  call rukaml_applyN
-     193	  mov [8*2+rsp], rax
-     194	  add rsp, 8 ; deallocate var "__temp23"
-     195	  add rsp, 8 ; deallocate var "__temp22"
-     196	  sub rsp, 8 ; allocate for var "temp12"
-     197	  sub rsp, 8 ; allocate for var "__temp24"
-     198	  mov rdi, id
-     199	  mov rsi, 1
-     200	  call rukaml_alloc_closure
-     201	  mov [rsp], rax
-     202	  mov rax, 0  ; no float arguments
-     203	  mov rdi, [8*2+rsp]
-     204	  mov rsi, 1
-     205	  mov rdx, [rsp]
-     206	  call rukaml_applyN
-     207	  add rsp, 8 ; deallocate var "__temp24"
-     208	  mov [rsp], rax
-     209	  sub rsp, 8 ; allocate for var "rez"
-     210	  mov rdx, [rsp+1*8] 
-     211	  mov [rsp], rdx ; access a var "temp12"
-     212	  sub rsp, 8 ; allocate for var "temp13"
-     213	  mov rdi, [8*1+rsp]
-     214	  call rukaml_print_int ; short
-     215	  mov [rsp], rax
-     216	  sub rsp, 8 ; allocate for var "t"
-     217	  mov rdx, [rsp+1*8] 
-     218	  mov [rsp], rdx ; access a var "temp13"
-     219	  mov qword rax,  0
-     220	  add rsp, 8 ; deallocate var "t"
-     221	  add rsp, 8 ; deallocate var "temp13"
-     222	  add rsp, 8 ; deallocate var "rez"
-     223	  add rsp, 8 ; deallocate var "temp12"
-     224	  add rsp, 8 ; deallocate var "temp11"
-     225	  pop rbp
-     226	  ret  ;;;; main
+      11	GLOBAL fresh_1
+      12	
+      13	fresh_1:
+      14	  push rbp
+      15	  mov  rbp, rsp
+      16	  sub rsp, 8 ; allocate for var "temp1"
+      17	  sub rsp, 8 ; allocate for var "__temp3"
+      18	  mov rdx, [rsp+4*8] 
+      19	  mov [rsp], rdx ; access a var "n"
+      20	  sub rsp, 8 ; allocate for var "__temp4"
+      21	  mov rdx, [rsp+7*8] 
+      22	  mov [rsp], rdx ; access a var "m"
+      23	  mov rax, [8*1+rsp]
+      24	  mov rbx, [rsp]
+      25	  imul rbx, rax
+      26	  mov [8*2+rsp], rbx
+      27	  add rsp, 8 ; deallocate var "__temp4"
+      28	  add rsp, 8 ; deallocate var "__temp3"
+      29	  sub rsp, 8 ; allocate for var "__temp5"
+      30	  mov rdx, [rsp+1*8] 
+      31	  mov [rsp], rdx ; access a var "temp1"
+      32	  mov rax, 0  ; no float arguments
+      33	  mov rdi, [8*5+rsp]
+      34	  mov rsi, 1
+      35	  mov rdx, [rsp]
+      36	  call rukaml_applyN
+      37	  add rsp, 8 ; deallocate var "__temp5"
+      38	  mov rax, rax
+      39	  add rsp, 8 ; deallocate var "temp1"
+      40	  pop rbp
+      41	  ret  ;;;; fresh_1
+      42	GLOBAL fack
+      43	fack:
+      44	  push rbp
+      45	  mov  rbp, rsp
+      46	  sub rsp, 8 ; allocate for var "temp3"
+      47	  sub rsp, 8 ; allocate for var "__temp8"
+      48	  mov rdx, [rsp+4*8] 
+      49	  mov [rsp], rdx ; access a var "n"
+      50	  sub rsp, 8 ; allocate for var "__temp9"
+      51	  mov qword [rsp],  1
+      52	  mov rax, [8*1+rsp]
+      53	  mov rbx, [rsp]
+      54	  cmp rax, rbx
+      55	  je lab_14
+      56	  mov qword [8*2+rsp], 0
+      57	  jmp lab_15
+      58	lab_14:
+      59	  mov qword [8*2+rsp], 1
+      60	  jmp lab_15
+      61	lab_15:
+      62	  add rsp, 8 ; deallocate var "__temp9"
+      63	  add rsp, 8 ; deallocate var "__temp8"
+      64	  mov rdx, [rsp+0*8] 
+      65	  cmp rdx, 0
+      66	  je lab_then_16
+      67	  sub rsp, 8 ; allocate for var "__temp10"
+      68	  mov qword [rsp],  1
+      69	  mov rax, 0  ; no float arguments
+      70	  mov rdi, [8*5+rsp]
+      71	  mov rsi, 1
+      72	  mov rdx, [rsp]
+      73	  call rukaml_applyN
+      74	  add rsp, 8 ; deallocate var "__temp10"
+      75	  mov rax, rax
+      76	  jmp lab_endif_17
+      77	  lab_then_16:
+      78	  sub rsp, 8 ; allocate for var "temp5"
+      79	  sub rsp, 8 ; allocate for var "__temp11"
+      80	  mov rdx, [rsp+5*8] 
+      81	  mov [rsp], rdx ; access a var "n"
+      82	  mov rax, [rsp]
+      83	  dec rax
+      84	  mov [8*1+rsp], rax
+      85	  add rsp, 8 ; deallocate var "__temp11"
+      86	  sub rsp, 8 ; allocate for var "temp6"
+      87		; expected_arity = 2
+      88		; formal_arity = 1
+      89		; calling "fack"
+      90	  sub rsp, 8 ; allocate wrapper for func __temp12
+      91	  mov rdi, fack
+      92	  mov rsi, 2
+      93	  call rukaml_alloc_closure
+      94	  mov [rsp], rax
+      95	  sub rsp, 8 ; allocate for argument 0 (name = __temp13)
+      96	  mov rdx, [rsp+3*8] 
+      97	  mov [rsp], rdx ; access a var "temp5"
+      98	  mov rdi, [8*1+rsp]
+      99	  mov rsi, 1
+     100	  mov rdx, [rsp]
+     101	  mov al, 0
+     102	  call rukaml_applyN
+     103	  mov [8*2+rsp], rax
+     104	  add rsp, 8 ; deallocate var "__temp13"
+     105	  add rsp, 8 ; deallocate var "__temp12"
+     106	  sub rsp, 8 ; allocate for var "temp7"
+     107		; expected_arity = 3
+     108		; formal_arity = 1
+     109		; calling "fresh_1"
+     110	  sub rsp, 8 ; allocate wrapper for func __temp14
+     111	  mov rdi, fresh_1
+     112	  mov rsi, 3
+     113	  call rukaml_alloc_closure
+     114	  mov [rsp], rax
+     115	  sub rsp, 8 ; allocate for argument 0 (name = __temp15)
+     116	  mov rdx, [rsp+8*8] 
+     117	  mov [rsp], rdx ; access a var "n"
+     118	  mov rdi, [8*1+rsp]
+     119	  mov rsi, 1
+     120	  mov rdx, [rsp]
+     121	  mov al, 0
+     122	  call rukaml_applyN
+     123	  mov [8*2+rsp], rax
+     124	  add rsp, 8 ; deallocate var "__temp15"
+     125	  add rsp, 8 ; deallocate var "__temp14"
+     126	  sub rsp, 8 ; allocate for var "temp8"
+     127	  sub rsp, 8 ; allocate for var "__temp16"
+     128	  mov rdx, [rsp+9*8] 
+     129	  mov [rsp], rdx ; access a var "k"
+     130	  mov rax, 0  ; no float arguments
+     131	  mov rdi, [8*2+rsp]
+     132	  mov rsi, 1
+     133	  mov rdx, [rsp]
+     134	  call rukaml_applyN
+     135	  add rsp, 8 ; deallocate var "__temp16"
+     136	  mov [rsp], rax
+     137	  sub rsp, 8 ; allocate for var "__temp17"
+     138	  mov rdx, [rsp+1*8] 
+     139	  mov [rsp], rdx ; access a var "temp8"
+     140	  mov rax, 0  ; no float arguments
+     141	  mov rdi, [8*3+rsp]
+     142	  mov rsi, 1
+     143	  mov rdx, [rsp]
+     144	  call rukaml_applyN
+     145	  add rsp, 8 ; deallocate var "__temp17"
+     146	  mov rax, rax
+     147	  add rsp, 8 ; deallocate var "temp8"
+     148	  add rsp, 8 ; deallocate var "temp7"
+     149	  add rsp, 8 ; deallocate var "temp6"
+     150	  add rsp, 8 ; deallocate var "temp5"
+     151	  lab_endif_17:
+     152	  add rsp, 8 ; deallocate var "temp3"
+     153	  pop rbp
+     154	  ret  ;;;; fack
+     155	GLOBAL id
+     156	id:
+     157	  push rbp
+     158	  mov  rbp, rsp
+     159	  mov rdx, [rsp+2*8] 
+     160	  mov rax, rdx ; access a var "u"
+     161	  pop rbp
+     162	  ret  ;;;; id
+     163	GLOBAL main
+     164	main:
+     165	  push rbp
+     166	  mov  rbp, rsp
+     167	  mov rdi, rsp
+     168	  call rukaml_initialize
+     169	  sub rsp, 8 ; allocate for var "temp11"
+     170		; expected_arity = 2
+     171		; formal_arity = 1
+     172		; calling "fack"
+     173	  sub rsp, 8 ; allocate wrapper for func __temp22
+     174	  mov rdi, fack
+     175	  mov rsi, 2
+     176	  call rukaml_alloc_closure
+     177	  mov [rsp], rax
+     178	  sub rsp, 8 ; allocate for argument 0 (name = __temp23)
+     179	  mov qword [rsp],  5
+     180	  mov rdi, [8*1+rsp]
+     181	  mov rsi, 1
+     182	  mov rdx, [rsp]
+     183	  mov al, 0
+     184	  call rukaml_applyN
+     185	  mov [8*2+rsp], rax
+     186	  add rsp, 8 ; deallocate var "__temp23"
+     187	  add rsp, 8 ; deallocate var "__temp22"
+     188	  sub rsp, 8 ; allocate for var "temp12"
+     189	  sub rsp, 8 ; allocate for var "__temp24"
+     190	  mov rdi, id
+     191	  mov rsi, 1
+     192	  call rukaml_alloc_closure
+     193	  mov [rsp], rax
+     194	  mov rax, 0  ; no float arguments
+     195	  mov rdi, [8*2+rsp]
+     196	  mov rsi, 1
+     197	  mov rdx, [rsp]
+     198	  call rukaml_applyN
+     199	  add rsp, 8 ; deallocate var "__temp24"
+     200	  mov [rsp], rax
+     201	  sub rsp, 8 ; allocate for var "rez"
+     202	  mov rdx, [rsp+1*8] 
+     203	  mov [rsp], rdx ; access a var "temp12"
+     204	  sub rsp, 8 ; allocate for var "temp13"
+     205	  mov rdi, [8*1+rsp]
+     206	  call rukaml_print_int ; short
+     207	  mov [rsp], rax
+     208	  sub rsp, 8 ; allocate for var "t"
+     209	  mov rdx, [rsp+1*8] 
+     210	  mov [rsp], rdx ; access a var "temp13"
+     211	  mov qword rax,  0
+     212	  add rsp, 8 ; deallocate var "t"
+     213	  add rsp, 8 ; deallocate var "temp13"
+     214	  add rsp, 8 ; deallocate var "rez"
+     215	  add rsp, 8 ; deallocate var "temp12"
+     216	  add rsp, 8 ; deallocate var "temp11"
+     217	  pop rbp
+     218	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o
   $ gcc program.o ../../back_amd64/rukaml_stdlib.o -o program.exe 
   /usr/bin/ld: warning: program.o: missing .note.GNU-stack section implies executable stack

@@ -36,66 +36,60 @@
       15	              mov rdi, rax    ; rdi stores return code
       16	              mov rax, 60     ; exit syscall
       17	              syscall
-      18	
-      19		; @[{stack||stack}@]
-      20	GLOBAL sq
-      21	
-      22	sq:
-      23	  push rbp
-      24	  mov  rbp, rsp
-      25	  sub rsp, 8 ; allocate for var "__temp3"
-      26	  mov rdx, [rsp+3*8] 
-      27	  mov [rsp], rdx ; access a var "y"
-      28	  sub rsp, 8 ; allocate for var "__temp4"
-      29	  mov rdx, [rsp+4*8] 
-      30	  mov [rsp], rdx ; access a var "y"
-      31	  mov rax, [8*1+rsp]
-      32	  mov rbx, [rsp]
-      33	  imul rbx, rax
-      34	  mov rax, rbx
-      35	  add rsp, 8 ; deallocate var "__temp4"
-      36	  add rsp, 8 ; deallocate var "__temp3"
-      37	  pop rbp
-      38	  ret  ;;;; sq
-      39	
-      40		; @[{stack||stack}@]
-      41	GLOBAL double
-      42	double:
-      43	  push rbp
-      44	  mov  rbp, rsp
-      45	  sub rsp, 8 ; allocate for var "__temp7"
-      46	  mov rdx, [rsp+3*8] 
-      47	  mov [rsp], rdx ; access a var "x"
-      48	  sub rsp, 8 ; allocate for var "__temp8"
-      49	  mov rdx, [rsp+4*8] 
-      50	  mov [rsp], rdx ; access a var "x"
-      51	  mov rax, [8*1+rsp]
-      52	  mov rbx, [rsp]
-      53	  add  rbx, rax
-      54	  mov rax, rbx
-      55	  add rsp, 8 ; deallocate var "__temp8"
-      56	  add rsp, 8 ; deallocate var "__temp7"
-      57	  pop rbp
-      58	  ret  ;;;; double
-      59	
-      60		; @[{stack||stack}@]
-      61	GLOBAL main
-      62	main:
-      63	  push rbp
-      64	  mov  rbp, rsp
-      65	mov rdi, rsp
-      66	call rukaml_initialize
-      67		; expected_arity = 1
-      68		; formal_arity = 1
-      69		; calling "sq"
-      70	  ; expected_arity = formal_arity = 1
-      71	  sub rsp, 8 ; allocate for argument 0 (name = __temp11)
-      72	  mov qword [rsp],  7
-      73	  call sq
-      74	  add rsp, 8 ; deallocate var "__temp11"
-      75	  mov rax, rax
-      76	  pop rbp
-      77	  ret  ;;;; main
+      18	GLOBAL sq
+      19	
+      20	sq:
+      21	  push rbp
+      22	  mov  rbp, rsp
+      23	  sub rsp, 8 ; allocate for var "__temp3"
+      24	  mov rdx, [rsp+3*8] 
+      25	  mov [rsp], rdx ; access a var "y"
+      26	  sub rsp, 8 ; allocate for var "__temp4"
+      27	  mov rdx, [rsp+4*8] 
+      28	  mov [rsp], rdx ; access a var "y"
+      29	  mov rax, [8*1+rsp]
+      30	  mov rbx, [rsp]
+      31	  imul rbx, rax
+      32	  mov rax, rbx
+      33	  add rsp, 8 ; deallocate var "__temp4"
+      34	  add rsp, 8 ; deallocate var "__temp3"
+      35	  pop rbp
+      36	  ret  ;;;; sq
+      37	GLOBAL double
+      38	double:
+      39	  push rbp
+      40	  mov  rbp, rsp
+      41	  sub rsp, 8 ; allocate for var "__temp7"
+      42	  mov rdx, [rsp+3*8] 
+      43	  mov [rsp], rdx ; access a var "x"
+      44	  sub rsp, 8 ; allocate for var "__temp8"
+      45	  mov rdx, [rsp+4*8] 
+      46	  mov [rsp], rdx ; access a var "x"
+      47	  mov rax, [8*1+rsp]
+      48	  mov rbx, [rsp]
+      49	  add  rbx, rax
+      50	  mov rax, rbx
+      51	  add rsp, 8 ; deallocate var "__temp8"
+      52	  add rsp, 8 ; deallocate var "__temp7"
+      53	  pop rbp
+      54	  ret  ;;;; double
+      55	GLOBAL main
+      56	main:
+      57	  push rbp
+      58	  mov  rbp, rsp
+      59	  mov rdi, rsp
+      60	  call rukaml_initialize
+      61		; expected_arity = 1
+      62		; formal_arity = 1
+      63		; calling "sq"
+      64	  ; expected_arity = formal_arity = 1
+      65	  sub rsp, 8 ; allocate for argument 0 (name = __temp11)
+      66	  mov qword [rsp],  7
+      67	  call sq
+      68	  add rsp, 8 ; deallocate var "__temp11"
+      69	  mov rax, rax
+      70	  pop rbp
+      71	  ret  ;;;; main
 
   $ nasm -felf64 program.asm -o program.o && ld -o program.exe program.o && chmod u+x program.exe && ./program.exe
   ld: warning: cannot find entry symbol _start; defaulting to 0000000000401000

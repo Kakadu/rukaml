@@ -32,43 +32,41 @@
       15	              mov rdi, rax    ; rdi stores return code
       16	              mov rax, 60     ; exit syscall
       17	              syscall
-      18	
-      19		; @[{stack||stack}@]
-      20	GLOBAL main
-      21	
-      22	main:
-      23	  push rbp
-      24	  mov  rbp, rsp
-      25	mov rdi, rsp
-      26	call rukaml_initialize
-      27	  sub rsp, 8 ; allocate for var "temp1"
-      28	  sub rsp, 8 ; allocate for var "__temp3"
-      29	  mov qword [rsp],  0
-      30	  sub rsp, 8 ; allocate for var "__temp4"
-      31	  mov qword [rsp],  1
-      32	  mov rax, [8*1+rsp]
-      33	  mov rbx, [rsp]
-      34	  cmp rax, rbx
-      35	  je lab_3
-      36	  mov qword [8*2+rsp], 0
-      37	  jmp lab_4
-      38	  lab_3:
-      39	    mov qword [8*2+rsp], 1
-      40	    jmp lab_4
-      41	  lab_4:
-      42	  add rsp, 8 ; deallocate var "__temp4"
-      43	  add rsp, 8 ; deallocate var "__temp3"
-      44	  mov rdx, [rsp+0*8] 
-      45	  cmp rdx, 0
-      46	  je lab_then_5
-      47	  mov qword rax,  10
-      48	  jmp lab_endif_6
-      49	  lab_then_5:
-      50	  mov qword rax,  20
-      51	  lab_endif_6:
-      52	  add rsp, 8 ; deallocate var "temp1"
-      53	  pop rbp
-      54	  ret  ;;;; main
+      18	GLOBAL main
+      19	
+      20	main:
+      21	  push rbp
+      22	  mov  rbp, rsp
+      23	  mov rdi, rsp
+      24	  call rukaml_initialize
+      25	  sub rsp, 8 ; allocate for var "temp1"
+      26	  sub rsp, 8 ; allocate for var "__temp3"
+      27	  mov qword [rsp],  0
+      28	  sub rsp, 8 ; allocate for var "__temp4"
+      29	  mov qword [rsp],  1
+      30	  mov rax, [8*1+rsp]
+      31	  mov rbx, [rsp]
+      32	  cmp rax, rbx
+      33	  je lab_3
+      34	  mov qword [8*2+rsp], 0
+      35	  jmp lab_4
+      36	lab_3:
+      37	  mov qword [8*2+rsp], 1
+      38	  jmp lab_4
+      39	lab_4:
+      40	  add rsp, 8 ; deallocate var "__temp4"
+      41	  add rsp, 8 ; deallocate var "__temp3"
+      42	  mov rdx, [rsp+0*8] 
+      43	  cmp rdx, 0
+      44	  je lab_then_5
+      45	  mov qword rax,  10
+      46	  jmp lab_endif_6
+      47	  lab_then_5:
+      48	  mov qword rax,  20
+      49	  lab_endif_6:
+      50	  add rsp, 8 ; deallocate var "temp1"
+      51	  pop rbp
+      52	  ret  ;;;; main
 
   $ nasm -felf64 program.asm -o program.o && ld -o program.exe program.o && chmod u+x program.exe && ./program.exe
   ld: warning: cannot find entry symbol _start; defaulting to 0000000000401000
