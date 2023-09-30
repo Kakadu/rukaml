@@ -6,6 +6,17 @@
  (applies_to 002helloworld_nasm)
  (deps helloworld_nasm.s))
 
+(rule
+ (targets 002hello.exe)
+ (deps
+  (:src helloworld_nasm.s))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run nasm -g -F dwarf -felf64 %{src} -o hello.o)
+   (run ld hello.o -o %{targets}))))
+
 (cram
  (applies_to 003helloworld)
  (deps 003hello.s))
@@ -25,3 +36,15 @@
   005fac.s
   ;
   ))
+
+(rule
+ (targets fac.exe)
+ (deps
+  (:srcasm 005fac.s)
+  (:srcc 005print_int.c))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run nasm -g -F dwarf -felf64 %{srcasm} -o fac.o)
+   (run gcc -g fac.o %{srcc} -o %{targets}))))

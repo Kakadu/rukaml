@@ -1,9 +1,11 @@
   $ as  helloworld_gas.s -o hello1.o
   $ ld -o hello hello1.o
-  $ ./hello #| xargs -l echo  2>/dev/null   | sed 's/Segmentation/11111/g'
+There we redirect shell's output to separate file, to be able to sed the output
+  $ (sh -c ./hello) 2> err.log
   hello, world!
-  Segmentation fault (core dumped)
   [139]
+  $ cat err.log
+  Segmentation fault
   $ objdump --dwarf=decodedline  -M intel -D hello1.o
   
   hello1.o:     file format elf64-x86-64

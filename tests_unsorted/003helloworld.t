@@ -3,8 +3,8 @@
   $ chmod u+x hello
   $ ./hello
   hello, world!
-  $ echo $?k
-  0k
+  $ echo $?
+  0
   $ objdump -M intel -D hello.o
   
   hello.o:     file format elf64-x86-64

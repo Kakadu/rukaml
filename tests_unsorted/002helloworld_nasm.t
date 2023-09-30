@@ -1,10 +1,12 @@
   $ nasm -felf64 helloworld_nasm.s -o hello.o
   $ ld -o hello hello.o
   $ chmod u+x hello
-  $ ./hello
+There we redirect shell's output to separate file, to be able to sed the output
+  $ (sh -c ./hello) 2> err.log
   hello, world!
-  Segmentation fault (core dumped)
   [139]
+  $ cat err.log
+  Segmentation fault
   $ objdump -M intel -D hello.o
   
   hello.o:     file format elf64-x86-64

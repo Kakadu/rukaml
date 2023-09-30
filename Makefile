@@ -12,4 +12,5 @@ promote:
 
 deps:
 	opam install --yes dune-site angstrom ppx_blob ppx_show llvm ppx_expect
+	sudo apt install nasm --yes --no-install-recommends
 
