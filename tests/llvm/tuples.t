@@ -12,11 +12,10 @@
       (temp1, a)
   let f a b =
     let temp3 = mydiv a  in
-      let temp4 = temp3 b  in
-        let temp5 = temp4 in
-          let u = field 0 temp5 in
-            let v = field 1 temp5 in
-              (u + v)
+      let temp5 = temp3 b  in
+        let u = field 0 temp5 in
+          let v = field 1 temp5 in
+            (u + v)
   let main =
     let temp7 = f 7  in
       temp7 13 
@@ -25,11 +24,10 @@
       (temp1, a)
   let f a b =
     let temp3 = mydiv a  in
-      let temp4 = temp3 b  in
-        let temp5 = temp4 in
-          let u = field 0 temp5 in
-            let v = field 1 temp5 in
-              (u + v)
+      let temp5 = temp3 b  in
+        let u = field 0 temp5 in
+          let v = field 1 temp5 in
+            (u + v)
   let main =
     let temp7 = f 7  in
       temp7 13 

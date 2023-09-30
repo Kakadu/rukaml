@@ -172,6 +172,12 @@ let simplify : expr -> expr =
       | EComplex e -> EComplex (helper_c e)
       | ELet (Parsetree.NonRecursive, PVar name1, body, EComplex (CAtom (AVar name2)))
         when String.equal name1 name2 -> EComplex (helper_c body)
+      | ELet
+          ( NonRecursive
+          , PVar name1
+          , body
+          , ELet (NonRecursive, var2, CAtom (AVar name2), wher_) )
+        when String.equal name1 name2 -> helper (ELet (NonRecursive, var2, body, wher_))
       | ELet (flg, name, body, wher) -> ELet (flg, name, helper_c body, helper wher)
     in
     (* log "Simpl: @[%a@] ~~> @[%a@] " pp e pp rez; *)
@@ -229,7 +235,7 @@ let reset_gensym, gensym =
 ;;
 
 let gensym_s : _ =
- fun ?(prefix = "temp") () ->
+  fun ?(prefix = "temp") () ->
   let n = gensym () in
   Printf.sprintf "%s%d" prefix n
 ;;
@@ -331,9 +337,9 @@ let anf =
     | TLam (pat, body, _) ->
       anf_pat pat ~kbefore:(fun name e -> elam name e) (fun pat -> helper body k)
     (* | TLam (PVar pat, body, _) ->
-      let name = gensym_s () in
-      let body = helper body complex_of_atom in
-      make_let_nonrec name (CAtom (ALam (APname pat, body))) (k (AVar name)) *)
+       let name = gensym_s () in
+       let body = helper body complex_of_atom in
+       make_let_nonrec name (CAtom (ALam (APname pat, body))) (k (AVar name)) *)
     | TLet (flag, name, _typ, TLam (PVar vname, body, _), wher) ->
       ELet
         ( flag
