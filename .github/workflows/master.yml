@@ -38,8 +38,8 @@ jobs:
 
       - name: Install OPAM dependencies via Makefile
         #continue-on-error: true
-        run: >
-          sudo apt update
+        run: |
+          sudo apt update --yes
           make deps
 
       - run: opam exec -- dune build @default --profile=release
