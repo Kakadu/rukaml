@@ -23,11 +23,9 @@
     u
   let main =
     let temp11 = fack 5  in
-      let temp12 = temp11 id  in
-        let rez = temp12 in
-          let temp13 = print rez  in
-            let t = temp13 in
-              0
+      let rez = temp11 id  in
+        let t = print rez  in
+          0
   ANF: let fresh_1 n k m =
          let temp1 = (n * m) in
            k temp1 
@@ -44,11 +42,9 @@
          u
        let main =
          let temp11 = fack 5  in
-           let temp12 = temp11 id  in
-             let rez = temp12 in
-               let temp13 = print rez  in
-                 let t = temp13 in
-                   0
+           let rez = temp11 id  in
+             let t = print rez  in
+               0
 
   $ cat program.asm | nl -ba
        1	section .text
@@ -238,7 +234,7 @@
      185	  mov [8*2+rsp], rax
      186	  add rsp, 8 ; deallocate var "__temp23"
      187	  add rsp, 8 ; deallocate var "__temp22"
-     188	  sub rsp, 8 ; allocate for var "temp12"
+     188	  sub rsp, 8 ; allocate for var "rez"
      189	  sub rsp, 8 ; allocate for var "__temp24"
      190	  mov rdi, id
      191	  mov rsi, 1
@@ -251,24 +247,16 @@
      198	  call rukaml_applyN
      199	  add rsp, 8 ; deallocate var "__temp24"
      200	  mov [rsp], rax
-     201	  sub rsp, 8 ; allocate for var "rez"
-     202	  mov rdx, [rsp+1*8] 
-     203	  mov [rsp], rdx ; access a var "temp12"
-     204	  sub rsp, 8 ; allocate for var "temp13"
-     205	  mov rdi, [8*1+rsp]
-     206	  call rukaml_print_int ; short
-     207	  mov [rsp], rax
-     208	  sub rsp, 8 ; allocate for var "t"
-     209	  mov rdx, [rsp+1*8] 
-     210	  mov [rsp], rdx ; access a var "temp13"
-     211	  mov qword rax,  0
-     212	  add rsp, 8 ; deallocate var "t"
-     213	  add rsp, 8 ; deallocate var "temp13"
-     214	  add rsp, 8 ; deallocate var "rez"
-     215	  add rsp, 8 ; deallocate var "temp12"
-     216	  add rsp, 8 ; deallocate var "temp11"
-     217	  pop rbp
-     218	  ret  ;;;; main
+     201	  sub rsp, 8 ; allocate for var "t"
+     202	  mov rdi, [8*1+rsp]
+     203	  call rukaml_print_int ; short
+     204	  mov [rsp], rax
+     205	  mov qword rax,  0
+     206	  add rsp, 8 ; deallocate var "t"
+     207	  add rsp, 8 ; deallocate var "rez"
+     208	  add rsp, 8 ; deallocate var "temp11"
+     209	  pop rbp
+     210	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o
   $ gcc program.o ../../back_amd64/rukaml_stdlib.o -o program.exe 
   /usr/bin/ld: warning: program.o: missing .note.GNU-stack section implies executable stack
@@ -276,4 +264,4 @@
   /usr/bin/ld: program.o: warning: relocation in read-only section `.text'
   /usr/bin/ld: warning: creating DT_TEXTREL in a PIE
   $ chmod u+x program.exe && ./program.exe
-  120
+  rukaml_print_int 120

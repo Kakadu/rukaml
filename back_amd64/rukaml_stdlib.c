@@ -27,7 +27,7 @@ static uint64_t log_level = 0;
   if (log_level & 0x800) \
   printf(__VA_ARGS__)
 
-#define HEADER(size, tag) ((size << 10) + (tag % 256))
+#define HEADER(size, tag) ( (uint64_t) ((size << 10u) + (tag % 256u)) )
 #define SIZE(ptr) (*((uint64_t *)ptr - 1) >> 10)
 #define TAG(ptr) (*((uint64_t *)ptr - 1) & 0xFF)
 #define FIELD(ptr, n) ((uint64_t *)ptr + n)
@@ -62,9 +62,9 @@ static struct gc_data GC = {.ebp = 0, .allocated_words = 0, .stats = {.gs_alloca
 void rukaml_initialize(uint64_t ebp)
 {
   setbuf(stdout, NULL);
-
+// 
   {
-    const char *env = getenv("RUKAMLRUNPARAM");
+    char *env = getenv("RUKAMLRUNPARAM");
     if (env)
     {
       char *temp;
@@ -86,7 +86,7 @@ void rukaml_initialize(uint64_t ebp)
         {
           long v = strtol(temp + 2, (char **)NULL, 10);
           assert(v > 0);
-          logGC("Setting heap size to be %u words\n", v);
+          logGC("Setting heap size to be %ld words\n", v);
           HEAP_SIZE = (uint32_t)v;
           break;
         }
@@ -201,8 +201,7 @@ void rukaml_gc_print_stats(void)
 
 void rukaml_print_int(int x)
 {
-  printf("%s %d\n", x, __func__);
-  // putchar(0x30 + x);
+  printf("%s %d\n", __func__, x);
   fflush(stdout);
 }
 
@@ -276,7 +275,7 @@ void *rukaml_alloc_pair(void *l, void *r)
   uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
   GC.allocated_words += 3;
   GC.stats.gs_allocated_words += 3;
-  rez[0] = HEADER(2, Tuple_tag);
+  rez[0] = (uint64_t*) HEADER(2, Tuple_tag);
   assert(TAG(rez + 1) == Tuple_tag);
 
   (rez)[1] = l;

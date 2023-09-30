@@ -41,6 +41,7 @@
   (run
    gcc
    -g
+   -Wall
    %{deps}
    -c
    -o
