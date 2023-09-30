@@ -1,8 +1,6 @@
   $ gcc 005print_int.c -c -o print_int.o
   $ nasm -felf64 005fac.s -o fac.o
   $ gcc fac.o print_int.o -o 005.exe
-  /usr/bin/ld: warning: fac.o: missing .note.GNU-stack section implies executable stack
-  /usr/bin/ld: NOTE: This behaviour is deprecated and will be removed in a future version of the linker
   $ ./005.exe
   print_int 24
   $ echo $?

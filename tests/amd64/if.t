@@ -14,7 +14,7 @@
            else 20)
 
 ; generated code for amd64
-  $ cat program.asm | nl -ba
+  $ cat program.asm  | grep -v 'section .note.GNU-stack' | nl -ba
        1	section .text
        2	extern rukaml_alloc_closure
        3	extern rukaml_print_int

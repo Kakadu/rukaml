@@ -442,6 +442,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
 
   Stdio.Out_channel.with_file file ~f:(fun ch ->
       let ppf = Format.formatter_of_out_channel ch in
+      printfn ppf "section .note.GNU-stack noalloc noexec nowrite progbits";
 
       if use_custom_main then
         printfn ppf

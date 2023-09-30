@@ -1,5 +1,4 @@
 global _start
-
 extern fac
 section .text
 _start:
@@ -10,3 +9,6 @@ _start:
     mov rax, 60   ; 'exit' syscall number
     syscall
 ; PITFALL
+
+; Silence linker's warning about executable stack
+section .note.GNU-stack noalloc noexec nowrite progbits

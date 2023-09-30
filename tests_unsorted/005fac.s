@@ -9,7 +9,7 @@ _start:
   mov rax, 60     ; exit syscall
   syscall
 
-; copy-paste from Godbolt
+; copy-paste from Godbolt (-O0)
 fac:
   sub     rsp, 24
   mov     dword [rsp+12], edi
@@ -27,6 +27,7 @@ fac:
   add     rsp, 24
   ret
 
+; TODO: optimized factorial
 
 GLOBAL main
 main:
@@ -38,3 +39,6 @@ main:
   call print_int
   pop rbp
   ret  ;;;; main
+
+; Silence linker's warning about executable stack
+section .note.GNU-stack noalloc noexec nowrite progbits

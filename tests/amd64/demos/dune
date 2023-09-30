@@ -1,33 +1,38 @@
 (cram
  (applies_to)
- (deps double.exe if.exe app1.exe gc1.exe))
+ (deps
+  ;double.exe 
+  if.exe
+  app1.exe
+  gc1.exe))
 
-(rule
- (targets double.asm double.exe)
- (deps double.ml)
- (mode
-  (promote (until-clean)))
- (action
-  (progn
-   (run
-    %{project_root}/back_amd64/amd64_compiler.exe
-    double.ml
-    -o
-    double.asm)
-   (run nasm -g -F dwarf -felf64 double.asm -o double.o)
-   (run gcc -g -o double.exe double.o))))
+; (rule
+;  (targets double.asm double.exe)
+;  (deps double.ml)
+;  (mode
+;   (promote (until-clean)))
+;  (action
+;   (progn
+;    (run
+;     %{project_root}/back_amd64/amd64_compiler.exe
+;     double.ml
+;     -o
+;     double.asm)
+;    (run nasm -g -F dwarf -felf64 double.asm -o double.o)
+;    (run gcc -g -o double.exe double.o))))
 
 (rule
  (targets if.asm if.exe)
  (deps
-  (:src if.ml))
+  (:src if.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
   (progn
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o if.asm)
    (run nasm -g -F dwarf -felf64 if.asm -o if.o)
-   (run gcc -g -o if.exe if.o))))
+   (run gcc -g -o if.exe %{stdlib} if.o))))
 
 (rule
  (targets fac.asm fac.exe)
@@ -81,14 +86,14 @@
    (run nasm -g -F dwarf -felf64 app1.asm -o app1.o)
    (run gcc -g -o app1.exe %{stdlib} app1.o))))
 
-(rule
- (targets hack.exe)
- (deps
-  (:src hack.asm)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
- (mode
-  (promote (until-clean)))
- (action
-  (progn
-   (run nasm -g -F dwarf -felf64 hack.asm -o hack.o)
-   (run gcc -g -o hack.exe %{stdlib} hack.o))))
+; (rule
+;  (targets hack.exe)
+;  (deps
+;   (:src hack.asm)
+;   (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+;  (mode
+;   (promote (until-clean)))
+;  (action
+;   (progn
+;    (run nasm -g -F dwarf -felf64 hack.asm -o hack.o)
+;    (run gcc -g -o hack.exe %{stdlib} hack.o))))
