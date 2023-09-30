@@ -37,8 +37,10 @@ jobs:
           fetch-depth: 1
 
       - name: Install OPAM dependencies via Makefile
-        continue-on-error: true
-        run: make deps
+        #continue-on-error: true
+        run: >
+          sudo apt update
+          make deps
 
       - run: opam exec -- dune build @default --profile=release
       - run: opam exec -- dune test
