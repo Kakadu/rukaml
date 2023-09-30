@@ -322,8 +322,6 @@
      242	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o
   $ gcc program.o ../../back_amd64/rukaml_stdlib.o -o program.exe 
-  /usr/bin/ld: warning: program.o: missing .note.GNU-stack section implies executable stack
-  /usr/bin/ld: NOTE: This behaviour is deprecated and will be removed in a future version of the linker
 $ ulimit -s 64
 $ export RUKAMLRUNPARAM=v=2048,m=128
   $ chmod u+x program.exe && ./program.exe

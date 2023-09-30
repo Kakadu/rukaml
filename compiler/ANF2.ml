@@ -335,7 +335,7 @@ let anf =
           let name = gensym_s () in
           ELet (NonRecursive, PVar name, CApp (f, arg1, []), k (AVar name))))
     | TLam (pat, body, _) ->
-      anf_pat pat ~kbefore:(fun name e -> elam name e) (fun pat -> helper body k)
+      anf_pat pat ~kbefore:(fun name e -> elam name e) (fun _pat -> helper body k)
     (* | TLam (PVar pat, body, _) ->
        let name = gensym_s () in
        let body = helper body complex_of_atom in

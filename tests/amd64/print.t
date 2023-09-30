@@ -154,8 +154,6 @@
      117	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o
   $ gcc program.o ../../back_amd64/rukaml_stdlib.o -o program.exe 
-  /usr/bin/ld: warning: program.o: missing .note.GNU-stack section implies executable stack
-  /usr/bin/ld: NOTE: This behaviour is deprecated and will be removed in a future version of the linker
   /usr/bin/ld: program.o: warning: relocation in read-only section `.text'
   /usr/bin/ld: warning: creating DT_TEXTREL in a PIE
 $ ulimit -c 0

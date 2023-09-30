@@ -78,6 +78,4 @@
 
   $ nasm -felf64 program.asm -o program.o 
   $ gcc -g -o program.exe ../../back_amd64/rukaml_stdlib.o program.o && ./program.exe
-  /usr/bin/ld: warning: program.o: missing .note.GNU-stack section implies executable stack
-  /usr/bin/ld: NOTE: This behaviour is deprecated and will be removed in a future version of the linker
   rukaml_print_int 6

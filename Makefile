@@ -12,5 +12,6 @@ promote:
 
 deps:
 	opam install --yes dune-site angstrom ppx_blob ppx_show llvm ppx_expect
-	sudo apt install nasm --yes --no-install-recommends
+	sudo apt install --yes --no-install-recommends \
+		nasm clang-14
 

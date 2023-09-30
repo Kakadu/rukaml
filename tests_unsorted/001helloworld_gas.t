@@ -4,7 +4,7 @@ There we redirect shell's output to separate file, to be able to sed the output
   $ (sh -c ./hello) 2> err.log
   hello, world!
   [139]
-  $ cat err.log
+  $ cat err.log | sed 's/ \(core dumped\)//g'
   Segmentation fault
   $ objdump --dwarf=decodedline  -M intel -D hello1.o
   
