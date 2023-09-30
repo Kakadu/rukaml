@@ -23,6 +23,7 @@ jobs:
     steps:
       - run: opam --version
       - run: opam exec -- ocamlopt --version
+      - run: opam list
 
       #- name: Cancel Previous Runs
       #  uses: styfle/cancel-workflow-action@0.11.0
