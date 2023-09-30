@@ -1,6 +1,6 @@
-  $ gcc 005print_int.c -c -o print_int.o
+  $ gcc-12 005print_int.c -c -o print_int.o
   $ nasm -felf64 005fac.s -o fac.o
-  $ gcc fac.o print_int.o -o 005.exe
+  $ gcc-12 fac.o print_int.o -o 005.exe
   $ ./005.exe
   print_int 24
   $ echo $?

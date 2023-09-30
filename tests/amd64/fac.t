@@ -77,5 +77,5 @@
       60	  ret  ;;;; main
 
   $ nasm -felf64 program.asm -o program.o 
-  $ gcc -g -o program.exe ../../back_amd64/rukaml_stdlib.o program.o && ./program.exe
+  $ gcc-12 -g -o program.exe ../../back_amd64/rukaml_stdlib.o program.o && ./program.exe
   rukaml_print_int 6

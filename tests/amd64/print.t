@@ -153,7 +153,7 @@
      116	  pop rbp
      117	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o
-  $ gcc program.o ../../back_amd64/rukaml_stdlib.o -o program.exe 
+  $ gcc-12 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe 
   /usr/bin/ld: program.o: warning: relocation in read-only section `.text'
   /usr/bin/ld: warning: creating DT_TEXTREL in a PIE
 $ ulimit -c 0

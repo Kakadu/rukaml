@@ -39,4 +39,4 @@
 ;   (progn
 ;    (run %{project_root}/back_amd64/amd64_compiler.exe print.ml -o print.asm)
 ;    (run nasm -g -F dwarf -felf64 print.asm -o print.o)
-;    (run gcc -g print.o %{stdlib} -o print.exe))))
+;    (run gcc-12 -g print.o %{stdlib} -o print.exe))))

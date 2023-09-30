@@ -47,4 +47,4 @@
  (action
   (progn
    (run nasm -g -F dwarf -felf64 %{srcasm} -o fac.o)
-   (run gcc -g fac.o %{srcc} -o %{targets}))))
+   (run gcc-12 -g fac.o %{srcc} -o %{targets}))))

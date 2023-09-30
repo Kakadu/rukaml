@@ -321,7 +321,7 @@
      241	  pop rbp
      242	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o
-  $ gcc program.o ../../back_amd64/rukaml_stdlib.o -o program.exe 
+  $ gcc-12 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe 
 $ ulimit -s 64
 $ export RUKAMLRUNPARAM=v=2048,m=128
   $ chmod u+x program.exe && ./program.exe
