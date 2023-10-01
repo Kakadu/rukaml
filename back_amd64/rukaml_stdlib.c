@@ -27,7 +27,7 @@ static uint64_t log_level = 0;
   if (log_level & 0x800) \
   printf(__VA_ARGS__)
 
-#define HEADER(size, tag) ( (uint64_t) ((size << 10u) + (tag % 256u)) )
+#define HEADER(size, tag) ((uint64_t)((size << 10u) + (tag % 256u)))
 #define SIZE(ptr) (*((uint64_t *)ptr - 1) >> 10)
 #define TAG(ptr) (*((uint64_t *)ptr - 1) & 0xFF)
 #define FIELD(ptr, n) ((uint64_t *)ptr + n)
@@ -62,7 +62,6 @@ static struct gc_data GC = {.ebp = 0, .allocated_words = 0, .stats = {.gs_alloca
 void rukaml_initialize(uint64_t ebp)
 {
   setbuf(stdout, NULL);
-// 
   {
     char *env = getenv("RUKAMLRUNPARAM");
     if (env)
@@ -201,7 +200,14 @@ void rukaml_gc_print_stats(void)
 
 void rukaml_print_int(int x)
 {
-  printf("%s %d\n", __func__, x);
+  putchar(0x30 + x);
+  putchar('\n');
+  char repr[15];
+  snprintf(repr, 15, "%d", x);
+  puts(repr);
+  printf("%s\n", __func__);
+  fflush(stdout);
+  printf("%d\n", x);
   fflush(stdout);
 }
 
@@ -213,37 +219,33 @@ typedef void *(*fun7)(void *, void *, void *, void *, void *, void *, void *);
 typedef void *(*fun8)(void *, void *, void *, void *, void *, void *, void *, void *);
 typedef void *(*fun9)(void *, void *, void *, void *, void *, void *, void *, void *, void *);
 
-void *rukaml_apply0(void *f)
+void *rukaml_apply0(fun0 f)
 {
   // TODO: I'm not sure that zero-argument call is needed
-  fun0 foo = (fun0)f;
-  return foo();
+  return f();
 }
 
 // NOTE: Below we pass first 6 arguments as zeros, because they go to the registers.
 // Others will go on stack
-void *rukaml_apply1(void *f, void *arg1)
+void *rukaml_apply1(fun7 foo, void *arg1)
 {
 #ifdef DEBUG
   printf("%s f = %" PRIx64 ", arg = %" PRIx64 "\n", __func__, f, arg1);
 #endif
-  fun7 foo = (fun7)f;
   return foo(0, 0, 0, 0, 0, 0, arg1);
 }
 
-void *rukaml_apply2(void *f, void *arg1, void *arg2)
+void *rukaml_apply2(fun8 f, void *arg1, void *arg2)
 {
-  fun8 foo = (fun8)f;
 #ifdef DEBUG
   printf("call %s with code ptr = %" PRIx64 "\n", __func__, (uint64_t)f);
 #endif
-  return foo(0, 0, 0, 0, 0, 0, arg1, arg2);
+  return f(0, 0, 0, 0, 0, 0, arg1, arg2);
 }
 
-void *rukaml_apply3(void *f, void *arg1, void *arg2, void *arg3)
+void *rukaml_apply3(fun9 f, void *arg1, void *arg2, void *arg3)
 {
-  fun9 foo = (fun9)f;
-  return foo(0, 0, 0, 0, 0, 0, arg1, arg2, arg3);
+  return f(0, 0, 0, 0, 0, 0, arg1, arg2, arg3);
 }
 
 typedef struct
@@ -275,7 +277,7 @@ void *rukaml_alloc_pair(void *l, void *r)
   uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
   GC.allocated_words += 3;
   GC.stats.gs_allocated_words += 3;
-  rez[0] = (uint64_t*) HEADER(2, Tuple_tag);
+  rez[0] = (uint64_t *)HEADER(2, Tuple_tag);
   assert(TAG(rez + 1) == Tuple_tag);
 
   (rez)[1] = l;
@@ -289,11 +291,11 @@ void *rukaml_field(int n, void **r)
   return r[n];
 }
 
-int64_t myadd(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t a, int64_t b)
+/* int64_t myadd(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t a, int64_t b)
 {
   printf("a = %ld, b = %ld\n", a, b);
   return a * b;
-}
+} */
 
 void *rukaml_alloc_closure(void *func, int32_t argsc)
 {
@@ -357,6 +359,8 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
   {
     switch (f_closure->argsc)
     {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
     case 0:
       return rukaml_apply0(f_closure->code);
       break;
@@ -369,6 +373,7 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
     case 3:
       return rukaml_apply3(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2]);
       break;
+#pragma GCC diagnostic pop
     default:
       printf("FUCK, f_closure->argsc = %lu\n", f_closure->argsc);
       printf("Application of too many arguments is not implemented!");

@@ -42,6 +42,7 @@
    gcc
    -g
    -Wall
+   -Wpedantic
    %{deps}
    -c
    -o

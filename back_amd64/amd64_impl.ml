@@ -187,6 +187,7 @@ let generate_body is_toplevel ppf body =
         match arg1 with
         | AVar v when LoI.has_key v ->
             printfn ppf "  mov rdi, %a" pp_dest (DStack_var v);
+            printfn ppf "  mov rax, 0";
             printfn ppf "  call rukaml_print_int ; short";
             printfn ppf "  mov %a, rax" pp_dest dest
         | arg1 ->
