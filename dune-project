@@ -30,6 +30,8 @@
   dune
   dune-site
   angstrom
+  (ocaml
+   (>= 4.14))
   (ppx_inline_test :with-test)
   ppx_expect
   ppx_show
