@@ -35,7 +35,8 @@
   (ppx_inline_test :with-test)
   ppx_expect
   ppx_show
-  llvm
+  (llvm
+   (= 14.0.6))
   ctypes-foreign ; needed for LLVM
   ppx_blob
   (odoc :with-doc)

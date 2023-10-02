@@ -15,5 +15,5 @@ deps:
 	sudo apt install --yes --no-install-recommends \
 		nasm clang-14 gcc-12 pkg-config
 	opam install --yes \
-		dune-site angstrom ppx_blob ppx_show ppx_expect llvm.14.0.6 ctype-foreign
+		dune-site angstrom ppx_blob ppx_show ppx_expect llvm.14.0.6 ctypes-foreign
 
