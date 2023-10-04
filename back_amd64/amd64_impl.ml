@@ -187,6 +187,11 @@ let generate_body is_toplevel ppf body =
         match arg1 with
         | AVar v when LoI.has_key v ->
             printfn ppf "  mov rdi, %a" pp_dest (DStack_var v);
+            printfn ppf "  mov rsi, 0";
+            printfn ppf "  mov rcx, 0";
+            printfn ppf "  mov rdx, 0";
+            printfn ppf "  mov r8, 0";
+            printfn ppf "  mov r9, 0";
             printfn ppf "  mov rax, 0";
             printfn ppf "  call rukaml_print_int ; short";
             printfn ppf "  mov %a, rax" pp_dest dest
@@ -270,8 +275,8 @@ let generate_body is_toplevel ppf body =
         let right_dest = DStack_var right_name in
         helper_a right_dest arg2;
         printfn ppf "  mov rax, %a" pp_dest left_dest;
-        printfn ppf "  mov rbx, %a" pp_dest right_dest;
-        printfn ppf "  cmp rax, rbx";
+        printfn ppf "  mov r8, %a" pp_dest right_dest;
+        printfn ppf "  cmp rax, r8";
         let eq_lab = Printf.sprintf "lab_%d" (gensym ()) in
         let exit_lab = Printf.sprintf "lab_%d" (gensym ()) in
         printfn ppf "  je %s" eq_lab;
@@ -299,8 +304,8 @@ let generate_body is_toplevel ppf body =
         let left_dest = DStack_var left_name in
         helper_a left_dest arg1;
         printfn ppf "  mov rax, %a" pp_dest left_dest;
-        printfn ppf "  mov qword rbx, %d" n;
-        printfn ppf "  sub rax, rbx";
+        printfn ppf "  mov qword r8, %d" n;
+        printfn ppf "  sub rax, r8";
         printfn ppf "  mov %a, rax" pp_dest dest;
         dealloc_var ppf left_name
     | CApp (APrimitive (("+" | "*") as prim), arg1, [ arg2 ]) ->
@@ -313,12 +318,12 @@ let generate_body is_toplevel ppf body =
         let right_dest = DStack_var right_name in
         helper_a right_dest arg2;
         printfn ppf "  mov rax, %a" pp_dest left_dest;
-        printfn ppf "  mov rbx, %a" pp_dest right_dest;
+        printfn ppf "  mov r8, %a" pp_dest right_dest;
         (match prim with
-        | "+" -> printfn ppf "  add  rbx, rax"
-        | "*" -> printfn ppf "  imul rbx, rax"
+        | "+" -> printfn ppf "  add  r8, rax"
+        | "*" -> printfn ppf "  imul r8, rax"
         | op -> printfn ppf ";;; TODO %s. %s %d" op __FUNCTION__ __LINE__);
-        printfn ppf "  mov %a, rbx" pp_dest dest;
+        printfn ppf "  mov %a, r8" pp_dest dest;
         dealloc_var ppf right_name;
         dealloc_var ppf left_name
     | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), [])

@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <unistd.h>
 
 /* #define clean_errno() (errno == 0 ? "None" : strerror(errno))
 #define log_error(M, ...) fprintf(stderr, "[ERROR] (%s:%d: errno: %s) " M "\n", __FILE__, __LINE__, clean_errno(), ##__VA_ARGS__)
@@ -218,6 +219,8 @@ typedef void *(*fun3)(void *, void *, void *);
 typedef void *(*fun7)(void *, void *, void *, void *, void *, void *, void *);
 typedef void *(*fun8)(void *, void *, void *, void *, void *, void *, void *, void *);
 typedef void *(*fun9)(void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void *(*fun10)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void *(*fun11)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
 
 void *rukaml_apply0(fun0 f)
 {
@@ -246,6 +249,14 @@ void *rukaml_apply2(fun8 f, void *arg1, void *arg2)
 void *rukaml_apply3(fun9 f, void *arg1, void *arg2, void *arg3)
 {
   return f(0, 0, 0, 0, 0, 0, arg1, arg2, arg3);
+}
+void *rukaml_apply4(fun10 f, void *arg1, void *arg2, void *arg3, void *arg4)
+{
+  return f(0, 0, 0, 0, 0, 0, arg1, arg2, arg3, arg4);
+}
+void *rukaml_apply5(fun11 f, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5)
+{
+  return f(0, 0, 0, 0, 0, 0, arg1, arg2, arg3, arg4, arg5);
 }
 
 typedef struct
@@ -316,8 +327,6 @@ void *rukaml_alloc_closure(void *func, int32_t argsc)
   return ans;
 }
 
-#include <unistd.h>
-
 void *rukaml_applyN(void *f, int64_t argc, ...)
 {
 
@@ -372,6 +381,12 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
       break;
     case 3:
       return rukaml_apply3(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2]);
+      break;
+    case 4:
+      return rukaml_apply4(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2], f_closure->args[3]);
+      break;
+    case 5:
+      return rukaml_apply5(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2], f_closure->args[3], f_closure->args[4]);
       break;
 #pragma GCC diagnostic pop
     default:

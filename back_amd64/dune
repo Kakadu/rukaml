@@ -39,7 +39,7 @@
  (deps rukaml_stdlib.c)
  (action
   (run
-   gcc
+   clang
    -g
    -Wall
    -Wpedantic

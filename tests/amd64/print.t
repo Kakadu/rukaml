@@ -100,5 +100,3 @@ $ ulimit -c 0
   @
   16
   rukaml_print_int
-  Segmentation fault (core dumped)
-  [139]
