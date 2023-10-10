@@ -131,14 +131,30 @@ let list_take n xs =
   (* TODO: it's not optimal *)
   fst (list_take_n n xs)
 
-type dest = DReg of string | DStack_var of string
+type dest = DReg of string | DStack_var of int
 
 let pp_dest ppf = function
   | DReg s -> fprintf ppf "%s" s
-  | DStack_var v ->
-      let shift = Loc_of_ident.lookup_exn v in
+  | DStack_var shift ->
       (* 8 for 64 bit, 4 for 32bit *)
-      if shift = 0 then fprintf ppf "[rsp]" else fprintf ppf "[8*%d+rsp]" shift
+      if shift = 0 then fprintf ppf "[rbp]" else fprintf ppf "[8*%d+rbp]" shift
+
+module Addr_of_local = struct
+  let store = Hashtbl.create 13
+  let last_pos = ref 0
+
+  let clear () =
+    Hashtbl.clear store;
+    last_pos := 0
+
+  let extend name =
+    incr last_pos;
+    Hashtbl.add store name !last_pos
+
+  let count () = Hashtbl.length store
+  let contains name = Hashtbl.mem store name
+  let find_exn name = Hashtbl.find store name
+end
 
 let dealloc_var ppf name =
   Loc_of_ident.remove name;
@@ -149,20 +165,30 @@ let alloc_closure ppf name arity =
   printfn ppf "  mov rsi, %d" arity;
   printfn ppf "  call rukaml_alloc_closure"
 
+let allocate_locals input_anf =
+  let () = Addr_of_local.clear () in
+  let open Compile_lib.ANF2 in
+  let rec helper = function EComplex c -> helper_c c | _ -> assert false
+  and helper_c = function
+    | CIte (_, th, el) ->
+        helper th;
+        helper el
+    | CApp _ | CAtom _ -> ()
+  in
+  helper input_anf
+
 (**
     Argument [is_toplevel] returns None or Some arity. *)
 let generate_body is_toplevel ppf body =
   let open Compile_lib.ANF2 in
   let open Miniml.Parsetree in
-  let module LoI = Loc_of_ident in
+  let () = allocate_locals body in
   let rec helper dest = function
-    | EComplex c ->
-        (* printfn ppf ";;; TODO Complex " *)
-        helper_c dest c
+    | EComplex c -> helper_c dest c
     | ELet (_, Miniml.Parsetree.PVar name, rhs, wher) ->
+        assert (Addr_of_local.contains name);
         Loc_of_ident.alloc_and_store name;
-        printfn ppf "  sub rsp, 8 ; allocate for var %S" name;
-        helper_c (DStack_var name) rhs;
+        helper_c (DStack_var (Addr_of_local.find_exn name)) rhs;
         helper dest wher;
         dealloc_var ppf name
     | ELet (_, PTuple (_, _, _), _, _) -> assert false
@@ -171,8 +197,9 @@ let generate_body is_toplevel ppf body =
         helper dest bth
     | CIte (AConst (Miniml.Parsetree.PConst_bool false), _bth, bel) ->
         helper dest bel
-    | CIte (AVar econd, bth, bel) when LoI.has_key econd ->
-        printfn ppf "  mov rdx, [rsp+%d*8] " (LoI.lookup_exn econd);
+    | CIte (AVar econd, bth, bel) when Loc_of_ident.has_key econd ->
+        (* if on global or local variable  *)
+        printfn ppf "  mov rdx, [rsp+%d*8] " (Loc_of_ident.lookup_exn econd);
         printfn ppf "  cmp rdx, 0";
         let el_lab = Printf.sprintf "lab_then_%d" (gensym ()) in
         let fin_lab = Printf.sprintf "lab_endif_%d" (gensym ()) in
@@ -183,40 +210,55 @@ let generate_body is_toplevel ppf body =
         helper dest bel;
         printfn ppf "  %s:" fin_lab
     | CApp (AVar ("print" as f), arg1, [])
-      when is_toplevel f = None && not (LoI.has_key f) -> (
+      when is_toplevel f = None && not (Loc_of_ident.has_key f) -> (
         match arg1 with
-        | AVar v when LoI.has_key v ->
-            printfn ppf "  mov rdi, %a" pp_dest (DStack_var v);
-            printfn ppf "  mov rsi, 0";
-            printfn ppf "  mov rcx, 0";
-            printfn ppf "  mov rdx, 0";
-            printfn ppf "  mov r8, 0";
-            printfn ppf "  mov r9, 0";
-            printfn ppf "  mov rax, 0";
+        | AVar v when Loc_of_ident.has_key v ->
+            printfn ppf "  mov rdi, %a" pp_dest
+              (DStack_var (Addr_of_local.find_exn v));
             printfn ppf "  call rukaml_print_int ; short";
             printfn ppf "  mov %a, rax" pp_dest dest
-        | arg1 ->
-            let arg_name = LoI.alloc_temp () in
-            printfn ppf "  sub rsp, 8 ; allocate for var %S" arg_name;
-            let arg_dest = DStack_var arg_name in
-            helper_a arg_dest arg1;
-            printfn ppf "  mov rdi, %a" pp_dest arg_dest;
-            printfn ppf "  mov rax, 0";
+        | AConst (PConst_int n) ->
+            printfn ppf "  mov rdi, %d" n;
             printfn ppf "  call rukaml_print_int";
-            printfn ppf "  mov %a, rax" pp_dest dest;
-            dealloc_var ppf arg_name)
+            printfn ppf "  mov %a, rax" pp_dest dest
+        | AConst (PConst_bool _)
+        | AVar _ | APrimitive _
+        | ATuple (_, _, _)
+        | ALam (_, _)
+        | AUnit ->
+            failwith "Should not happen")
     | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
+        (* Callig a rukaml function uses custon calling convention.
+           Pascal convention: all arguments on stack, RTL *)
         let expected_arity = Option.get (is_toplevel f) in
         let formal_arity = 1 + List.length args in
 
-        printfn ppf "\t; expected_arity = %d\n\t; formal_arity = %d"
-          expected_arity formal_arity;
-        printfn ppf "\t; calling %S" f;
+        (* printfn ppf "\t; expected_arity = %d\n\t; formal_arity = %d"
+             expected_arity formal_arity;
+           printfn ppf "\t; calling %S" f; *)
         if expected_arity = formal_arity then (
-          printfn ppf "  ; expected_arity = formal_arity = %d" formal_arity;
+          let stack_padding =
+            if formal_arity mod 2 <> 0 then
+              let () =
+                printfn ppf "  sub rsp, 8 ; trying to save alignment 16 bytes"
+              in
+              1
+            else 0
+          in
+          (* printfn ppf "  ; expected_arity = formal_arity = %d" formal_arity; *)
+          printfn ppf "  sub rsp, 8*%d ; fun arguments" formal_arity;
+          List.iteri
+            (fun i -> function
+              | AConst (PConst_int n) ->
+                  printfn ppf "  mov [rbp+%d+8*%d], %d" stack_padding i n
+              | AVar
+
+                  )
+            (arg1 :: args);
+
           let formal_locs =
             List.init formal_arity (fun i ->
-                let name = LoI.alloc_temp () in
+                let name = Loc_of_ident.alloc_temp () in
                 printfn ppf
                   "  sub rsp, 8 ; allocate for argument %d (name = %s)" i name;
                 name)
@@ -543,6 +585,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
                 (* We are doing reverse to be more look like UNIX calling conversion.
                    So the 1st argument is closer to the top of the stach than the last arg
                 *)
+                (* TODO: Put arguments into Addr_of_local *)
                 List.rev pats
                 |> List.iter (function ANF2.APname name ->
                        let n = Loc_of_ident.alloc_more () in
