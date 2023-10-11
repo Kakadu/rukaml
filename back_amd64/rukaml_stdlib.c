@@ -203,12 +203,12 @@ void rukaml_print_int(int x)
 {
   putchar(0x30 + x);
   putchar('\n');
-  char repr[15];
-  snprintf(repr, 15, "%d", x);
-  puts(repr);
-  printf("%s\n", __func__);
-  fflush(stdout);
-  printf("%d\n", x);
+  // char repr[15];
+  // snprintf(repr, 15, "%d", x);
+  // puts(repr);
+  // printf("%s\n", __func__);
+  // fflush(stdout);
+  printf("%s %d\n", __func__, x);
   fflush(stdout);
 }
 
