@@ -1,17 +1,42 @@
   $ cat fac.ml | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 -
   After ANF transformation.
   let fac n =
-    (n + 1)
+    let temp1 = (n = 1) in
+      (if temp1
+      then 1
+      else let p = (n - 1) in
+             let p2 = fac p  in
+               (n * p2))
   let main =
-    let n = fac 5  in
+    let n = fac 4  in
       let t = print n  in
         0
   ANF: let fac n =
-         (n + 1)
+         let temp1 = (n = 1) in
+           (if temp1
+           then 1
+           else let p = (n - 1) in
+                  let p2 = fac p  in
+                    (n * p2))
        let main =
-         let n = fac 5  in
+         let n = fac 4  in
            let t = print n  in
              0
+  Location argument "n" in [rbp+2]
+  extend temp1 with shift = 1
+  extend p with shift = 2
+  extend p2 with shift = 3
+  extend __pad8 with shift = 4
+  remove __pad8 with shift = 4
+  remove p2 with shift = 3
+  remove p with shift = 2
+  remove temp1 with shift = 1
+  Removing info about args [ n ]
+  extend n with shift = 1
+  extend t with shift = 2
+  remove t with shift = 2
+  remove n with shift = 1
+  Removing info about args [  ]
 
 ; generated code for amd64
   $ cat program.asm | grep -v 'section .note.GNU-stack' | nl -ba
@@ -37,45 +62,65 @@
       20	fac:
       21	  push rbp
       22	  mov  rbp, rsp
-      23	  sub rsp, 8 ; allocate for var "__temp3"
-      24	  mov rdx, [rsp+3*8] 
-      25	  mov [rsp], rdx ; access a var "n"
-      26	  sub rsp, 8 ; allocate for var "__temp4"
-      27	  mov qword [rsp],  1
-      28	  mov rax, [8*1+rsp]
-      29	  mov rbx, [rsp]
-      30	  add  rbx, rax
-      31	  mov rax, rbx
-      32	  add rsp, 8 ; deallocate var "__temp4"
-      33	  add rsp, 8 ; deallocate var "__temp3"
-      34	  pop rbp
-      35	  ret  ;;;; fac
-      36	GLOBAL main
-      37	main:
-      38	  push rbp
-      39	  mov  rbp, rsp
-      40	  mov rdi, rsp
-      41	  call rukaml_initialize
-      42	  sub rsp, 8 ; allocate for var "n"
-      43		; expected_arity = 1
-      44		; formal_arity = 1
-      45		; calling "fac"
-      46	  ; expected_arity = formal_arity = 1
-      47	  sub rsp, 8 ; allocate for argument 0 (name = __temp7)
-      48	  mov qword [rsp],  5
-      49	  call fac
-      50	  add rsp, 8 ; deallocate var "__temp7"
-      51	  mov [rsp], rax
-      52	  sub rsp, 8 ; allocate for var "t"
-      53	  mov rdi, [8*1+rsp]
-      54	  call rukaml_print_int ; short
-      55	  mov [rsp], rax
-      56	  mov qword rax,  0
-      57	  add rsp, 8 ; deallocate var "t"
-      58	  add rsp, 8 ; deallocate var "n"
-      59	  pop rbp
-      60	  ret  ;;;; main
+      23	  sub rsp, 8*3 ; allocate for local variables p2, p, temp1
+      24	  sub rsp, 8 ; allocate padding for locals
+      25	  mov qword r11, [rbp+2*8]
+      26	  mov qword r12, 1
+      27	  cmp r11, r12
+      28	  je lab_9
+      29	  mov qword [rbp-1*8], 0
+      30	  jmp lab_10
+      31	lab_9:
+      32	  mov qword [rbp-1*8], 1
+      33	  jmp lab_10
+      34	lab_10:
+      35	  mov qword rdx, [rbp-1*8]
+      36	  cmp rdx, 0
+      37	  je lab_then_11
+      38	  mov qword rax,  1
+      39	  jmp lab_endif_12
+      40	lab_then_11:
+      41	  mov qword r11, [rbp+2*8]
+      42	  dec r11
+      43	  mov qword [rbp-2*8], r11
+      44	  sub rsp, 8 ; trying to save alignment 16 bytes
+      45	  sub rsp, 8*1 ; fun arguments
+      46	  mov qword r8, [rbp-2*8]
+      47	  mov qword [rsp+8*0], r8
+      48	  call fac
+      49	  add rsp, 8*2 ; dealloc args
+      50	  mov [rbp-3*8], rax
+      51	  mov qword r11, [rbp+2*8]
+      52	  mov qword r12, [rbp-3*8]
+      53	  imul r11, r12
+      54	  mov rax, r11
+      55	lab_endif_12:
+      56	  add rsp, 8 ; deallocate padding for locals
+      57	  add rsp, 8*3 ; deallocate local variables p2, p, temp1
+      58	  pop rbp
+      59	  ret  ;;;; fac
+      60	GLOBAL main
+      61	main:
+      62	  push rbp
+      63	  mov  rbp, rsp
+      64	  mov rdi, rsp
+      65	  call rukaml_initialize
+      66	  sub rsp, 8*2 ; allocate for local variables t, n
+      67	  sub rsp, 8 ; trying to save alignment 16 bytes
+      68	  sub rsp, 8*1 ; fun arguments
+      69	  mov qword [rsp+8*0], 4
+      70	  call fac
+      71	  add rsp, 8*2 ; dealloc args
+      72	  mov [rbp-1*8], rax
+      73	  mov rdi, [rbp-1*8]
+      74	  call rukaml_print_int ; short
+      75	  mov [rbp-2*8], rax
+      76	  mov qword rax,  0
+      77	  add rsp, 8*2 ; deallocate local variables t, n
+      78	  pop rbp
+      79	  ret  ;;;; main
 
   $ nasm -felf64 program.asm -o program.o 
   $ gcc-12 -g -o program.exe ../../back_amd64/rukaml_stdlib.o program.o && ./program.exe
-  rukaml_print_int 6
+  H
+  rukaml_print_int 24
