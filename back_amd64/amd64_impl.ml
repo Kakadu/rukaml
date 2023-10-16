@@ -133,64 +133,165 @@ let list_take n xs =
 
 type dest = DReg of string | DStack_var of int
 
-let pp_dest ppf = function
-  | DReg s -> fprintf ppf "%s" s
-  | DStack_var shift ->
-      (* 8 for 64 bit, 4 for 32bit *)
-      if shift = 0 then fprintf ppf "[rbp]" else fprintf ppf "[8*%d+rbp]" shift
-
 module Addr_of_local = struct
   let store = Hashtbl.create 13
   let last_pos = ref 0
+  let get_locals_count () = !last_pos
 
   let clear () =
+    log "%s" __FUNCTION__;
     Hashtbl.clear store;
     last_pos := 0
 
   let extend name =
     incr last_pos;
+    log "extend %s with shift = %d" name !last_pos;
     Hashtbl.add store name !last_pos
+
+  let remove_local name =
+    let pos = Hashtbl.find store name in
+    if !last_pos = pos then (
+      log "remove %s with shift = %d" name !last_pos;
+      decr last_pos;
+      Hashtbl.remove store name)
+    else
+      failwiths "Something bad %d. Can't remove local variable %S" __LINE__ name
 
   let count () = Hashtbl.length store
   let contains name = Hashtbl.mem store name
-  let find_exn name = Hashtbl.find store name
+
+  let find_exn name =
+    match Hashtbl.find store name with
+    | v -> v
+    | exception Not_found ->
+        failwiths "Can't find location of a variable %S" name
+
+  let add_arg ~argc i name =
+    assert (i < argc);
+    let loc = -2 - argc + 1 + i in
+    assert (loc < 0);
+    log "Location argument %S in [rbp+%d]" name (-loc);
+    Hashtbl.add store name loc
+
+  let remove_args xs =
+    log "Removing info about args [ %a ]"
+      (Format.pp_print_list Format.pp_print_string)
+      xs;
+    List.iter (Hashtbl.remove store) xs
+
+  let pp_local_exn ppf name =
+    let offset = find_exn name in
+    if offset > 0 then fprintf ppf "[rbp-%d*8]" offset
+    else fprintf ppf "[rbp+%d*8]" (-offset)
 end
 
-let dealloc_var ppf name =
-  Loc_of_ident.remove name;
-  printfn ppf "  add rsp, 8 ; deallocate var %S" name
+let pp_dest ppf = function
+  | DReg s -> fprintf ppf "%s" s
+  | DStack_var offset ->
+      (* 8 for 64 bit, 4 for 32bit *)
+      if offset = 0 then fprintf ppf "[rbp]"
+      else if offset > 0 then fprintf ppf "[rbp-%d*8]" offset
+      else fprintf ppf "[rbp+%d*8]" (-offset)
+
+(* let dealloc_var ppf name =
+   Loc_of_ident.remove name;
+   printfn ppf "  add rsp, 8 ; deallocate var %S" name *)
 
 let alloc_closure ppf name arity =
   printfn ppf "  mov rdi, %s" name;
   printfn ppf "  mov rsi, %d" arity;
   printfn ppf "  call rukaml_alloc_closure"
 
-let allocate_locals input_anf =
-  let () = Addr_of_local.clear () in
+let allocate_locals ppf input_anf : now:unit -> unit =
   let open Compile_lib.ANF2 in
-  let rec helper = function EComplex c -> helper_c c | _ -> assert false
+  let names = Hashtbl.create 23 in
+  let rec helper = function
+    | EComplex c -> helper_c c
+    | ELet (_flg, PVar name, rhs, where_) ->
+        Addr_of_local.extend name;
+        Hashtbl.add names name ();
+        helper_c rhs;
+        helper where_
+    | ELet (_, PTuple (_, _, _), _, _) -> assert false
   and helper_c = function
     | CIte (_, th, el) ->
         helper th;
         helper el
     | CApp _ | CAtom _ -> ()
   in
-  helper input_anf
+  helper input_anf;
+  let count = Hashtbl.length names in
+
+  assert (count = Addr_of_local.get_locals_count ());
+
+  (* If assertion fails it's like a number of locals with the same names *)
+  let args_repr =
+    Hashtbl.to_seq_keys names |> List.of_seq |> String.concat ", "
+  in
+  let deallocate_padding =
+    if count mod 2 = 1 then (
+      let pad_name = Printf.sprintf "__pad%d" (gensym ()) in
+      printfn ppf "  sub rsp, 8 ; allocate padding for locals";
+      Addr_of_local.extend pad_name;
+      fun () ->
+        Addr_of_local.remove_local pad_name;
+        printfn ppf "  add rsp, 8 ; deallocate padding for locals")
+    else fun () -> ()
+  in
+
+  if count > 0 then (
+    let () =
+      printfn ppf "  sub rsp, 8*%d ; allocate for local variables %s" count
+        args_repr
+    in
+    fun ~now ->
+      let () = now in
+      deallocate_padding ();
+      printfn ppf "  add rsp, 8*%d ; deallocate local variables %s" count
+        args_repr)
+  else fun ~now ->
+    let () = now in
+    ()
 
 (**
     Argument [is_toplevel] returns None or Some arity. *)
 let generate_body is_toplevel ppf body =
   let open Compile_lib.ANF2 in
   let open Miniml.Parsetree in
-  let () = allocate_locals body in
+  let allocate_args args =
+    let count = List.length args in
+    let _stack_padding =
+      if count mod 2 = 0 then 0
+      else (
+        printfn ppf "  sub rsp, 8 ; trying to save alignment 16 bytes";
+        1)
+    in
+
+    printfn ppf "  sub rsp, 8*%d ; fun arguments" count;
+    List.iteri
+      (fun i ->
+        let pp_access v =
+          printfn ppf "  mov qword [rsp+8*%d], %d" (count - 1 - i) v
+        in
+        function
+        | AUnit | AConst (PConst_bool false) -> pp_access 0
+        | AConst (PConst_bool true) -> pp_access 1
+        | AConst (PConst_int n) -> pp_access n
+        | ALam _ -> failwith "Should it be representable in ANF?"
+        | AVar _ -> assert false
+        | APrimitive _ -> assert false
+        | ATuple _ -> assert false)
+      args;
+    count + _stack_padding
+  in
+
   let rec helper dest = function
     | EComplex c -> helper_c dest c
     | ELet (_, Miniml.Parsetree.PVar name, rhs, wher) ->
         assert (Addr_of_local.contains name);
         Loc_of_ident.alloc_and_store name;
         helper_c (DStack_var (Addr_of_local.find_exn name)) rhs;
-        helper dest wher;
-        dealloc_var ppf name
+        helper dest wher (* dealloc_var ppf name *)
     | ELet (_, PTuple (_, _, _), _, _) -> assert false
   and helper_c (dest : dest) = function
     | CIte (AConst (Miniml.Parsetree.PConst_bool true), bth, _bel) ->
@@ -229,7 +330,7 @@ let generate_body is_toplevel ppf body =
             failwith "Should not happen")
     | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
         (* Callig a rukaml function uses custon calling convention.
-           Pascal convention: all arguments on stack, RTL *)
+           Pascal convention: all arguments on stack, LTR *)
         let expected_arity = Option.get (is_toplevel f) in
         let formal_arity = 1 + List.length args in
 
@@ -237,150 +338,138 @@ let generate_body is_toplevel ppf body =
              expected_arity formal_arity;
            printfn ppf "\t; calling %S" f; *)
         if expected_arity = formal_arity then (
-          let stack_padding =
-            if formal_arity mod 2 <> 0 then
-              let () =
-                printfn ppf "  sub rsp, 8 ; trying to save alignment 16 bytes"
-              in
-              1
-            else 0
-          in
-          (* printfn ppf "  ; expected_arity = formal_arity = %d" formal_arity; *)
-          printfn ppf "  sub rsp, 8*%d ; fun arguments" formal_arity;
-          List.iteri
-            (fun i -> function
-              | AConst (PConst_int n) ->
-                  printfn ppf "  mov [rbp+%d+8*%d], %d" stack_padding i n
-              | AVar
+          let to_remove = allocate_args (arg1 :: args) in
 
-                  )
-            (arg1 :: args);
-
-          let formal_locs =
-            List.init formal_arity (fun i ->
-                let name = Loc_of_ident.alloc_temp () in
-                printfn ppf
-                  "  sub rsp, 8 ; allocate for argument %d (name = %s)" i name;
-                name)
-          in
-          let () =
-            List.rev (arg1 :: args)
-            |> List.iter2
-                 (fun name arg -> helper_a (DStack_var name) arg)
-                 formal_locs
-          in
           printfn ppf "  call %s" f;
-          List.iter (dealloc_var ppf) formal_locs;
+          printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
           printfn ppf "  mov %a, rax" pp_dest dest)
         else if formal_arity < expected_arity then (
-          let wfname = LoI.alloc_temp () in
-          printfn ppf "  sub rsp, 8 ; allocate wrapper for func %s" wfname;
           printfn ppf "  mov rdi, %s" f;
           printfn ppf "  mov rsi, %d" expected_arity;
           printfn ppf "  call rukaml_alloc_closure";
-          printfn ppf "  mov %a, rax" pp_dest (DStack_var wfname);
-          let formal_locs =
-            List.mapi
-              (fun i _arg ->
-                let name = LoI.alloc_temp () in
-                printfn ppf
-                  "  sub rsp, 8 ; allocate for argument %d (name = %s)" i name;
-                name)
-              (arg1 :: args)
-          in
-          List.iter2
-            (fun loc arg -> helper_a (DStack_var loc) arg)
-            formal_locs (arg1 :: args);
-          printfn ppf "  mov rdi, %a" pp_dest (DStack_var wfname);
+
+          (* Addr_of_local.extend "closure_container"; *)
+          (* Addr_of_local.extend "temp_for_padding"; *)
+          (* printfn ppf "  mov %a, rax" pp_dest
+             (DStack_var (Addr_of_local.find_exn "closure_container")); *)
+          let partial_args_count = allocate_args (arg1 :: args) in
+
+          printfn ppf "  mov rdi, rax";
           printfn ppf "  mov rsi, %d" formal_arity;
           assert (formal_arity < 5);
           (* See calling convention *)
-          List.iter2
-            (fun loc rname ->
-              printfn ppf "  mov %s, %a" rname pp_dest (DStack_var loc))
-            formal_locs
-            (list_take (List.length formal_locs) [ "rdx"; "rcx"; "r8"; "r9" ]);
+          List.iteri
+            (fun i rname ->
+              printfn ppf "  mov %s, [rsp+8*%d]" rname (formal_arity - i - 1))
+            (list_take formal_arity [ "rdx"; "rcx"; "r8"; "r9" ]);
           printfn ppf "  mov al, 0";
           printfn ppf "  call rukaml_applyN";
-          printfn ppf "  mov %a, rax" pp_dest dest;
-
-          let () = List.iter (fun name -> dealloc_var ppf name) formal_locs in
-          dealloc_var ppf wfname)
+          printfn ppf "  add rsp, 8*%d ; deallocate args of rukaml_applyN"
+            partial_args_count;
+          printfn ppf "  mov %a, rax" pp_dest dest
+          (* printfn ppf "  sub rsp, 8*2 ; deallocate closure value and padding" *))
         else failwith "Arity mismatch: over application"
     | CApp (APrimitive "=", arg1, [ arg2 ]) ->
-        let left_name = LoI.alloc_temp () in
-        printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
-        let left_dest = DStack_var left_name in
-        helper_a left_dest arg1;
-        let right_name = LoI.alloc_temp () in
-        printfn ppf "  sub rsp, 8 ; allocate for var %S" right_name;
-        let right_dest = DStack_var right_name in
-        helper_a right_dest arg2;
-        printfn ppf "  mov rax, %a" pp_dest left_dest;
-        printfn ppf "  mov r8, %a" pp_dest right_dest;
-        printfn ppf "  cmp rax, r8";
-        let eq_lab = Printf.sprintf "lab_%d" (gensym ()) in
-        let exit_lab = Printf.sprintf "lab_%d" (gensym ()) in
-        printfn ppf "  je %s" eq_lab;
-        printfn ppf "  mov qword %a, 0" pp_dest dest;
-        printfn ppf "  jmp %s" exit_lab;
-        printfn ppf "%s:" eq_lab;
-        printfn ppf "  mov qword %a, 1" pp_dest dest;
-        printfn ppf "  jmp %s" exit_lab;
-        printfn ppf "%s:" exit_lab;
-        dealloc_var ppf right_name;
-        dealloc_var ppf left_name
+        failwiths "not implemented %d" __LINE__
+        (* let left_name = LoI.alloc_temp () in
+           printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
+           let left_dest = DStack_var left_name in
+           helper_a left_dest arg1;
+           let right_name = LoI.alloc_temp () in
+           printfn ppf "  sub rsp, 8 ; allocate for var %S" right_name;
+           let right_dest = DStack_var right_name in
+           helper_a right_dest arg2;
+           printfn ppf "  mov rax, %a" pp_dest left_dest;
+           printfn ppf "  mov r8, %a" pp_dest right_dest;
+           printfn ppf "  cmp rax, r8";
+           let eq_lab = Printf.sprintf "lab_%d" (gensym ()) in
+           let exit_lab = Printf.sprintf "lab_%d" (gensym ()) in
+           printfn ppf "  je %s" eq_lab;
+           printfn ppf "  mov qword %a, 0" pp_dest dest;
+           printfn ppf "  jmp %s" exit_lab;
+           printfn ppf "%s:" eq_lab;
+           printfn ppf "  mov qword %a, 1" pp_dest dest;
+           printfn ppf "  jmp %s" exit_lab;
+           printfn ppf "%s:" exit_lab;
+           dealloc_var ppf right_name;
+           dealloc_var ppf left_name *)
     | CApp (APrimitive "-", arg1, [ AConst (PConst_int 1) ]) ->
-        let left_name = LoI.alloc_temp () in
-        printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
-        let left_dest = DStack_var left_name in
-        helper_a left_dest arg1;
-        printfn ppf "  mov rax, %a" pp_dest left_dest;
-        printfn ppf "  dec rax";
-        printfn ppf "  mov %a, rax" pp_dest dest;
-        dealloc_var ppf left_name
+        failwiths "not implemented %d" __LINE__
+        (* let left_name = LoI.alloc_temp () in
+           printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
+           let left_dest = DStack_var left_name in
+           helper_a left_dest arg1;
+           printfn ppf "  mov rax, %a" pp_dest left_dest;
+           printfn ppf "  dec rax";
+           printfn ppf "  mov %a, rax" pp_dest dest;
+           dealloc_var ppf left_name *)
     | CApp (APrimitive "-", arg1, [ AConst (PConst_int n) ]) ->
-        (* TODO: Move this specialization to the case below  *)
-        let left_name = LoI.alloc_temp () in
-        printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
-        let left_dest = DStack_var left_name in
-        helper_a left_dest arg1;
-        printfn ppf "  mov rax, %a" pp_dest left_dest;
-        printfn ppf "  mov qword r8, %d" n;
-        printfn ppf "  sub rax, r8";
-        printfn ppf "  mov %a, rax" pp_dest dest;
-        dealloc_var ppf left_name
-    | CApp (APrimitive (("+" | "*") as prim), arg1, [ arg2 ]) ->
-        let left_name = LoI.alloc_temp () in
-        printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
-        let left_dest = DStack_var left_name in
-        helper_a left_dest arg1;
-        let right_name = LoI.alloc_temp () in
-        printfn ppf "  sub rsp, 8 ; allocate for var %S" right_name;
-        let right_dest = DStack_var right_name in
-        helper_a right_dest arg2;
-        printfn ppf "  mov rax, %a" pp_dest left_dest;
-        printfn ppf "  mov r8, %a" pp_dest right_dest;
-        (match prim with
-        | "+" -> printfn ppf "  add  r8, rax"
-        | "*" -> printfn ppf "  imul r8, rax"
-        | op -> printfn ppf ";;; TODO %s. %s %d" op __FUNCTION__ __LINE__);
-        printfn ppf "  mov %a, r8" pp_dest dest;
-        dealloc_var ppf right_name;
-        dealloc_var ppf left_name
+        failwiths "not implemented %d" __LINE__
+    (* TODO: Move this specialization to the case below  *)
+    (* let left_name = LoI.alloc_temp () in
+       printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
+       let left_dest = DStack_var left_name in
+       helper_a left_dest arg1;
+       printfn ppf "  mov rax, %a" pp_dest left_dest;
+       printfn ppf "  mov qword r8, %d" n;
+       printfn ppf "  sub rax, r8";
+       printfn ppf "  mov %a, rax" pp_dest dest;
+       dealloc_var ppf left_name *)
+    | CApp
+        (APrimitive (("+" | "*") as prim), AVar vname, [ AConst (PConst_int n) ])
+    | CApp
+        (APrimitive (("+" | "*") as prim), AConst (PConst_int n), [ AVar vname ])
+      -> (
+        match is_toplevel vname with
+        | None ->
+            printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
+            printfn ppf "  %s r11, %d"
+              (match prim with
+              | "+" -> "add "
+              | "*" -> "imul"
+              | op ->
+                  Format.asprintf ";;; TODO %s. %s %d" op __FUNCTION__ __LINE__)
+              n;
+            printfn ppf "  mov qword %a, r11" pp_dest dest
+        | Some _ ->
+            failwiths "not implemented %d" __LINE__
+            (* let left_name = LoI.alloc_temp () in
+               printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
+               let left_dest = DStack_var left_name in
+               helper_a left_dest arg1;
+               let right_name = LoI.alloc_temp () in
+               printfn ppf "  sub rsp, 8 ; allocate for var %S" right_name;
+               let right_dest = DStack_var right_name in
+               helper_a right_dest arg2;
+               printfn ppf "  mov rax, %a" pp_dest left_dest;
+               printfn ppf "  mov r8, %a" pp_dest right_dest;
+               (match prim with
+               | "+" -> printfn ppf "  add  r8, rax"
+               | "*" -> printfn ppf "  imul r8, rax"
+               | op -> printfn ppf ";;; TODO %s. %s %d" op __FUNCTION__ __LINE__);
+               printfn ppf "  mov %a, r8" pp_dest dest;
+               dealloc_var ppf right_name;
+               dealloc_var ppf left_name *))
     | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), [])
       ->
         assert (Option.is_none (is_toplevel f));
-        let aname = LoI.alloc_temp () in
-        printfn ppf "  sub rsp, 8 ; allocate for var %S" aname;
-        helper_a (DStack_var aname) arg;
+
+        Addr_of_local.extend "temp_padding";
+        Addr_of_local.extend "arg1";
+        printfn ppf "  sub rsp, 8 ; padding";
+        printfn ppf "  sub rsp, 8 ; first arg of a function %s" f;
+        helper_a (DStack_var (Addr_of_local.find_exn "arg1")) arg;
 
         printfn ppf "  mov rax, 0  ; no float arguments";
-        printfn ppf "  mov rdi, %a" pp_dest (DStack_var f);
+        printfn ppf "  mov rdi, %a" pp_dest
+          (DStack_var (Addr_of_local.find_exn f));
         printfn ppf "  mov rsi, 1";
-        printfn ppf "  mov rdx, %a" pp_dest (DStack_var aname);
+        printfn ppf "  mov rdx, %a" pp_dest
+          (DStack_var (Addr_of_local.find_exn "arg1"));
         printfn ppf "  call rukaml_applyN";
-        dealloc_var ppf aname;
+        Addr_of_local.remove_local "arg1";
+        Addr_of_local.remove_local "temp_padding";
+        printfn ppf "  add rsp, 8*2 ; free space for args of function %S" f;
         printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (APrimitive "field", AConst (PConst_int n), [ (AVar _ as cont) ]) ->
         helper_a (DReg "rsi") cont;
@@ -411,7 +500,7 @@ let generate_body is_toplevel ppf body =
         match is_toplevel vname with
         | None ->
             (* We use temprarily rdx because we can't move from stack to stack *)
-            printfn ppf "  mov rdx, [rsp+%d*8] " (LoI.lookup_exn vname);
+            printfn ppf "  mov rdx, [rsp+%d*8] " (Addr_of_local.find_exn vname);
             printfn ppf "  mov %a, rdx ; access a var %S" pp_dest dest vname
         | Some arity ->
             alloc_closure ppf vname arity;
@@ -426,8 +515,9 @@ let generate_body is_toplevel ppf body =
         printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
         printfn ppf ";;; @[`%a`@]" pp_a atom
   in
-
-  helper (DReg "rax") body
+  let dealloc_locals = allocate_locals ppf body in
+  helper (DReg "rax") body;
+  dealloc_locals ~now:()
 
 let put_print_newline ppf =
   printfn ppf
@@ -582,34 +672,33 @@ let codegen ?(wrap_main_into_start = true) anf file =
 
                 let pats, body = ANF2.group_abstractions expr in
 
-                (* We are doing reverse to be more look like UNIX calling conversion.
-                   So the 1st argument is closer to the top of the stach than the last arg
-                *)
-                (* TODO: Put arguments into Addr_of_local *)
+                (* TODO: Put arguments into Addr_of_local using RTL order *)
+                let argc = List.length pats in
+                let names =
+                  List.map (function ANF2.APname name -> name) pats
+                in
                 List.rev pats
-                |> List.iter (function ANF2.APname name ->
-                       let n = Loc_of_ident.alloc_more () in
-                       Loc_of_ident.put name n);
-                let rsi_goes_here = Loc_of_ident.alloc_temp () in
+                |> ListLabels.iteri ~f:(fun i -> function
+                     | ANF2.APname name -> Addr_of_local.add_arg ~argc i name);
+
+                (* let rsi_goes_here = Loc_of_ident.alloc_temp () in *)
                 printfn ppf "  push rbp";
                 printfn ppf "  mov  rbp, rsp";
                 if name = "main" then (
                   printfn ppf "  mov rdi, rsp";
                   printfn ppf "  call rukaml_initialize");
-                let rbp_goes_here = Loc_of_ident.alloc_temp () in
+                (* let rbp_goes_here = Loc_of_ident.alloc_temp () in *)
                 generate_body is_toplevel ppf body;
-                Loc_of_ident.remove rbp_goes_here;
-                Loc_of_ident.remove rsi_goes_here;
+                Addr_of_local.remove_args names;
 
-                let () =
-                  (* deallocation from stack should be done by caller  *)
-                  List.iter
-                    (function
-                      | ANF2.APname name ->
-                          Loc_of_ident.remove name (* dealloc_var ppf name *))
-                    (List.rev pats)
-                in
-
+                (* let () =
+                     (* deallocation from stack should be done by caller  *)
+                     List.iter
+                       (function
+                         | ANF2.APname name ->
+                             Loc_of_ident.remove name (* dealloc_var ppf name *))
+                       (List.rev pats)
+                   in *)
                 print_epilogue ppf name);
              ());
       Format.pp_print_flush ppf ());
