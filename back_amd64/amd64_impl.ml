@@ -33,6 +33,9 @@ let set_verbose b = cfg.verbose <- b
 let fprintf = Format.fprintf
 let printfn ppf fmt = Format.kfprintf (fun ppf -> fprintf ppf "\n") ppf fmt
 
+let pp_space_list eta =
+  Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf " ") eta
+
 let print_prologue ppf name =
   if name = "main" then (
     printfn ppf "global _start";
@@ -51,72 +54,72 @@ let print_epilogue ppf name =
   printfn ppf "  ret  ;;;; %s" name;
   fprintf ppf "%!"
 
-module Loc_of_ident : sig
-  type t
+(* module Loc_of_ident : sig
+     type t
 
-  val size : unit -> int
-  val lookup_exn : string -> int
-  val has_key : string -> bool
-  val alloc_more : unit -> int
-  val put : string -> int -> unit
-  val remove : string -> unit
-  val alloc_and_store : string -> unit
-  val alloc_temp : unit -> string
-  val keys : unit -> string
-  val pp : Format.formatter -> unit -> unit
-end = struct
-  type t = (string, int) Hashtbl.t
+     val size : unit -> int
+     val lookup_exn : string -> int
+     val has_key : string -> bool
+     val alloc_more : unit -> int
+     val put : string -> int -> unit
+     val remove : string -> unit
+     val alloc_and_store : string -> unit
+     val alloc_temp : unit -> string
+     val keys : unit -> string
+     val pp : Format.formatter -> unit -> unit
+   end = struct
+     type t = (string, int) Hashtbl.t
 
-  (* TODO: maybe add a tracing function, which prints the stack with names *)
-  let store : t = Hashtbl.create 23
-  let size () = Hashtbl.length store
-  let allocated = ref 0
-  let has_key name = Hashtbl.mem store name
+     (* TODO: maybe add a tracing function, which prints the stack with names *)
+     let store : t = Hashtbl.create 23
+     let size () = Hashtbl.length store
+     let allocated = ref 0
+     let has_key name = Hashtbl.mem store name
 
-  let lookup_exn name =
-    try
-      let saved = Hashtbl.find store name in
-      assert (!allocated >= saved);
-      !allocated - saved
-    with Not_found ->
-      failwiths "Loc_of_ident.lokkup_exn: name %S is absent" name
+     let lookup_exn name =
+       try
+         let saved = Hashtbl.find store name in
+         assert (!allocated >= saved);
+         !allocated - saved
+       with Not_found ->
+         failwiths "Loc_of_ident.lokkup_exn: name %S is absent" name
 
-  let alloc_more () =
-    incr allocated;
-    !allocated
+     let alloc_more () =
+       incr allocated;
+       !allocated
 
-  let gensym =
-    let last = ref 0 in
-    fun () ->
-      incr last;
-      Printf.sprintf "__temp%d" !last
+     let gensym =
+       let last = ref 0 in
+       fun () ->
+         incr last;
+         Printf.sprintf "__temp%d" !last
 
-  let put name shift = Hashtbl.add store name shift
+     let put name shift = Hashtbl.add store name shift
 
-  let remove name =
-    assert (Hashtbl.mem store name);
-    Hashtbl.remove store name;
-    decr allocated
+     let remove name =
+       assert (Hashtbl.mem store name);
+       Hashtbl.remove store name;
+       decr allocated
 
-  let alloc_and_store name = put name (alloc_more ())
+     let alloc_and_store name = put name (alloc_more ())
 
-  let alloc_temp () =
-    let name = gensym () in
-    alloc_and_store name;
-    name
+     let alloc_temp () =
+       let name = gensym () in
+       alloc_and_store name;
+       name
 
-  let keys () =
-    Hashtbl.to_seq_keys store |> Seq.fold_left (fun acc x -> acc ^ " " ^ x) ""
+     let keys () =
+       Hashtbl.to_seq_keys store |> Seq.fold_left (fun acc x -> acc ^ " " ^ x) ""
 
-  let pp ppf () =
-    let b = Buffer.create 100 in
+     let pp ppf () =
+       let b = Buffer.create 100 in
 
-    Printf.bprintf b "@[{stack|";
-    Hashtbl.iter (Printf.bprintf b "%s -> %d; ") store;
-    Printf.bprintf b "|stack}@]";
-    Format.fprintf ppf "%s" (Buffer.contents b)
-end
-
+       Printf.bprintf b "@[{stack|";
+       Hashtbl.iter (Printf.bprintf b "%s -> %d; ") store;
+       Printf.bprintf b "|stack}@]";
+       Format.fprintf ppf "%s" (Buffer.contents b)
+   end
+*)
 let list_take_n n xs =
   let rec helper n forw xs =
     if n = 0 then (List.rev forw, xs)
@@ -139,7 +142,6 @@ module Addr_of_local = struct
   let get_locals_count () = !last_pos
 
   let clear () =
-    log "%s" __FUNCTION__;
     Hashtbl.clear store;
     last_pos := 0
 
@@ -158,13 +160,17 @@ module Addr_of_local = struct
       failwiths "Something bad %d. Can't remove local variable %S" __LINE__ name
 
   let count () = Hashtbl.length store
+  let size = count
   let contains name = Hashtbl.mem store name
+  let has_key = contains
 
   let find_exn name =
     match Hashtbl.find store name with
     | v -> v
     | exception Not_found ->
         failwiths "Can't find location of a variable %S" name
+
+  let lookup_exn = find_exn
 
   let add_arg ~argc i name =
     assert (i < argc);
@@ -175,7 +181,7 @@ module Addr_of_local = struct
 
   let remove_args xs =
     log "Removing info about args [ %a ]"
-      (Format.pp_print_list Format.pp_print_string)
+      (pp_space_list Format.pp_print_string)
       xs;
     List.iter (Hashtbl.remove store) xs
 
@@ -183,6 +189,9 @@ module Addr_of_local = struct
     let offset = find_exn name in
     if offset > 0 then fprintf ppf "[rbp-%d*8]" offset
     else fprintf ppf "[rbp+%d*8]" (-offset)
+
+  let keys () =
+    Hashtbl.to_seq_keys store |> Seq.fold_left (fun acc x -> acc ^ " " ^ x) ""
 end
 
 let pp_dest ppf = function
@@ -204,12 +213,12 @@ let alloc_closure ppf name arity =
 
 let allocate_locals ppf input_anf : now:unit -> unit =
   let open Compile_lib.ANF2 in
-  let names = Hashtbl.create 23 in
+  let names = ref [] in
   let rec helper = function
     | EComplex c -> helper_c c
     | ELet (_flg, PVar name, rhs, where_) ->
         Addr_of_local.extend name;
-        Hashtbl.add names name ();
+        names := name :: !names;
         helper_c rhs;
         helper where_
     | ELet (_, PTuple (_, _, _), _, _) -> assert false
@@ -220,14 +229,16 @@ let allocate_locals ppf input_anf : now:unit -> unit =
     | CApp _ | CAtom _ -> ()
   in
   helper input_anf;
-  let count = Hashtbl.length names in
+  let count = List.length !names in
 
   assert (count = Addr_of_local.get_locals_count ());
 
   (* If assertion fails it's like a number of locals with the same names *)
-  let args_repr =
-    Hashtbl.to_seq_keys names |> List.of_seq |> String.concat ", "
-  in
+  let args_repr = String.concat ", " !names in
+  if count > 0 then
+    printfn ppf "  sub rsp, 8*%d ; allocate for local variables %s" count
+      args_repr;
+
   let deallocate_padding =
     if count mod 2 = 1 then (
       let pad_name = Printf.sprintf "__pad%d" (gensym ()) in
@@ -239,16 +250,13 @@ let allocate_locals ppf input_anf : now:unit -> unit =
     else fun () -> ()
   in
 
-  if count > 0 then (
-    let () =
-      printfn ppf "  sub rsp, 8*%d ; allocate for local variables %s" count
-        args_repr
-    in
-    fun ~now ->
-      let () = now in
-      deallocate_padding ();
-      printfn ppf "  add rsp, 8*%d ; deallocate local variables %s" count
-        args_repr)
+  if count > 0 then (fun ~now ->
+    let () = now in
+
+    deallocate_padding ();
+    printfn ppf "  add rsp, 8*%d ; deallocate local variables %s" count
+      args_repr;
+    !names |> List.iter (fun name -> Addr_of_local.remove_local name))
   else fun ~now ->
     let () = now in
     ()
@@ -277,8 +285,11 @@ let generate_body is_toplevel ppf body =
         | AUnit | AConst (PConst_bool false) -> pp_access 0
         | AConst (PConst_bool true) -> pp_access 1
         | AConst (PConst_int n) -> pp_access n
+        | AVar vname ->
+            printfn ppf "  mov qword r8, %a" pp_dest
+              (DStack_var (Addr_of_local.lookup_exn vname));
+            printfn ppf "  mov qword [rsp+8*%d], r8" (count - 1 - i)
         | ALam _ -> failwith "Should it be representable in ANF?"
-        | AVar _ -> assert false
         | APrimitive _ -> assert false
         | ATuple _ -> assert false)
       args;
@@ -289,31 +300,35 @@ let generate_body is_toplevel ppf body =
     | EComplex c -> helper_c dest c
     | ELet (_, Miniml.Parsetree.PVar name, rhs, wher) ->
         assert (Addr_of_local.contains name);
-        Loc_of_ident.alloc_and_store name;
-        helper_c (DStack_var (Addr_of_local.find_exn name)) rhs;
-        helper dest wher (* dealloc_var ppf name *)
+        let local = DStack_var (Addr_of_local.find_exn name) in
+        (* printfn ppf "    ;; calculate rhs and put into %a. offset = %d" pp_dest
+           dest
+           (Addr_of_local.find_exn name); *)
+        helper_c local rhs;
+        helper dest wher
     | ELet (_, PTuple (_, _, _), _, _) -> assert false
   and helper_c (dest : dest) = function
     | CIte (AConst (Miniml.Parsetree.PConst_bool true), bth, _bel) ->
         helper dest bth
     | CIte (AConst (Miniml.Parsetree.PConst_bool false), _bth, bel) ->
         helper dest bel
-    | CIte (AVar econd, bth, bel) when Loc_of_ident.has_key econd ->
+    | CIte (AVar econd, bth, bel) when Addr_of_local.contains econd ->
         (* if on global or local variable  *)
-        printfn ppf "  mov rdx, [rsp+%d*8] " (Loc_of_ident.lookup_exn econd);
+        printfn ppf "  mov qword rdx, %a" pp_dest
+          (DStack_var (Addr_of_local.lookup_exn econd));
         printfn ppf "  cmp rdx, 0";
         let el_lab = Printf.sprintf "lab_then_%d" (gensym ()) in
         let fin_lab = Printf.sprintf "lab_endif_%d" (gensym ()) in
         printfn ppf "  je %s" el_lab;
         helper dest bth;
         printfn ppf "  jmp %s" fin_lab;
-        printfn ppf "  %s:" el_lab;
+        printfn ppf "%s:" el_lab;
         helper dest bel;
-        printfn ppf "  %s:" fin_lab
+        printfn ppf "%s:" fin_lab
     | CApp (AVar ("print" as f), arg1, [])
-      when is_toplevel f = None && not (Loc_of_ident.has_key f) -> (
+      when is_toplevel f = None && not (Addr_of_local.has_key f) -> (
         match arg1 with
-        | AVar v when Loc_of_ident.has_key v ->
+        | AVar v when Addr_of_local.has_key v ->
             printfn ppf "  mov rdi, %a" pp_dest
               (DStack_var (Addr_of_local.find_exn v));
             printfn ppf "  call rukaml_print_int ; short";
@@ -369,8 +384,24 @@ let generate_body is_toplevel ppf body =
           printfn ppf "  mov %a, rax" pp_dest dest
           (* printfn ppf "  sub rsp, 8*2 ; deallocate closure value and padding" *))
         else failwith "Arity mismatch: over application"
-    | CApp (APrimitive "=", arg1, [ arg2 ]) ->
-        failwiths "not implemented %d" __LINE__
+    | CApp (APrimitive "=", AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
+        if l = r then printfn ppf "  mov qword %a, 1" pp_dest dest
+        else printfn ppf "  mov qword %a, 0" pp_dest dest
+    | CApp (APrimitive "=", AConst (PConst_int n), [ AVar vname ])
+    | CApp (APrimitive "=", AVar vname, [ AConst (PConst_int n) ]) ->
+        printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
+        printfn ppf "  mov qword r12, %d" n;
+        printfn ppf "  cmp r11, r12";
+        let eq_lab = Printf.sprintf "lab_%d" (gensym ()) in
+        let exit_lab = Printf.sprintf "lab_%d" (gensym ()) in
+        printfn ppf "  je %s" eq_lab;
+        printfn ppf "  mov qword %a, 0" pp_dest dest;
+        printfn ppf "  jmp %s" exit_lab;
+        printfn ppf "%s:" eq_lab;
+        printfn ppf "  mov qword %a, 1" pp_dest dest;
+        printfn ppf "  jmp %s" exit_lab;
+        printfn ppf "%s:" exit_lab
+        (* failwiths "not implemented %d" __LINE__ *)
         (* let left_name = LoI.alloc_temp () in
            printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
            let left_dest = DStack_var left_name in
@@ -393,28 +424,13 @@ let generate_body is_toplevel ppf body =
            printfn ppf "%s:" exit_lab;
            dealloc_var ppf right_name;
            dealloc_var ppf left_name *)
-    | CApp (APrimitive "-", arg1, [ AConst (PConst_int 1) ]) ->
-        failwiths "not implemented %d" __LINE__
-        (* let left_name = LoI.alloc_temp () in
-           printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
-           let left_dest = DStack_var left_name in
-           helper_a left_dest arg1;
-           printfn ppf "  mov rax, %a" pp_dest left_dest;
-           printfn ppf "  dec rax";
-           printfn ppf "  mov %a, rax" pp_dest dest;
-           dealloc_var ppf left_name *)
-    | CApp (APrimitive "-", arg1, [ AConst (PConst_int n) ]) ->
-        failwiths "not implemented %d" __LINE__
-    (* TODO: Move this specialization to the case below  *)
-    (* let left_name = LoI.alloc_temp () in
-       printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
-       let left_dest = DStack_var left_name in
-       helper_a left_dest arg1;
-       printfn ppf "  mov rax, %a" pp_dest left_dest;
-       printfn ppf "  mov qword r8, %d" n;
-       printfn ppf "  sub rax, r8";
-       printfn ppf "  mov %a, rax" pp_dest dest;
-       dealloc_var ppf left_name *)
+    | CApp (APrimitive "-", AVar vname, [ AConst (PConst_int 1) ]) -> (
+        match is_toplevel vname with
+        | None ->
+            printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
+            printfn ppf "  dec r11";
+            printfn ppf "  mov qword %a, r11" pp_dest dest
+        | Some _ -> failwiths "not implemented %d" __LINE__)
     | CApp
         (APrimitive (("+" | "*") as prim), AVar vname, [ AConst (PConst_int n) ])
     | CApp
@@ -450,6 +466,28 @@ let generate_body is_toplevel ppf body =
                printfn ppf "  mov %a, r8" pp_dest dest;
                dealloc_var ppf right_name;
                dealloc_var ppf left_name *))
+    | CApp (APrimitive (("+" | "*" | "-") as prim), AVar vl, [ AVar vr ]) ->
+        printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vl;
+        printfn ppf "  mov qword r12, %a" Addr_of_local.pp_local_exn vr;
+        printfn ppf "  %s r11, r12"
+          (match prim with
+          | "+" -> "add "
+          | "*" -> "imul"
+          | "-" -> "sub"
+          | op -> failwiths "not_implemeted  %S. %d" op __LINE__);
+        printfn ppf "  mov %a, r11" pp_dest dest
+    | CApp (APrimitive "-", arg1, [ AConst (PConst_int n) ]) ->
+        failwiths "not implemented %d" __LINE__
+    (* TODO: Move this specialization to the case below  *)
+    (* let left_name = LoI.alloc_temp () in
+       printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
+       let left_dest = DStack_var left_name in
+       helper_a left_dest arg1;
+       printfn ppf "  mov rax, %a" pp_dest left_dest;
+       printfn ppf "  mov qword r8, %d" n;
+       printfn ppf "  sub rax, r8";
+       printfn ppf "  mov %a, rax" pp_dest dest;
+       dealloc_var ppf left_name *)
     | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), [])
       ->
         assert (Option.is_none (is_toplevel f));
@@ -486,8 +524,8 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  call rukaml_gc_print_stats"
     | CAtom atom -> helper_a dest atom
     | CApp _ as anf ->
-        printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
-        printfn ppf ";;; %a" pp_c anf
+        Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF2.pp_c anf;
+        failwiths "Not implemented %d" __LINE__
     | rest ->
         printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
         printfn ppf "; @[<h>%a@]" pp_c rest
@@ -500,8 +538,10 @@ let generate_body is_toplevel ppf body =
         match is_toplevel vname with
         | None ->
             (* We use temprarily rdx because we can't move from stack to stack *)
-            printfn ppf "  mov rdx, [rsp+%d*8] " (Addr_of_local.find_exn vname);
-            printfn ppf "  mov %a, rdx ; access a var %S" pp_dest dest vname
+            printfn ppf "  mov qword rdx, [rsp+%d*8] "
+              (Addr_of_local.find_exn vname);
+            printfn ppf "  mov qword %a, rdx ; access a var %S" pp_dest dest
+              vname
         | Some arity ->
             alloc_closure ppf vname arity;
             printfn ppf "  mov %a, rax" pp_dest dest)
@@ -634,10 +674,10 @@ let codegen ?(wrap_main_into_start = true) anf file =
       let open Compile_lib in
       anf
       |> List.iter (fun (_flg, name, expr) ->
-             if Loc_of_ident.size () <> 0 then
+             if Addr_of_local.size () <> 0 then
                failwiths
                  "There are left over variables (before function %s): %s " name
-                 (Loc_of_ident.keys ());
+                 (Addr_of_local.keys ());
 
              (* printfn ppf "";
                 fprintf ppf "\t; %a\n" Loc_of_ident.pp (); *)

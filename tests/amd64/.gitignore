@@ -1,3 +1,4 @@
 *.exe
 
 /print.asm
+/gdb.txt

@@ -22,24 +22,6 @@
   ;
   ))
 
-(cram
- (applies_to run fib if fack print tuples)
- (deps
-  (package MiniML)
-  (package MiniML_amd64)
-  ;(package minimlc)
-  %{project_root}/compiler.exe
-  ;%{project_root}/llvm/llvm_backend.cmxs # issues with linksing C code
-  ;%{project_root}/llvm/llvm_compiler.exe
-  %{project_root}/back_amd64/amd64_compiler.exe
-  %{project_root}/back_amd64/rukaml_stdlib.o
-  ;
-  ../llvm/fack.ml
-  fac.ml
-  ;
-  ;double.exe
-  ))
-
 (rule
  (targets print.asm print.exe)
  (deps
@@ -52,3 +34,41 @@
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o print.asm)
    (run nasm -g -F dwarf -felf64 print.asm -o print.o)
    (run gcc-12 -g -no-pie print.o %{stdlib} -o print.exe))))
+
+(cram
+ (applies_to if)
+ (deps
+  (package MiniML)
+  (package MiniML_amd64)
+  %{project_root}/compiler.exe
+  %{project_root}/back_amd64/amd64_compiler.exe
+  %{project_root}/back_amd64/rukaml_stdlib.o
+  ./if.ml
+  ;
+  ))
+
+(rule
+ (targets if.asm if.exe)
+ (deps
+  (:src if.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o if.asm)
+   (run nasm -g -F dwarf -felf64 if.asm -o if.o)
+   (run gcc-12 -g -no-pie if.o %{stdlib} -o if.exe))))
+
+(cram
+ (applies_to run fib fack print tuples)
+ (deps
+  (package MiniML)
+  (package MiniML_amd64)
+  %{project_root}/compiler.exe
+  %{project_root}/back_amd64/amd64_compiler.exe
+  %{project_root}/back_amd64/rukaml_stdlib.o
+  ../llvm/fack.ml
+  fac.ml
+  ;
+  ))

@@ -19,8 +19,7 @@
   Location argument "c" in [rbp+4]
   Location argument "b" in [rbp+3]
   Location argument "a" in [rbp+2]
-  Removing info about args [ ab
-  c ]
+  Removing info about args [ a b c ]
   extend temp2 with shift = 1
   extend temp3 with shift = 2
   extend w with shift = 3
@@ -101,7 +100,7 @@
       61	  mov rdi, [rbp-3*8]
       62	  call rukaml_print_int ; short
       63	  mov [rbp-4*8], rax
-      64	  mov qword rax,  0
+      64	  mov qword [rbp-4*8],  0
       65	  add rsp, 8*4 ; deallocate local variables w, u, temp3, temp2
       66	  pop rbp
       67	  ret  ;;;; main
