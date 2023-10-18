@@ -54,6 +54,13 @@ let print_epilogue ppf name =
   printfn ppf "  ret  ;;;; %s" name;
   fprintf ppf "%!"
 
+let gensym =
+  Compile_lib.ANF2.(
+    reset_gensym ();
+    gensym)
+
+module ANF = Compile_lib.ANF2
+
 (* module Loc_of_ident : sig
      type t
 
@@ -264,9 +271,13 @@ let allocate_locals ppf input_anf : now:unit -> unit =
 (**
     Argument [is_toplevel] returns None or Some arity. *)
 let generate_body is_toplevel ppf body =
-  let open Compile_lib.ANF2 in
   let open Miniml.Parsetree in
   let allocate_args args =
+    log "XXX %s: [ %a ]" __FUNCTION__
+      (Format.pp_print_list
+         ~pp_sep:(fun ppf () -> fprintf ppf ", ")
+         Compile_lib.ANF2.pp_a)
+      args;
     let count = List.length args in
     let _stack_padding =
       if count mod 2 = 0 then 0
@@ -282,7 +293,7 @@ let generate_body is_toplevel ppf body =
           printfn ppf "  mov qword [rsp+8*%d], %d" (count - 1 - i) v
         in
         function
-        | AUnit | AConst (PConst_bool false) -> pp_access 0
+        | Compile_lib.ANF2.AUnit | AConst (PConst_bool false) -> pp_access 0
         | AConst (PConst_bool true) -> pp_access 1
         | AConst (PConst_int n) -> pp_access n
         | AVar vname ->
@@ -297,7 +308,7 @@ let generate_body is_toplevel ppf body =
   in
 
   let rec helper dest = function
-    | EComplex c -> helper_c dest c
+    | Compile_lib.ANF2.EComplex c -> helper_c dest c
     | ELet (_, Miniml.Parsetree.PVar name, rhs, wher) ->
         assert (Addr_of_local.contains name);
         let local = DStack_var (Addr_of_local.find_exn name) in
@@ -528,7 +539,7 @@ let generate_body is_toplevel ppf body =
         failwiths "Not implemented %d" __LINE__
     | rest ->
         printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
-        printfn ppf "; @[<h>%a@]" pp_c rest
+        printfn ppf "; @[<h>%a@]" Compile_lib.ANF2.pp_c rest
   and helper_a (dest : dest) = function
     | AConst (Miniml.Parsetree.PConst_bool true) ->
         printfn ppf "  mov qword %a, 1" pp_dest dest
@@ -553,7 +564,7 @@ let generate_body is_toplevel ppf body =
     | AUnit -> printfn ppf "mov qword %a, 0" pp_dest dest
     | atom ->
         printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
-        printfn ppf ";;; @[`%a`@]" pp_a atom
+        printfn ppf ";;; @[`%a`@]" ANF.pp_a atom
   in
   let dealloc_locals = allocate_locals ppf body in
   helper (DReg "rax") body;

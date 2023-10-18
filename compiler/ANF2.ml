@@ -329,6 +329,12 @@ let anf =
             , PVar name
             , CApp (APrimitive varname, arg1, [ arg2 ])
             , k (AVar name) )))
+    | TApp (TApp (TVar ("fresh", _), arg1, _), arg2, _) ->
+      helper arg1 (fun arg1 ->
+        helper arg2 (fun arg2 ->
+          let name = gensym_s () in
+          ELet
+            (NonRecursive, PVar name, CApp (AVar "fresh", arg1, [ arg2 ]), k (AVar name))))
     | TApp (f, arg1, _) ->
       helper f (fun f ->
         helper arg1 (fun arg1 ->
