@@ -29,7 +29,10 @@ let log fmt =
   if cfg.verbose then Format.kasprintf (fun s -> Format.printf "%s\n%!" s) fmt
   else Format.ifprintf Format.std_formatter fmt
 
-let set_verbose b = cfg.verbose <- b
+let set_verbose b =
+  (* Printf.printf "verbosity in %s = %b\n%!" __FILE__ b; *)
+  cfg.verbose <- b
+
 let fprintf = Format.fprintf
 let printfn ppf fmt = Format.kfprintf (fun ppf -> fprintf ppf "\n") ppf fmt
 
@@ -154,13 +157,13 @@ module Addr_of_local = struct
 
   let extend name =
     incr last_pos;
-    log "extend %s with shift = %d" name !last_pos;
+    (* log "extend %s with shift = %d" name !last_pos; *)
     Hashtbl.add store name !last_pos
 
   let remove_local name =
     let pos = Hashtbl.find store name in
     if !last_pos = pos then (
-      log "remove %s with shift = %d" name !last_pos;
+      (* log "remove %s with shift = %d" name !last_pos; *)
       decr last_pos;
       Hashtbl.remove store name)
     else
@@ -206,8 +209,7 @@ let pp_dest ppf = function
   | DStack_var offset ->
       (* 8 for 64 bit, 4 for 32bit *)
       if offset = 0 then fprintf ppf "[rbp]"
-      else if offset > 0 then fprintf ppf "[rbp-%d*8]" offset
-      else fprintf ppf "[rbp+%d*8]" (-offset)
+      else fprintf ppf "[rbp%+d*8]" (-offset)
 
 (* let dealloc_var ppf name =
    Loc_of_ident.remove name;
@@ -219,10 +221,9 @@ let alloc_closure ppf name arity =
   printfn ppf "  call rukaml_alloc_closure"
 
 let allocate_locals ppf input_anf : now:unit -> unit =
-  let open Compile_lib.ANF2 in
   let names = ref [] in
   let rec helper = function
-    | EComplex c -> helper_c c
+    | ANF.EComplex c -> helper_c c
     | ELet (_flg, PVar name, rhs, where_) ->
         Addr_of_local.extend name;
         names := name :: !names;
@@ -268,16 +269,25 @@ let allocate_locals ppf input_anf : now:unit -> unit =
     let () = now in
     ()
 
+let print_alloc_closure ppf fname arity =
+  printfn ppf "  mov rdi, %s" fname;
+  printfn ppf "  mov rsi, %d" arity;
+  printfn ppf "  call rukaml_alloc_closure"
+
+let list_iter_revindex ~f xs =
+  let l = List.length xs in
+  List.iteri (fun n x -> f (l - n - 1) x) xs
+
 (**
     Argument [is_toplevel] returns None or Some arity. *)
 let generate_body is_toplevel ppf body =
   let open Miniml.Parsetree in
   let allocate_args args =
-    log "XXX %s: [ %a ]" __FUNCTION__
-      (Format.pp_print_list
-         ~pp_sep:(fun ppf () -> fprintf ppf ", ")
-         Compile_lib.ANF2.pp_a)
-      args;
+    (* log "XXX %s: [ %a ]" __FUNCTION__
+       (Format.pp_print_list
+          ~pp_sep:(fun ppf () -> fprintf ppf ", ")
+          Compile_lib.ANF2.pp_a)
+       args; *)
     let count = List.length args in
     let _stack_padding =
       if count mod 2 = 0 then 0
@@ -287,23 +297,31 @@ let generate_body is_toplevel ppf body =
     in
 
     printfn ppf "  sub rsp, 8*%d ; fun arguments" count;
-    List.iteri
-      (fun i ->
-        let pp_access v =
-          printfn ppf "  mov qword [rsp+8*%d], %d" (count - 1 - i) v
+    ListLabels.iteri args ~f:(fun i ->
+        let pp_access ?(doc = "") v =
+          Format.fprintf ppf "  mov qword [rsp%+d*8], %d" i v;
+          if doc <> "" then printfn ppf " ; %s" doc else printfn ppf ""
         in
+
         function
         | Compile_lib.ANF2.AUnit | AConst (PConst_bool false) -> pp_access 0
         | AConst (PConst_bool true) -> pp_access 1
-        | AConst (PConst_int n) -> pp_access n
+        | AConst (PConst_int n) -> pp_access ~doc:"constant" n
+        | AVar vname when Option.is_some (is_toplevel vname) -> (
+            match is_toplevel vname with
+            | Some arity ->
+                print_alloc_closure ppf vname arity;
+                printfn ppf "  mov qword [rsp%+d*8], rax ; arg %S" i vname
+            | None -> assert false)
         | AVar vname ->
-            printfn ppf "  mov qword r8, %a" pp_dest
-              (DStack_var (Addr_of_local.lookup_exn vname));
-            printfn ppf "  mov qword [rsp+8*%d], r8" (count - 1 - i)
+            printfn ppf "  mov qword r8, %a  ; arg %S" pp_dest
+              (* TODO: user Addr_of_local.pp_local_exn *)
+              (DStack_var (Addr_of_local.lookup_exn vname))
+              vname;
+            printfn ppf "  mov qword [rsp%+d*8], r8" (count - 1 - i)
         | ALam _ -> failwith "Should it be representable in ANF?"
         | APrimitive _ -> assert false
-        | ATuple _ -> assert false)
-      args;
+        | ATuple _ -> assert false);
     count + _stack_padding
   in
 
@@ -326,6 +344,7 @@ let generate_body is_toplevel ppf body =
     | CIte (AVar econd, bth, bel) when Addr_of_local.contains econd ->
         (* if on global or local variable  *)
         printfn ppf "  mov qword rdx, %a" pp_dest
+          (* TODO: user Addr_of_local.pp_local_exn *)
           (DStack_var (Addr_of_local.lookup_exn econd));
         printfn ppf "  cmp rdx, 0";
         let el_lab = Printf.sprintf "lab_then_%d" (gensym ()) in
@@ -340,11 +359,13 @@ let generate_body is_toplevel ppf body =
       when is_toplevel f = None && not (Addr_of_local.has_key f) -> (
         match arg1 with
         | AVar v when Addr_of_local.has_key v ->
+            (* TODO: user Addr_of_local.pp_local_exn *)
             printfn ppf "  mov rdi, %a" pp_dest
               (DStack_var (Addr_of_local.find_exn v));
             printfn ppf "  call rukaml_print_int ; short";
             printfn ppf "  mov %a, rax" pp_dest dest
         | AConst (PConst_int n) ->
+            (* TODO: user Addr_of_local.pp_local_exn *)
             printfn ppf "  mov rdi, %d" n;
             printfn ppf "  call rukaml_print_int";
             printfn ppf "  mov %a, rax" pp_dest dest
@@ -354,48 +375,8 @@ let generate_body is_toplevel ppf body =
         | ALam (_, _)
         | AUnit ->
             failwith "Should not happen")
-    | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
-        (* Callig a rukaml function uses custon calling convention.
-           Pascal convention: all arguments on stack, LTR *)
-        let expected_arity = Option.get (is_toplevel f) in
-        let formal_arity = 1 + List.length args in
-
-        (* printfn ppf "\t; expected_arity = %d\n\t; formal_arity = %d"
-             expected_arity formal_arity;
-           printfn ppf "\t; calling %S" f; *)
-        if expected_arity = formal_arity then (
-          let to_remove = allocate_args (arg1 :: args) in
-
-          printfn ppf "  call %s" f;
-          printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
-          printfn ppf "  mov %a, rax" pp_dest dest)
-        else if formal_arity < expected_arity then (
-          printfn ppf "  mov rdi, %s" f;
-          printfn ppf "  mov rsi, %d" expected_arity;
-          printfn ppf "  call rukaml_alloc_closure";
-
-          (* Addr_of_local.extend "closure_container"; *)
-          (* Addr_of_local.extend "temp_for_padding"; *)
-          (* printfn ppf "  mov %a, rax" pp_dest
-             (DStack_var (Addr_of_local.find_exn "closure_container")); *)
-          let partial_args_count = allocate_args (arg1 :: args) in
-
-          printfn ppf "  mov rdi, rax";
-          printfn ppf "  mov rsi, %d" formal_arity;
-          assert (formal_arity < 5);
-          (* See calling convention *)
-          List.iteri
-            (fun i rname ->
-              printfn ppf "  mov %s, [rsp+8*%d]" rname (formal_arity - i - 1))
-            (list_take formal_arity [ "rdx"; "rcx"; "r8"; "r9" ]);
-          printfn ppf "  mov al, 0";
-          printfn ppf "  call rukaml_applyN";
-          printfn ppf "  add rsp, 8*%d ; deallocate args of rukaml_applyN"
-            partial_args_count;
-          printfn ppf "  mov %a, rax" pp_dest dest
-          (* printfn ppf "  sub rsp, 8*2 ; deallocate closure value and padding" *))
-        else failwith "Arity mismatch: over application"
     | CApp (APrimitive "=", AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
+        (* TODO: user Addr_of_local.pp_local_exn *)
         if l = r then printfn ppf "  mov qword %a, 1" pp_dest dest
         else printfn ppf "  mov qword %a, 0" pp_dest dest
     | CApp (APrimitive "=", AConst (PConst_int n), [ AVar vname ])
@@ -406,6 +387,7 @@ let generate_body is_toplevel ppf body =
         let eq_lab = Printf.sprintf "lab_%d" (gensym ()) in
         let exit_lab = Printf.sprintf "lab_%d" (gensym ()) in
         printfn ppf "  je %s" eq_lab;
+        (* TODO: user Addr_of_local.pp_local_exn *)
         printfn ppf "  mov qword %a, 0" pp_dest dest;
         printfn ppf "  jmp %s" exit_lab;
         printfn ppf "%s:" eq_lab;
@@ -499,13 +481,54 @@ let generate_body is_toplevel ppf body =
        printfn ppf "  sub rax, r8";
        printfn ppf "  mov %a, rax" pp_dest dest;
        dealloc_var ppf left_name *)
+    | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
+        (* Callig a rukaml function uses custom calling convention.
+           Pascal convention: all arguments on stack, LTR *)
+        let expected_arity = Option.get (is_toplevel f) in
+        let formal_arity = 1 + List.length args in
+
+        (* printfn ppf "\t; expected_arity = %d\n\t; formal_arity = %d"
+             expected_arity formal_arity;
+           printfn ppf "\t; calling %S" f; *)
+        if expected_arity = formal_arity then (
+          let to_remove = allocate_args (arg1 :: args) in
+
+          printfn ppf "  call %s" f;
+          printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
+          printfn ppf "  mov %a, rax" pp_dest dest)
+        else if formal_arity < expected_arity then (
+          printfn ppf "  mov rdi, %s" f;
+          printfn ppf "  mov rsi, %d" expected_arity;
+          printfn ppf "  call rukaml_alloc_closure";
+
+          (* Addr_of_local.extend "closure_container"; *)
+          (* Addr_of_local.extend "temp_for_padding"; *)
+          (* printfn ppf "  mov %a, rax" pp_dest
+             (DStack_var (Addr_of_local.find_exn "closure_container")); *)
+          let partial_args_count = allocate_args (arg1 :: args) in
+
+          printfn ppf "  mov rdi, rax";
+          printfn ppf "  mov rsi, %d" formal_arity;
+          assert (formal_arity < 5);
+          (* See calling convention *)
+          List.iteri
+            (fun i rname ->
+              printfn ppf "  mov %s, [rsp+8*%d]" rname (formal_arity - i - 1))
+            (list_take formal_arity [ "rdx"; "rcx"; "r8"; "r9" ]);
+          printfn ppf "  mov al, 0";
+          printfn ppf "  call rukaml_applyN";
+          printfn ppf "  add rsp, 8*%d ; deallocate args of rukaml_applyN"
+            partial_args_count;
+          printfn ppf "  mov %a, rax" pp_dest dest
+          (* printfn ppf "  sub rsp, 8*2 ; deallocate closure value and padding" *))
+        else failwith "Arity mismatch: over application"
     | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), [])
       ->
         assert (Option.is_none (is_toplevel f));
 
         Addr_of_local.extend "temp_padding";
         Addr_of_local.extend "arg1";
-        printfn ppf "  sub rsp, 8 ; padding";
+        printfn ppf "  sub rsp, 8 ; padding %s %d" __FILE__ __LINE__;
         printfn ppf "  sub rsp, 8 ; first arg of a function %s" f;
         helper_a (DStack_var (Addr_of_local.find_exn "arg1")) arg;
 
@@ -540,7 +563,9 @@ let generate_body is_toplevel ppf body =
     | rest ->
         printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
         printfn ppf "; @[<h>%a@]" Compile_lib.ANF2.pp_c rest
-  and helper_a (dest : dest) = function
+  and helper_a (dest : dest) x =
+    (* log "  %s: dest=`%a`, expr = %a" __FUNCTION__ pp_dest dest ANF.pp_a x; *)
+    match x with
     | AConst (Miniml.Parsetree.PConst_bool true) ->
         printfn ppf "  mov qword %a, 1" pp_dest dest
     | AConst (Miniml.Parsetree.PConst_int n) ->
@@ -548,9 +573,10 @@ let generate_body is_toplevel ppf body =
     | AVar vname -> (
         match is_toplevel vname with
         | None ->
-            (* We use temprarily rdx because we can't move from stack to stack *)
-            printfn ppf "  mov qword rdx, [rsp+%d*8] "
-              (Addr_of_local.find_exn vname);
+            printfn ppf
+              "  mov qword rdx, %a ; use temp rdx to move from stack to stack"
+              Addr_of_local.pp_local_exn vname
+            (* (Addr_of_local.find_exn vname) *);
             printfn ppf "  mov qword %a, rdx ; access a var %S" pp_dest dest
               vname
         | Some arity ->

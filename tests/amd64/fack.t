@@ -1,9 +1,9 @@
-  $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 --no-start -
-  > let rec fack n k = if n=1 then k 1 else fack (n-1) (fun m -> k(n*m))
+  $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm --no-start - # -vamd64
+  > let rec fack n k = if n=1 then k 1 else fack (n-1) (fun m -> k (n*m))
   > let id u = u
   > let main =
   >   let rez = fack 5 id in
-  >   let t = print rez in 
+  >   let t = print rez in
   >   0
   > EOF
   After ANF transformation.
@@ -26,25 +26,6 @@
       let rez = temp11 id  in
         let t = print rez  in
           0
-  ANF: let fresh_1 n k m =
-         let temp1 = (n * m) in
-           k temp1 
-       let rec fack n k =
-         let temp3 = (n = 1) in
-           (if temp3
-           then k 1 
-           else let temp5 = (n - 1) in
-                  let temp6 = fack temp5  in
-                    let temp7 = fresh_1 n  in
-                      let temp8 = temp7 k  in
-                        temp6 temp8 )
-       let id u =
-         u
-       let main =
-         let temp11 = fack 5  in
-           let rez = temp11 id  in
-             let t = print rez  in
-               0
 
   $ cat program.asm  | grep -v 'section .note.GNU-stack' | nl -ba
        1	section .text
@@ -62,204 +43,170 @@
       13	fresh_1:
       14	  push rbp
       15	  mov  rbp, rsp
-      16	  sub rsp, 8 ; allocate for var "temp1"
-      17	  sub rsp, 8 ; allocate for var "__temp3"
-      18	  mov rdx, [rsp+4*8] 
-      19	  mov [rsp], rdx ; access a var "n"
-      20	  sub rsp, 8 ; allocate for var "__temp4"
-      21	  mov rdx, [rsp+7*8] 
-      22	  mov [rsp], rdx ; access a var "m"
-      23	  mov rax, [8*1+rsp]
-      24	  mov rbx, [rsp]
-      25	  imul rbx, rax
-      26	  mov [8*2+rsp], rbx
-      27	  add rsp, 8 ; deallocate var "__temp4"
-      28	  add rsp, 8 ; deallocate var "__temp3"
-      29	  sub rsp, 8 ; allocate for var "__temp5"
-      30	  mov rdx, [rsp+1*8] 
-      31	  mov [rsp], rdx ; access a var "temp1"
-      32	  mov rax, 0  ; no float arguments
-      33	  mov rdi, [8*5+rsp]
-      34	  mov rsi, 1
-      35	  mov rdx, [rsp]
-      36	  call rukaml_applyN
-      37	  add rsp, 8 ; deallocate var "__temp5"
-      38	  mov rax, rax
-      39	  add rsp, 8 ; deallocate var "temp1"
-      40	  pop rbp
-      41	  ret  ;;;; fresh_1
-      42	GLOBAL fack
-      43	fack:
-      44	  push rbp
-      45	  mov  rbp, rsp
-      46	  sub rsp, 8 ; allocate for var "temp3"
-      47	  sub rsp, 8 ; allocate for var "__temp8"
-      48	  mov rdx, [rsp+4*8] 
-      49	  mov [rsp], rdx ; access a var "n"
-      50	  sub rsp, 8 ; allocate for var "__temp9"
-      51	  mov qword [rsp],  1
-      52	  mov rax, [8*1+rsp]
-      53	  mov rbx, [rsp]
-      54	  cmp rax, rbx
-      55	  je lab_14
-      56	  mov qword [8*2+rsp], 0
-      57	  jmp lab_15
-      58	lab_14:
-      59	  mov qword [8*2+rsp], 1
-      60	  jmp lab_15
-      61	lab_15:
-      62	  add rsp, 8 ; deallocate var "__temp9"
-      63	  add rsp, 8 ; deallocate var "__temp8"
-      64	  mov rdx, [rsp+0*8] 
-      65	  cmp rdx, 0
-      66	  je lab_then_16
-      67	  sub rsp, 8 ; allocate for var "__temp10"
-      68	  mov qword [rsp],  1
-      69	  mov rax, 0  ; no float arguments
-      70	  mov rdi, [8*5+rsp]
-      71	  mov rsi, 1
-      72	  mov rdx, [rsp]
-      73	  call rukaml_applyN
-      74	  add rsp, 8 ; deallocate var "__temp10"
-      75	  mov rax, rax
-      76	  jmp lab_endif_17
-      77	  lab_then_16:
-      78	  sub rsp, 8 ; allocate for var "temp5"
-      79	  sub rsp, 8 ; allocate for var "__temp11"
-      80	  mov rdx, [rsp+5*8] 
-      81	  mov [rsp], rdx ; access a var "n"
-      82	  mov rax, [rsp]
-      83	  dec rax
-      84	  mov [8*1+rsp], rax
-      85	  add rsp, 8 ; deallocate var "__temp11"
-      86	  sub rsp, 8 ; allocate for var "temp6"
-      87		; expected_arity = 2
-      88		; formal_arity = 1
-      89		; calling "fack"
-      90	  sub rsp, 8 ; allocate wrapper for func __temp12
-      91	  mov rdi, fack
-      92	  mov rsi, 2
-      93	  call rukaml_alloc_closure
-      94	  mov [rsp], rax
-      95	  sub rsp, 8 ; allocate for argument 0 (name = __temp13)
-      96	  mov rdx, [rsp+3*8] 
-      97	  mov [rsp], rdx ; access a var "temp5"
-      98	  mov rdi, [8*1+rsp]
-      99	  mov rsi, 1
-     100	  mov rdx, [rsp]
-     101	  mov al, 0
-     102	  call rukaml_applyN
-     103	  mov [8*2+rsp], rax
-     104	  add rsp, 8 ; deallocate var "__temp13"
-     105	  add rsp, 8 ; deallocate var "__temp12"
-     106	  sub rsp, 8 ; allocate for var "temp7"
-     107		; expected_arity = 3
-     108		; formal_arity = 1
-     109		; calling "fresh_1"
-     110	  sub rsp, 8 ; allocate wrapper for func __temp14
-     111	  mov rdi, fresh_1
-     112	  mov rsi, 3
-     113	  call rukaml_alloc_closure
-     114	  mov [rsp], rax
-     115	  sub rsp, 8 ; allocate for argument 0 (name = __temp15)
-     116	  mov rdx, [rsp+8*8] 
-     117	  mov [rsp], rdx ; access a var "n"
-     118	  mov rdi, [8*1+rsp]
-     119	  mov rsi, 1
-     120	  mov rdx, [rsp]
-     121	  mov al, 0
-     122	  call rukaml_applyN
-     123	  mov [8*2+rsp], rax
-     124	  add rsp, 8 ; deallocate var "__temp15"
-     125	  add rsp, 8 ; deallocate var "__temp14"
-     126	  sub rsp, 8 ; allocate for var "temp8"
-     127	  sub rsp, 8 ; allocate for var "__temp16"
-     128	  mov rdx, [rsp+9*8] 
-     129	  mov [rsp], rdx ; access a var "k"
-     130	  mov rax, 0  ; no float arguments
-     131	  mov rdi, [8*2+rsp]
-     132	  mov rsi, 1
-     133	  mov rdx, [rsp]
-     134	  call rukaml_applyN
-     135	  add rsp, 8 ; deallocate var "__temp16"
-     136	  mov [rsp], rax
-     137	  sub rsp, 8 ; allocate for var "__temp17"
-     138	  mov rdx, [rsp+1*8] 
-     139	  mov [rsp], rdx ; access a var "temp8"
-     140	  mov rax, 0  ; no float arguments
-     141	  mov rdi, [8*3+rsp]
-     142	  mov rsi, 1
-     143	  mov rdx, [rsp]
-     144	  call rukaml_applyN
-     145	  add rsp, 8 ; deallocate var "__temp17"
-     146	  mov rax, rax
-     147	  add rsp, 8 ; deallocate var "temp8"
-     148	  add rsp, 8 ; deallocate var "temp7"
-     149	  add rsp, 8 ; deallocate var "temp6"
-     150	  add rsp, 8 ; deallocate var "temp5"
-     151	  lab_endif_17:
-     152	  add rsp, 8 ; deallocate var "temp3"
-     153	  pop rbp
-     154	  ret  ;;;; fack
-     155	GLOBAL id
-     156	id:
-     157	  push rbp
-     158	  mov  rbp, rsp
-     159	  mov rdx, [rsp+2*8] 
-     160	  mov rax, rdx ; access a var "u"
-     161	  pop rbp
-     162	  ret  ;;;; id
-     163	GLOBAL main
-     164	main:
-     165	  push rbp
-     166	  mov  rbp, rsp
-     167	  mov rdi, rsp
-     168	  call rukaml_initialize
-     169	  sub rsp, 8 ; allocate for var "temp11"
-     170		; expected_arity = 2
-     171		; formal_arity = 1
-     172		; calling "fack"
-     173	  sub rsp, 8 ; allocate wrapper for func __temp22
-     174	  mov rdi, fack
-     175	  mov rsi, 2
-     176	  call rukaml_alloc_closure
-     177	  mov [rsp], rax
-     178	  sub rsp, 8 ; allocate for argument 0 (name = __temp23)
-     179	  mov qword [rsp],  5
-     180	  mov rdi, [8*1+rsp]
-     181	  mov rsi, 1
-     182	  mov rdx, [rsp]
-     183	  mov al, 0
-     184	  call rukaml_applyN
-     185	  mov [8*2+rsp], rax
-     186	  add rsp, 8 ; deallocate var "__temp23"
-     187	  add rsp, 8 ; deallocate var "__temp22"
-     188	  sub rsp, 8 ; allocate for var "rez"
-     189	  sub rsp, 8 ; allocate for var "__temp24"
-     190	  mov rdi, id
-     191	  mov rsi, 1
-     192	  call rukaml_alloc_closure
-     193	  mov [rsp], rax
-     194	  mov rax, 0  ; no float arguments
-     195	  mov rdi, [8*2+rsp]
-     196	  mov rsi, 1
-     197	  mov rdx, [rsp]
-     198	  call rukaml_applyN
-     199	  add rsp, 8 ; deallocate var "__temp24"
-     200	  mov [rsp], rax
-     201	  sub rsp, 8 ; allocate for var "t"
-     202	  mov rdi, [8*1+rsp]
-     203	  call rukaml_print_int ; short
-     204	  mov [rsp], rax
-     205	  mov qword rax,  0
-     206	  add rsp, 8 ; deallocate var "t"
-     207	  add rsp, 8 ; deallocate var "rez"
-     208	  add rsp, 8 ; deallocate var "temp11"
-     209	  pop rbp
-     210	  ret  ;;;; main
+      16	  sub rsp, 8*1 ; allocate for local variables temp1
+      17	  sub rsp, 8 ; allocate padding for locals
+      18	  mov qword r11, [rbp+2*8]
+      19	  mov qword r12, [rbp+4*8]
+      20	  imul r11, r12
+      21	  mov [rbp-1*8], r11
+      22	  sub rsp, 8 ; padding back_amd64/amd64_impl.ml 525
+      23	  sub rsp, 8 ; first arg of a function k
+      24	  mov qword rdx, [rbp-1*8] ; use temp rdx to move from stack to stack
+      25	  mov qword [rbp-4*8], rdx ; access a var "temp1"
+      26	  mov rax, 0  ; no float arguments
+      27	  mov rdi, [rbp+3*8]
+      28	  mov rsi, 1
+      29	  mov rdx, [rbp-4*8]
+      30	  call rukaml_applyN
+      31	  add rsp, 8*2 ; free space for args of function "k"
+      32	  mov rax, rax
+      33	  add rsp, 8 ; deallocate padding for locals
+      34	  add rsp, 8*1 ; deallocate local variables temp1
+      35	  pop rbp
+      36	  ret  ;;;; fresh_1
+      37	GLOBAL fack
+      38	fack:
+      39	  push rbp
+      40	  mov  rbp, rsp
+      41	  sub rsp, 8*5 ; allocate for local variables temp8, temp7, temp6, temp5, temp3
+      42	  sub rsp, 8 ; allocate padding for locals
+      43	  mov qword r11, [rbp+2*8]
+      44	  mov qword r12, 1
+      45	  cmp r11, r12
+      46	  je lab_16
+      47	  mov qword [rbp-1*8], 0
+      48	  jmp lab_17
+      49	lab_16:
+      50	  mov qword [rbp-1*8], 1
+      51	  jmp lab_17
+      52	lab_17:
+      53	  mov qword rdx, [rbp-1*8]
+      54	  cmp rdx, 0
+      55	  je lab_then_18
+      56	  sub rsp, 8 ; padding back_amd64/amd64_impl.ml 525
+      57	  sub rsp, 8 ; first arg of a function k
+      58	  mov qword [rbp-8*8],  1
+      59	  mov rax, 0  ; no float arguments
+      60	  mov rdi, [rbp+3*8]
+      61	  mov rsi, 1
+      62	  mov rdx, [rbp-8*8]
+      63	  call rukaml_applyN
+      64	  add rsp, 8*2 ; free space for args of function "k"
+      65	  mov rax, rax
+      66	  jmp lab_endif_19
+      67	lab_then_18:
+      68	  mov qword r11, [rbp+2*8]
+      69	  dec r11
+      70	  mov qword [rbp-2*8], r11
+      71	  mov rdi, fack
+      72	  mov rsi, 2
+      73	  call rukaml_alloc_closure
+      74	  sub rsp, 8 ; trying to save alignment 16 bytes
+      75	  sub rsp, 8*1 ; fun arguments
+      76	  mov qword r8, [rbp-2*8]  ; arg "temp5"
+      77	  mov qword [rsp+0*8], r8
+      78	  mov rdi, rax
+      79	  mov rsi, 1
+      80	  mov rdx, [rsp+8*0]
+      81	  mov al, 0
+      82	  call rukaml_applyN
+      83	  add rsp, 8*2 ; deallocate args of rukaml_applyN
+      84	  mov [rbp-3*8], rax
+      85	  mov rdi, fresh_1
+      86	  mov rsi, 3
+      87	  call rukaml_alloc_closure
+      88	  sub rsp, 8 ; trying to save alignment 16 bytes
+      89	  sub rsp, 8*1 ; fun arguments
+      90	  mov qword r8, [rbp+2*8]  ; arg "n"
+      91	  mov qword [rsp+0*8], r8
+      92	  mov rdi, rax
+      93	  mov rsi, 1
+      94	  mov rdx, [rsp+8*0]
+      95	  mov al, 0
+      96	  call rukaml_applyN
+      97	  add rsp, 8*2 ; deallocate args of rukaml_applyN
+      98	  mov [rbp-4*8], rax
+      99	  sub rsp, 8 ; padding back_amd64/amd64_impl.ml 525
+     100	  sub rsp, 8 ; first arg of a function temp7
+     101	  mov qword rdx, [rbp+3*8] ; use temp rdx to move from stack to stack
+     102	  mov qword [rbp-8*8], rdx ; access a var "k"
+     103	  mov rax, 0  ; no float arguments
+     104	  mov rdi, [rbp-4*8]
+     105	  mov rsi, 1
+     106	  mov rdx, [rbp-8*8]
+     107	  call rukaml_applyN
+     108	  add rsp, 8*2 ; free space for args of function "temp7"
+     109	  mov [rbp-5*8], rax
+     110	  sub rsp, 8 ; padding back_amd64/amd64_impl.ml 525
+     111	  sub rsp, 8 ; first arg of a function temp6
+     112	  mov qword rdx, [rbp-5*8] ; use temp rdx to move from stack to stack
+     113	  mov qword [rbp-8*8], rdx ; access a var "temp8"
+     114	  mov rax, 0  ; no float arguments
+     115	  mov rdi, [rbp-3*8]
+     116	  mov rsi, 1
+     117	  mov rdx, [rbp-8*8]
+     118	  call rukaml_applyN
+     119	  add rsp, 8*2 ; free space for args of function "temp6"
+     120	  mov rax, rax
+     121	lab_endif_19:
+     122	  add rsp, 8 ; deallocate padding for locals
+     123	  add rsp, 8*5 ; deallocate local variables temp8, temp7, temp6, temp5, temp3
+     124	  pop rbp
+     125	  ret  ;;;; fack
+     126	GLOBAL id
+     127	id:
+     128	  push rbp
+     129	  mov  rbp, rsp
+     130	  mov qword rdx, [rbp+2*8] ; use temp rdx to move from stack to stack
+     131	  mov qword rax, rdx ; access a var "u"
+     132	  pop rbp
+     133	  ret  ;;;; id
+     134	GLOBAL main
+     135	main:
+     136	  push rbp
+     137	  mov  rbp, rsp
+     138	  mov rdi, rsp
+     139	  call rukaml_initialize
+     140	  sub rsp, 8*3 ; allocate for local variables t, rez, temp11
+     141	  sub rsp, 8 ; allocate padding for locals
+     142	  mov rdi, fack
+     143	  mov rsi, 2
+     144	  call rukaml_alloc_closure
+     145	  sub rsp, 8 ; trying to save alignment 16 bytes
+     146	  sub rsp, 8*1 ; fun arguments
+     147	  mov qword [rsp+0*8], 5 ; constant
+     148	  mov rdi, rax
+     149	  mov rsi, 1
+     150	  mov rdx, [rsp+8*0]
+     151	  mov al, 0
+     152	  call rukaml_applyN
+     153	  add rsp, 8*2 ; deallocate args of rukaml_applyN
+     154	  mov [rbp-1*8], rax
+     155	  sub rsp, 8 ; padding back_amd64/amd64_impl.ml 525
+     156	  sub rsp, 8 ; first arg of a function temp11
+     157	  mov rdi, id
+     158	  mov rsi, 1
+     159	  call rukaml_alloc_closure
+     160	  mov [rbp-6*8], rax
+     161	  mov rax, 0  ; no float arguments
+     162	  mov rdi, [rbp-1*8]
+     163	  mov rsi, 1
+     164	  mov rdx, [rbp-6*8]
+     165	  call rukaml_applyN
+     166	  add rsp, 8*2 ; free space for args of function "temp11"
+     167	  mov [rbp-2*8], rax
+     168	  mov rdi, [rbp-2*8]
+     169	  call rukaml_print_int ; short
+     170	  mov [rbp-3*8], rax
+     171	  mov qword rax,  0
+     172	  add rsp, 8 ; deallocate padding for locals
+     173	  add rsp, 8*3 ; deallocate local variables t, rez, temp11
+     174	  pop rbp
+     175	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o
   $ gcc-12 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe 
   /usr/bin/ld: program.o: warning: relocation in read-only section `.text'
   /usr/bin/ld: warning: creating DT_TEXTREL in a PIE
   $ chmod u+x program.exe && ./program.exe
+  ¨
   rukaml_print_int 120
