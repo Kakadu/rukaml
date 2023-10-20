@@ -1,21 +1,13 @@
-  $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 -
-  > let main = if 1=1 then 10 else 20
+  $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm - #-vamd64
+  > let main = print (if 1=1 then 10 else 20)
   > EOF
   After ANF transformation.
   let main =
     let temp1 = (1 = 1) in
-      (if temp1
-      then 10
-      else 20)
-  ANF: let main =
-         let temp1 = (1 = 1) in
-           (if temp1
-           then 10
-           else 20)
-  extend temp1 with shift = 1
-  extend __pad3 with shift = 2
-  remove __pad3 with shift = 2
-  Removing info about args [  ]
+      let temp2 = (if temp1
+                  then 10
+                  else 20) in
+        print temp2 
 
 ; generated code for amd64
   $ cat program.asm  | grep -v 'section .note.GNU-stack' | nl -ba
@@ -43,23 +35,25 @@
       22	  mov  rbp, rsp
       23	  mov rdi, rsp
       24	  call rukaml_initialize
-      25	  sub rsp, 8*1 ; allocate for local variables temp1
-      26	  sub rsp, 8 ; allocate padding for locals
-      27	    ;; calculate rhs and put into [rbp-1*8]. offset = 1
-      28	  mov qword [rbp-1*8], 1
-      29	  mov qword rdx, [rbp-1*8]
-      30	  cmp rdx, 0
-      31	  je lab_then_4
-      32	  mov qword [rbp-1*8],  10
-      33	  jmp lab_endif_5
-      34	lab_then_4:
-      35	  mov qword [rbp-1*8],  20
-      36	lab_endif_5:
-      37	  add rsp, 8 ; deallocate padding for locals
-      38	  add rsp, 8*1 ; deallocate local variables temp1
+      25	  sub rsp, 8*2 ; allocate for local variables temp2, temp1
+      26	  mov qword [rbp-1*8], 1
+      27	  mov qword rdx, [rbp-1*8]
+      28	  cmp rdx, 0
+      29	  je lab_then_4
+      30	  mov qword [rbp-2*8],  10
+      31	  jmp lab_endif_5
+      32	lab_then_4:
+      33	  mov qword [rbp-2*8],  20
+      34	lab_endif_5:
+      35	  mov rdi, [rbp-2*8]
+      36	  call rukaml_print_int ; short
+      37	  mov rax, rax
+      38	  add rsp, 8*2 ; deallocate local variables temp2, temp1
       39	  pop rbp
       40	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o
   $ gcc-12 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe 
   $ ./program.exe && echo $?
+  :
+  rukaml_print_int 10
   0

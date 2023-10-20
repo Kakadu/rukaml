@@ -16,6 +16,11 @@
          (x + x)
        let main =
          sq 7 
+  Location argument "y" in [rbp+2]
+  Removing info about args [ y ]
+  Location argument "x" in [rbp+2]
+  Removing info about args [ x ]
+  Removing info about args [  ]
 
 ; generated code for amd64
   $ cat program.asm  | grep -v 'section .note.GNU-stack' | nl -ba
@@ -41,58 +46,38 @@
       20	sq:
       21	  push rbp
       22	  mov  rbp, rsp
-      23	  sub rsp, 8 ; allocate for var "__temp3"
-      24	  mov rdx, [rsp+3*8] 
-      25	  mov [rsp], rdx ; access a var "y"
-      26	  sub rsp, 8 ; allocate for var "__temp4"
-      27	  mov rdx, [rsp+4*8] 
-      28	  mov [rsp], rdx ; access a var "y"
-      29	  mov rax, [8*1+rsp]
-      30	  mov rbx, [rsp]
-      31	  imul rbx, rax
-      32	  mov rax, rbx
-      33	  add rsp, 8 ; deallocate var "__temp4"
-      34	  add rsp, 8 ; deallocate var "__temp3"
-      35	  pop rbp
-      36	  ret  ;;;; sq
-      37	GLOBAL double
-      38	double:
-      39	  push rbp
-      40	  mov  rbp, rsp
-      41	  sub rsp, 8 ; allocate for var "__temp7"
-      42	  mov rdx, [rsp+3*8] 
-      43	  mov [rsp], rdx ; access a var "x"
-      44	  sub rsp, 8 ; allocate for var "__temp8"
-      45	  mov rdx, [rsp+4*8] 
-      46	  mov [rsp], rdx ; access a var "x"
-      47	  mov rax, [8*1+rsp]
-      48	  mov rbx, [rsp]
-      49	  add  rbx, rax
-      50	  mov rax, rbx
-      51	  add rsp, 8 ; deallocate var "__temp8"
-      52	  add rsp, 8 ; deallocate var "__temp7"
-      53	  pop rbp
-      54	  ret  ;;;; double
-      55	GLOBAL main
-      56	main:
-      57	  push rbp
-      58	  mov  rbp, rsp
-      59	  mov rdi, rsp
-      60	  call rukaml_initialize
-      61		; expected_arity = 1
-      62		; formal_arity = 1
-      63		; calling "sq"
-      64	  ; expected_arity = formal_arity = 1
-      65	  sub rsp, 8 ; allocate for argument 0 (name = __temp11)
-      66	  mov qword [rsp],  7
-      67	  call sq
-      68	  add rsp, 8 ; deallocate var "__temp11"
-      69	  mov rax, rax
-      70	  pop rbp
-      71	  ret  ;;;; main
+      23	  mov qword r11, [rbp+2*8]
+      24	  mov qword r12, [rbp+2*8]
+      25	  imul r11, r12
+      26	  mov rax, r11
+      27	  pop rbp
+      28	  ret  ;;;; sq
+      29	GLOBAL double
+      30	double:
+      31	  push rbp
+      32	  mov  rbp, rsp
+      33	  mov qword r11, [rbp+2*8]
+      34	  mov qword r12, [rbp+2*8]
+      35	  add  r11, r12
+      36	  mov rax, r11
+      37	  pop rbp
+      38	  ret  ;;;; double
+      39	GLOBAL main
+      40	main:
+      41	  push rbp
+      42	  mov  rbp, rsp
+      43	  mov rdi, rsp
+      44	  call rukaml_initialize
+      45	  sub rsp, 8 ; trying to save alignment 16 bytes
+      46	  sub rsp, 8*1 ; fun arguments
+      47	  mov qword [rsp+0*8], 7 ; constant
+      48	  call sq
+      49	  add rsp, 8*2 ; dealloc args
+      50	  mov rax, rax
+      51	  pop rbp
+      52	  ret  ;;;; main
 
-  $ nasm -felf64 program.asm -o program.o && ld -o program.exe program.o && chmod u+x program.exe && ./program.exe
-  ld: warning: cannot find entry symbol _start; defaulting to 0000000000401000
-  ld: program.o: in function `main':
-  program.asm:(.text+0x8a): undefined reference to `rukaml_initialize'
-  [1]
+  $ nasm -felf64 program.asm -o program.o
+  $ gcc-12 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
+  $ ./program.exe && echo $?
+  [49]
