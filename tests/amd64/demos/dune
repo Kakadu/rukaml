@@ -1,7 +1,7 @@
 (cram
  (applies_to)
  (deps
-  ;double.exe 
+  ;double.exe
   if.exe
   app1.exe
   gc1.exe))
@@ -56,7 +56,12 @@
   (promote (until-clean)))
  (action
   (progn
-   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o fack.asm)
+   (run
+    %{project_root}/back_amd64/amd64_compiler.exe
+    %{src}
+    -o
+    fack.asm
+    -vamd64)
    (run nasm -g -F dwarf -felf64 fack.asm -o fack.o)
    (run gcc-12 -g -o fack.exe %{stdlib} fack.o))))
 

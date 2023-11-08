@@ -1,3 +1,7 @@
-let rec fac n k = if n = 1 then k 1 else fac (n - 1) (fun u -> k (u * n))
-let id u = u
-let main = print (fac 4 id)
+let fresh n k =
+  k n
+let id x = x
+let main =
+  let u = fresh 1 id in
+  let v = print u in
+  0
