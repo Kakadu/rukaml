@@ -35,6 +35,8 @@
    (run nasm -g -F dwarf -felf64 print.asm -o print.o)
    (run gcc-12 -g -no-pie print.o %{stdlib} -o print.exe))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (cram
  (applies_to if)
  (deps
@@ -59,6 +61,8 @@
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o if.asm)
    (run nasm -g -F dwarf -felf64 if.asm -o if.o)
    (run gcc-12 -g -no-pie if.o %{stdlib} -o if.exe))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (cram
  (applies_to run fib fack print tuples)

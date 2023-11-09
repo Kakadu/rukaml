@@ -87,9 +87,29 @@
   (promote (until-clean)))
  (action
   (progn
-   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o app1.asm)
+   (run
+    %{project_root}/back_amd64/amd64_compiler.exe
+    %{src}
+    -o
+    app1.asm
+    -vamd64)
    (run nasm -g -F dwarf -felf64 app1.asm -o app1.o)
    (run gcc-12 -g -o app1.exe %{stdlib} app1.o))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(rule
+ (targets hack.asm hack.exe)
+ (deps
+  (:src hack.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o hack.asm)
+   (run nasm -g -F dwarf -felf64 hack.asm -o hack.o)
+   (run gcc-12 -g -no-pie hack.o %{stdlib} -o hack.exe))))
 
 ; (rule
 ;  (targets hack.exe)
