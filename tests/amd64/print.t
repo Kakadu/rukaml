@@ -20,18 +20,6 @@
   Location argument "b" in [rbp+3]
   Location argument "a" in [rbp+2]
   Removing info about args [ a b c ]
-  extend temp2 with shift = 1
-  extend temp3 with shift = 2
-  extend w with shift = 3
-  extend u with shift = 4
-  extend temp_padding with shift = 5
-  extend arg1 with shift = 6
-  remove arg1 with shift = 6
-  remove temp_padding with shift = 5
-  extend temp_padding with shift = 5
-  extend arg1 with shift = 6
-  remove arg1 with shift = 6
-  remove temp_padding with shift = 5
   Removing info about args [  ]
 
  
@@ -63,13 +51,13 @@
       24	  mov  rbp, rsp
       25	  mov rdi, rsp
       26	  call rukaml_initialize
-      27	  sub rsp, 8*4 ; allocate for local variables w, u, temp3, temp2
+      27	  sub rsp, 8*4 ; allocate for local variables u, w, temp3, temp2
       28	  mov rdi, prod
       29	  mov rsi, 3
       30	  call rukaml_alloc_closure
       31	  sub rsp, 8 ; trying to save alignment 16 bytes
       32	  sub rsp, 8*1 ; fun arguments
-      33	  mov qword [rsp+8*0], 1
+      33	  mov qword [rsp+0*8], 1 ; constant
       34	  mov rdi, rax
       35	  mov rsi, 1
       36	  mov rdx, [rsp+8*0]
@@ -100,8 +88,8 @@
       61	  mov rdi, [rbp-3*8]
       62	  call rukaml_print_int ; short
       63	  mov [rbp-4*8], rax
-      64	  mov qword [rbp-4*8],  0
-      65	  add rsp, 8*4 ; deallocate local variables w, u, temp3, temp2
+      64	  mov qword rax,  0
+      65	  add rsp, 8*4 ; deallocate local variables u, w, temp3, temp2
       66	  pop rbp
       67	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o

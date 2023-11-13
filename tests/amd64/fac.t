@@ -23,19 +23,7 @@
            let t = print n  in
              0
   Location argument "n" in [rbp+2]
-  extend temp1 with shift = 1
-  extend p with shift = 2
-  extend p2 with shift = 3
-  extend __pad8 with shift = 4
-  remove __pad8 with shift = 4
-  remove p2 with shift = 3
-  remove p with shift = 2
-  remove temp1 with shift = 1
   Removing info about args [ n ]
-  extend n with shift = 1
-  extend t with shift = 2
-  remove t with shift = 2
-  remove n with shift = 1
   Removing info about args [  ]
 
 ; generated code for amd64
@@ -85,8 +73,8 @@
       43	  mov qword [rbp-2*8], r11
       44	  sub rsp, 8 ; trying to save alignment 16 bytes
       45	  sub rsp, 8*1 ; fun arguments
-      46	  mov qword r8, [rbp-2*8]
-      47	  mov qword [rsp+8*0], r8
+      46	  mov qword r8, [rbp-2*8]  ; arg "p"
+      47	  mov qword [rsp+0*8], r8
       48	  call fac
       49	  add rsp, 8*2 ; dealloc args
       50	  mov [rbp-3*8], rax
@@ -108,7 +96,7 @@
       66	  sub rsp, 8*2 ; allocate for local variables t, n
       67	  sub rsp, 8 ; trying to save alignment 16 bytes
       68	  sub rsp, 8*1 ; fun arguments
-      69	  mov qword [rsp+8*0], 4
+      69	  mov qword [rsp+0*8], 4 ; constant
       70	  call fac
       71	  add rsp, 8*2 ; dealloc args
       72	  mov [rbp-1*8], rax

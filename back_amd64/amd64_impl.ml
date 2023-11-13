@@ -424,6 +424,13 @@ let generate_body is_toplevel ppf body =
             printfn ppf "  dec r11";
             printfn ppf "  mov qword %a, r11" pp_dest dest
         | Some _ -> failwiths "not implemented %d" __LINE__)
+    | CApp (APrimitive "-", AVar vname, [ AConst (PConst_int n) ]) -> (
+        match is_toplevel vname with
+        | None ->
+            printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
+            printfn ppf "  sub r11, %d" n;
+            printfn ppf "  mov qword %a, r11" pp_dest dest
+        | Some _ -> failwiths "not implemented %d" __LINE__)
     | CApp
         (APrimitive (("+" | "*") as prim), AVar vname, [ AConst (PConst_int n) ])
     | CApp
@@ -469,8 +476,6 @@ let generate_body is_toplevel ppf body =
           | "-" -> "sub"
           | op -> failwiths "not_implemeted  %S. %d" op __LINE__);
         printfn ppf "  mov %a, r11" pp_dest dest
-    | CApp (APrimitive "-", arg1, [ AConst (PConst_int n) ]) ->
-        failwiths "not implemented %d" __LINE__
     (* TODO: Move this specialization to the case below  *)
     (* let left_name = LoI.alloc_temp () in
        printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
@@ -528,7 +533,7 @@ let generate_body is_toplevel ppf body =
 
         Addr_of_local.extend "temp_padding";
         Addr_of_local.extend "arg1";
-        printfn ppf "  sub rsp, 8 ; padding %s %d" __FILE__ __LINE__;
+        printfn ppf "  sub rsp, 8 ; padding";
         printfn ppf "  sub rsp, 8 ; first arg of a function %s" f;
         helper_a (DStack_var (Addr_of_local.find_exn "arg1")) arg;
 

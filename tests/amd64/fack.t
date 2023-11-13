@@ -49,7 +49,7 @@
       19	  mov qword r12, [rbp+4*8]
       20	  imul r11, r12
       21	  mov [rbp-1*8], r11
-      22	  sub rsp, 8 ; padding back_amd64/amd64_impl.ml 525
+      22	  sub rsp, 8 ; padding
       23	  sub rsp, 8 ; first arg of a function k
       24	  mov qword rdx, [rbp-1*8] ; use temp rdx to move from stack to stack
       25	  mov qword [rbp-4*8], rdx ; access a var "temp1"
@@ -83,7 +83,7 @@
       53	  mov qword rdx, [rbp-1*8]
       54	  cmp rdx, 0
       55	  je lab_then_18
-      56	  sub rsp, 8 ; padding back_amd64/amd64_impl.ml 525
+      56	  sub rsp, 8 ; padding
       57	  sub rsp, 8 ; first arg of a function k
       58	  mov qword [rbp-8*8],  1
       59	  mov rax, 0  ; no float arguments
@@ -126,7 +126,7 @@
       96	  call rukaml_applyN
       97	  add rsp, 8*2 ; deallocate args of rukaml_applyN
       98	  mov [rbp-4*8], rax
-      99	  sub rsp, 8 ; padding back_amd64/amd64_impl.ml 525
+      99	  sub rsp, 8 ; padding
      100	  sub rsp, 8 ; first arg of a function temp7
      101	  mov qword rdx, [rbp+3*8] ; use temp rdx to move from stack to stack
      102	  mov qword [rbp-8*8], rdx ; access a var "k"
@@ -137,7 +137,7 @@
      107	  call rukaml_applyN
      108	  add rsp, 8*2 ; free space for args of function "temp7"
      109	  mov [rbp-5*8], rax
-     110	  sub rsp, 8 ; padding back_amd64/amd64_impl.ml 525
+     110	  sub rsp, 8 ; padding
      111	  sub rsp, 8 ; first arg of a function temp6
      112	  mov qword rdx, [rbp-5*8] ; use temp rdx to move from stack to stack
      113	  mov qword [rbp-8*8], rdx ; access a var "temp8"
@@ -182,7 +182,7 @@
      152	  call rukaml_applyN
      153	  add rsp, 8*2 ; deallocate args of rukaml_applyN
      154	  mov [rbp-1*8], rax
-     155	  sub rsp, 8 ; padding back_amd64/amd64_impl.ml 525
+     155	  sub rsp, 8 ; padding
      156	  sub rsp, 8 ; first arg of a function temp11
      157	  mov rdi, id
      158	  mov rsi, 1
