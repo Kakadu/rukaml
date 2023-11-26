@@ -1,11 +1,16 @@
 (cram
- (applies_to fac)
  (deps
   (package MiniML)
   (package MiniML_amd64)
   %{project_root}/compiler.exe
   %{project_root}/back_amd64/amd64_compiler.exe
   %{project_root}/back_amd64/rukaml_stdlib.o
+  ;
+  ))
+
+(cram
+ (applies_to fac)
+ (deps
   ./fac.ml
   ;
   ))
@@ -13,11 +18,6 @@
 (cram
  (applies_to print)
  (deps
-  (package MiniML)
-  (package MiniML_amd64)
-  %{project_root}/compiler.exe
-  %{project_root}/back_amd64/amd64_compiler.exe
-  %{project_root}/back_amd64/rukaml_stdlib.o
   ./print.ml
   ;
   ))
@@ -40,11 +40,6 @@
 (cram
  (applies_to if)
  (deps
-  (package MiniML)
-  (package MiniML_amd64)
-  %{project_root}/compiler.exe
-  %{project_root}/back_amd64/amd64_compiler.exe
-  %{project_root}/back_amd64/rukaml_stdlib.o
   ./if.ml
   ;
   ))
@@ -67,11 +62,6 @@
 (cram
  (applies_to run fib fack print tuples)
  (deps
-  (package MiniML)
-  (package MiniML_amd64)
-  %{project_root}/compiler.exe
-  %{project_root}/back_amd64/amd64_compiler.exe
-  %{project_root}/back_amd64/rukaml_stdlib.o
   ../llvm/fack.ml
   fac.ml
   ;
