@@ -7,7 +7,7 @@ There we redirect shell's output to separate file, to be able to sed the output
   [139]
   $ cat err.log | sed 's/ (core dumped)//g'
   Segmentation fault
-  $ objdump -M intel -D hello.o
+  $ objdump -M intel -D hello.o | sed 's/[ \t]*$//'
   
   hello.o:     file format elf64-x86-64
   
@@ -27,6 +27,6 @@ There we redirect shell's output to separate file, to be able to sed the output
      0:	b8 01 00 00 00       	mov    eax,0x1
      5:	bf 01 00 00 00       	mov    edi,0x1
      a:	48 be 00 00 00 00 00 	movabs rsi,0x0
-    11:	00 00 00 
+    11:	00 00 00
     14:	ba 0e 00 00 00       	mov    edx,0xe
     19:	0f 05                	syscall

@@ -5,7 +5,7 @@
   print_int 24
   $ echo $?
   0
-  $ objdump -M intel -D fac.o
+  $ objdump -M intel -D fac.o | sed 's/[ \t]*$//'
   
   fac.o:     file format elf64-x86-64
   

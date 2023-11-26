@@ -6,7 +6,7 @@ There we redirect shell's output to separate file, to be able to sed the output
   [139]
   $ cat err.log | sed 's/ (core dumped)//g'
   Segmentation fault
-  $ objdump --dwarf=decodedline  -M intel -D hello1.o
+  $ objdump --dwarf=decodedline  -M intel -D hello1.o | sed 's/[ \t]*$//'
   
   hello1.o:     file format elf64-x86-64
   
