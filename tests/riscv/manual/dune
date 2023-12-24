@@ -1,7 +1,0 @@
-(cram
- (applies_to 003)
- (deps 003hello.s))
-
-(cram
- (applies_to 004)
- (deps 004fac.s))
