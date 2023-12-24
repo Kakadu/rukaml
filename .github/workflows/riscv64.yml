@@ -32,9 +32,11 @@ jobs:
 
       # checking out the code seems to be important because local switch is used
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          ref: riscv64
+          show-progress: false
 
       - name: Install OPAM dependencies via Makefile
         #continue-on-error: true
