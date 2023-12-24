@@ -6,14 +6,14 @@ on:
       - riscv64
 
 env:
-  OPAMROOT: /home/opam/.opam
+  OPAMROOT: /home/user/.opam
 
 jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: kakadu18/ocaml:llvm # TODO: add dune-site to image
-      options: --user root
+      image: kakadu18/ocaml:miniml
+      options: --user user
 
     # The below probably could be used instead of styfle/cancel-workflow-action
     concurrency:
@@ -21,9 +21,17 @@ jobs:
       cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
     steps:
+      - run: whoami
+      - run: ls -la ~
+      - run: echo $HOME
+      - run: which opam
       - run: opam --version
       - run: opam exec -- ocamlopt --version
       - run: opam list
+
+      # dirty hack to make binfmt happy
+      - run: sudo ln -s /usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1 /lib
+      - run: sudo ln -s /usr/riscv64-linux-gnu/lib/libc.so.6 /lib
 
       #- name: Cancel Previous Runs
       #  uses: styfle/cancel-workflow-action@0.11.0
@@ -43,6 +51,9 @@ jobs:
         run: |
           sudo apt update --yes
           make deps
+
+      - run: riscv64-linux-gnu-gcc --version
+      - run: qemu-riscv64 --version
 
       - run: opam exec -- dune build @default --profile=release
       - run: opam exec -- dune test
