@@ -1,4 +1,4 @@
-.PHONY: deps
+.PHONY: debs deps 
 all:
 	dune build
 
@@ -11,9 +11,13 @@ watch:
 promote:
 	dune runtest --auto-promote
 
-deps:
-	sudo apt install --yes --no-install-recommends \
-		nasm clang-14 gcc-12 pkg-config
-	opam install --yes \
+DEBS += nasm clang-14 gcc-12 pkg-config
+DEBS += gcc-riscv64-linux-gnu libc6-dev-riscv64-cross
+
+debs:
+	sudo apt install --yes --no-install-recommends $(DEBS)
+
+deps: debs
+	opam install --confirm-level=yes \
 		dune-site angstrom ppx_blob ppx_show ppx_expect llvm.14.0.6 ctypes-foreign
 
