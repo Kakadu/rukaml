@@ -1,0 +1,51 @@
+(env
+ (dev
+  (flags
+   (:standard -warn-error -26-27-39))
+  (ocamlopt_flags
+   (:standard -S))))
+
+(library
+ (name amd64_impl)
+ (public_name MiniML_rv64.impl)
+ (modules RV64_impl)
+ (wrapped false)
+ (libraries MiniML.cconv MiniML.compile))
+
+(executable
+ (name RV64_compiler)
+ (modules RV64_compiler)
+ (libraries stdio amd64_impl))
+
+; (library
+;  (public_name MiniML_amd64.backend)
+;  (name plugin1_impl)
+;  (modules back_amd64)
+;  (libraries
+;   MiniML.frontend
+;   MiniML.compile
+;   MiniML.register
+;   MiniML.cconv
+;   amd64_impl))
+
+; (plugin
+;  (name plugin1)
+;  (libraries MiniML_amd64.backend)
+;  (site
+;   (MiniML plugins)))
+
+(rule
+ (targets rukaml_stdlib.o)
+ (deps rukaml_stdlib.c)
+ (action
+  (run
+   gcc-12
+   -g
+   -Wall
+   -Wpedantic
+   %{deps}
+   -c
+   -o
+   %{targets}
+   ;
+   )))
