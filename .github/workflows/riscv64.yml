@@ -1,9 +1,9 @@
-name: Build master
+name: Build riscv64
 
 on:
   push:
     branches:
-      - "riscv64"
+      - riscv64
 
 env:
   OPAMROOT: /home/opam/.opam
