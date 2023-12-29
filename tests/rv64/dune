@@ -42,7 +42,7 @@
     --no-start
     -vamd64
     %{src})
-   (run riscv64-linux-gnu-gcc -c -g fac.s -o fac.o)
+   (run riscv64-linux-gnu-gcc -g -c fac.s -o fac.o)
    (run riscv64-linux-gnu-gcc -g fac.o -o %{targets}))))
 
 (cram
