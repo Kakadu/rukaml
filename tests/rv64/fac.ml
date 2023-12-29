@@ -6,7 +6,6 @@ let fac n =
     let p2 = fac p in
     n * p2)
 
-
 let main =
   let n = fac 4 in
   0

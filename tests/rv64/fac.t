@@ -26,7 +26,9 @@
  
   $ cat program.s | grep -v 'section .note.GNU-stack' | nl -ba
   $ ls 
+  $ ls ../../back_rv64
 
-  $ riscv64-linux-gnu-gcc program.s rukaml_stdlib.o -o program.o 2>&1 | head -n5
+  $ riscv64-linux-gnu-gcc -c -g program.s -o program.o # 2>&1 | head -n5
 $ riscv64-linux-gnu-gcc -g -o program.exe ../../back_rv64/rukaml_stdlib.o program.o && ./program.exe
-  
+  $ riscv64-linux-gnu-gcc -g program.o ../../back_rv64/rukaml_stdlib.o -o fac.exe 2>&1 | head -n5
+  $ qemu-riscv64 -cpu rv64  ./fac.exe

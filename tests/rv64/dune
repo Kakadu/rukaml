@@ -3,11 +3,47 @@
  (deps
   (package MiniML)
   (package MiniML_rv64)
-  %{project_root}/compiler.exe
+  ; %{project_root}/compiler.exe
   %{project_root}/back_rv64/RV64_compiler.exe
   %{project_root}/back_rv64/rukaml_stdlib.o
   ;
   ))
+
+;;;;; fac 
+
+(rule
+ (targets fac.s)
+ (deps
+  (:src fac.ml))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    --no-start
+    -vamd64
+    %{src}))))
+
+(rule
+ (targets fac.exe)
+ (deps
+  (:src fac.s))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    fac.s
+    --no-start
+    -vamd64
+    %{src})
+   (run riscv64-linux-gnu-gcc -c -g fac.s -o fac.o)
+   (run riscv64-linux-gnu-gcc -g fac.o -o %{targets}))))
 
 (cram
  (applies_to fac)

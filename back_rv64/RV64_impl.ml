@@ -652,9 +652,9 @@ let codegen ?(wrap_main_into_start = true) anf file =
 
                 (* printfn ppf "  push rbp";
                    printfn ppf "  mov  rbp, rsp"; *)
-                if name = "main" then (
+                (* if name = "main" then (
                   printfn ppf "  mv a0, sp";
-                  printfn ppf "  call rukaml_initialize");
+                  printfn ppf "  call rukaml_initialize"); *)
                 generate_body is_toplevel ppf body;
                 Addr_of_local.remove_args names;
 
