@@ -30,8 +30,9 @@ jobs:
       - run: opam list
 
       # dirty hack to make binfmt happy
-      - run: sudo ln -s /usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1 /lib
-      - run: sudo ln -s /usr/riscv64-linux-gnu/lib/libc.so.6 /lib
+      #     Right solution is 'qemu-riscv64 -L /usr/riscv64-linux-gnu'
+      #- run: sudo ln -s /usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1 /lib
+      #- run: sudo ln -s /usr/riscv64-linux-gnu/lib/libc.so.6 /lib
 
       #- name: Cancel Previous Runs
       #  uses: styfle/cancel-workflow-action@0.11.0
