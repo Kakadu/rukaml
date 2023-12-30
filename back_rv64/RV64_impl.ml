@@ -321,8 +321,13 @@ let generate_body is_toplevel ppf body =
           printfn ppf "  mov qword %a, 1" (Addr_of_local.pp_dest ~locals) dest
         else
           printfn ppf "  mov qword %a, 0" (Addr_of_local.pp_dest ~locals) dest
-    | CApp (APrimitive "=", AConst (PConst_int n), [ AVar vname ])
-    | CApp (APrimitive "=", AVar vname, [ AConst (PConst_int n) ]) ->
+    | CApp (APrimitive ("=" as op), AConst (PConst_int n), [ AVar vname ])
+    | CApp
+        (APrimitive (("=" | "<") as op), AVar vname, [ AConst (PConst_int n) ])
+      ->
+        let branch_instr =
+          match op with "=" -> "beq" | "<" -> "blt" | _ -> assert false
+        in
         let eq_lab = Printf.sprintf "lab_%d" (gensym ()) in
         let exit_lab = Printf.sprintf "lab_%d" (gensym ()) in
         printfn ppf " # %a, find_exn %S = %d, last_pos = %d  "
@@ -334,7 +339,7 @@ let generate_body is_toplevel ppf body =
           (Addr_of_local.pp_local_exn ~locals)
           vname locals;
         printfn ppf "  li t1, %d" n;
-        printfn ppf "  beq t0, t1, %s" eq_lab;
+        printfn ppf "  %s t0, t1, %s" branch_instr eq_lab;
         (* TODO: user Addr_of_local.pp_local_exn *)
         printfn ppf "  sd zero, %a" (Addr_of_local.pp_dest ~locals) dest;
         printfn ppf "  beq zero, zero, %s # Where is unconditional jump?"
@@ -383,13 +388,11 @@ let generate_body is_toplevel ppf body =
     | CApp (APrimitive "-", AVar vname, [ AConst (PConst_int n) ]) -> (
         match is_toplevel vname with
         | None ->
-            printfn ppf "  mov qword r11, %a #"
-              (Addr_of_local.pp_local_exn ~locals:0)
+            printfn ppf "  ld t5, %a #"
+              (Addr_of_local.pp_local_exn ~locals)
               vname;
-            printfn ppf "  sub r11, %d" n;
-            printfn ppf "  mov qword %a, r11"
-              (Addr_of_local.pp_dest ~locals)
-              dest
+            printfn ppf "  addi t5, t5, -%d" n;
+            printfn ppf "  sd t5, %a" (Addr_of_local.pp_dest ~locals) dest
         | Some _ ->
             (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
             failwiths "not implemented %d" __LINE__)
@@ -523,14 +526,17 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  li %a, %d" (Addr_of_local.pp_dest ~locals) dest n
     | AVar vname -> (
         match is_toplevel vname with
-        | None ->
-            printfn ppf
-              "  mov qword rdx, %a ; use temp rdx to move from stack to stack"
-              (Addr_of_local.pp_local_exn ~locals:0)
-              vname;
-            printfn ppf "  mov qword %a, rdx ; access a var %S"
-              (Addr_of_local.pp_dest ~locals)
-              dest vname
+        | None -> (
+            printfn ppf "  lw t5, %a" (Addr_of_local.pp_local_exn ~locals) vname;
+            match dest with
+            | DReg _ ->
+                printfn ppf "  addi %a, t5, 0 "
+                  (Addr_of_local.pp_dest ~locals)
+                  dest
+            | DStack_var _ ->
+                printfn ppf "  sw t5, %a # access a var %S"
+                  (Addr_of_local.pp_dest ~locals)
+                  dest vname)
         | Some arity ->
             alloc_closure ppf vname arity;
             printfn ppf "  mov %a, rax" (Addr_of_local.pp_dest ~locals) dest)

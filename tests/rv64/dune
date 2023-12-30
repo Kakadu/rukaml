@@ -56,7 +56,50 @@
  (applies_to fac)
  (deps
   %{project_root}/back_rv64/rukaml_stdlib.o
-  %{project_root}/back_rv64/rukaml_stdlib.c
   ./fac.ml
+  ;
+  ))
+
+;;;;; fib 
+
+(rule
+ (targets fib.s)
+ (deps
+  (:src fib.ml))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    --no-start
+    -vamd64
+    %{src}))))
+
+(rule
+ (targets fib.exe)
+ (deps
+  (:src fib.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc -g -c %{src} -o fib.o)
+   (run
+    riscv64-linux-gnu-gcc
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    fib.o
+    -o
+    %{targets}))))
+
+(cram
+ (applies_to fib)
+ (deps
+  %{project_root}/back_rv64/rukaml_stdlib.o
+  ./fib.ml
   ;
   ))
