@@ -20,7 +20,7 @@
   } */
 
 #define DEBUG
-#undef DEBUG
+//#undef DEBUG
 
 static uint64_t log_level = 0;
 
@@ -233,17 +233,18 @@ void *rukaml_apply0(fun0 f)
 void *rukaml_apply1(fun7 foo, void *arg1)
 {
 #ifdef DEBUG
-  printf("%s f = %" PRIx64 ", arg = %" PRIx64 "\n", __func__, f, arg1);
+  printf("%s f = %" PRIx64 ", arg = %" PRIx64 "\n", __func__, foo, arg1);
 #endif
   return foo(0, 0, 0, 0, 0, 0, arg1);
 }
 
-void *rukaml_apply2(fun8 f, void *arg1, void *arg2)
+void *rukaml_apply2(fun10 f, void *arg1, void *arg2)
 {
 #ifdef DEBUG
   printf("call %s with code ptr = %" PRIx64 "\n", __func__, (uint64_t)f);
+  printf("arg1 = %" PRIx64 "; arg2 = %" PRIx64 "\n", (uint64_t)arg1, (uint64_t)arg2);
 #endif
-  return f(0, 0, 0, 0, 0, 0, arg1, arg2);
+  return f(0, 0, 0, 0, 0, 0, 0, 0, arg1, arg2);
 }
 
 void *rukaml_apply3(fun9 f, void *arg1, void *arg2, void *arg3)
@@ -333,12 +334,15 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
 #ifdef DEBUG
   write(STDERR_FILENO, "HERE\n", 5);
   printf("%s argc = %lu, closure = %" PRIx64 "\n\n", __func__, argc, (uint64_t)f);
+  fflush(stdout);
   printf("\tsaved code ptr = %" PRIx64 "\n", (uint64_t)(((rukaml_closure *)f)->code));
+  fflush(stdout);
+
 #endif
   va_list argp;
   va_start(argp, argc);
-  rukaml_closure *f_closure = copy_closure((rukaml_closure *)f);
-  // rukaml_closure *f_closure = f;
+  // rukaml_closure *f_closure = copy_closure((rukaml_closure *)f);
+  rukaml_closure *f_closure = f;
 #ifdef DEBUG
   printf("\nf->arg_received = %lu, f->argc = %lu\n",
          f_closure->args_received,
@@ -353,7 +357,7 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
   {
     // printf("%d\n", __LINE__);
     void *arg1 = va_arg(argp, void *);
-    // printf("arg[%lu] = %p, ", i, arg1);
+    printf("arg[%lu] = %p, ", i, arg1);
     fflush(stdout);
     f_closure->args[f_closure->args_received++] = arg1;
   }

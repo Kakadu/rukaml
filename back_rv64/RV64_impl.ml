@@ -270,6 +270,15 @@ let generate_body is_toplevel ppf body =
     count
   in
 
+  let store_ra_temp f =
+    incr Addr_of_local.last_pos;
+    printfn ppf "  addi sp, sp, -8";
+    printfn ppf "  sd ra, (sp)";
+    f ();
+    printfn ppf "  ld ra, (sp)";
+    printfn ppf "  addi sp, sp, 8";
+    decr Addr_of_local.last_pos
+  in
   let rec helper dest = function
     | Compile_lib.ANF2.EComplex c -> helper_c dest c
     | ELet (_, Miniml.Parsetree.PVar name, rhs, wher) ->
@@ -419,7 +428,7 @@ let generate_body is_toplevel ppf body =
         | Some _ ->
             (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
             failwiths "not implemented %d" __LINE__)
-    | CApp (APrimitive (("+" | "*" | "-") as prim), AVar vl, [ AVar vr ]) ->
+    | CApp (APrimitive (("+" | "*" | "-") as prim), AVar vl, [ AVar vr ]) -> (
         printfn ppf "  ld t3, %a #" (Addr_of_local.pp_local_exn ~locals) vl;
         printfn ppf "  ld t4, %a" (Addr_of_local.pp_local_exn ~locals) vr;
         printfn ppf "  %s t5, t3, t4"
@@ -428,8 +437,12 @@ let generate_body is_toplevel ppf body =
           | "*" -> "mulw"
           | "-" -> "sub"
           | op -> failwiths "not_implemeted  %S. %d" op __LINE__);
-        printfn ppf "  addi %a, t5, 0" (Addr_of_local.pp_dest ~locals) dest
-        (* TODO: Maybe move this specialization to the case below  *)
+        match dest with
+        | DReg _ ->
+            printfn ppf "  addi %a, t5, 0" (Addr_of_local.pp_dest ~locals) dest
+        | DStack_var _ ->
+            printfn ppf "  sw t5, %a" (Addr_of_local.pp_dest ~locals) dest
+        (* TODO: Maybe move this specialization to the case below  *))
     | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
         (* Callig a rukaml function uses custom calling convention.
            Pascal convention: all arguments on stack, LTR *)
@@ -441,62 +454,59 @@ let generate_body is_toplevel ppf body =
            printfn ppf "\t; calling %S" f; *)
         if expected_arity = formal_arity then (
           let to_remove = allocate_args_for_call ~f (arg1 :: args) in
-          incr Addr_of_local.last_pos;
-          printfn ppf "  addi sp, sp, -8";
-          printfn ppf "  sd ra, (sp)";
-          printfn ppf "  call %s" f;
-          printfn ppf "  ld ra, (sp)";
-          printfn ppf "  addi sp, sp, 8";
-          decr Addr_of_local.last_pos;
+          store_ra_temp (fun () -> printfn ppf "  call %s" f);
+          (* incr Addr_of_local.last_pos;
+             printfn ppf "  addi sp, sp, -8";
+             printfn ppf "  sd ra, (sp)";
+             printfn ppf "  call %s" f;
+             printfn ppf "  ld ra, (sp)";
+             printfn ppf "  addi sp, sp, 8";
+             decr Addr_of_local.last_pos; *)
           deallocate_args_for_call to_remove;
           printfn ppf "  sd a0, %a" (Addr_of_local.pp_dest ~locals) dest)
-        else if formal_arity < expected_arity then failwith "Not implemented"
-          (*
-          printfn ppf "  mov rdi, %s" f;
-          printfn ppf "  mov rsi, %d" expected_arity;
+        else if formal_arity < expected_arity then (
+          printfn ppf "  ld a0, %s" f;
+          printfn ppf "  addi a1, zero, %d" expected_arity;
           printfn ppf "  call rukaml_alloc_closure";
 
           let partial_args_count = allocate_args_for_call ~f (arg1 :: args) in
 
-          printfn ppf "  mov rdi, rax";
-          printfn ppf "  mov rsi, %d" formal_arity;
+          (* printfn ppf "  add0 a0, a0, 0"; *)
+          printfn ppf "  li a1, %d" formal_arity;
           assert (formal_arity < 5);
           (* See calling convention *)
           List.iteri
             (fun i rname ->
-              printfn ppf "  mov %s, [rsp+8*%d]" rname (formal_arity - i - 1))
-            (list_take formal_arity [ "rdx"; "rcx"; "r8"; "r9" ]);
-          printfn ppf "  mov al, 0";
-          printfn ppf "  call rukaml_applyN";
-          deallocate_args_for_call(arg1 :: args) ;
+              printfn ppf "  ld %s, %+d*8(sp)" rname (formal_arity - i - 1))
+            (list_take formal_arity [ (*"a0"; *) "a1"; "a2"; "a3" ]);
+          (* printfn ppf "  mov al, 0"; *)
+          store_ra_temp (fun () -> printfn ppf "  call rukaml_applyN");
+          (* printfn ppf "  call rukaml_applyN"; *)
+          deallocate_args_for_call formal_arity;
           printfn ppf "  addi sp, sp, 8*%d # deallocate args of rukaml_applyN"
             partial_args_count;
-          printfn ppf "  mov %a, rax" (Addr_of_local.pp_dest ~locals) dest *)
-          (* printfn ppf "  sub rsp, 8*2 ; deallocate closure value and padding" *)
+          printfn ppf "  sd a0, %a" (Addr_of_local.pp_dest ~locals) dest
+          (* printfn ppf "  sub rsp, 8*2 ; deallocate closure value and padding" *))
         else failwith "Arity mismatch: over application"
     | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), [])
       ->
         assert (Option.is_none (is_toplevel f));
-
-        Addr_of_local.extend "temp_padding";
         Addr_of_local.extend "arg1";
-        printfn ppf "  sub rsp, 8 ; padding";
-        printfn ppf "  sub rsp, 8 ; first arg of a function %s" f;
+        printfn ppf "  addi sp, sp, -8 #first arg of a function %s" f;
         helper_a (DStack_var "arg1") arg;
 
-        printfn ppf "  mov rax, 0  ; no float arguments";
-        printfn ppf "  mov rdi, %a"
-          (Addr_of_local.pp_dest ~locals)
-          (DStack_var f);
-        printfn ppf "  mov rsi, 1";
-        printfn ppf "  mov rdx, %a"
+        (* printfn ppf "  mov rax, 0  ; no float arguments"; *)
+        printfn ppf "  ld a0, %a" (Addr_of_local.pp_dest ~locals) (DStack_var f);
+        printfn ppf "  addi a1, zero, 1";
+        printfn ppf "  ld a2, %a"
           (Addr_of_local.pp_dest ~locals)
           (DStack_var "arg1");
         printfn ppf "  call rukaml_applyN";
         Addr_of_local.remove_local "arg1";
-        Addr_of_local.remove_local "temp_padding";
-        printfn ppf "  add rsp, 8*2 ; free space for args of function %S" f;
-        printfn ppf "  mov %a, rax" (Addr_of_local.pp_dest ~locals) dest
+        (* Addr_of_local.remove_local "temp_padding"; *)
+        printfn ppf "  addi sp, sp, 8 # free space for args of function %S" f;
+        if dest <> DReg "a0" then
+          printfn ppf "  sw a0, %a" (Addr_of_local.pp_dest ~locals) dest
     | CApp (APrimitive "field", AConst (PConst_int n), [ (AVar _ as cont) ]) ->
         helper_a (DReg "rsi") cont;
         printfn ppf "  mov rdi, %d" n;
@@ -522,15 +532,20 @@ let generate_body is_toplevel ppf body =
     match x with
     | AConst (Miniml.Parsetree.PConst_bool true) ->
         printfn ppf "  li %a, 1" (Addr_of_local.pp_dest ~locals) dest
-    | AConst (Miniml.Parsetree.PConst_int n) ->
-        printfn ppf "  li %a, %d" (Addr_of_local.pp_dest ~locals) dest n
+    | AConst (Miniml.Parsetree.PConst_int n) -> (
+        match dest with
+        | DReg _ ->
+            printfn ppf "  li %a, %d" (Addr_of_local.pp_dest ~locals) dest n
+        | DStack_var _ ->
+            printfn ppf "  li t0, %d" n;
+            printfn ppf "  sw t0, %a" (Addr_of_local.pp_dest ~locals) dest)
     | AVar vname -> (
         match is_toplevel vname with
         | None -> (
             printfn ppf "  lw t5, %a" (Addr_of_local.pp_local_exn ~locals) vname;
             match dest with
             | DReg _ ->
-                printfn ppf "  addi %a, t5, 0 "
+                printfn ppf "  addi %a, t5, 0 # 24"
                   (Addr_of_local.pp_dest ~locals)
                   dest
             | DStack_var _ ->

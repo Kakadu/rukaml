@@ -81,3 +81,31 @@
 (cram
  (applies_to 003v)
  (deps strcpy.exe))
+
+; add2 
+
+(rule
+ (targets add2.exe)
+ (deps
+  (:src add2.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc -g -c %{src} -o add2.o)
+   (run
+    riscv64-linux-gnu-gcc
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    add2.o
+    -o
+    %{targets}))))
+
+(cram
+ (applies_to add2)
+ (deps
+  ;%{project_root}/back_rv64/rukaml_stdlib.o
+  add2.exe
+  ;
+  ))
