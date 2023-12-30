@@ -30,7 +30,8 @@
 (rule
  (targets fac.exe)
  (deps
-  (:src fac.s))
+  (:src fac.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
  (mode
   (promote (until-clean)))
  (action
@@ -43,7 +44,13 @@
     -vamd64
     %{src})
    (run riscv64-linux-gnu-gcc -g -c fac.s -o fac.o)
-   (run riscv64-linux-gnu-gcc -g fac.o -o %{targets}))))
+   (run
+    riscv64-linux-gnu-gcc
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    fac.o
+    -o
+    %{targets}))))
 
 (cram
  (applies_to fac)

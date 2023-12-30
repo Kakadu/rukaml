@@ -1,5 +1,6 @@
 let fac n =
-  if n = 1
+  let temp = (n=1) in 
+  if temp
   then 1
   else (
     let p = n - 1 in
@@ -7,5 +8,6 @@ let fac n =
     n * p2)
 
 let main =
-  let n = fac 4 in
+  let f = fac 5 in
+  let g = print f in
   0
