@@ -69,12 +69,12 @@
     -c
     -o
     runtime.o)
-   (run riscv64-linux-gnu-as -march=rv64gc_zve64x %{src} -o main.o)
+   (run riscv64-linux-gnu-as -march=rv64gc_zve64x %{src} -o strcpy.o)
    (run
     riscv64-linux-gnu-gcc
     -march=rv64gc_zve64x
     runtime.o
-    main.o
+    strcpy.o
     -o
     %{targets}))))
 
