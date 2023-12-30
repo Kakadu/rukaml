@@ -8,6 +8,6 @@ let fac n =
     n * p2)
 
 let main =
-  let f = fac 5 in
+  let f = fac 4 in
   let g = print f in
   0
