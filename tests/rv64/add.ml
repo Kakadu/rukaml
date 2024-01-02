@@ -1,9 +1,7 @@
-let add a b = 
-  let u = print a in 
-  let v2 = print b in 
-  a + b
+let add a b = a + b
 
-let main =
-  let f = add 1 10 in
-  let g = print f in
+let main = 
+  let x = add 1 10 in 
+  let y = print x in
   0
+  

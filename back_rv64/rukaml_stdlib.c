@@ -20,7 +20,7 @@
   } */
 
 #define DEBUG
-//#undef DEBUG
+#undef DEBUG
 
 static uint64_t log_level = 0;
 
@@ -241,15 +241,30 @@ void *rukaml_apply1(fun7 foo, void *arg1)
 void *rukaml_apply2(fun10 f, void *arg1, void *arg2)
 {
 #ifdef DEBUG
-  printf("call %s with code ptr = %" PRIx64 "\n", __func__, (uint64_t)f);
-  printf("arg1 = %" PRIx64 "; arg2 = %" PRIx64 "\n", (uint64_t)arg1, (uint64_t)arg2);
+  printf("call %s with code ptr = 0x%" PRIx64 "\n", __func__, (uint64_t)f);
+  printf("arg1 = 0x%" PRIx64 "; arg2 = 0x%" PRIx64 "\n", (uint64_t)arg1, (uint64_t)arg2);
+  fflush(stdout);
 #endif
-  return f(0, 0, 0, 0, 0, 0, 0, 0, arg1, arg2);
+  void* rez = f(0, 0, 0, 0, 0, 0, 0, 0, arg1, arg2);
+#ifdef DEBUG
+  printf("Returned from function with a value 0x%" PRIx64 "\n", rez);
+#endif
+  return rez;
 }
 
-void *rukaml_apply3(fun9 f, void *arg1, void *arg2, void *arg3)
+void *rukaml_apply3(fun11 f, void *arg1, void *arg2, void *arg3)
 {
-  return f(0, 0, 0, 0, 0, 0, arg1, arg2, arg3);
+#ifdef DEBUG
+  printf("call %s with code ptr = 0x%" PRIx64 "\n", __func__, (uint64_t)f);
+  printf("arg1 = 0x%" PRIx64 "; arg2 = 0x%" PRIx64"; arg3 = 0x%" PRIx64 "\n", 
+    (uint64_t)arg1, (uint64_t)arg2, (uint64_t)arg3);
+  fflush(stdout);
+#endif
+  void* rez = f(0, 0, 0, 0, 0, 0, 0, 0, arg1, arg2, arg3);
+#ifdef DEBUG
+  printf("Returned from function with a value 0x%" PRIx64 "\n", rez);
+#endif
+  return rez;
 }
 void *rukaml_apply4(fun10 f, void *arg1, void *arg2, void *arg3, void *arg4)
 {
@@ -335,7 +350,7 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
   write(STDERR_FILENO, "HERE\n", 5);
   printf("%s argc = %lu, closure = %" PRIx64 "\n\n", __func__, argc, (uint64_t)f);
   fflush(stdout);
-  printf("\tsaved code ptr = %" PRIx64 "\n", (uint64_t)(((rukaml_closure *)f)->code));
+  printf("\tsaved code ptr = %" PRIx64, (uint64_t)(((rukaml_closure *)f)->code));
   fflush(stdout);
 
 #endif
@@ -357,7 +372,7 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
   {
     // printf("%d\n", __LINE__);
     void *arg1 = va_arg(argp, void *);
-    printf("arg[%lu] = %p, ", i, arg1);
+    //printf("arg[%lu] = %p, ", i, arg1);
     fflush(stdout);
     f_closure->args[f_closure->args_received++] = arg1;
   }

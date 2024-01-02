@@ -82,30 +82,31 @@
  (applies_to 003v)
  (deps strcpy.exe))
 
-; add2 
+; fib_acc 
 
 (rule
- (targets add2.exe)
+ (targets fib_acc.exe)
  (deps
-  (:src add2.s)
+  (:src fib_acc.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
  (mode
   (promote (until-clean)))
  (action
   (progn
-   (run riscv64-linux-gnu-gcc -g -c %{src} -o add2.o)
+   (run riscv64-linux-gnu-gcc -fPIC -g -c %{src} -o fib_acc.o)
    (run
     riscv64-linux-gnu-gcc
+    -fPIC
     -g
     %{project_root}/back_rv64/rukaml_stdlib.o
-    add2.o
+    fib_acc.o
     -o
     %{targets}))))
 
 (cram
- (applies_to add2)
+ (applies_to fib_acc)
  (deps
   ;%{project_root}/back_rv64/rukaml_stdlib.o
-  add2.exe
+  fib_acc.exe
   ;
   ))

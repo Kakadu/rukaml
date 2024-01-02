@@ -41,6 +41,7 @@
   (run
    riscv64-linux-gnu-gcc
    -g
+   -fPIC
    -Wall
    -Wpedantic
    %{deps}

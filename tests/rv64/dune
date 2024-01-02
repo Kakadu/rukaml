@@ -193,3 +193,91 @@
   ;./fib_acc.s
   ;
   ))
+
+;;;;; fac_acc
+
+(rule
+ (targets fac_acc.s)
+ (deps
+  (:src fac_acc.ml))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    --no-start
+    -vamd64
+    %{src}))))
+
+(rule
+ (targets fac_acc.exe)
+ (deps
+  (:src fac_acc.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc -g -c %{src} -o fac_acc.o)
+   (run
+    riscv64-linux-gnu-gcc
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    fac_acc.o
+    -o
+    %{targets}))))
+
+(cram
+ (applies_to fac_acc)
+ (deps
+  %{project_root}/back_rv64/rukaml_stdlib.o
+  ./fac_acc.ml
+  ;
+  ))
+
+;;;;; fac_cps
+
+(rule
+ (targets fac_cps.s)
+ (deps
+  (:src fac_cps.ml))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    --no-start
+    -vamd64
+    %{src}))))
+
+(rule
+ (targets fac_cps.exe)
+ (deps
+  (:src fac_cps.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc -g -c %{src} -o fac_cps.o)
+   (run
+    riscv64-linux-gnu-gcc
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    fac_cps.o
+    -o
+    %{targets}))))
+
+(cram
+ (applies_to fac_cps)
+ (deps
+  %{project_root}/back_rv64/rukaml_stdlib.o
+  ./fac_cps.ml
+  ;
+  ))
