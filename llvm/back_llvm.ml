@@ -38,9 +38,9 @@ let compile stru _stru_typed ~filename =
   in
   (* Format.printf "After CCovv.\n%!"; *)
   (* Format.printf "%a\n%!" Pprinttyped.pp_typed stru_typed; *)
-  let anf = Compile_lib.ANF2.(anf_stru stru_typed |> simplify_stru) in
+  let anf = Compile_lib.ANF.(anf_stru stru_typed |> simplify_stru) in
   Format.printf "After ANF transformation.\n%!";
-  Format.printf "%a\n%!" Compile_lib.ANF2.pp_stru anf;
+  Format.printf "%a\n%!" Compile_lib.ANF.pp_stru anf;
   (* Result.return () *)
   prepare_llvm anf ~filename
 

@@ -40,9 +40,9 @@ let frontend cfg =
   in
   (* let* typedtree = Inferencer.structure ast |> promote_error in *)
   (* let typedtree = Typedtree.compact_expr typedtree in *)
-  let anf = Compile_lib.ANF2.(anf_stru typedtree |> simplify_stru) in
+  let anf = Compile_lib.ANF.(anf_stru typedtree |> simplify_stru) in
   Format.printf "After ANF transformation.\n%!";
-  Format.printf "%a\n%!" Compile_lib.ANF2.pp_stru anf;
+  Format.printf "%a\n%!" Compile_lib.ANF.pp_stru anf;
   RV64_impl.codegen ~wrap_main_into_start:cfg.wrap_main_into_start anf
     cfg.out_file
   |> promote_error

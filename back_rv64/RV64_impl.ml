@@ -66,7 +66,7 @@ let print_epilogue ppf fname =
     printfn ppf "  ecall               # Call linux to terminate the program");
   fprintf ppf "%!"
 
-module ANF = Compile_lib.ANF2
+module ANF = Compile_lib.ANF
 
 let gensym =
   let open ANF in
@@ -255,7 +255,7 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  addi sp, sp, -8 #";
         incr Addr_of_local.last_pos;
         function
-        | Compile_lib.ANF2.AUnit | AConst (PConst_bool false) -> pp_access 0
+        | Compile_lib.ANF.AUnit | AConst (PConst_bool false) -> pp_access 0
         | AConst (PConst_bool true) -> pp_access 1
         | AConst (PConst_int n) -> pp_access ~doc:"constant" n
         | AVar vname when Option.is_some (is_toplevel vname) -> (
@@ -281,7 +281,7 @@ let generate_body is_toplevel ppf body =
   in
 
   let rec helper dest = function
-    | Compile_lib.ANF2.EComplex c -> helper_c dest c
+    | Compile_lib.ANF.EComplex c -> helper_c dest c
     | ELet (_, Miniml.Parsetree.PVar name, rhs, wher) ->
         assert (Addr_of_local.contains name);
         let local = DStack_var name in
@@ -531,11 +531,11 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  call rukaml_gc_print_stats"
     | CAtom atom -> helper_a dest atom
     | CApp _ as anf ->
-        Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF2.pp_c anf;
+        Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_c anf;
         failwiths "Not implemented %d" __LINE__
     | rest ->
         printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
-        printfn ppf "; @[<h>%a@]" Compile_lib.ANF2.pp_c rest
+        printfn ppf "; @[<h>%a@]" Compile_lib.ANF.pp_c rest
   and helper_a (dest : dest) x =
     (* log "  %s: dest=`%a`, expr = %a" __FUNCTION__ pp_dest dest ANF.pp_a x; *)
     match x with
@@ -618,13 +618,13 @@ let use_custom_main = false
 
 let codegen ?(wrap_main_into_start = true) anf file =
   (* log "Going to generate code here %s %d" __FUNCTION__ __LINE__; *)
-  log "ANF: @[%a@]" Compile_lib.ANF2.pp_stru anf;
+  log "ANF: @[%a@]" Compile_lib.ANF.pp_stru anf;
 
   let is_toplevel =
     let hash = Hashtbl.create (List.length anf) in
     List.iter
       (fun (_, name, body) ->
-        let pats, _ = Compile_lib.ANF2.group_abstractions body in
+        let pats, _ = Compile_lib.ANF.group_abstractions body in
         let argc = List.length pats in
         assert (argc >= 1 || name = "main");
         Hashtbl.add hash name argc)
@@ -713,15 +713,15 @@ let codegen ?(wrap_main_into_start = true) anf file =
                 let () = printfn ppf ".globl %s" name in
                 let () = printfn ppf "@[<h>%s:@]" name in
 
-                let pats, body = ANF2.group_abstractions expr in
+                let pats, body = ANF.group_abstractions expr in
 
                 let argc = List.length pats in
                 let names =
-                  List.map (function ANF2.APname name -> name) pats
+                  List.map (function ANF.APname name -> name) pats
                 in
                 List.rev pats
                 |> ListLabels.iteri ~f:(fun i -> function
-                     | ANF2.APname name -> Addr_of_local.add_arg ~argc i name);
+                     | ANF.APname name -> Addr_of_local.add_arg ~argc i name);
 
                 (* printfn ppf "  push rbp";
                    printfn ppf "  mov  rbp, rsp"; *)

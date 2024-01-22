@@ -1,5 +1,5 @@
 open Compile_lib
-open ANF2
+open ANF
 open Miniml
 
 let failwiths fmt = Format.kasprintf failwith fmt
@@ -14,7 +14,7 @@ let log fmt =
 
 let set_verbose b = cfg.verbose <- b
 
-let on_vb (module LL : LL.S) : ANF2.vb -> _ =
+let on_vb (module LL : LL.S) : ANF.vb -> _ =
  fun (_flg, name, body) ->
   (* log "vb %s" name; *)
 
@@ -56,7 +56,7 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
         let alloc = LL.lookup_func_exn "rukaml_alloc_pair" in
         LL.build_call alloc [ a; b ]
     | anf ->
-        Format.eprintf "ANF: %a\n%!" ANF2.pp_a anf;
+        Format.eprintf "ANF: %a\n%!" ANF.pp_a anf;
         Format.eprintf "virt_of_named_hash.card = %d\n%!"
           (Hashtbl.length virt_of_named_hash);
         failwiths "Unsupported case %s %d" __FUNCTION__ __LINE__
@@ -177,7 +177,7 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
         Llvm.position_at_end merge_bb LL.builder;
         Llvm.build_phi [ (t, then_bb); (e, else_bb) ] "phi_result" LL.builder
     | anf ->
-        Format.eprintf "ANF: %a\n%!" ANF2.pp_c anf;
+        Format.eprintf "ANF: %a\n%!" ANF.pp_c anf;
         failwiths "Unsupported case %s %d" __FUNCTION__ __LINE__
   and gen : _ -> Llvm.llvalue = function
     | ELet (_, Parsetree.PTuple _, _, _) -> assert false
@@ -189,14 +189,14 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
     | EComplex c -> gen_c c
   in
 
-  let args, body = ANF2.group_abstractions body in
+  let args, body = ANF.group_abstractions body in
   let fun_typ =
     let args = Array.make (List.length args) i64_typ in
     Llvm.function_type i64_typ args
   in
   let the_function = Llvm.declare_function name fun_typ LL.module_ in
   List.iteri
-    (fun n (ANF2.APname key) ->
+    (fun n (ANF.APname key) ->
       let param = Llvm.param the_function n in
       log "  formal parameter %d: %s" n (Llvm.string_of_llvalue param);
       add_virt_binding ~key param)
@@ -226,9 +226,9 @@ let on_vb (module LL : LL.S) : ANF2.vb -> _ =
   (* Llvm.dump_value the_function; *)
   ()
 
-let codegen : ANF2.vb list -> _ =
+let codegen : ANF.vb list -> _ =
  fun anf out_file ->
-  Format.printf "%a\n%!" Compile_lib.ANF2.pp_stru anf;
+  Format.printf "%a\n%!" Compile_lib.ANF.pp_stru anf;
 
   let context = Llvm.global_context () in
   let builder = Llvm.builder context in
