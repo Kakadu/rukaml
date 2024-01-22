@@ -4,27 +4,13 @@
    https://github.com/jhucompilers/fall2022/tree/gh-pages/lectures
 *)
 
-(* We are using Intel syntax !! *)
-
-(* NOTE: Possible fuckups
-
-   1) Exit code is not any possible int. See https://tldp.org/LDP/abs/html/exitcodes.html
-   2) We have runtime that could call back rukaml function after full partiall application.
-   This means that SYSV calling convention clashes with stdcall-ish. So, in runtime we call
-   the rukaml function with 6 zero arguments and real ones, to make real ones to go to the
-   stack explicitly
-   3) It's easy to forget that after function prologue argments start from RSP+2*8
-   (RBP and code ptr take two words)
-   4) arguments go to the stack from rigth to the left (unexpected order)
-   5) Variadic functions should AL:=0 to say that we don't have floating arguments.
-*)
-
 (*
    How to debug:
      qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64 -g 1234 tests/rv64/fac.exe
      gdb-multiarch ./fac.exe
 *)
 
+let sprintf = Format.sprintf
 let failwiths fmt = Format.kasprintf failwith fmt
 
 type config = { mutable verbose : bool }
@@ -57,14 +43,6 @@ let pp_space_list eta =
    (* printfn ppf "  ;sub rsp, 24 ; given 24 is total size of local variables"; *)
    fprintf ppf "%!"
 *)
-let print_epilogue ppf fname =
-  (* printfn ppf "  pop rbp"; *)
-  if fname <> "main" then printfn ppf "  ret  # %s" fname
-  else (
-    printfn ppf "  addi    a0, x0, 0   # Use 0 return code";
-    printfn ppf "  addi    a7, x0, 93  # Service command code 93 terminates";
-    printfn ppf "  ecall               # Call linux to terminate the program");
-  fprintf ppf "%!"
 
 module ANF = Compile_lib.ANF
 
@@ -153,6 +131,14 @@ module Addr_of_local = struct
   (* if offset > 0 then fprintf ppf "[rbp-%d*8]" offset
      else fprintf ppf "[rbp+%d*8]" (-offset) *)
 
+  let pp_to_mach name =
+    let offset =
+      let o = find_exn name in
+      if o > 0 then !last_pos - o else !last_pos - o
+    in
+    if not (offset >= 0) then assert (offset >= 0);
+    Machine.(ROffset (SP, offset * 8))
+
   let pp_dest ppf = function
     | DReg s -> fprintf ppf "%s" s
     | DStack_var name -> pp_local_exn ppf name
@@ -161,7 +147,13 @@ module Addr_of_local = struct
     Hashtbl.to_seq_keys store |> Seq.fold_left (fun acc x -> acc ^ " " ^ x) ""
 end
 
-let allocate_locals ppf input_anf : (now:unit -> unit) * _ =
+let list_iter_revindex ~f xs =
+  let l = List.length xs in
+  List.iteri (fun n x -> f (l - n - 1) x) xs
+
+open Machine
+
+let allocate_locals input_anf : (now:unit -> unit) * _ =
   let names = ref [] in
   let rec helper = function
     | ANF.EComplex c -> helper_c c
@@ -185,8 +177,11 @@ let allocate_locals ppf input_anf : (now:unit -> unit) * _ =
   (* If assertion fails it's like a number of locals with the same names *)
   let args_repr = String.concat ", " !names in
   if count > 0 then
-    printfn ppf "  addi sp, sp, -(8*%d) # allocate for local variables %s" count
-      args_repr;
+    emit addi sp sp (-8 * count)
+      ~comm:(sprintf "allocate for local variables %d" count);
+
+  (* printfn ppf "  addi sp, sp, -(8*%d) # allocate for local variables %s" count
+     args_repr; *)
 
   (* let deallocate_padding =
        if count mod 2 = 1 then (
@@ -201,10 +196,11 @@ let allocate_locals ppf input_anf : (now:unit -> unit) * _ =
   let deallocate =
     if count > 0 then (fun ~now ->
       let () = now in
-
       (* deallocate_padding (); *)
-      printfn ppf "  addi sp, sp, 8*%d # deallocate local variables %s" count
-        args_repr;
+      emit addi sp sp (8 * count)
+        ~comm:(sprintf "deallocate local variables %s" args_repr);
+      (* printfn ppf "  addi sp, sp, 8*%d # deallocate local variables %s" count
+         args_repr; *)
       !names |> List.iter Addr_of_local.remove_local)
     else fun ~now ->
       let () = now in
@@ -212,47 +208,83 @@ let allocate_locals ppf input_anf : (now:unit -> unit) * _ =
   in
   (deallocate, count)
 
-let print_alloc_closure ppf fname arity =
-  printfn ppf "  lla a0, %s" fname;
-  printfn ppf "  li a1, %d" arity;
-  printfn ppf "  call rukaml_alloc_closure"
-
-let list_iter_revindex ~f xs =
-  let l = List.length xs in
-  List.iteri (fun n x -> f (l - n - 1) x) xs
-
-let store_ra_temp ppf f =
+let store_ra_temp f =
   let ra_temp_name = Printf.sprintf "temp_ra_%d" (gensym ()) in
   Addr_of_local.extend ra_temp_name;
-  printfn ppf "  addi sp, sp, -8 # alloc space for RA register";
+  emit addi sp sp (-8) ~comm:(sprintf "alloc space for RA register");
+  (* printfn ppf "  addi sp, sp, -8 # alloc space for RA register"; *)
   (* printfn ppf "  sd ra, (sp)"; *)
   let rez = f ra_temp_name in
-  printfn ppf "  ld ra, (sp)";
-  printfn ppf "  addi sp, sp, 8 # free space of RA register";
+  emit ld ra (ROffset (SP, 0));
+  (* printfn ppf "  ld ra, (sp)"; *)
+  emit addi sp sp 8 ~comm:"free space of RA register";
+  (* printfn ppf "  addi sp, sp, 8 # free space of RA register"; *)
   Addr_of_local.remove_local ra_temp_name;
   rez
 
+let print_epilogue ppf fname =
+  (* printfn ppf "  pop rbp"; *)
+  if fname <> "main" then emit ret ~comm:fname
+    (* printfn ppf "  ret  # %s" fname *)
+  else (
+    emit addi (RU "a0") (RU "x0") 0 ~comm:"Use 0 return code";
+    (* printfn ppf "  addi    a0, x0, 0   # Use 0 return code"; *)
+    emit addi (RU "a7") (RU "x0") 93 ~comm:"Service command code 93 terminates";
+    (* printfn ppf "  addi    a7, x0, 93  # Service command code 93 terminates"; *)
+    emit ecall ~comm:"Call linux to terminate the program"
+    (* printfn ppf "  ecall               # Call linux to terminate the program" *));
+  fprintf ppf "%!"
+
+let sd_dest k a = function
+  | DReg name -> sd k a (Temp_reg 100500)
+  | DStack_var name -> sd k a (Addr_of_local.pp_to_mach name)
+
+let li_dest k a n =
+  match a with
+  | DReg name -> li k (Temp_reg 100500) n
+  | DStack_var name -> li k (Temp_reg 666) n
+
+let addi1dest k d b n =
+  match d with
+  | DReg name -> addi k (RU name) b n
+  | DStack_var name -> li k (Temp_reg __LINE__) n
+
+let pp_to_mach = Addr_of_local.pp_to_mach
+
+let emit_alloc_closure fname arity =
+  emit lla (RU "a0") fname;
+  emit li (RU "a1") arity;
+  emit call "rukaml_alloc_closure"
+(* printfn ppf "  lla a0, %s" fname;
+   printfn ppf "  li a1, %d" arity;
+   printfn ppf "  call rukaml_alloc_closure" *)
+
 (**
     Argument [is_toplevel] returns None or Some arity. *)
-let generate_body is_toplevel ppf body =
+let generate_body is_toplevel body =
   let open Miniml.Parsetree in
-  let dealloc_locals, locals = allocate_locals ppf body in
+  let dealloc_locals, locals = allocate_locals body in
   let deallocate_args_for_call argc =
     Addr_of_local.(last_pos := !last_pos - argc);
-    printfn ppf "  addi sp, sp, 8*%d # deallocate %d args" argc argc
+    emit addi SP SP (8 * argc) ~comm:(sprintf "deallocate %d args" argc)
+    (* printfn ppf "  addi sp, sp, 8*%d # deallocate %d args" argc argc *)
   in
   let allocate_args_for_call ?f args =
     (* Allocate args for a function call inside a body *)
     let count = List.length args in
 
-    printfn ppf "  # Allocate args to call fun %S arguments" (Option.get f);
+    emit comment
+      (sprintf "Allocate args to call fun %S arguments" (Option.get f));
     ListLabels.iteri args ~f:(fun i ->
         let pp_access ?(doc = "") v =
-          printfn ppf "  li t0, %d" v;
-          Format.fprintf ppf "  sd t0, (sp)";
-          if doc <> "" then printfn ppf " # %s" doc else printfn ppf ""
+          emit li t0 v;
+          (* printfn ppf "  li t0, %d" v; *)
+          emit sd t0 (ROffset (SP, 0)) ~comm:doc
+          (* Format.fprintf ppf "  sd t0, (sp)"; *)
+          (* if doc <> "" then printfn ppf " # %s" doc else printfn ppf "" *)
         in
-        printfn ppf "  addi sp, sp, -8 #";
+        emit addi SP SP (-8);
+        (* printfn ppf "  addi sp, sp, -8 #"; *)
         incr Addr_of_local.last_pos;
         function
         | Compile_lib.ANF.AUnit | AConst (PConst_bool false) -> pp_access 0
@@ -261,18 +293,24 @@ let generate_body is_toplevel ppf body =
         | AVar vname when Option.is_some (is_toplevel vname) -> (
             match is_toplevel vname with
             | Some arity ->
-                store_ra_temp ppf (fun ra_name ->
-                    printfn ppf "  lla a0, %s" vname;
-                    printfn ppf "  li a1, %d" arity;
-                    printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name;
-                    printfn ppf "  call rukaml_alloc_closure"
-                    (* print_alloc_closure ppf vname arity *));
-                printfn ppf "  mov qword [rsp%+d*8], rax # arg %S" i vname
+                store_ra_temp (fun ra_name ->
+                    emit lla (RU "a0") vname;
+                    (* printfn ppf "  lla a0, %s" vname; *)
+                    emit li (RU "a1") arity;
+                    (* printfn ppf "  li a1, %d" arity; *)
+                    emit sd ra (pp_to_mach ra_name);
+                    (* printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
+                    emit call "rukaml_alloc_closure"
+                    (* printfn ppf "  call rukaml_alloc_closure" *)
+                    (* print_alloc_closure ppf vname arity *))
+            (* printfn ppf "  mov qword [rsp%+d*8], rax # arg %S" i vname *)
             | None -> assert false)
         | AVar vname ->
-            printfn ppf "  ld t0, %a  # arg %S" Addr_of_local.pp_local_exn vname
-              vname;
-            printfn ppf "  sd t0, (sp)"
+            emit ld t0 (pp_to_mach vname) ~comm:(sprintf "arg %S" vname);
+            (* printfn ppf "  ld t0, %a  # arg %S" Addr_of_local.pp_local_exn vname
+               vname; *)
+            emit sd t0 (ROffset (SP, 0))
+            (* printfn ppf "  sd t0, (sp)" *)
         | ALam _ -> failwith "Should it be representable in ANF?"
         | APrimitive _ -> assert false
         | ATuple _ -> assert false);
@@ -298,30 +336,44 @@ let generate_body is_toplevel ppf body =
         helper dest bel
     | CIte (AVar econd, bth, bel) when Addr_of_local.contains econd ->
         (* if on global or local variable  *)
-        printfn ppf "  ld  t0, %a" Addr_of_local.pp_local_exn econd;
+        emit ld t0 (pp_to_mach econd);
+
+        (* printfn ppf "  ld  t0, %a" Addr_of_local.pp_local_exn econd; *)
         let el_lab = Printf.sprintf "lab_else_%d" (gensym ()) in
         let fin_lab = Printf.sprintf "lab_endif_%d" (gensym ()) in
-        printfn ppf "  beq t0, zero, %s" el_lab;
+        emit beq t0 zero el_lab;
+        (* printfn ppf "  beq t0, zero, %s" el_lab; *)
         helper dest bth;
-        printfn ppf "  beq zero, zero, %s" fin_lab;
-        printfn ppf "%s:  # %s is 0 " el_lab econd;
+        emit beq zero zero fin_lab;
+        (* printfn ppf "  beq zero, zero, %s" fin_lab; *)
+        emit label el_lab ~comm:(sprintf "%s is 0 " econd);
+        (* printfn ppf "%s:  # %s is 0 " el_lab econd; *)
         helper dest bel;
-        printfn ppf "%s:" fin_lab
+        emit label fin_lab
+        (* printfn ppf "%s:" fin_lab *)
     | CApp (AVar ("print" as f), arg1, [])
       when is_toplevel f = None && not (Addr_of_local.has_key f) -> (
         match arg1 with
         | AVar v when Addr_of_local.has_key v ->
-            store_ra_temp ppf (fun ra_name ->
-                printfn ppf "  ld a0, %a" Addr_of_local.pp_local_exn v;
-                printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name;
-                printfn ppf "  call rukaml_print_int";
-                printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest)
+            store_ra_temp (fun ra_name ->
+                emit ld a0 (pp_to_mach v);
+                (* printfn ppf "  ld a0, %a" Addr_of_local.pp_local_exn v; *)
+                emit sd ra (pp_to_mach ra_name);
+                (* printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
+                emit call "rukaml_print_int";
+                (* printfn ppf "  call rukaml_print_int"; *)
+                emit sd_dest a0 dest
+                (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *))
         | AConst (PConst_int n) ->
-            store_ra_temp ppf (fun ra_name ->
-                printfn ppf "  li a0, %d" n;
-                printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name;
-                printfn ppf "  call rukaml_print_int";
-                printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest)
+            store_ra_temp (fun ra_name ->
+                emit li a0 n;
+                (* printfn ppf "  li a0, %d" n; *)
+                emit sd ra (pp_to_mach ra_name);
+                (* printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
+                emit call "rukaml_print_int";
+                (* printfn ppf "  call rukaml_print_int"; *)
+                emit sd_dest a0 dest
+                (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *))
         | AConst (PConst_bool _)
         | AVar _ | APrimitive _
         | ATuple (_, _, _)
@@ -330,35 +382,47 @@ let generate_body is_toplevel ppf body =
             failwith "Should not happen")
     | CApp (APrimitive "=", AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
         (* TODO: user Addr_of_local.pp_local_exn *)
-        if l = r then printfn ppf "  mov qword %a, 1" Addr_of_local.pp_dest dest
-        else printfn ppf "  mov qword %a, 0" Addr_of_local.pp_dest dest
+        if l = r then failwiths "not implemented %d" __LINE__
+          (* printfn ppf "  mov qword %a, 1" Addr_of_local.pp_dest dest *)
+        else failwiths "not implemented %d" __LINE__
+          (* printfn ppf "  mov qword %a, 0" Addr_of_local.pp_dest dest *)
     | CApp (APrimitive ("=" as op), AConst (PConst_int n), [ AVar vname ])
     | CApp
         (APrimitive (("=" | "<") as op), AVar vname, [ AConst (PConst_int n) ])
       ->
         let branch_instr =
-          match op with "=" -> "beq" | "<" -> "blt" | _ -> assert false
+          match op with "=" -> emit beq | "<" -> emit blt | _ -> assert false
         in
         let eq_lab = Printf.sprintf "lab_%d" (gensym ()) in
         let exit_lab = Printf.sprintf "lab_%d" (gensym ()) in
-        printfn ppf " # %a, find_exn %S = %d, last_pos = %d  "
-          Addr_of_local.pp_local_exn vname vname
-          (Addr_of_local.find_exn vname)
-          !Addr_of_local.last_pos;
-        printfn ppf "  ld t0, %a # locals = %d" Addr_of_local.pp_local_exn vname
-          locals;
-        printfn ppf "  li t1, %d" n;
-        printfn ppf "  %s t0, t1, %s" branch_instr eq_lab;
-        (* TODO: user Addr_of_local.pp_local_exn *)
-        printfn ppf "  sd zero, %a" Addr_of_local.pp_dest dest;
-        printfn ppf "  beq zero, zero, %s # Where is unconditional jump?"
-          exit_lab;
-        printfn ppf "%s:" eq_lab;
-        printfn ppf "  li t0, 1 # (* RISC is weird *)";
-        printfn ppf "  sd t0, %a # dest = %a" Addr_of_local.pp_dest dest
-          Addr_of_local.pp_dest dest;
-        printfn ppf "  beq zero, zero, %s # not needed?" exit_lab;
-        printfn ppf "%s:" exit_lab
+        emit comment
+          (Format.asprintf "%a, find_exn %S = %d, last_pos = %d  "
+             Addr_of_local.pp_local_exn vname vname
+             (Addr_of_local.find_exn vname)
+             !Addr_of_local.last_pos);
+        emit ld t0 (pp_to_mach vname) ~comm:(sprintf "locals = %d" locals);
+        (* printfn ppf "  ld t0, %a # locals = %d" Addr_of_local.pp_local_exn vname
+           locals; *)
+        emit li t1 n;
+        (* printfn ppf "  li t1, %d" n; *)
+        branch_instr t0 t1 eq_lab;
+        emit sd_dest zero dest;
+        (* printfn ppf "  sd zero, %a" Addr_of_local.pp_dest dest; *)
+        emit beq zero zero exit_lab;
+        (* printfn ppf "  beq zero, zero, %s # Where is unconditional jump?"
+           exit_lab; *)
+        emit label eq_lab;
+        (* printfn ppf "%s:" eq_lab; *)
+        emit li t0 1;
+        (* printfn ppf "  li t0, 1 # (* RISC is weird *)"; *)
+        emit sd_dest t0 dest
+          ~comm:(Format.asprintf "dest = %a" Addr_of_local.pp_dest dest);
+        (* printfn ppf "  sd t0, %a # dest = %a" Addr_of_local.pp_dest dest
+           Addr_of_local.pp_dest dest; *)
+        emit beq zero zero exit_lab;
+        (* printfn ppf "  beq zero, zero, %s # not needed?" exit_lab; *)
+        emit label exit_lab
+        (* printfn ppf "%s:" exit_lab *)
         (* failwiths "not implemented %d" __LINE__ *)
         (* let left_name = LoI.alloc_temp () in
            printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
@@ -385,18 +449,24 @@ let generate_body is_toplevel ppf body =
     | CApp (APrimitive "-", AVar vname, [ AConst (PConst_int 1) ]) -> (
         match is_toplevel vname with
         | None ->
-            printfn ppf "  ld t0, %a" Addr_of_local.pp_local_exn vname;
-            printfn ppf "  addi t0, t0, -1";
-            printfn ppf "  sd t0, %a" Addr_of_local.pp_dest dest
+            emit ld t0 (pp_to_mach vname);
+            (* printfn ppf "  ld t0, %a" Addr_of_local.pp_local_exn vname; *)
+            emit addi t0 t0 (-1);
+            (* printfn ppf "  addi t0, t0, -1"; *)
+            emit sd_dest t0 dest
+            (* printfn ppf "  sd t0, %a" Addr_of_local.pp_dest dest *)
         | Some _ ->
             (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
             failwiths "not implemented %d" __LINE__)
     | CApp (APrimitive "-", AVar vname, [ AConst (PConst_int n) ]) -> (
         match is_toplevel vname with
         | None ->
-            printfn ppf "  ld t5, %a #" Addr_of_local.pp_local_exn vname;
-            printfn ppf "  addi t5, t5, -%d" n;
-            printfn ppf "  sd t5, %a" Addr_of_local.pp_dest dest
+            emit ld t5 (pp_to_mach vname);
+            (* printfn ppf "  ld t5, %a #" Addr_of_local.pp_local_exn vname; *)
+            emit addi t5 t5 (-n);
+            (* printfn ppf "  addi t5, t5, -%d" n; *)
+            emit sd_dest t5 dest
+            (* printfn ppf "  sd t5, %a" Addr_of_local.pp_dest dest *)
         | Some _ ->
             (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
             failwiths "not implemented %d" __LINE__)
@@ -407,34 +477,42 @@ let generate_body is_toplevel ppf body =
       -> (
         match is_toplevel vname with
         | None ->
-            printfn ppf "  mov qword r11, %a #" Addr_of_local.pp_local_exn vname;
-            printfn ppf "  %s r11, %d"
-              (match prim with
-              | "+" -> "add "
-              | "*" -> "imul"
-              | op ->
-                  Format.asprintf ";;; TODO %s. %s %d" op __FUNCTION__ __LINE__)
-              n;
-            printfn ppf "  mov qword %a, r11" Addr_of_local.pp_dest dest
+            failwiths "not implemented %d" __LINE__
+            (* printfn ppf "  mov qword r11, %a #" Addr_of_local.pp_local_exn vname;
+               printfn ppf "  %s r11, %d"
+                 (match prim with
+                 | "+" -> "add "
+                 | "*" -> "imul"
+                 | op ->
+                     Format.asprintf ";;; TODO %s. %s %d" op __FUNCTION__ __LINE__)
+                 n;
+               printfn ppf "  mov qword %a, r11" Addr_of_local.pp_dest dest *)
         | Some _ ->
             (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
             failwiths "not implemented %d" __LINE__)
     | CApp (APrimitive (("+" | "*" | "-") as prim), AVar vl, [ AVar vr ]) -> (
-        printfn ppf "# %s is stored in %d" vl (Addr_of_local.find_exn vl);
-        printfn ppf "# %s is stored in %d" vr (Addr_of_local.find_exn vr);
-        printfn ppf "# last_pos = %d" !Addr_of_local.last_pos;
-        printfn ppf "  ld t3, %a #" Addr_of_local.pp_local_exn vl;
-        printfn ppf "  ld t4, %a" Addr_of_local.pp_local_exn vr;
-        printfn ppf "  %s t5, t3, t4"
-          (match prim with
-          | "+" -> "add "
-          | "*" -> "mulw"
-          | "-" -> "sub"
-          | op -> failwiths "not_implemeted  %S. %d" op __LINE__);
+        emit comment
+          (sprintf "%s is stored in %d" vl (Addr_of_local.find_exn vl));
+        emit comment
+          (sprintf "%s is stored in %d" vr (Addr_of_local.find_exn vr));
+        emit comment (sprintf "last_pos = %d" !Addr_of_local.last_pos);
+        emit ld t3 (Addr_of_local.pp_to_mach vl);
+        (* printfn ppf "  ld t4, %a" Addr_of_local.pp_local_exn vr; *)
+        emit ld t4 (Addr_of_local.pp_to_mach vr);
+
+        (match prim with
+        | "+" -> emit add
+        | "*" -> emit mulw
+        | "-" -> emit sub
+        | op -> failwiths "not_implemeted  %S. %d" op __LINE__)
+          t5 t3 t4;
         match dest with
-        | DReg _ -> printfn ppf "  addi %a, t5, 0" Addr_of_local.pp_dest dest
-        | DStack_var _ -> printfn ppf "  sd t5, %a" Addr_of_local.pp_dest dest
-        (* TODO: Maybe move this specialization to the case below  *))
+        | DReg _ ->
+            emit addi1dest dest t5 0
+            (* printfn ppf "  addi %a, t5, 0" Addr_of_local.pp_dest dest *)
+        | DStack_var _ ->
+            (* printfn ppf "  sd t5, %a" Addr_of_local.pp_dest dest *)
+            emit sd_dest t5 dest)
     | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
         (* Callig a rukaml function uses custom calling convention.
            Pascal convention: all arguments on stack, LTR *)
@@ -446,54 +524,52 @@ let generate_body is_toplevel ppf body =
            printfn ppf "\t; calling %S" f; *)
         if expected_arity = formal_arity then
           let _ =
-            store_ra_temp ppf (fun ra_name ->
+            store_ra_temp (fun ra_name ->
                 let to_remove = allocate_args_for_call ~f (arg1 :: args) in
 
-                printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name;
-                printfn ppf "  call %s" f;
+                emit sd (RU "ra") (Addr_of_local.pp_to_mach ra_name);
+                (* printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
+                emit call f;
+                (* printfn ppf "  call %s" f; *)
                 deallocate_args_for_call to_remove;
                 to_remove)
           in
-
-          (* incr Addr_of_local.last_pos;
-             printfn ppf "  addi sp, sp, -8";
-             printfn ppf "  sd ra, (sp)";
-             printfn ppf "  call %s" f;
-             printfn ppf "  ld ra, (sp)";
-             printfn ppf "  addi sp, sp, 8";
-             decr Addr_of_local.last_pos; *)
-          printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest
+          emit sd_dest (RU "a0") dest
+          (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *)
         else if formal_arity < expected_arity then (
-          store_ra_temp ppf (fun ra_name ->
-              printfn ppf "  lla a0, %s" f;
-              printfn ppf "  li a1, %d" expected_arity;
-              printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name;
-              printfn ppf "  call rukaml_alloc_closure");
+          store_ra_temp (fun ra_name ->
+              emit lla (RU "a0") f;
+              (* printfn ppf "  lla a0, %s" f; *)
+              emit li (RU "a1") expected_arity;
+              (* printfn ppf "  li a1, %d" expected_arity; *)
+              emit sd (RU "ra") (Addr_of_local.pp_to_mach ra_name);
+              (* printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
+              emit call "rukaml_alloc_closure"
+              (* printfn ppf "  call rukaml_alloc_closure" *));
 
           (* printfn ppf "  add0 a0, a0, 0"; *)
           let partial_args_count = allocate_args_for_call ~f (arg1 :: args) in
           let () =
-            store_ra_temp ppf (fun ra_name ->
-                printfn ppf "  li a1, %d" formal_arity;
+            store_ra_temp (fun ra_name ->
+                emit li a1 formal_arity;
+                (* printfn ppf "  li a1, %d" formal_arity; *)
                 assert (formal_arity < 5);
                 (* See calling convention *)
                 List.iteri
                   (fun i rname ->
-                    printfn ppf "  ld %s, %+d*8(sp) # arg %d" rname
-                      (formal_arity - i) i)
+                    emit ~comm:(sprintf "arg %d" i) ld (RU rname)
+                      (ROffset (SP, 8 * (formal_arity - i)))
+                    (* printfn ppf "  ld %s, %+d*8(sp) # arg %d" rname
+                       (formal_arity - i) i) *))
                   (list_take formal_arity [ (*"a0"; *) "a2"; "a3"; "a4"; "a5" ]);
 
-                (* printfn ppf "  mov al, 0"; *)
-                printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name;
-                printfn ppf "  call rukaml_applyN";
-
+                emit sd (RU "ra") (Addr_of_local.pp_to_mach ra_name);
+                (* printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
+                emit call "rukaml_applyN";
                 (* printfn ppf "  call rukaml_applyN"; *)
-                printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest
-                (* Needed because we allocate temporary space to prepare arguments  *)
-
-                (* printfn ppf
-                   "  addi sp, sp, 8*%d # deallocate args of rukaml_applyN"
-                   partial_args_count *))
+                emit sd_dest (RU "a0") dest
+                (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *)
+                (* Needed because we allocate temporary space to prepare arguments  *))
           in
           deallocate_args_for_call formal_arity
           (* printfn ppf "  sub rsp, 8*2 ; deallocate closure value and padding" *))
@@ -502,76 +578,97 @@ let generate_body is_toplevel ppf body =
       ->
         assert (Option.is_none (is_toplevel f));
         Addr_of_local.extend "arg1";
-        printfn ppf "  addi sp, sp, -8 #first arg of a function %s" f;
+        emit addi SP SP (-8) ~comm:(sprintf "first arg of a function %s" f);
+        (* printfn ppf "  addi sp, sp, -8 #first arg of a function %s" f; *)
         helper_a (DStack_var "arg1") arg;
-        store_ra_temp ppf (fun ra_name ->
-            (* printfn ppf "  mov rax, 0  ; no float arguments"; *)
-            printfn ppf "  ld a0, %a" Addr_of_local.pp_dest (DStack_var f);
-            printfn ppf "  li a1, 1";
-            printfn ppf "  ld a2, %a" Addr_of_local.pp_dest (DStack_var "arg1");
-            printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name;
-            printfn ppf "  call rukaml_applyN");
+        store_ra_temp (fun ra_name ->
+            emit ld (RU "a0") (Addr_of_local.pp_to_mach f);
+            (* printfn ppf "  ld a0, %a" Addr_of_local.pp_dest (DStack_var f); *)
+            emit li (RU "a1") 1 ~comm:"hack";
+            (* printfn ppf "  li a1, 1"; *)
+            emit ld (RU "a2") (Addr_of_local.pp_to_mach "arg1");
+            (* printfn ppf "  ld a2, %a" Addr_of_local.pp_dest (DStack_var "arg1"); *)
+            emit sd (RU "ra") (Addr_of_local.pp_to_mach ra_name);
+            (* printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
+            emit call "rukaml_applyN"
+            (* printfn ppf "  call rukaml_applyN" *));
         Addr_of_local.remove_local "arg1";
-        (* Addr_of_local.remove_local "temp_padding"; *)
-        printfn ppf "  addi sp, sp, 8 # free space for args of function %S" f;
-        if dest <> DReg "a0" then
-          printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest
+
+        emit addi SP SP 8 ~comm:(sprintf "free space for args of function %s" f);
+        (* printfn ppf "  addi sp, sp, 8 # free space for args of function %S" f; *)
+        if dest <> DReg "a0" then emit sd_dest (RU "a0") dest
+          (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *)
     | CApp (APrimitive "field", AConst (PConst_int n), [ (AVar _ as cont) ]) ->
-        helper_a (DReg "rsi") cont;
-        printfn ppf "  mov rdi, %d" n;
-        printfn ppf "  call rukaml_field";
-        printfn ppf "  mov %a, rax" Addr_of_local.pp_dest dest
+        failwiths "Not implemented"
+        (* helper_a (DReg "rsi") cont;
+           printfn ppf "  mov rdi, %d" n;
+           printfn ppf "  call rukaml_field";
+           printfn ppf "  mov %a, rax" Addr_of_local.pp_dest dest *)
     | CApp (AVar "gc_compact", AUnit, []) ->
-        printfn ppf "  mov rdi, rsp";
-        printfn ppf "  mov rsi, 0";
-        printfn ppf "  call rukaml_gc_compact"
+        failwiths "Not implemented"
+        (* printfn ppf "  mov rdi, rsp";
+           printfn ppf "  mov rsi, 0";
+           printfn ppf "  call rukaml_gc_compact" *)
     | CApp (AVar "gc_stats", AUnit, []) ->
-        printfn ppf "  mov rdi, 0";
-        printfn ppf "  mov rsi, 0";
-        printfn ppf "  call rukaml_gc_print_stats"
+        failwiths "Not implemented %s %d" __FILE__ __LINE__
+        (* printfn ppf "  mov rdi, 0";
+           printfn ppf "  mov rsi, 0";
+           printfn ppf "  call rukaml_gc_print_stats" *)
     | CAtom atom -> helper_a dest atom
     | CApp _ as anf ->
         Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_c anf;
         failwiths "Not implemented %d" __LINE__
-    | rest ->
-        printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
-        printfn ppf "; @[<h>%a@]" Compile_lib.ANF.pp_c rest
+    | _rest -> emit comment (sprintf ";;; TODO %s %d" __FUNCTION__ __LINE__)
+    (* printfn ppf "; @[<h>%a@]" Compile_lib.ANF.pp_c rest *)
   and helper_a (dest : dest) x =
     (* log "  %s: dest=`%a`, expr = %a" __FUNCTION__ pp_dest dest ANF.pp_a x; *)
     match x with
     | AConst (Miniml.Parsetree.PConst_bool true) ->
-        printfn ppf "  li %a, 1" Addr_of_local.pp_dest dest
+        emit li_dest dest 1
+        (* printfn ppf "  li %a, 1" Addr_of_local.pp_dest dest *)
     | AConst (Miniml.Parsetree.PConst_int n) -> (
         match dest with
-        | DReg _ -> printfn ppf "  li %a, %d" Addr_of_local.pp_dest dest n
+        | DReg r -> emit li (RU r) n
+        (* printfn ppf "  li %a, %d" Addr_of_local.pp_dest dest n *)
         | DStack_var _ ->
-            printfn ppf "  li t0, %d" n;
-            printfn ppf "  sd t0, %a" Addr_of_local.pp_dest dest)
+            emit li t0 n;
+            (* printfn ppf "  li t0, %d" n; *)
+            emit sd_dest t0 dest
+            (* printfn ppf "  sd t0, %a" Addr_of_local.pp_dest dest *))
     | AVar vname -> (
         match is_toplevel vname with
         | None -> (
-            printfn ppf "  ld t5, %a" Addr_of_local.pp_local_exn vname;
+            emit ld t5 (Addr_of_local.pp_to_mach vname);
+            (* printfn ppf "  ld t5, %a" Addr_of_local.pp_local_exn vname; *)
             match dest with
             | DReg _ ->
-                printfn ppf "  addi %a, t5, 0 # 24" Addr_of_local.pp_dest dest
+                emit addi1dest dest t5 0
+                (* printfn ppf "  addi %a, t5, 0 # 24" Addr_of_local.pp_dest dest *)
             | DStack_var _ ->
-                printfn ppf "  sd t5, %a # access a var %S"
-                  Addr_of_local.pp_dest dest vname)
+                emit sd_dest t5 dest ~comm:(sprintf "access a var %S" vname)
+            (* printfn ppf "  sd t5, %a # access a var %S"
+               Addr_of_local.pp_dest dest vname *))
         | Some arity ->
-            print_alloc_closure ppf vname arity;
-            printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest)
-    | ATuple (a, b, []) ->
-        store_ra_temp ppf (fun ra_name ->
+            emit_alloc_closure vname arity;
+            (* print_alloc_closure ppf vname arity; *)
+            emit sd_dest (RU "a0") dest
+            (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *))
+    | ATuple (_a, _b, []) ->
+        failwiths "not implemented %s %d" __FILE__ __LINE__
+        (* store_ra_temp ppf (fun ra_name ->
             helper_a (DReg "r0") a;
             helper_a (DReg "r1") b;
 
             printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name;
             printfn ppf "  call rukaml_alloc_pair";
-            printfn ppf "  mv %a, a0" Addr_of_local.pp_dest dest)
-    | AUnit -> printfn ppf "mov qword %a, 0" Addr_of_local.pp_dest dest
-    | atom ->
-        printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
-        printfn ppf ";;; @[`%a`@]" ANF.pp_a atom
+            printfn ppf "  mv %a, a0" Addr_of_local.pp_dest dest) *)
+    | AUnit ->
+        failwiths "not implemented %s %d" __FILE__ __LINE__
+        (* printfn ppf "mov qword %a, 0" Addr_of_local.pp_dest dest *)
+    | _atom ->
+        (* printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__; *)
+        failwiths "not implemented %s %d" __FILE__ __LINE__
+    (* printfn ppf ";;; @[`%a`@]" ANF.pp_a atom *)
   in
 
   helper (DReg "a0") body;
@@ -708,30 +805,22 @@ let codegen ?(wrap_main_into_start = true) anf file =
                 (Loc_of_ident.size ()) name; *)
 
              (* printfn ppf "  sub rsp, %d" (8 * Loc_of_ident.size ()); *)
-             (if false then ()
-              else
-                let () = printfn ppf ".globl %s" name in
-                let () = printfn ppf "@[<h>%s:@]" name in
+             (let () = printfn ppf ".globl %s" name in
+              let () = printfn ppf "@[<h>%s:@]" name in
 
-                let pats, body = ANF.group_abstractions expr in
+              let pats, body = ANF.group_abstractions expr in
 
-                let argc = List.length pats in
-                let names =
-                  List.map (function ANF.APname name -> name) pats
-                in
-                List.rev pats
-                |> ListLabels.iteri ~f:(fun i -> function
-                     | ANF.APname name -> Addr_of_local.add_arg ~argc i name);
+              let argc = List.length pats in
+              let names = List.map (function ANF.APname name -> name) pats in
+              List.rev pats
+              |> ListLabels.iteri ~f:(fun i -> function
+                   | ANF.APname name -> Addr_of_local.add_arg ~argc i name);
 
-                (* printfn ppf "  push rbp";
-                   printfn ppf "  mov  rbp, rsp"; *)
-                (* if name = "main" then (
-                   printfn ppf "  mv a0, sp";
-                   printfn ppf "  call rukaml_initialize"); *)
-                generate_body is_toplevel ppf body;
-                Addr_of_local.remove_args names;
+              generate_body is_toplevel body;
+              Addr_of_local.remove_args names;
 
-                print_epilogue ppf name);
+              print_epilogue ppf name;
+              Machine.flush_queue ppf);
              ());
       Format.pp_print_flush ppf ());
 
