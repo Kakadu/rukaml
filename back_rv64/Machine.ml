@@ -98,6 +98,10 @@ let rec flush_queue ppf =
     (match i with
     | Comment "" -> ()
     | Comment s -> fprintf ppf "# %s\n%!" s
+    | Label _ ->
+        fprintf ppf "%a" pp_instr i;
+        if comm <> "" then fprintf ppf " # %s" comm;
+        fprintf ppf "\n"
     | _ ->
         fprintf ppf "  %a" pp_instr i;
         if comm <> "" then fprintf ppf " # %s" comm;

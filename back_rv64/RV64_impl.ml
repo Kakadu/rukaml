@@ -178,7 +178,7 @@ let allocate_locals input_anf : (now:unit -> unit) * _ =
   let args_repr = String.concat ", " !names in
   if count > 0 then
     emit addi sp sp (-8 * count)
-      ~comm:(sprintf "allocate for local variables %d" count);
+      ~comm:(sprintf "allocate for local variables %s" args_repr);
 
   (* printfn ppf "  addi sp, sp, -(8*%d) # allocate for local variables %s" count
      args_repr; *)
@@ -346,7 +346,7 @@ let generate_body is_toplevel body =
         helper dest bth;
         emit beq zero zero fin_lab;
         (* printfn ppf "  beq zero, zero, %s" fin_lab; *)
-        emit label el_lab ~comm:(sprintf "%s is 0 " econd);
+        emit label el_lab ~comm:(sprintf "%s is 0" econd);
         (* printfn ppf "%s:  # %s is 0 " el_lab econd; *)
         helper dest bel;
         emit label fin_lab
@@ -396,7 +396,7 @@ let generate_body is_toplevel body =
         let eq_lab = Printf.sprintf "lab_%d" (gensym ()) in
         let exit_lab = Printf.sprintf "lab_%d" (gensym ()) in
         emit comment
-          (Format.asprintf "%a, find_exn %S = %d, last_pos = %d  "
+          (Format.asprintf "%a, find_exn %S = %d, last_pos = %d"
              Addr_of_local.pp_local_exn vname vname
              (Addr_of_local.find_exn vname)
              !Addr_of_local.last_pos);
@@ -584,7 +584,7 @@ let generate_body is_toplevel body =
         store_ra_temp (fun ra_name ->
             emit ld (RU "a0") (Addr_of_local.pp_to_mach f);
             (* printfn ppf "  ld a0, %a" Addr_of_local.pp_dest (DStack_var f); *)
-            emit li (RU "a1") 1 ~comm:"hack";
+            emit li (RU "a1") 1;
             (* printfn ppf "  li a1, 1"; *)
             emit ld (RU "a2") (Addr_of_local.pp_to_mach "arg1");
             (* printfn ppf "  ld a2, %a" Addr_of_local.pp_dest (DStack_var "arg1"); *)
@@ -594,7 +594,7 @@ let generate_body is_toplevel body =
             (* printfn ppf "  call rukaml_applyN" *));
         Addr_of_local.remove_local "arg1";
 
-        emit addi SP SP 8 ~comm:(sprintf "free space for args of function %s" f);
+        emit addi SP SP 8 ~comm:(sprintf "free space for args of function %S" f);
         (* printfn ppf "  addi sp, sp, 8 # free space for args of function %S" f; *)
         if dest <> DReg "a0" then emit sd_dest (RU "a0") dest
           (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *)
@@ -806,7 +806,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
 
              (* printfn ppf "  sub rsp, %d" (8 * Loc_of_ident.size ()); *)
              (let () = printfn ppf ".globl %s" name in
-              let () = printfn ppf "@[<h>%s:@]" name in
+              let () = printfn ppf "%s:" name in
 
               let pats, body = ANF.group_abstractions expr in
 
