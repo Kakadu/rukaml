@@ -1,0 +1,60 @@
+name: Build riscv64
+
+on:
+  push:
+    branches:
+      - riscv64
+
+env:
+  OPAMROOT: /home/user/.opam
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: kakadu18/ocaml:miniml
+      options: --user user
+
+    # The below probably could be used instead of styfle/cancel-workflow-action
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+    steps:
+      - run: whoami
+      - run: ls -la ~
+      - run: echo $HOME
+      - run: which opam
+      - run: opam --version
+      - run: opam exec -- ocamlopt --version
+      - run: opam list
+
+      # dirty hack to make binfmt happy
+      #     Right solution is 'qemu-riscv64 -L /usr/riscv64-linux-gnu'
+      #- run: sudo ln -s /usr/riscv64-linux-gnu/lib/ld-linux-riscv64-lp64d.so.1 /lib
+      #- run: sudo ln -s /usr/riscv64-linux-gnu/lib/libc.so.6 /lib
+
+      #- name: Cancel Previous Runs
+      #  uses: styfle/cancel-workflow-action@0.11.0
+      #  with:
+      #    access_token: ${{ github.token }}
+
+      # checking out the code seems to be important because local switch is used
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: riscv64
+          show-progress: false
+
+      - name: Install OPAM dependencies via Makefile
+        #continue-on-error: true
+        run: |
+          sudo apt update --yes
+          make deps
+
+      - run: riscv64-linux-gnu-gcc --version
+      - run: qemu-riscv64 --version
+
+      - run: opam exec -- dune build @default --profile=release
+      - run: opam exec -- dune test

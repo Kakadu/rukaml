@@ -1,0 +1,5 @@
+profile=default
+version=0.26.1
+#max-indent=2
+sequence-style = terminator
+field-space=loose

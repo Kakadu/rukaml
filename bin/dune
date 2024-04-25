@@ -1,0 +1,7 @@
+(executable
+ (public_name pascal)
+ (name main)
+ (libraries pascal))
+
+(cram
+ (deps ./pascal.exe))

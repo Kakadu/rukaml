@@ -1,0 +1,12 @@
+(env
+ (dev
+  (flags
+   (:standard
+    -warn-error
+    -unused-var-strict
+    -warn-error
+    -unused-rec-flag
+    -warn-error
+    -unused-var
+    ;
+    ))))
