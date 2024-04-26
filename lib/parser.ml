@@ -51,7 +51,7 @@ let char c =
 let econst () =
   (* ws (); *)
   let acc = Buffer.create 5 in
-  while is_digit !text.[!pos] do
+  while !pos < !length && is_digit !text.[!pos] do
     Buffer.add_char acc !text.[!pos];
     incr pos
   done;
@@ -72,7 +72,7 @@ let eident () =
 
 let rec expr_plus () =
   let ch, op = ('+', "+") in
-  match eident () with
+  match primary () with
   | None -> None
   | Some head ->
       let acc = ref head in
@@ -91,7 +91,7 @@ let rec expr_plus () =
 
 and expr_mul () =
   let ch, op = ('*', "*") in
-  match eident () with
+  match primary () with
   | None -> None
   | Some head ->
       let acc = ref head in
@@ -107,6 +107,11 @@ and expr_mul () =
       in
       loop ();
       Some !acc
+
+and primary () =
+  match eident () with
+  | Some x -> Some x
+  | None -> ( match econst () with None -> None | Some x -> Some x)
 
 let expr = expr_plus
 
@@ -144,9 +149,8 @@ let%expect_test "a+b*c" =
 
 let%expect_test "a+b*c" =
   logoff ();
-  parse_print_expr "a+b*c+d";
-  [%expect
-    {|
-  (Some (EBinop ("+",
-           (EBinop ("+", (EVar "a"), (EBinop ("*", (EVar "b"), (EVar "c"))))),
-           (EVar "d")))) |}]
+  parse_print_expr "a+b*c+1";
+  [%expect{|
+    (Some (EBinop ("+",
+             (EBinop ("+", (EVar "a"), (EBinop ("*", (EVar "b"), (EVar "c"))))),
+             (EConst 1)))) |}]
