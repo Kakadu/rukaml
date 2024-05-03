@@ -66,7 +66,7 @@ module String_set = Set.Make (String)
 
 let keywords =
   let open String_set in
-  empty |> add "if" |> add "fi" |> add "then"
+  empty |> add "if" |> add "else" |> add "fi" |> add "then"
 
 let is_keyword s = String_set.mem s keywords
 
@@ -81,7 +81,7 @@ let econst () =
     Option.some @@ EConst (int_of_string (Buffer.contents acc))
   else None
 
-let ident () =
+let ident_or_keyword () =
   ws ();
   let acc = Buffer.create 5 in
   (* log "eident: pos = %d" !pos; *)
@@ -91,8 +91,11 @@ let ident () =
   done;
   if Buffer.length acc > 0 then
     let s = Buffer.contents acc in
-    if is_keyword s then None else Some s
+    Some s
   else None
+
+let ident () =
+  match ident_or_keyword () with Some s when is_keyword s -> None | x -> x
 
 let keyword kw =
   let exception Fail in
@@ -187,45 +190,58 @@ let rec statement () =
   let ( >>= ) = Option.bind in
   let rb1 = Rollback.make () in
 
-  if keyword "if" then (
-    (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
-    ws ();
-
-    expr () >>= fun econd ->
-    (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
-    let () = ws () in
-    (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
-    let isKWthen = keyword "then" in
-    (* log "%s %d isKWthen = %b" __FILE__ __LINE__ isKWthen; *)
-    statements () >>= fun ethen ->
-    ws ();
-    (* log "%s %d. ethen.length = %d" __FILE__ __LINE__ (List.length ethen); *)
-    (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
-    let isKWfi = keyword "fi" in
-    (* log "%s %d isKWfi = %b" __FILE__ __LINE__ isKWfi; *)
-    (* log "%s %d. ethen.length = %d" __FILE__ __LINE__ (List.length ethen); *)
-    match econd with
-    | cond when isKWthen && isKWfi ->
-        (* log "%s %d" __FILE__ __LINE__; *)
-        Some (Ite (cond, ethen, []))
-    | _ ->
-        Rollback.rollback rb1;
-        None)
-  else
-    match ident () with
-    | None ->
-        Rollback.rollback rb1;
+  match ident_or_keyword () with
+  | Some "fi" ->
+      Rollback.rollback rb1;
+      None
+  | None ->
+      Rollback.rollback rb1;
+      None
+  | Some "if" ->
+      ws ();
+      expr () >>= fun econd ->
+      (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
+      let () = ws () in
+      (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
+      if keyword "then" then (
+        (* log "%s %d isKWthen = %b" __FILE__ __LINE__ isKWthen; *)
+        (* log "%s %d. Calling 'statements'... pos = %d" __FILE__ __LINE__ !pos; *)
+        statements ()
+        >>= fun ethen ->
+        ws ();
+        (* log "%s %d. ethen.length = %d" __FILE__ __LINE__ (List.length ethen); *)
+        (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
+        match ident_or_keyword () with
+        | None ->
+            (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
+            let () = Rollback.rollback rb1 in
+            None
+        | Some "fi" ->
+            (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
+            Some (Ite (econd, ethen, []))
+        | Some "else" ->
+            (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
+            statements () >>= fun eelse ->
+            if keyword "fi" then Some (Ite (econd, ethen, eelse)) else None
+        | Some _ ->
+            let () = Rollback.rollback rb1 in
+            None)
+      else
+        let () = Rollback.rollback rb1 in
         None
-    | Some lhs -> (
-        let is_eq = char '=' in
-        let rhs = expr () in
-        (* log "%s %d %s" __FILE__ __LINE__ @@ [%show: AST.expr option] rhs; *)
-        let is_semi = char ';' in
-        match rhs with
-        | Some r when is_eq && is_semi -> Some (Assgn (lhs, r))
-        | _ -> None)
+  | Some kw when is_keyword kw ->
+      let () = Rollback.rollback rb1 in
+      None
+  | Some lhs -> (
+      let is_eq = char '=' in
+      let rhs = expr () in
+      (* log "%s %d %s" __FILE__ __LINE__ @@ [%show: AST.expr option] rhs; *)
+      let is_semi = char ';' in
+      match rhs with
+      | Some r when is_eq && is_semi -> Some (Assgn (lhs, r))
+      | _ -> None)
 
-and statements () =
+and statements () : _ list option =
   let rec loop acc =
     match statement () with None -> List.rev acc | Some v -> loop (v :: acc)
   in
@@ -372,3 +388,13 @@ let%expect_test "program" =
   parse_print_stmt "if a then fi";
   [%expect {|
     (Ite ((EVar "a"), [], [])) |}]
+
+let%expect_test "program" =
+  parse_print_stmt "x=1;";
+  [%expect {|
+    (Assgn ("x", (EConst 1))) |}];
+  parse_print_stmt "if a then x=1; y=2; else z=3; fi";
+  [%expect
+    {|
+    (Ite ((EVar "a"), [(Assgn ("x", (EConst 1))); (Assgn ("y", (EConst 2)))],
+       [(Assgn ("z", (EConst 3)))])) |}]
