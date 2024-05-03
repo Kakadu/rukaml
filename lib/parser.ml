@@ -20,12 +20,12 @@ open AST
 module Rollback : sig
   type t
 
-  val bmrk : unit -> t
+  val make : unit -> t
   val rollback : t -> unit
 end = struct
   type t = int
 
-  let bmrk () = !pos
+  let make () = !pos
   let rollback dest = pos := dest
 end
 
@@ -53,7 +53,7 @@ let lookahead_cond cond =
   while !curpos < !length && cond !text.[!pos] do
     incr curpos
   done;
-  !curpos < !length && !text.[!curpos] = '('
+  !curpos < !length && cond !text.[!curpos]
 
 let lookahead_paren () =
   let curpos = ref !pos in
@@ -61,6 +61,14 @@ let lookahead_paren () =
     incr curpos
   done;
   !curpos < !length && !text.[!curpos] = '('
+
+module String_set = Set.Make (String)
+
+let keywords =
+  let open String_set in
+  empty |> add "if" |> add "fi" |> add "then"
+
+let is_keyword s = String_set.mem s keywords
 
 let econst () =
   (* ws (); *)
@@ -76,20 +84,49 @@ let econst () =
 let ident () =
   ws ();
   let acc = Buffer.create 5 in
-  log "eident: pos = %d" !pos;
+  (* log "eident: pos = %d" !pos; *)
   while !pos < !length && is_alpha !text.[!pos] do
     Buffer.add_char acc !text.[!pos];
     incr pos
   done;
-  if Buffer.length acc > 0 then Some (Buffer.contents acc) else None
+  if Buffer.length acc > 0 then
+    let s = Buffer.contents acc in
+    if is_keyword s then None else Some s
+  else None
 
-let eident () = match ident () with Some x -> Some (EVar x) | None -> None
+let keyword kw =
+  let exception Fail in
+  ws ();
+  let kwlen = String.length kw in
+  let rec loop i =
+    if i >= kwlen then ()
+    else if !pos + i < !length && !text.[!pos + i] = kw.[i] then loop (i + 1)
+    else raise Fail
+  in
+  match loop 0 with
+  | exception Fail -> false
+  | () ->
+      if !pos + kwlen >= !length then (
+        pos := !pos + kwlen;
+        true)
+      else if not (is_alpha !text.[!pos + kwlen]) then (
+        pos := !pos + kwlen;
+        true)
+      else
+        let () = log "parsing keyword %S failed" kw in
+        false
+
+let eident () =
+  match ident () with
+  | Some x when not (String_set.mem x keywords) -> Some (EVar x)
+  | _ -> None
 
 let rec expr_plus () =
   let ch, op = ('+', "+") in
   match expr_mul () with
   | None -> None
   | Some head ->
+      (* log "got a head: %S" ([%show: AST.expr] head); *)
       if lookahead_paren () then
         let b1 : bool = char '(' in
         let rez = expr_plus () in
@@ -98,7 +135,7 @@ let rec expr_plus () =
       else
         let acc = ref head in
         let rec loop () =
-          let rb1 = Rollback.bmrk () in
+          let rb1 = Rollback.make () in
           if char ch then (
             match expr_mul () with
             | None -> Rollback.rollback rb1
@@ -115,9 +152,10 @@ and expr_mul () =
   match primary () with
   | None -> None
   | Some head ->
+      (* log "got a head: %S" ([%show: AST.expr] head); *)
       let acc = ref head in
       let rec loop () =
-        let rb1 = Rollback.bmrk () in
+        let rb1 = Rollback.make () in
         if char ch then (
           match eident () with
           | None -> Rollback.rollback rb1
@@ -130,6 +168,7 @@ and expr_mul () =
       Some !acc
 
 and primary () =
+  (* log " %s %d , pos = %d" __FILE__ __LINE__ !pos; *)
   if lookahead_paren () then
     let b1 : bool = char '(' in
     let rez = expr_plus () in
@@ -138,25 +177,60 @@ and primary () =
   else
     match eident () with
     | Some x ->
-        log "ident %S parsed in primary" ([%show: AST.expr] x);
+        (* log "ident %S parsed in primary" ([%show: AST.expr] x); *)
         Some x
     | None -> ( match econst () with None -> None | Some x -> Some x)
 
 let expr = expr_plus
 
-let statement () =
-  match ident () with
-  | None -> None
-  | Some "if" -> assert false
-  | Some lhs -> (
-      let is_eq = char '=' in
-      let rhs = expr () in
-      log "%s %d %s" __FILE__ __LINE__ @@ [%show: AST.expr option] rhs;
+let rec statement () =
+  let ( >>= ) = Option.bind in
+  let rb1 = Rollback.make () in
 
-      let is_semi = char ';' in
-      match rhs with
-      | Some r when is_eq && is_semi -> Some (Assgn (lhs, r))
-      | _ -> None)
+  if keyword "if" then (
+    (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
+    ws ();
+
+    expr () >>= fun econd ->
+    (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
+    let () = ws () in
+    (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
+    let isKWthen = keyword "then" in
+    (* log "%s %d isKWthen = %b" __FILE__ __LINE__ isKWthen; *)
+    statements () >>= fun ethen ->
+    ws ();
+    (* log "%s %d. ethen.length = %d" __FILE__ __LINE__ (List.length ethen); *)
+    (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
+    let isKWfi = keyword "fi" in
+    (* log "%s %d isKWfi = %b" __FILE__ __LINE__ isKWfi; *)
+    (* log "%s %d. ethen.length = %d" __FILE__ __LINE__ (List.length ethen); *)
+    match econd with
+    | cond when isKWthen && isKWfi ->
+        (* log "%s %d" __FILE__ __LINE__; *)
+        Some (Ite (cond, ethen, []))
+    | _ ->
+        Rollback.rollback rb1;
+        None)
+  else
+    match ident () with
+    | None ->
+        Rollback.rollback rb1;
+        None
+    | Some lhs -> (
+        let is_eq = char '=' in
+        let rhs = expr () in
+        (* log "%s %d %s" __FILE__ __LINE__ @@ [%show: AST.expr option] rhs; *)
+        let is_semi = char ';' in
+        match rhs with
+        | Some r when is_eq && is_semi -> Some (Assgn (lhs, r))
+        | _ -> None)
+
+and statements () =
+  let rec loop acc =
+    match statement () with None -> List.rev acc | Some v -> loop (v :: acc)
+  in
+  let stmts = loop [] in
+  Some stmts
 
 let parse_expr_string s =
   init s;
@@ -175,6 +249,12 @@ let program () =
   ws ();
   Some stmts
 (* if !pos >= !length then Some stmts else None *)
+
+let parse_print_stmt str =
+  init str;
+  match statement () with
+  | Some ast -> Format.printf "%s\n%!" @@ [%show: AST.stmt] ast
+  | None -> print_endline "ERROR"
 
 let parse_print_program str =
   init str;
@@ -197,7 +277,6 @@ let%expect_test "just a constant" =
   logon ();
   parse_print_expr "42";
   [%expect {|
-    eident: pos = 0
     (EConst 42) |}]
 
 let%expect_test "a+b+c" =
@@ -206,6 +285,12 @@ let%expect_test "a+b+c" =
   [%expect
     {|
         (EBinop ("+", (EBinop ("+", (EVar "a"), (EVar "b"))), (EVar "c"))) |}]
+
+let%expect_test " a" =
+  logoff ();
+  parse_print_expr " a";
+  [%expect {|
+        (EVar "a") |}]
 
 let%expect_test "a+b*c" =
   logoff ();
@@ -251,18 +336,39 @@ let%expect_test "program" =
   [%expect {|
     [(Assgn ("x", (EConst 5)))] |}]
 
-let%expect_test "program" =
-  parse_print_program "if (a) then x=5; fi";
-  [%expect.unreachable]
-[@@expect.uncaught_exn {|
-  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
-     This is strongly discouraged as backtraces are fragile.
-     Please change this test to not include a backtrace. *)
+let%test "keyword 'fi'" =
+  init " fi";
+  keyword "fi"
 
-  "Assert_failure lib/parser.ml:150:17"
-  Raised at Parser.statement in file "lib/parser.ml", line 150, characters 17-29
-  Called from Parser.program.loop in file "lib/parser.ml", line 172, characters 10-22
-  Called from Parser.program in file "lib/parser.ml", line 174, characters 14-21
-  Called from Parser.parse_print_program in file "lib/parser.ml", line 181, characters 8-18
-  Called from Parser.(fun) in file "lib/parser.ml", line 255, characters 2-43
-  Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 262, characters 12-19 |}]
+let%test "keyword 'if'" =
+  init "if";
+  keyword "if"
+
+let%expect_test "stmt doesn't eat too much " =
+  init " fi";
+  (match statement () with
+  | Some _ -> print_endline "failed"
+  | None ->
+      log "%s %d. pos = %d" __FILE__ __LINE__ !pos;
+      Printf.printf "%b\n" (!pos < 3));
+  [%expect "true"]
+
+let%expect_test "  " =
+  logon ();
+  init " fi";
+  (match statement () with
+  | None -> print_endline "failed"
+  | Some _ -> Printf.printf "%b" (keyword "fi"));
+
+  [%expect {|
+    failed |}]
+
+let%test "keyword 'then' " =
+  init " then ";
+  keyword "then"
+
+let%expect_test "program" =
+  logon ();
+  parse_print_stmt "if a then fi";
+  [%expect {|
+    (Ite ((EVar "a"), [], [])) |}]
