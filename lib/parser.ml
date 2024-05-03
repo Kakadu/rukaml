@@ -66,7 +66,8 @@ module String_set = Set.Make (String)
 
 let keywords =
   let open String_set in
-  empty |> add "if" |> add "else" |> add "fi" |> add "then"
+  empty |> add "if" |> add "else" |> add "fi" |> add "then" |> add "do"
+  |> add "while" |> add "done"
 
 let is_keyword s = String_set.mem s keywords
 
@@ -190,13 +191,25 @@ let rec statement () =
   let ( >>= ) = Option.bind in
   let rb1 = Rollback.make () in
 
+  let rollback () =
+    let () = Rollback.rollback rb1 in
+    None
+  in
+
   match ident_or_keyword () with
-  | Some "fi" ->
-      Rollback.rollback rb1;
-      None
-  | None ->
-      Rollback.rollback rb1;
-      None
+  | Some "fi" | None -> rollback ()
+  | Some "while" ->
+      ws ();
+      expr () >>= fun econd ->
+      if keyword "do" then (
+        statements () >>= fun ebody ->
+        (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
+        ws ();
+        match ident_or_keyword () with
+        | None -> rollback ()
+        | Some "done" -> Some (While (econd, ebody))
+        | Some _ -> rollback ())
+      else rollback ()
   | Some "if" ->
       ws ();
       expr () >>= fun econd ->
@@ -223,27 +236,26 @@ let rec statement () =
             (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
             statements () >>= fun eelse ->
             if keyword "fi" then Some (Ite (econd, ethen, eelse)) else None
-        | Some _ ->
-            let () = Rollback.rollback rb1 in
-            None)
-      else
-        let () = Rollback.rollback rb1 in
-        None
-  | Some kw when is_keyword kw ->
-      let () = Rollback.rollback rb1 in
-      None
+        | Some _ -> rollback ())
+      else rollback ()
+  | Some kw when is_keyword kw -> rollback ()
   | Some lhs -> (
       let is_eq = char '=' in
-      let rhs = expr () in
-      (* log "%s %d %s" __FILE__ __LINE__ @@ [%show: AST.expr option] rhs; *)
-      let is_semi = char ';' in
-      match rhs with
-      | Some r when is_eq && is_semi -> Some (Assgn (lhs, r))
-      | _ -> None)
+      if not is_eq then rollback ()
+      else
+        match expr () with
+        | None -> rollback ()
+        | Some rhs ->
+            (* log "%s %d %s" __FILE__ __LINE__ @@ [%show: AST.expr option] rhs; *)
+            if char ';' then Some (Assgn (lhs, rhs)) else rollback ())
 
 and statements () : _ list option =
   let rec loop acc =
-    match statement () with None -> List.rev acc | Some v -> loop (v :: acc)
+    match statement () with
+    | None ->
+        (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
+        List.rev acc
+    | Some v -> loop (v :: acc)
   in
   let stmts = loop [] in
   Some stmts
@@ -264,7 +276,6 @@ let program () =
   let stmts = loop [] in
   ws ();
   Some stmts
-(* if !pos >= !length then Some stmts else None *)
 
 let parse_print_stmt str =
   init str;
@@ -388,6 +399,13 @@ let%expect_test "program" =
   parse_print_stmt "if a then fi";
   [%expect {|
     (Ite ((EVar "a"), [], [])) |}]
+
+let%expect_test "program 'while'" =
+  logon ();
+  parse_print_stmt "while a do x=5; done";
+  [%expect
+    {|
+    (While ((EVar "a"), [(Assgn ("x", (EConst 5)))])) |}]
 
 let%expect_test "program" =
   parse_print_stmt "x=1;";
