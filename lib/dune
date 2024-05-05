@@ -1,6 +1,6 @@
 (library
  (name lib_pascal)
- (modules AST pascal parser)
+ (modules AST parser machine codegen)
  (libraries ppx_show.runtime)
  (inline_tests)
  (wrapped false)
@@ -10,3 +10,11 @@
    ppx_deriving.show
    ppx_expect
    ppx_inline_test)))
+
+(executable
+ (name driver)
+ (modules driver)
+ (libraries lib_pascal))
+
+(cram
+ (deps ./driver.exe))

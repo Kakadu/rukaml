@@ -3,3 +3,6 @@
  (libraries lib_pascal)
  (preprocess
   (pps ppx_expect ppx_inline_test)))
+
+(cram
+ (deps %{project_root}/lib/driver.exe))
