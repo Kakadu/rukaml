@@ -53,9 +53,26 @@ let rec codegen_stmt : AST.stmt -> _ = function
 
 let codegen : AST.program -> Format.formatter -> unit =
  fun (locals, prog) ppf ->
+  let printfn fmt =
+    Format.kfprintf (fun ppf -> Format.fprintf ppf "\n") ppf fmt
+  in
+
   List.iteri (fun i s -> Hashtbl.add locals_pos s i) locals;
   emit addi SP SP (-8 * List.length locals);
   List.iter codegen_stmt prog;
+
+  (* Code to print everything *)
+  ListLabels.iter locals ~f:(fun s ->
+      emit comment (Printf.sprintf "trace variable %S" s);
+      (* emit_write "varname_x" 2; *)
+      emit la a0 (Printf.sprintf "varname_%s" s);
+      emit ld a1 (local_offset_exn s);
+      emit call "trace_variable";
+
+      (* emit la a0 "helloworld"; *)
+      (* emit_write "varname_x" 1; *)
+      ());
+
   Machine.flush_queue ppf
 
 let%expect_test _ =

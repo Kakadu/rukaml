@@ -4,10 +4,11 @@ set architecture riscv:rv64
 set sysroot /usr/riscv64-linux-gnu
 target remote :1234
 b _start
+b trace_variable
 c
-#x/8xg $sp
-#layout reg
-#layout asm
 tui layout example
 focus cmd
 
+#x/8xg $sp
+#layout reg
+#layout asm

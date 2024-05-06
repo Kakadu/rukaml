@@ -25,6 +25,7 @@ type instr =
   | Call of string
   | Ret
   | Lla of reg * string
+  | La of reg * string
   | Ld of reg * reg  (** [ld ra, (sp)] *)
   | Sd of reg * reg
   | Beq of reg * reg * string
@@ -50,6 +51,7 @@ let pp_instr ppf =
   | Call f -> fprintf ppf "call %s" f
   | Ret -> fprintf ppf "ret"
   | Lla (r1, s) -> fprintf ppf "lla %a, %s" pp_reg r1 s
+  | La (r1, s) -> fprintf ppf "la %a, %s" pp_reg r1 s
   | Ld (r1, r2) -> fprintf ppf "ld %a, %a" pp_reg r1 pp_reg r2
   | Sd (r1, r2) -> fprintf ppf "sd %a, %a" pp_reg r1 pp_reg r2
   | Beq (r1, r2, offset) ->
@@ -74,6 +76,7 @@ let ecall k = k Ecall
 let call k name = k (Call name)
 let ret k = k Ret
 let lla k r name = k (Lla (r, name))
+let la k r name = k (La (r, name))
 let ld k a b = k (Ld (a, b))
 let sd k a b = k (Sd (a, b))
 let beq k r1 r2 r3 = k @@ Beq (r1, r2, r3)
@@ -120,8 +123,16 @@ let rec flush_queue ppf =
     flush_queue ppf
 
 let emit ?(comm = "") instr = instr (fun i -> Queue.add (i, comm) code)
+let emit_comment ppf = Format.kasprintf (emit comment) ppf
 
 let __ () =
   let () = emit addi SP SP 4 in
   let () = emit comment "" in
   ()
+
+let emit_write s len =
+  emit li (RU "a7") 64;
+  emit li (RU "a0") 1;
+  emit la (RU "a1") s;
+  emit li (RU "a2") len;
+  emit ecall

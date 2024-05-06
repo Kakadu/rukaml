@@ -1,7 +1,7 @@
 # https://github.com/riscv/riscv-v-spec/blob/master/v-spec.adoc
 .section .data
-str2:       .string "01234567012345670123456701234567\n" # 32+1 bytes
-#.equ BUFSIZE,32
+str2:    .string "01234567012345670123456701234567\n" # 32+1 bytes
+.equ BUFSIZE,32
 .globl str2
 .text
 
@@ -31,14 +31,14 @@ strlen_fin:
 
 .global memcpy
 memcpy: # a0 dest, a1 src, a2 size. No intersection
-memcpy_loop:
-  beq a2, zero, memcpy_fin
-  lb t0, (a1)
-  sb t0, (a0)
-  addi a0, a0, 1
-  addi a1, a1, 1
-  addi a2, a2, -1
-  j memcpy_loop
+# memcpy_loop:
+#   beq a2, zero, memcpy_fin
+#   lb t0, (a1)
+#   sb t0, (a0)
+#   addi a0, a0, 1
+#   addi a1, a1, 1
+#   addi a2, a2, -1
+#   j memcpy_loop
 memcpy_fin:
   ret
 
@@ -61,3 +61,32 @@ myitoa_loop:
   divu t2, t2, t1
   bne t2, zero, myitoa_loop
   ret
+
+.global trace_variable
+trace_variable:
+  addi sp, sp, -8*2
+  sd a0, 8(sp) # a0 is varname
+  sd a1, (sp)  # a1 is a value
+  # TODO: varname length
+
+  # la a0, str2
+  # #li a1, 0x20 # space
+  # li a1, 0x30 # '0'
+  # li a2, BUFSIZE
+  # call memset
+
+  ld a0, (sp)
+  call myitoa
+
+  # la a0, str2
+  # ld a1, 8(sp)
+  # li a2, 0
+  # call memcpy
+  addi sp, sp, 8*2
+  li      a7, 64  # write on RISCV linux"
+  li      a0, 1
+  la      a1, str2
+  li      a2, BUFSIZE+1
+  ecall
+  ret
+
