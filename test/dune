@@ -1,3 +1,10 @@
+(rule
+ (targets rv64_runtime.o)
+ (deps
+  (:src rv64_runtime.S))
+ (action
+  (run riscv64-linux-gnu-as -march=rv64gc_zbb %{src} -o %{targets})))
+
 (test
  (name test_pascal)
  (libraries lib_pascal)
@@ -5,4 +12,17 @@
   (pps ppx_expect ppx_inline_test)))
 
 (cram
- (deps %{project_root}/lib/driver.exe))
+ (deps %{project_root}/lib/driver.exe rv64_runtime.o))
+
+(rule
+ (targets demo1.exe)
+ (deps
+  (:src demo1.pas)
+  (:runtime rv64_runtime.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/lib/driver.exe %{src})
+   (run riscv64-linux-gnu-as -march=rv64gc_zbb out.s -o main.o)
+   (run riscv64-linux-gnu-ld %{runtime} main.o -o %{targets}))))

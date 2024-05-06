@@ -1,0 +1,63 @@
+# https://github.com/riscv/riscv-v-spec/blob/master/v-spec.adoc
+.section .data
+str2:       .string "01234567012345670123456701234567\n" # 32+1 bytes
+#.equ BUFSIZE,32
+.globl str2
+.text
+
+.global memset
+memset: # a0 is addr, a1 is byte, a2 is length
+memset_loop:
+  beq a2, zero, memset_fin
+  sb a1, (a0)
+  addi a0, a0, 1
+  addi a2, a2, -1
+  j memset_loop
+memset_fin:
+  ret
+
+.global strlen
+strlen: # a0 is a string, a0 is a result
+  li t0, 0
+strlen_loop:
+  ld t1, (a0)
+  bne zero, t1, strlen_fin
+  addi a0, a0, 1
+  addi t0, t0, 1
+  j strlen_loop
+strlen_fin:
+  mv a0, t0
+  ret
+
+.global memcpy
+memcpy: # a0 dest, a1 src, a2 size. No intersection
+memcpy_loop:
+  beq a2, zero, memcpy_fin
+  lb t0, (a1)
+  sb t0, (a0)
+  addi a0, a0, 1
+  addi a1, a1, 1
+  addi a2, a2, -1
+  j memcpy_loop
+memcpy_fin:
+  ret
+
+.global myitoa
+myitoa:
+  # t2 is an arg, a0 is current pos, a1 is output len
+  #li t5, 0x30   #  char for an '0'
+  li t1, 10     # t1 is basis
+  mv t2, a0     # argument
+  mv a1, zero   # output length
+  la a0, str2
+  addi a0, a0, 32  # 32 is preallocated space
+myitoa_loop:
+  #
+  remu t4, t2, t1
+  addi t4, t4, 0x30   # t4 stores one more char
+  addi a1, a1, 1
+  addi a0, a0, -1
+  sb t4, (a0)
+  divu t2, t2, t1
+  bne t2, zero, myitoa_loop
+  ret
