@@ -12,12 +12,16 @@ let next_label =
     Printf.sprintf "lab%d" !last
 
 let codegen_exp rdest : AST.expr -> _ = function
+  | AST.EBinop ("*", EVar l, EConst c) ->
+      emit ld t3 (local_offset_exn l);
+      emit li t4 c;
+      emit mulw rdest t3 t4
   | AST.EBinop ("*", EVar l, EVar r) ->
-      emit sd t3 (local_offset_exn l);
-      emit sd t4 (local_offset_exn r);
+      emit ld t3 (local_offset_exn l);
+      emit ld t4 (local_offset_exn r);
       emit mulw rdest t3 t4
   | EBinop ("-", EVar l, EConst r) ->
-      emit sd t3 (local_offset_exn l);
+      emit ld t3 (local_offset_exn l);
       emit li t4 r;
       emit sub rdest t3 t4
   | expr ->
@@ -53,10 +57,6 @@ let rec codegen_stmt : AST.stmt -> _ = function
 
 let codegen : AST.program -> Format.formatter -> unit =
  fun (locals, prog) ppf ->
-  let printfn fmt =
-    Format.kfprintf (fun ppf -> Format.fprintf ppf "\n") ppf fmt
-  in
-
   List.iteri (fun i s -> Hashtbl.add locals_pos s i) locals;
   emit addi SP SP (-8 * List.length locals);
   List.iter codegen_stmt prog;
@@ -64,16 +64,11 @@ let codegen : AST.program -> Format.formatter -> unit =
   (* Code to print everything *)
   ListLabels.iter locals ~f:(fun s ->
       emit comment (Printf.sprintf "trace variable %S" s);
-      (* emit_write "varname_x" 2; *)
       emit la a0 (Printf.sprintf "varname_%s" s);
       emit li a1 (String.length s);
       emit ld a2 (local_offset_exn s);
       emit call "trace_variable";
-
-      (* emit la a0 "helloworld"; *)
-      (* emit_write "varname_x" 1; *)
       ());
-
   Machine.flush_queue ppf
 
 let%expect_test _ =
@@ -87,12 +82,25 @@ let%expect_test _ =
   (match Parser.program () with
   | None -> print_endline "can't parse"
   | Some p ->
-      (* let open Format in *)
-      (* printf "_start:\n"; *)
       codegen ([], p) Format.std_formatter;
-
-      (* printf "  li      a0, 0 \n";
-         printf "  li      a7, 93\n";
-         printf "  ecall\n"; *)
       Format.print_flush ());
-  [%expect {| |}]
+  [%expect
+    {|
+      addi sp, sp, 0
+      li t0, 5
+      sd t0, (sp)
+      li t0, 1
+      sd t0, 8(sp)
+    lab1:
+      ld t0, (sp)
+      bge zero, t0, lab2
+      ld t3, 8(sp)
+      ld t4, (sp)
+      mulw t0, t3, t4
+      sd t0, 8(sp)
+      ld t3, (sp)
+      li t4, 1
+      sub t0, t3, t4
+      sd t0, (sp)
+      j lab1
+    lab2: |}]

@@ -1,16 +1,18 @@
-type cmd_args = { mutable file : string }
+type cmd_args = { mutable file : string; mutable outfile : string }
 
-let args = { file = "" }
+let args = { file = ""; outfile = "out.s" }
 let fprintf = Format.fprintf
-(* let printfn ppf fmt = Format.kfprintf (fun ppf -> fprintf ppf "\n") ppf fmt *)
 
 let () =
-  Arg.parse [] (fun s -> args.file <- s) "help";
+  Arg.parse
+    [ ("-o", Arg.String (fun s -> args.outfile <- s), "Out file") ]
+    (fun s -> args.file <- s)
+    "help";
   Parser.init @@ In_channel.with_open_text args.file In_channel.input_all;
   match Parser.program () with
   | None -> exit 1
   | Some p ->
-      Out_channel.with_open_text "out.s" (fun outch ->
+      Out_channel.with_open_text args.outfile (fun outch ->
           let ppf = Format.formatter_of_out_channel outch in
           let locals = AST.all_vars p in
 
@@ -30,7 +32,6 @@ let () =
                  printfn ".equ VARLEN_%s, %d+1" s (String.length s));
 
           printfn ".text";
-          printfn ".extern memset";
           printfn ".extern trace_variable";
           printfn ".global _start";
           printfn "_start:";
@@ -38,10 +39,9 @@ let () =
           printfn "  .option norelax";
           printfn "  la gp, __global_pointer$";
           printfn "  .option pop";
-          (* printfn ppf "  addi sp, sp, %+d*8" (AST.String_set.cardinal locals); *)
           Codegen.codegen (List.of_seq (AST.String_set.to_seq locals), p) ppf;
 
-          printfn "  li a0, 22";
+          printfn "  li a0, 0";
           printfn "  li a7, 93";
           printfn "  ecall\n";
 

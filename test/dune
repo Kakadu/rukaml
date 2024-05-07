@@ -15,14 +15,14 @@
  (deps %{project_root}/lib/driver.exe rv64_runtime.o))
 
 (rule
- (targets demo1.exe)
+ (targets factorial.exe factorial.S)
  (deps
-  (:src demo1.pas)
+  (:src factorial.pas)
   (:runtime rv64_runtime.o))
  (mode
   (promote (until-clean)))
  (action
   (progn
-   (run %{project_root}/lib/driver.exe %{src})
-   (run riscv64-linux-gnu-as -march=rv64gc_zbb out.s -o main.o)
-   (run riscv64-linux-gnu-ld %{runtime} main.o -o %{targets}))))
+   (run %{project_root}/lib/driver.exe %{src} -o factorial.S)
+   (run riscv64-linux-gnu-as -march=rv64gc_zbb factorial.S -o factorial.o)
+   (run riscv64-linux-gnu-ld %{runtime} factorial.o -o factorial.exe))))
