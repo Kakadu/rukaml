@@ -66,7 +66,8 @@ let codegen : AST.program -> Format.formatter -> unit =
       emit comment (Printf.sprintf "trace variable %S" s);
       (* emit_write "varname_x" 2; *)
       emit la a0 (Printf.sprintf "varname_%s" s);
-      emit ld a1 (local_offset_exn s);
+      emit li a1 (String.length s);
+      emit ld a2 (local_offset_exn s);
       emit call "trace_variable";
 
       (* emit la a0 "helloworld"; *)

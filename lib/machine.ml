@@ -95,6 +95,7 @@ let ra = RU "ra"
 let sp = SP
 let a0 = RU "a0"
 let a1 = RU "a1"
+let a2 = RU "a2"
 let t0 = Temp_reg 0
 let t1 = Temp_reg 1
 let t3 = Temp_reg 3

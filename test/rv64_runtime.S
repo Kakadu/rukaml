@@ -31,14 +31,14 @@ strlen_fin:
 
 .global memcpy
 memcpy: # a0 dest, a1 src, a2 size. No intersection
-# memcpy_loop:
-#   beq a2, zero, memcpy_fin
-#   lb t0, (a1)
-#   sb t0, (a0)
-#   addi a0, a0, 1
-#   addi a1, a1, 1
-#   addi a2, a2, -1
-#   j memcpy_loop
+memcpy_loop:
+  beq a2, zero, memcpy_fin
+  lb t0, (a1)
+  sb t0, (a0)
+  addi a0, a0, 1
+  addi a1, a1, 1
+  addi a2, a2, -1
+  j memcpy_loop
 memcpy_fin:
   ret
 
@@ -64,29 +64,32 @@ myitoa_loop:
 
 .global trace_variable
 trace_variable:
-  addi sp, sp, -8*2
-  sd a0, 8(sp) # a0 is varname
-  sd a1, (sp)  # a1 is a value
+  addi sp, sp, -8*4
+  sd ra, 24(sp) # save ra beacuse we do calls IMPORTANT
+  sd a0, 16(sp) # a0 is varname
+  sd a1, 8(sp)  # a1 is varname length
+  sd a2, (sp)  # a2 is a value
   # TODO: varname length
 
-  # la a0, str2
-  # #li a1, 0x20 # space
-  # li a1, 0x30 # '0'
-  # li a2, BUFSIZE
-  # call memset
+  la a0, str2
+  li a1, 0x20 # space
+  li a2, BUFSIZE
+  call memset
 
   ld a0, (sp)
   call myitoa
 
-  # la a0, str2
-  # ld a1, 8(sp)
-  # li a2, 0
-  # call memcpy
-  addi sp, sp, 8*2
+  la a0, str2
+  ld a1, 16(sp)
+  ld a2, 8(sp)
+  call memcpy
+
   li      a7, 64  # write on RISCV linux"
   li      a0, 1
   la      a1, str2
   li      a2, BUFSIZE+1
   ecall
+  ld ra, 24(sp)
+  addi sp, sp, 8*4
   ret
 
