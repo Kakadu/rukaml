@@ -1,9 +1,22 @@
 # https://github.com/riscv/riscv-v-spec/blob/master/v-spec.adoc
 .section .data
 str2:    .string "01234567012345670123456701234567\n" # 32+1 bytes
+NOT_IMPLEMENTED_STR: .string "Not implemented\n\0"
 .equ BUFSIZE,32
 .globl str2
 .text
+
+.global not_implemented
+not_implemented:
+  li      a7, 64 # write on RISCV linux"
+  li      a0, 1 # stdout
+  la      a1, NOT_IMPLEMENTED_STR
+  li      a2, 16
+  ecall
+  li a0, 1
+  li a7, 93
+  ecall
+  ret
 
 .global memset
 memset: # a0 is addr, a1 is byte, a2 is length

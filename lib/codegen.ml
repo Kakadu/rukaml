@@ -20,13 +20,26 @@ let codegen_exp rdest : AST.expr -> _ = function
       emit ld t3 (local_offset_exn l);
       emit ld t4 (local_offset_exn r);
       emit mulw rdest t3 t4
+  (* | AST.EBinop (">", EVar l, EConst c) ->
+      emit ld t3 (local_offset_exn l);
+      emit li t4 c;
+      emit mulw rdest t3 t4 *)
   | EBinop ("-", EVar l, EConst r) ->
       emit ld t3 (local_offset_exn l);
       emit li t4 r;
       emit sub rdest t3 t4
+  | EBinop ("-", EVar l, EVar r) ->
+      emit ld t3 (local_offset_exn l);
+      emit ld t4 (local_offset_exn r);
+      emit sub rdest t3 t4
+  | EBinop ("+", EVar l, EVar r) ->
+      emit ld t3 (local_offset_exn l);
+      emit ld t4 (local_offset_exn r);
+      emit add rdest t3 t4
   | expr ->
       emit comment (Format.asprintf "%a" AST.pp_expr expr);
-      emit comment (Format.asprintf "Not implemented %d" __LINE__)
+      emit comment (Format.asprintf "Not implemented %d" __LINE__);
+      emit call "not_implemented"
 
 let rec codegen_stmt : AST.stmt -> _ = function
   | AST.Assgn (l, EConst c) when Hashtbl.mem locals_pos l ->
@@ -45,6 +58,10 @@ let rec codegen_stmt : AST.stmt -> _ = function
       | EBinop (">", EVar v, EConst 0) ->
           emit ld t0 (local_offset_exn v);
           emit bge zero t0 lab_fin
+      | EBinop (">", EVar v, EConst c) ->
+          emit ld t0 (local_offset_exn v);
+          emit li t1 c;
+          emit bge t1 t0 lab_fin
       | econd ->
           codegen_exp t0 econd;
           emit beq t0 zero lab_fin);

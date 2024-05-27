@@ -26,3 +26,16 @@
    (run %{project_root}/lib/driver.exe %{src} -o factorial.S)
    (run riscv64-linux-gnu-as -march=rv64gc_zbb factorial.S -o factorial.o)
    (run riscv64-linux-gnu-ld %{runtime} factorial.o -o factorial.exe))))
+
+(rule
+ (targets fib_loop.exe fib_loop.S)
+ (deps
+  (:src fib_loop.pas)
+  (:runtime rv64_runtime.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/lib/driver.exe %{src} -o fib_loop.S)
+   (run riscv64-linux-gnu-as -march=rv64gc_zbb fib_loop.S -o fib_loop.o)
+   (run riscv64-linux-gnu-ld %{runtime} fib_loop.o -o fib_loop.exe))))
