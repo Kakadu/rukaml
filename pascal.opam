@@ -4,7 +4,7 @@ synopsis: "A short synopsis"
 description: "A longer description"
 maintainer: ["Maintainer Name"]
 authors: ["Author Name"]
-license: "LICENSE"
+license: "GPL-3.0-or-later"
 tags: ["topics" "to describe" "your" "project"]
 homepage: "https://github.com/username/reponame"
 doc: "https://url/to/documentation"
@@ -29,3 +29,4 @@ build: [
   ]
 ]
 dev-repo: "git+https://github.com/username/reponame.git"
+depexts: [ ["gcc-riscv64-linux-gnu"] { os-distribution = "ubuntu"} ]

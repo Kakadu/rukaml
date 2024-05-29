@@ -1,0 +1,1 @@
+depexts: [ ["gcc-riscv64-linux-gnu"] { os-distribution = "ubuntu"} ]
