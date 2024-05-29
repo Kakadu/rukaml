@@ -3,7 +3,7 @@ set history save
 set architecture riscv:rv64
 set sysroot /usr/riscv64-linux-gnu
 target remote :1234
-b memcpy
+b _start
 c
 x/8xg $sp
 #layout reg
@@ -11,3 +11,4 @@ x/8xg $sp
 tui layout example
 focus cmd
 
+# Use printf "%s", $a0 to print string, which pointer is in a0

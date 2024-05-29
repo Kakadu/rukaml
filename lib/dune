@@ -13,6 +13,8 @@
 
 (executable
  (name driver)
+ (package pascal)
+ (public_name pascal)
  (modules driver)
  (libraries lib_pascal))
 

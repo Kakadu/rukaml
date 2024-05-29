@@ -36,3 +36,41 @@
     main.o
     -o
     %{targets}))))
+
+(rule
+ (targets mmap_c_demo.exe)
+ (deps
+  (:src mmap_c_demo.c))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    riscv64-linux-gnu-gcc
+    -O3
+    -march=rv64gc_zbb
+    %{src}
+    -S
+    -o
+    mmap_c_demo.S)
+   (run
+    riscv64-linux-gnu-gcc
+    -O3
+    -march=rv64gc_zbb
+    %{src}
+    -o
+    mmap_c_demo.exe))))
+
+(rule
+ (targets mmap_asm_demo.exe)
+ (deps
+  (:src mmap_asm_demo.S))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-as -march=rv64gc_zbb %{src} -o main.o)
+   (run riscv64-linux-gnu-ld main.o -o %{targets}))))
+
+(cram
+ (deps ./mmap_c_demo.exe mmap_asm_demo.exe))
