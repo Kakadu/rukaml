@@ -47,3 +47,10 @@ int main(int argc, char **argv) {
 
     return EXIT_SUCCESS;
 }
+
+
+/*
+https://stackoverflow.com/questions/6988487/what-does-the-brk-system-call-do
+Recommends to use mmap instead.
+
+*/
