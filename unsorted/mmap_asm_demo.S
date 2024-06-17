@@ -61,45 +61,53 @@ _start:
     #set by zeros
     ld a0, (sp)
     li a1, 0
-    li a2, 12
+    li a2, 64
     call memset
 
     ld a0, (sp)
-    addi a0, a0, 11
+    addi a0, a0, 62
     li t0, 0xA # '\n'
     sb t0, (a0)
     # set by '0'
     ld a0, (sp)
     li a1, 0x30
-    li a2, 10
+    li a2, 62
     call memset
 
-    li a7, 64  # write on RISCV linux
-    li a0, 1
-    ld a1, (sp)
-    li a2, 12
-    ecall
+    # li      a7, 64  # write on RISCV linux
+    # li      a0, 1
+    # la      a1, helloworld
+    # li      a2, 13
+    # ecall
+
+    # li a7, 11  # write on RISCV linux
+    # li a0, 1
+    # ld a1, (sp)
+    # li a2, 63
+    # ecall
+
 
     li t5, 10  # counter
     ld t4, (sp) # curpos
+    add t4, t4, t5
     li t1, 0x30 # char zero
 fill_loop:
     beq t5, zero, fill_loop_fin
     addi t5, t5, -1
+    addi t4, t4, -1
     add t2, t1, t5
     sb t2, (t4)
-    addi t4, t4, 1
     j fill_loop
 fill_loop_fin:
     # print after filling
     li a7, 64  # write on RISCV linux
     li a0, 1
     ld a1, (sp)
-    li a2, 12
+    li a2, 10
     ecall
 
     li      a7, 93  # Service command code 93 terminates
-    li      a0, 1   # Use 0 return code
+    li      a0, 0   # Use 0 return code
     ecall           # Call linux to terminate the program
 
 main_map_failed:
