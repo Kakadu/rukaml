@@ -1,3 +1,7 @@
+(env
+ (dev
+  (flags :standard -warn-error -unused-open -warn-error -unused-field)))
+
 (rule
  (targets rv64_runtime.o)
  (deps
@@ -7,6 +11,7 @@
 
 (test
  (name test_pascal)
+ (modules test_pascal)
  (libraries lib_pascal)
  (preprocess
   (pps ppx_expect ppx_inline_test)))
@@ -39,3 +44,8 @@
    (run %{project_root}/lib/driver.exe %{src} -o fib_loop.S)
    (run riscv64-linux-gnu-as -march=rv64gc_zbb fib_loop.S -o fib_loop.o)
    (run riscv64-linux-gnu-ld %{runtime} fib_loop.o -o fib_loop.exe))))
+
+(executable
+ (name qc_parser)
+ (modules Pprint qc_parser)
+ (libraries lib_pascal qcheck-core qcheck-core.runner))

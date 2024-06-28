@@ -285,6 +285,10 @@ and statements () : _ list option =
   let stmts = loop [] in
   Some stmts
 
+let parse_ident_string s =
+  init s;
+  ident ()
+
 let parse_expr_string s =
   init s;
   expr ()
@@ -293,6 +297,10 @@ let parse_print_expr str =
   match parse_expr_string str with
   | Some ast -> Format.printf "%s\n%!" @@ [%show: AST.expr] ast
   | None -> print_endline "ERROR"
+
+let parse_stmt_string s =
+  init s;
+  statement ()
 
 let program () =
   let rec loop acc =
