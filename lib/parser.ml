@@ -29,10 +29,10 @@ end = struct
   let rollback dest = pos := dest
 end
 
+let is_ws = function '\n' | ' ' -> true | _ -> false
+
 let ws () =
-  while
-    !pos < !length && match !text.[!pos] with '\n' | ' ' -> true | _ -> false
-  do
+  while !pos < !length && is_ws !text.[!pos] do
     incr pos
   done
 
@@ -43,6 +43,11 @@ let is_alpha ch =
 let is_digit ch =
   let code = Char.code ch in
   Char.code '0' <= code && code <= Char.code '9'
+
+let is_alpha_digit ch =
+  let code = Char.code ch in
+  (Char.code 'a' <= code && code <= Char.code 'z')
+  || (Char.code '0' <= code && code <= Char.code '9')
 
 let char c =
   if !pos < !length && !text.[!pos] = c then (
@@ -59,7 +64,7 @@ let lookahead_cond cond =
 
 let lookahead_paren () =
   let curpos = ref !pos in
-  while !curpos < !length && is_digit !text.[!pos] do
+  while !curpos < !length && is_ws !text.[!pos] do
     incr curpos
   done;
   !curpos < !length && !text.[!curpos] = '('
@@ -84,16 +89,24 @@ let econst () =
 
 let ident_or_keyword () =
   ws ();
+  let oldpos = !pos in
   let acc = Buffer.create 5 in
   (* log "eident: pos = %d" !pos; *)
-  while !pos < !length && is_alpha !text.[!pos] do
+  if !pos < !length && is_alpha !text.[!pos] then (
     Buffer.add_char acc !text.[!pos];
-    incr pos
-  done;
+    incr pos);
+
+  if Buffer.length acc > 0 then
+    while !pos < !length && is_alpha_digit !text.[!pos] do
+      Buffer.add_char acc !text.[!pos];
+      incr pos
+    done;
   if Buffer.length acc > 0 then
     let s = Buffer.contents acc in
     Some s
-  else None
+  else (
+    pos := oldpos;
+    None)
 
 let ident () =
   match ident_or_keyword () with Some s when is_keyword s -> None | x -> x
@@ -209,6 +222,10 @@ and primary () =
 
 let expr = expr_plus
 
+let ( ** ) a b () =
+  a ();
+  b ()
+
 let rec statement () =
   let ( >>= ) = Option.bind in
   let rb1 = Rollback.make () in
@@ -217,7 +234,13 @@ let rec statement () =
     let () = Rollback.rollback rb1 in
     None
   in
-
+  let and_semic_too rez =
+    ws ();
+    if char ';' then Some rez
+    else
+      let () = Rollback.rollback rb1 in
+      None
+  in
   match ident_or_keyword () with
   | Some "fi" | None -> rollback ()
   | Some "while" ->
@@ -232,7 +255,9 @@ let rec statement () =
         ws ();
         match ident_or_keyword () with
         | None -> rollback ()
-        | Some "done" -> Some (While (econd, ebody))
+        | Some "done" ->
+            ws ();
+            if char ';' then Some (While (econd, ebody)) else rollback ()
         | Some _ -> rollback ())
       else rollback ()
   | Some "if" ->
@@ -248,19 +273,18 @@ let rec statement () =
         >>= fun ethen ->
         ws ();
         (* log "%s %d. ethen.length = %d" __FILE__ __LINE__ (List.length ethen); *)
-        (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
+        log "%s %d. pos = %d" __FILE__ __LINE__ !pos;
         match ident_or_keyword () with
         | None ->
             (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
             let () = Rollback.rollback rb1 in
             None
-        | Some "fi" ->
-            (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
-            Some (Ite (econd, ethen, []))
+        | Some "fi" -> and_semic_too (Ite (econd, ethen, []))
         | Some "else" ->
             (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
             statements () >>= fun eelse ->
-            if keyword "fi" then Some (Ite (econd, ethen, eelse)) else None
+            if keyword "fi" then and_semic_too (Ite (econd, ethen, eelse))
+            else None
         | Some _ -> rollback ())
       else rollback ()
   | Some kw when is_keyword kw -> rollback ()
@@ -280,7 +304,9 @@ and statements () : _ list option =
     | None ->
         (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
         List.rev acc
-    | Some v -> loop (v :: acc)
+    | Some v ->
+        log "Statement eaten: %s\n" (show_stmt v);
+        loop (v :: acc)
   in
   let stmts = loop [] in
   Some stmts
@@ -434,7 +460,7 @@ let%expect_test "  " =
 
 let%expect_test "  " =
   logoff ();
-  init "while x do  done";
+  init "while x do  done;";
   (match statements () with
   | Some [ _ ] -> Printf.printf "DONE"
   | _ -> print_endline "failed");
@@ -448,13 +474,13 @@ let%test "keyword 'then' " =
 
 let%expect_test "program" =
   logoff ();
-  parse_print_stmt "if a then fi";
+  parse_print_stmt "if a then fi;";
   [%expect {|
     (Ite ((EVar "a"), [], [])) |}]
 
 let%expect_test "program 'while'" =
   logoff ();
-  parse_print_stmt "while a do x=5; done";
+  parse_print_stmt "while a do x=5; done;";
   [%expect {|
     (While ((EVar "a"), [(Assgn ("x", (EConst 5)))])) |}]
 
@@ -462,7 +488,7 @@ let%expect_test "program" =
   parse_print_stmt "x=1;";
   [%expect {|
     (Assgn ("x", (EConst 1))) |}];
-  parse_print_stmt "if a then x=1; y=2; else z=3; fi";
+  parse_print_stmt "if a then x=1; y=2; else z=3; fi;";
   [%expect
     {|
     (Ite ((EVar "a"), [(Assgn ("x", (EConst 1))); (Assgn ("y", (EConst 2)))],
@@ -473,7 +499,7 @@ let%expect_test "program popcount" =
     {|
          x=7;
          acc=0;
-         while x>0 do acc=acc+(x mod 2); x=x/2; done
+         while x>0 do acc=acc+(x mod 2); x=x/2; done;
        |};
   [%expect
     {|
@@ -491,7 +517,7 @@ let%expect_test "program popcount" =
 let factorial = {|
   x=5;
   acc=1;
-  while x>0 do acc=acc*x; x=x-1;  done
+  while x>0 do acc=acc*x; x=x-1;  done;
 |}
 
 let%expect_test "program factorial" =
@@ -504,4 +530,16 @@ let%expect_test "program factorial" =
            (Assgn ("x", (EBinop ("-", (EVar "x"), (EConst 1)))))]
          ))
       ] |}];
+  logoff ()
+
+let%expect_test _ =
+  parse_print_stmt "while 21 do while 21 do done; done;";
+  [%expect {|
+    (While ((EConst 21), [(While ((EConst 21), []))]))
+ |}];
+  logoff ()
+
+let%expect_test _ =
+  parse_print_stmt "if 21 then else if 22 then else fi; fi;";
+  [%expect {| (Ite ((EConst 21), [], [(Ite ((EConst 22), [], []))])) |}];
   logoff ()

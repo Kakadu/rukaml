@@ -1,6 +1,13 @@
 (env
  (dev
-  (flags :standard -warn-error -unused-open -warn-error -unused-field)))
+  (flags
+   :standard
+   -warn-error
+   -unused-open
+   -warn-error
+   -unused-field
+   -warn-error
+   -unused-value-declaration)))
 
 (rule
  (targets rv64_runtime.o)

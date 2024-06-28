@@ -12,7 +12,7 @@ let semic_list eta = pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ";@ ") eta
 
 let pp_stmt =
   let rec helper ppf = function
-    | Assgn (v, e) -> fprintf ppf "%s:=%a;" v pp_expr e
+    | Assgn (v, e) -> fprintf ppf "%s=%a;" v pp_expr e
     | Ite (cond, th, el) ->
         fprintf ppf "if %a then %a else %a fi;" pp_expr cond (semic_list helper)
           th (semic_list helper) el

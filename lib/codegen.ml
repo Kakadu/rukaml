@@ -91,7 +91,7 @@ let codegen : AST.program -> Format.formatter -> unit =
 let%expect_test _ =
   let s = {| x=5;
   acc=1;
-  while x>0 do acc=acc*x; x=x-1;  done |} in
+  while x>0 do acc=acc*x; x=x-1;  done; |} in
   Parser.init s;
   Hashtbl.add locals_pos "x" 0;
   Hashtbl.add locals_pos "acc" 1;
