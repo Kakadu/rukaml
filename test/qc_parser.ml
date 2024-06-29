@@ -5,17 +5,26 @@ include struct
 
   let infix_op = oneof [ return "+" ]
 
-  let ident_gen =
-    (* add_shrink_invariant (fun s -> not (Parser.is_keyword s))
-       @@ *)
-    map2 (Printf.sprintf "%c%c") (char_range 'a' 'z')
-      (oneof [ char_range 'a' 'z'; numeral ])
-  (* >>= fun s -> if Parser.is_keyword s then oneof [] else return s *)
+  include (
+    struct
+      let ident_gen =
+        (* add_shrink_invariant (fun s -> not (Parser.is_keyword s))
+           @@ *)
+        map2 (Printf.sprintf "%c%c") (char_range 'a' 'z')
+          (oneof [ char_range 'a' 'z'; numeral ])
+        >>= fun s ->
+        if Parser.is_keyword s then
+          map (Printf.sprintf "%s%c" s) (oneof [ char_range 'a' 'z'; numeral ])
+        else return s
+    end :
+      sig
+        val ident_gen : ident t
+      end)
 
   let expr_gen =
     sized
     @@ fix (fun self -> function
-         | 0 -> oneof [ return (EConst 42) ]
+         | 0 -> oneof [ return (EConst 42); (ident_gen >|= fun i -> EVar i) ]
          | n ->
              let half = self (n / 10) in
              oneof [ map3 (fun op l r -> EBinop (op, l, r)) infix_op half half ])
@@ -121,35 +130,3 @@ let print_parse_is_identity_stmt =
   make_print_parse ~name:"print/parse stmt" arbitrary_stmt
     ~of_string:(fun x -> Option.get (Parser.parse_stmt_string x))
     ~to_string:Pprint.show_stmt Stdlib.( = )
-
-type cfg = {
-  mutable cfg_expr : bool;
-  mutable cfg_stmt : bool; (* mutable cfg_fun_m : bool; *)
-}
-
-let cfg = { cfg_expr = false; cfg_stmt = false (* cfg_fun_m = true  *) }
-
-let () =
-  Arg.parse
-    [
-      ("-expr", Arg.Unit (fun () -> cfg.cfg_expr <- true), "");
-      ("-stmt", Arg.Unit (fun () -> cfg.cfg_stmt <- true), "");
-      (* ("-fun-m", Arg.Unit (fun () -> cfg.cfg_fun_m <- true), ""); *)
-    ]
-    (fun _ -> assert false)
-    "";
-
-  QCheck_base_runner.set_seed 227547128;
-  Format.printf "Failed ident tests: %d\n%!"
-  @@ QCheck_base_runner.run_tests [ print_parse_is_identity_identifier ];
-  Format.printf "Failed expr tests: %d\n%!"
-  @@ QCheck_base_runner.run_tests [ print_parse_is_identity_expression ];
-  Format.printf "Failed stmt tests: %d\n%!"
-  @@ QCheck_base_runner.run_tests [ print_parse_is_identity_stmt ];
-  (* if cfg.cfg_rule then
-       Format.printf "Failed rule tests: %d\n%!"
-       @@ QCheck_base_runner.run_tests [ print_parse_is_identity_rule ];
-     if cfg.cfg_cond then
-       Format.printf "Failed condition tests: %d\n%!"
-       @@ QCheck_base_runner.run_tests [ print_parse_is_identity_condition ]; *)
-  ()

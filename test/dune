@@ -52,7 +52,12 @@
    (run riscv64-linux-gnu-as -march=rv64gc_zbb fib_loop.S -o fib_loop.o)
    (run riscv64-linux-gnu-ld %{runtime} fib_loop.o -o fib_loop.exe))))
 
-(executable
- (name qc_parser)
+(library
+ (name qc_lib)
  (modules Pprint qc_parser)
- (libraries lib_pascal qcheck-core qcheck-core.runner))
+ (libraries lazy-trie lib_pascal qcheck-core.runner))
+
+(executable
+ (name qc)
+ (modules qc)
+ (libraries qc_lib qcheck-core.runner))
