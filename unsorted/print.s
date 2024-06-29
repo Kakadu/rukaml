@@ -1,6 +1,7 @@
 # https://github.com/riscv/riscv-v-spec/blob/master/v-spec.adoc
 .section .data
-helloworld: .string "Hello_World!\n\0"
+helloworld: .string "Hello, World!\n"
+.equ HELLO_WORLD_LEN,14
 varname:    .string "varname\n"
 str2:       .string "01234567012345670123456701234567\n" # 32+1 bytes
 .equ BUFSIZE,32
@@ -65,14 +66,14 @@ myitoa_loop:
 
 .global _start
 _start:
-    .option push
-    .option norelax
+.option push
+.option norelax
     la gp, __global_pointer$
-    .option pop
+.option pop
     li      a7, 64  # write on RISCV linux
     li      a0, 1   # stdout
     la      a1, helloworld
-    li      a2, 14
+    li      a2, HELLO_WORLD_LEN
     ecall
 
     li      a7, 64  # write on RISCV linux

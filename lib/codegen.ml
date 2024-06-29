@@ -75,6 +75,7 @@ let rec codegen_stmt : AST.stmt -> _ = function
 let codegen : AST.program -> Format.formatter -> unit =
  fun (locals, prog) ppf ->
   List.iteri (fun i s -> Hashtbl.add locals_pos s i) locals;
+  emit comment "Add $gp magic";
   emit addi SP SP (-8 * List.length locals);
   List.iter codegen_stmt prog;
 
@@ -103,6 +104,7 @@ let%expect_test _ =
       Format.print_flush ());
   [%expect
     {|
+    # Add $gp magic
       addi sp, sp, 0
       li t0, 5
       sd t0, (sp)

@@ -11,14 +11,8 @@
   (promote (until-clean)))
  (action
   (progn
-   ;(run riscv64-linux-gnu-gcc -march=rv64gc_zbb %{runtime} -c -o runtime.o)
-   (run riscv64-linux-gnu-as -march=rv64gc_zbb %{src} -o main.o)
-   (run
-    riscv64-linux-gnu-ld
-    ; -march=rv64gc_zbb
-    main.o
-    -o
-    %{targets}))))
+   (run riscv64-linux-gnu-as -march=rv64gc_zbb %{src} -o print.o)
+   (run riscv64-linux-gnu-ld print.o -o %{targets}))))
 
 (rule
  (targets strings.exe)
