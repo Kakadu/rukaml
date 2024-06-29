@@ -4,7 +4,7 @@ all:
 	dune test
 
 OPAM_PACKAGES := dune angstrom bisect_ppx ppx_expect ppx_inline_test ppx_deriving ppx_show       \
-	      qcheck-core lazy-trie
+	      qcheck-core
 
 devdeps: $(eval OPAM_PACKAGES += ocaml-lsp-server ocamlformat.0.26.2)
 deps:

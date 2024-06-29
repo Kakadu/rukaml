@@ -55,7 +55,7 @@
 (library
  (name qc_lib)
  (modules Pprint qc_parser)
- (libraries lazy-trie lib_pascal qcheck-core.runner))
+ (libraries lib_pascal qcheck-core.runner))
 
 (executable
  (name qc)
