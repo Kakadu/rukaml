@@ -35,10 +35,10 @@ let () =
           printfn ".extern trace_variable";
           printfn ".global _start";
           printfn "_start:";
-          printfn "  .option push";
-          printfn "  .option norelax";
+          printfn ".option push";
+          printfn ".option norelax";
           printfn "  la gp, __global_pointer$";
-          printfn "  .option pop";
+          printfn ".option pop";
           Codegen.codegen (List.of_seq (AST.String_set.to_seq locals), p) ppf;
 
           printfn "  li a0, 0";
