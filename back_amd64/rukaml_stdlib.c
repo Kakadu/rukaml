@@ -221,6 +221,7 @@ typedef void *(*fun8)(void *, void *, void *, void *, void *, void *, void *, vo
 typedef void *(*fun9)(void *, void *, void *, void *, void *, void *, void *, void *, void *);
 typedef void *(*fun10)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
 typedef void *(*fun11)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+typedef void *(*fun12)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
 
 void *rukaml_apply0(fun0 f)
 {
@@ -257,6 +258,10 @@ void *rukaml_apply4(fun10 f, void *arg1, void *arg2, void *arg3, void *arg4)
 void *rukaml_apply5(fun11 f, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5)
 {
   return f(0, 0, 0, 0, 0, 0, arg1, arg2, arg3, arg4, arg5);
+}
+void *rukaml_apply6(fun12 f, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5, void *arg6)
+{
+  return f(0, 0, 0, 0, 0, 0, arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 typedef struct
@@ -388,11 +393,23 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
     case 5:
       return rukaml_apply5(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2], f_closure->args[3], f_closure->args[4]);
       break;
+    case 6:
+      return rukaml_apply6(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2], f_closure->args[3], f_closure->args[4], f_closure->args[5]);
+      break;
+    // case 7:
+    //   void** stack_args = alloca(f_closure->argsc * 8); //8 bytes per argument (int64)
+    //   for (int i=0; i<f_closure->argsc; ++i)
+    //     stack_args[i] = (void*)f_closure->args[i];
+    //   return ((fun0)f_closure->code)();
 #pragma GCC diagnostic pop
     default:
-      printf("FUCK, f_closure->argsc = %lu\n", f_closure->argsc);
-      printf("Application of too many arguments is not implemented!");
-      assert(false);
+      void** stack_args = alloca(f_closure->argsc * 8); //8 bytes per argument (int64)
+      for (int i=0; i<f_closure->argsc; ++i)
+        stack_args[i] = (void*)f_closure->args[i];
+      return ((fun0)f_closure->code)();
+      // printf("FUCK, f_closure->argsc = %lu\n", f_closure->argsc);
+      // printf("Application of too many arguments is not implemented!");
+      // assert(false);
     }
   }
   return f_closure;
