@@ -60,6 +60,29 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (cram
+ (applies_to long_app)
+ (deps
+  ./long_app.ml
+  long_app.exe
+  ;
+  ))
+
+(rule
+ (targets long_app.asm long_app.exe)
+ (deps
+  (:src long_app.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o long_app.asm)
+   (run nasm -g -F dwarf -felf64 long_app.asm -o long_app.o)
+   (run gcc-12 -g -no-pie long_app.o %{stdlib} -o long_app.exe))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(cram
  (applies_to run fib fack print tuples)
  (deps
   ../llvm/fack.ml
