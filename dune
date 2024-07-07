@@ -6,7 +6,15 @@
 (library
  (name miniml)
  (public_name MiniML.frontend)
- (modules parsetree Pprint parsing typedtree Pprinttyped inferencer stuff)
+ (modules
+  parsetree
+  Pprint
+  parsing
+  Ident
+  typedtree
+  Pprinttyped
+  inferencer
+  stuff)
  (inline_tests)
  (libraries ppx_show.runtime angstrom)
  (preprocess

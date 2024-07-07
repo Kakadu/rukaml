@@ -39,7 +39,10 @@ let int_typ = tprim "int"
 let bool_typ = tprim "bool"
 let unit_typ = tprim "unit"
 
-type pattern = Parsetree.pattern [@@deriving show { with_path = false }]
+type pattern =
+  | Tpat_var of Ident.t
+  | Tpat_tuple of pattern * pattern * pattern list
+[@@deriving show { with_path = false }]
 
 type expr =
   | TUnit
@@ -90,7 +93,7 @@ let compact_expr =
 
 type value_binding =
   { tvb_flag : Parsetree.rec_flag
-  ; tvb_pat : Parsetree.pattern
+  ; tvb_pat : pattern
   ; tvb_body : expr
   ; tvb_typ : scheme
   }

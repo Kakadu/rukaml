@@ -40,7 +40,9 @@ val int_typ : ty
 val bool_typ : ty
 val unit_typ : ty
 
-type pattern = Parsetree.pattern
+type pattern =
+  | Tpat_var of Ident.t
+  | Tpat_tuple of pattern * pattern * pattern list
 
 val show_pattern : pattern -> string
 
@@ -53,7 +55,7 @@ type expr =
   | TApp of expr * expr * ty (** Application f x *)
   | TTuple of expr * expr * expr list * ty (** Tuple (a,b,...,_) as a tuple (a,b,...) *)
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
-      (** let rec? .. = ... in ...  *)
+  (** let rec? .. = ... in ... *)
 
 val type_of_expr : expr -> ty
 val type_without_links : ty -> ty
@@ -61,7 +63,7 @@ val compact_expr : expr -> expr
 
 type value_binding =
   { tvb_flag : Parsetree.rec_flag
-  ; tvb_pat : Parsetree.pattern
+  ; tvb_pat : pattern
   ; tvb_body : expr
   ; tvb_typ : scheme
   }

@@ -15,6 +15,7 @@ let log fmt =
 
 type error =
   [ `Occurs_check
+  | `No_ident of Ident.t
   | `NoVariable of string
   | `UnificationFailed of ty * ty
   | `Only_varibles_on_the_left_of_letrec
@@ -22,6 +23,7 @@ type error =
 
 let pp_error ppf : error -> _ = function
   | `Occurs_check -> Format.fprintf ppf "Occurs check failed"
+  | `No_ident id -> Format.fprintf ppf "Undefined variable '%a'" Ident.pp id
   | `NoVariable s -> Format.fprintf ppf "Undefined variable '%s'" s
   | `UnificationFailed (l, r) ->
     Format.fprintf ppf "unification failed on %a and %a" Pprint.pp_typ l Pprint.pp_typ r
@@ -64,23 +66,23 @@ end = struct
     fresh_counter * cur_level -> (fresh_counter * cur_level) * ('a, error) Result.t
 
   let ( >>= ) : 'a 'b. 'a t -> ('a -> 'b t) -> 'b t =
-   fun m f st ->
+    fun m f st ->
     let last, r = m st in
     match r with
     | Result.Error x -> last, Error x
     | Ok a -> f a last
- ;;
+  ;;
 
   let fail e st = st, Result.fail e
   let return x last = last, Result.return x
   let bind x ~f = x >>= f
 
   let ( >>| ) : 'a 'b. 'a t -> ('a -> 'b) -> 'b t =
-   fun x f st ->
+    fun x f st ->
     match x st with
     | st, Ok x -> st, Ok (f x)
     | st, Result.Error e -> st, Result.Error e
- ;;
+  ;;
 
   module Syntax = struct
     let ( let* ) x f = bind x ~f
@@ -88,13 +90,13 @@ end = struct
   end
 
   let fresh : int t =
-   fun (last_fresh, level) -> (last_fresh + 1, level), Result.Ok last_fresh
- ;;
+    fun (last_fresh, level) -> (last_fresh + 1, level), Result.Ok last_fresh
+  ;;
 
   let level : int t = fun ((_, level) as info) -> info, Result.Ok level
 
   (* let set_level : int -> unit t = fun n (fresh, _) -> (fresh, n), Result.Ok ()
-      *)
+  *)
   let enter_level : unit t = fun (fresh, level) -> (fresh, 1 + level), Result.Ok ()
   let leave_level : unit t = fun (fresh, level) -> (fresh, level - 1), Result.Ok ()
   let run : 'a. 'a t -> ('a, error) Result.t = fun m -> snd (m (0, 0))
@@ -166,12 +168,12 @@ end = struct
   ;;
 
   let union : t -> t -> t =
-   fun xs ys ->
+    fun xs ys ->
     List.fold_left ys ~init:xs ~f:(fun acc (k, v) ->
       match List.Assoc.find acc ~equal:Int.equal k with
       | None -> (k, v) :: acc
       | Some _x -> acc)
- ;;
+  ;;
 
   let compose s1 s2 = union (List.Assoc.map s2 ~f:(apply s1)) s1
   let ( ++ ) = compose
@@ -265,35 +267,39 @@ let%expect_test " " =
 ;;
 
 module TypeEnv : sig
-  type t = (string * scheme) list
+  type t = scheme Ident.Ident_map.t
 
   val pp : Format.formatter -> t -> unit
   val empty : t
-  val extend : string * scheme -> t -> t
+  val extend : varname:string -> Ident.t -> scheme -> t -> t
   val apply : Subst.t -> t -> t
-  val find_exn : string -> t -> scheme
+  val find_exn : Ident.t -> t -> scheme
+  val find_by_string_exn : string -> t -> scheme
   val free_vars : t -> Var_set.t
 end = struct
-  type t = (string * scheme) list
+  open Ident
 
-  let extend h e = h :: e
-  let empty = []
+  type t = scheme Ident.Ident_map.t
+
+  let extend ~varname id scheme map = Ident.Ident_map.add varname id scheme map
+  let empty = Ident.Ident_map.empty
 
   let free_vars : t -> Var_set.t =
-    List.fold_left ~init:Var_set.empty ~f:(fun acc (_, s) ->
+    Ident_map.fold_idents ~init:Var_set.empty ~f:(fun acc (_, s) ->
       Var_set.union acc (Scheme.free_vars s))
   ;;
 
-  let apply s env = List.Assoc.map env ~f:(Scheme.apply s)
+  let apply s env = Ident_map.map env ~f:(Scheme.apply s)
 
   let pp ppf xs =
     Stdlib.Format.fprintf ppf "{| ";
-    List.iter xs ~f:(fun (n, s) ->
-      Stdlib.Format.fprintf ppf "%s -> %a; " n Pprint.pp_scheme s);
+    Ident_map.iter_idents xs ~f:(fun n s ->
+      Stdlib.Format.fprintf ppf "%a -> %a; " Ident.pp n Pprint.pp_scheme s);
     Stdlib.Format.fprintf ppf "|}%!"
   ;;
 
-  let find_exn name xs = List.Assoc.find_exn ~equal:String.equal xs name
+  let find_exn = Ident.Ident_map.find_by_ident
+  let find_by_string_exn = Ident_map.find_by_string_exn
 end
 
 open R
@@ -337,7 +343,7 @@ let unify l r =
 ;;
 
 let instantiate ?(level = 0) : scheme -> ty R.t =
- fun (S (bs, t)) ->
+  fun (S (bs, t)) ->
   let rec next_name () =
     let* new_name = fresh in
     if Var_set.mem new_name bs then next_name () else return new_name
@@ -352,7 +358,7 @@ let instantiate ?(level = 0) : scheme -> ty R.t =
 ;;
 
 let generalize : level:int -> Type.t -> Scheme.t =
- fun ~level ->
+  fun ~level ->
   let rec helper acc typ : binder_set =
     match typ.typ_desc with
     | V { var_level; binder } -> if var_level > level then Var_set.add binder acc else acc
@@ -370,35 +376,42 @@ let generalize : level:int -> Type.t -> Scheme.t =
 
 let lookup_env e xs =
   (* log "Looking up for %s" e;
-  log "  inside %a" TypeEnv.pp xs; *)
-  match List.Assoc.find_exn xs ~equal:String.equal e with
-  | (exception Stdlib.Not_found) | (exception Not_found_s _) -> fail (`NoVariable e)
+     log "  inside %a" TypeEnv.pp xs; *)
+  match List.Assoc.find_exn xs ~equal:Ident.equal e with
+  | (exception Stdlib.Not_found) | (exception Not_found_s _) -> fail (`No_ident e)
   | scheme -> instantiate scheme
 ;;
 
 let lookup_scheme : _ -> TypeEnv.t -> scheme t =
- fun e xs ->
+  fun id xs ->
   (* log "Looking up for %s" e;
-  log "  inside %a" TypeEnv.pp xs; *)
-  match List.Assoc.find_exn xs ~equal:String.equal e with
-  | (exception Stdlib.Not_found) | (exception Not_found_s _) -> fail (`NoVariable e)
+     log "  inside %a" TypeEnv.pp xs; *)
+  match TypeEnv.find_exn id xs with
+  | (exception Stdlib.Not_found) | (exception Not_found_s _) -> fail (`No_ident id)
   | scheme -> return scheme
+;;
+
+let lookup_scheme_by_string : _ =
+  fun s env ->
+  match TypeEnv.find_by_string_exn s env with
+  | scheme -> return scheme
+  | (exception Stdlib.Not_found) | (exception Not_found_s _) -> fail (`NoVariable s)
 ;;
 
 let fresh_var ~level = fresh >>| fun n -> tv n ~level
 
 let pp_env subst ppf env =
   let env : TypeEnv.t =
-    List.map ~f:(fun (k, S (args, v)) -> k, S (args, Subst.apply subst v)) env
+    Ident.Ident_map.map ~f:(fun (S (args, v)) -> S (args, Subst.apply subst v)) env
   in
   TypeEnv.pp ppf env
 ;;
 
-(** Introduce many fresh variables using in the for of a pattern  *)
+(** Introduce many fresh variables using in the for of a pattern *)
 let rec check_pat ~level env : _ -> (_ * ty) t = function
   | Parsetree.PVar x ->
     let* tx = fresh_var ~level in
-    let env = TypeEnv.extend (x, Scheme.make_mono tx) env in
+    let env = TypeEnv.extend ~varname:x (Ident.of_string x) (Scheme.make_mono tx) env in
     return (env, tx)
   | Parsetree.PTuple (p1, p2, []) ->
     let* env, t1 = check_pat ~level env p1 in
@@ -418,23 +431,24 @@ let infer env expr =
     Int.decr current_level
   in
   let rec (helper : TypeEnv.t -> Parsetree.expr -> (ty * Typedtree.expr) R.t) =
-   fun env -> function
+    fun env -> function
     | Parsetree.EVar "=" ->
       (* TODO: make equality predefined *)
       let typ = tarrow int_typ (tarrow int_typ bool_typ) in
       return (typ, TVar ("=", typ))
     | Parsetree.EVar x ->
-      let* scheme = lookup_scheme x env in
+      let* scheme = lookup_scheme_by_string x env in
       let* typ = instantiate ~level:!current_level scheme in
       return (typ, TVar (x, typ))
     | EUnit -> return (unit_typ, TUnit)
     (* lambda abstraction *)
     | ELam (PVar x, e1) ->
       let* tx = fresh_var ~level:!current_level in
-      let env2 = TypeEnv.extend (x, S (Var_set.empty, tx)) env in
+      let xID = Ident.of_string x in
+      let env2 = TypeEnv.extend ~varname:x xID (S (Var_set.empty, tx)) env in
       let* ty, tbody = helper env2 e1 in
       let trez = tarrow tx ty in
-      return (trez, TLam (PVar x, tbody, trez))
+      return (trez, TLam (Tpat_var xID, tbody, trez))
     | Parsetree.ELam ((PTuple _ as pat), body) ->
       let* env, tp = check_pat ~level:!current_level env pat in
       let* ty, tbody = helper env body in
@@ -547,7 +561,7 @@ let vb ?(env = start_env) (flg, pat, body) =
   in
   run comp
   |> Result.map ~f:(fun (ty, body) ->
-       value_binding flg pat body (generalize ~level:(-1) ty))
+    value_binding flg pat body (generalize ~level:(-1) ty))
   |> Result.map_error ~f:(function #error as x -> x)
 ;;
 

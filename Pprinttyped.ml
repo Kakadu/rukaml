@@ -39,6 +39,20 @@ let pp_typ_hum =
   pp_typ CArrow_right
 ;;
 
+let rec pp_pattern ppf = function
+  | Tpat_var id -> Ident.pp ppf id
+  | Tpat_tuple (h1, h2, rest) ->
+    fprintf
+      ppf
+      "(%a, %a, %a)"
+      pp_pattern
+      h1
+      pp_pattern
+      h2
+      (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " ") pp_pattern)
+      rest
+;;
+
 let pp_expr =
   let open Format in
   let rec extract_lambdas acc e =
@@ -58,7 +72,7 @@ let pp_expr =
        | ps, e ->
          if pars then fprintf ppf "(";
          fprintf ppf "fun ";
-         List.iter (fun name -> fprintf ppf "%a " Pprint.pp_pattern name) ps;
+         List.iter (fun name -> fprintf ppf "%a " pp_pattern name) ps;
          fprintf ppf "-> %a" expr_no e;
          if pars then fprintf ppf ")")
     | TApp (TApp (TVar ("+", _), l, _), r, _) ->
@@ -102,27 +116,13 @@ let pp_expr =
       List.iter (fprintf ppf ", %a" expr_no) es;
       fprintf ppf ")@]"
   and pp_typ = pp_typ_hum
-  and pp_pat ppf s = fprintf ppf "%a" Pprint.pp_pattern s
+  and pp_pat ppf s = fprintf ppf "%a" pp_pattern s
   and expr ppf = expr_gen ~pars:true ppf
   and expr_no ppf = expr_gen ~pars:false ppf in
   fun ?(pars = false) ppf e -> fprintf ppf "@[<v>%a@]" (expr_gen ~pars) e
 ;;
 
 let pp_hum = pp_expr ~pars:false
-
-let rec pp_pattern ppf = function
-  | Parsetree.PVar s -> Format.fprintf ppf "%s" s
-  | PTuple (h1, h2, rest) ->
-    fprintf
-      ppf
-      "(%a, %a, %a)"
-      pp_pattern
-      h1
-      pp_pattern
-      h2
-      (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " ") pp_pattern)
-      rest
-;;
 
 let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
   fprintf

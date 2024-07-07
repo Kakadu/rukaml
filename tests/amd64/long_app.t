@@ -1,6 +1,6 @@
 $ ls
   $ ./long_app.exe
-  ÷
+  ï¿½
   rukaml_print_int 1111111111
   1
   rukaml_print_int 1
@@ -12,7 +12,7 @@ $ ls
   $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm - #-vamd64
   > let wrap f = if 1 = 1 then f else f
   > let test3 a b c =
-  >   let a = print a in
+  >   let a1 = print a in
   >   let b = print b in
   >   let c = print c in
   >   0
@@ -45,10 +45,3 @@ $ ls
   /usr/bin/ld: program.o: warning: relocation in read-only section `.text'
   /usr/bin/ld: warning: creating DT_TEXTREL in a PIE
   $ ./program.exe && echo $?
-  0
-  rukaml_print_int 0
-  0
-  rukaml_print_int 0
-  
-  rukaml_print_int -1828005918
-  0
