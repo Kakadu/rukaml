@@ -20,7 +20,7 @@
   } */
 
 #define DEBUG
-#undef DEBUG
+//#undef DEBUG
 
 static uint64_t log_level = 0;
 
@@ -256,7 +256,7 @@ void *rukaml_apply3(fun11 f, void *arg1, void *arg2, void *arg3)
 {
 #ifdef DEBUG
   printf("call %s with code ptr = 0x%" PRIx64 "\n", __func__, (uint64_t)f);
-  printf("arg1 = 0x%" PRIx64 "; arg2 = 0x%" PRIx64"; arg3 = 0x%" PRIx64 "\n", 
+  printf("arg1 = 0x%" PRIx64 "; arg2 = 0x%" PRIx64"; arg3 = 0x%" PRIx64 "\n",
     (uint64_t)arg1, (uint64_t)arg2, (uint64_t)arg3);
   fflush(stdout);
 #endif

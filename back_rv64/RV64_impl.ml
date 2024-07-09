@@ -394,8 +394,11 @@ let generate_body is_toplevel body =
             failwith "Should not happen")
     | CApp (APrimitive "=", AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
         (* TODO: user Addr_of_local.pp_local_exn *)
-        if l = r then failwiths "not implemented %d" __LINE__
-          (* printfn ppf "  mov qword %a, 1" Addr_of_local.pp_dest dest *)
+        if l = r then (
+          emit li t0 1;
+          emit sd_dest t0 dest
+          (* failwiths "not implemented %d" __LINE__ *)
+          (* printfn ppf "  mov qword %a, 1" Addr_of_local.pp_dest dest *))
         else failwiths "not implemented %d" __LINE__
           (* printfn ppf "  mov qword %a, 0" Addr_of_local.pp_dest dest *)
     | CApp (APrimitive ("=" as op), AConst (PConst_int n), [ AVar vname ])

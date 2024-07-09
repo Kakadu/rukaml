@@ -9,7 +9,7 @@
   ;
   ))
 
-;;;;; fac 
+;;;;; fac
 
 (rule
  (targets fac.s)
@@ -60,7 +60,7 @@
   ;
   ))
 
-;;;;; fib 
+;;;;; fib
 
 (rule
  (targets fib.s)
@@ -279,5 +279,50 @@
  (deps
   %{project_root}/back_rv64/rukaml_stdlib.o
   ./fac_cps.ml
+  ;
+  ))
+
+;;;;; long_app
+
+(rule
+ (targets long_app.S)
+ (deps
+  (:src long_app.ml))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    --no-start
+    -vamd64
+    %{src}))))
+
+(rule
+ (targets long_app.exe)
+ (deps
+  (:src long_app.S)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc -g -c %{src} -o long_app.o)
+   (run
+    riscv64-linux-gnu-gcc
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    long_app.o
+    -o
+    %{targets}))))
+
+(cram
+ (applies_to long_app)
+ (deps
+  %{project_root}/back_rv64/rukaml_stdlib.o
+  ./long_app.ml
+  long_app.exe
   ;
   ))
