@@ -151,12 +151,12 @@ let allocate_locals ppf input_anf : now:unit -> unit =
   let names = ref [] in
   let rec helper = function
     | ANF.EComplex c -> helper_c c
-    | ELet (_flg, PVar name, rhs, where_) ->
+    | ELet (_flg, Tpat_var name, rhs, where_) ->
         Addr_of_local.extend name;
         names := name :: !names;
         helper_c rhs;
         helper where_
-    | ELet (_, PTuple (_, _, _), _, _) -> assert false
+    | ELet (_, Tpat_tuple (_, _, _), _, _) -> assert false
   and helper_c = function
     | CIte (_, th, el) ->
         helper th;
@@ -252,7 +252,7 @@ let generate_body is_toplevel ppf body =
 
   let rec helper dest = function
     | Compile_lib.ANF.EComplex c -> helper_c dest c
-    | ELet (_, Miniml.Parsetree.PVar name, rhs, wher) ->
+    | ELet (_, Tpat_var name, rhs, wher) ->
         assert (Addr_of_local.contains name);
         let local = DStack_var name in
         (* printfn ppf "    ;; calculate rhs and put into %a. offset = %d" pp_dest
@@ -260,7 +260,7 @@ let generate_body is_toplevel ppf body =
            (Addr_of_local.find_exn name); *)
         helper_c local rhs;
         helper dest wher
-    | ELet (_, PTuple (_, _, _), _, _) -> assert false
+    | ELet (_, Tpat_tuple (_, _, _), _, _) -> assert false
   and helper_c (dest : dest) = function
     | CIte (AConst (Miniml.Parsetree.PConst_bool true), bth, _bel) ->
         helper dest bth
@@ -278,8 +278,10 @@ let generate_body is_toplevel ppf body =
         printfn ppf "%s:" el_lab;
         helper dest bel;
         printfn ppf "%s:" fin_lab
-    | CApp (AVar ("print" as f), arg1, [])
-      when is_toplevel f = None && not (Addr_of_local.has_key f) -> (
+    | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "print"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) -> (
         match arg1 with
         | AVar v when Addr_of_local.has_key v ->
             printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn v;
@@ -447,11 +449,11 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  mov rdi, %d" n;
         printfn ppf "  call rukaml_field";
         printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar "gc_compact", AUnit, []) ->
+    | CApp (AVar id, AUnit, []) when id.Miniml.Ident.hum_name = "gc_compact" ->
         printfn ppf "  mov rdi, rsp";
         printfn ppf "  mov rsi, 0";
         printfn ppf "  call rukaml_gc_compact"
-    | CApp (AVar "gc_stats", AUnit, []) ->
+    | CApp (AVar id, AUnit, []) when id.Miniml.Ident.hum_name = "gc_stats" ->
         printfn ppf "  mov rdi, 0";
         printfn ppf "  mov rsi, 0";
         printfn ppf "  call rukaml_gc_print_stats"

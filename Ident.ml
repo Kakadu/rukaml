@@ -29,6 +29,7 @@ module Ident_map : sig
 
   val empty : 'a t
   val add : string -> ident -> 'a -> 'a t -> 'a t
+  val ident_of_string_exn : string -> _ t -> ident
   val find_by_string_exn : string -> 'a t -> 'a
   val find_by_ident : ident -> 'a t -> 'a
   val fold_idents : f:('acc -> ident * 'b -> 'acc) -> init:'acc -> 'b t -> 'acc
@@ -38,6 +39,7 @@ end = struct
   type nonrec 'a t = 'a Id_map.t * t String_map.t
 
   let empty = Id_map.empty, String_map.empty
+  let ident_of_string_exn name (_, m) = String_map.find name m
 
   let add str ident v (left, right) =
     Id_map.add ident v left, String_map.add str ident right

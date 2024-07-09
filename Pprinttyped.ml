@@ -63,7 +63,7 @@ let pp_expr =
   let rec expr_gen ?(pars = true) ppf = function
     | TUnit -> fprintf ppf "unit"
     | TConst c -> Pprint.pp_const ppf c
-    | TVar (name, _) -> fprintf ppf "%s" name
+    | TVar (name, _, _) -> fprintf ppf "%s" name
     | TIf (cond, th, el, _) ->
       fprintf ppf "(if %a then %a else %a)" expr_no cond expr_no th expr_no el
     | TLam (pat, e, _) ->
@@ -75,15 +75,15 @@ let pp_expr =
          List.iter (fun name -> fprintf ppf "%a " pp_pattern name) ps;
          fprintf ppf "-> %a" expr_no e;
          if pars then fprintf ppf ")")
-    | TApp (TApp (TVar ("+", _), l, _), r, _) ->
+    | TApp (TApp (TVar ("+", _, _), l, _), r, _) ->
       fprintf ppf (if pars then "(%a + %a)" else "%a + %a") expr l expr r
-    | TApp (TApp (TVar ("*", _), l, _), r, _) ->
+    | TApp (TApp (TVar ("*", _, _), l, _), r, _) ->
       fprintf ppf (if pars then "(%a * %a)" else "%a * %a") expr l expr r
       (* fprintf ppf "(%a * %a)" expr l expr r *)
-    | TApp (TApp (TVar ("-", _), l, _), r, _) ->
+    | TApp (TApp (TVar ("-", _, _), l, _), r, _) ->
       fprintf ppf (if pars then "(%a - %a)" else "%a - %a") expr l expr r
       (* fprintf ppf "(%a - %a)" expr l expr r *)
-    | TApp (TApp (TVar ("=", _), l, _), r, _) ->
+    | TApp (TApp (TVar ("=", _, _), l, _), r, _) ->
       fprintf ppf (if pars then "(%a = %a)" else "%a = %a") expr l expr r
       (* fprintf ppf "(%a = %a)" expr l expr r *)
     | TApp (l, r, _) -> fprintf ppf (if pars then "(%a %a)" else "%a %a") expr l expr r

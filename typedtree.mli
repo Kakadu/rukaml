@@ -45,11 +45,12 @@ type pattern =
   | Tpat_tuple of pattern * pattern * pattern list
 
 val show_pattern : pattern -> string
+val of_untyped_pattern : Parsetree.pattern -> pattern
 
 type expr =
   | TUnit
   | TConst of Parsetree.const (** Contants *)
-  | TVar of string * ty
+  | TVar of string * Ident.t * ty
   | TIf of expr * expr * expr * ty (** if ... then ... else ... *)
   | TLam of pattern * expr * ty (** fun ... -> ... *)
   | TApp of expr * expr * ty (** Application f x *)
@@ -71,13 +72,7 @@ type value_binding =
 type structure_item = value_binding
 type structure = structure_item list
 
-val value_binding
-  :  Parsetree.rec_flag
-  -> Parsetree.pattern
-  -> expr
-  -> scheme
-  -> value_binding
-
+val value_binding : Parsetree.rec_flag -> pattern -> expr -> scheme -> value_binding
 val pp_expr : Format.formatter -> expr -> unit
 val show_expr : expr -> string
 val pp_binder_set : Format.formatter -> binder_set -> unit

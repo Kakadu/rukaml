@@ -44,10 +44,18 @@ type pattern =
   | Tpat_tuple of pattern * pattern * pattern list
 [@@deriving show { with_path = false }]
 
+let of_untyped_pattern =
+  let rec helper = function
+    | Parsetree.PVar v -> Tpat_var (Ident.of_string v)
+    | PTuple (a, b, xs) -> Tpat_tuple (helper a, helper b, List.map helper xs)
+  in
+  helper
+;;
+
 type expr =
   | TUnit
   | TConst of Parsetree.const
-  | TVar of string * ty
+  | TVar of string * Ident.t * ty
   | TIf of expr * expr * expr * ty
   | TLam of pattern * expr * ty
   | TApp of expr * expr * ty
@@ -58,8 +66,11 @@ type expr =
 let rec type_of_expr = function
   | TUnit -> unit_typ
   | TConst _ -> int_typ
-  | TTuple (_, _, _, t) | TVar (_, t) | TIf (_, _, _, t) | TLam (_, _, t) | TApp (_, _, t)
-    -> t
+  | TVar (_, _, t)
+  | TTuple (_, _, _, t)
+  | TIf (_, _, _, t)
+  | TLam (_, _, t)
+  | TApp (_, _, t) -> t
   | TLet (_, _, _, _, wher) -> type_of_expr wher
 ;;
 
@@ -80,7 +91,7 @@ let compact_expr =
   let rec helper t =
     match t with
     | TUnit | TConst _ -> t
-    | TVar (name, ty) -> TVar (name, type_without_links ty)
+    | TVar (name, id, ty) -> TVar (name, id, type_without_links ty)
     | TIf (a, b, c, ty) -> TIf (helper a, helper b, helper c, type_without_links ty)
     | TLam (pat, e, ty) -> TLam (pat, helper e, type_without_links ty)
     | TApp (l, r, ty) -> TApp (helper l, helper r, type_without_links ty)
