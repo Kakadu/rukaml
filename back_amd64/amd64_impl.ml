@@ -57,6 +57,7 @@ let print_epilogue ppf name =
   fprintf ppf "%!"
 
 module ANF = Compile_lib.ANF
+module Ident = Miniml.Ident
 
 let gensym =
   let open ANF in
@@ -77,10 +78,10 @@ let list_take n xs =
   (* TODO: it's not optimal *)
   fst (list_take_n n xs)
 
-type dest = DReg of string | DStack_var of string
+type dest = DReg of string | DStack_var of Miniml.Ident.t
 
 module Addr_of_local = struct
-  let store = Hashtbl.create 13
+  let store : (Miniml.Ident.t, _) Hashtbl.t = Hashtbl.create 13
   let last_pos = ref 0
   let get_locals_count () = !last_pos
 
@@ -100,7 +101,8 @@ module Addr_of_local = struct
       decr last_pos;
       Hashtbl.remove store name)
     else
-      failwiths "Something bad %d. Can't remove local variable %S" __LINE__ name
+      failwiths "Something bad %d. Can't remove local variable %a" __LINE__
+        Miniml.Ident.pp name
 
   let count () = Hashtbl.length store
   let size = count
@@ -111,7 +113,7 @@ module Addr_of_local = struct
     match Hashtbl.find store name with
     | v -> v
     | exception Not_found ->
-        failwiths "Can't find location of a variable %S" name
+        failwiths "Can't find location of a variable %a" Miniml.Ident.pp name
 
   let lookup_exn = find_exn
 
@@ -119,13 +121,11 @@ module Addr_of_local = struct
     assert (i < argc);
     let loc = -2 - argc + 1 + i in
     assert (loc < 0);
-    log "Location argument %S in [rbp+%d]" name (-loc);
+    log "Location argument \"%a\" in [rbp+%d]" Miniml.Ident.pp name (-loc);
     Hashtbl.add store name loc
 
   let remove_args xs =
-    log "Removing info about args [ %a ]"
-      (pp_space_list Format.pp_print_string)
-      xs;
+    log "Removing info about args [ %a ]" (pp_space_list Miniml.Ident.pp) xs;
     List.iter (Hashtbl.remove store) xs
 
   let pp_local_exn ppf name =
@@ -135,7 +135,10 @@ module Addr_of_local = struct
     else fprintf ppf "[rbp+%d*8]" (-offset)
 
   let keys () =
-    Hashtbl.to_seq_keys store |> Seq.fold_left (fun acc x -> acc ^ " " ^ x) ""
+    Hashtbl.to_seq_keys store
+    |> Seq.fold_left
+         (fun acc x -> Format.asprintf "%s %a" acc Miniml.Ident.pp x)
+         ""
 end
 
 let pp_dest ppf = function
@@ -143,7 +146,7 @@ let pp_dest ppf = function
   | DStack_var name -> Addr_of_local.pp_local_exn ppf name
 
 let alloc_closure ppf name arity =
-  printfn ppf "  mov rdi, %s" name;
+  printfn ppf "  mov rdi, %a" Ident.pp name;
   printfn ppf "  mov rsi, %d" arity;
   printfn ppf "  call rukaml_alloc_closure"
 
@@ -169,14 +172,14 @@ let allocate_locals ppf input_anf : now:unit -> unit =
   assert (count = Addr_of_local.get_locals_count ());
 
   (* If assertion fails it's like a number of locals with the same names *)
-  let args_repr = String.concat ", " !names in
+  let args_repr = Ident.concat_str !names in
   if count > 0 then
     printfn ppf "  sub rsp, 8*%d ; allocate for local variables %s" count
       args_repr;
 
   let deallocate_padding =
     if count mod 2 = 1 then (
-      let pad_name = Printf.sprintf "__pad%d" (gensym ()) in
+      let pad_name = Ident.of_string @@ Printf.sprintf "__pad%d" (gensym ()) in
       printfn ppf "  sub rsp, 8 ; allocate padding for locals";
       Addr_of_local.extend pad_name;
       fun () ->
@@ -197,7 +200,7 @@ let allocate_locals ppf input_anf : now:unit -> unit =
     ()
 
 let print_alloc_closure ppf fname arity =
-  printfn ppf "  mov rdi, %s" fname;
+  printfn ppf "  mov rdi, %a" Ident.pp fname;
   printfn ppf "  mov rsi, %d" arity;
   printfn ppf "  call rukaml_alloc_closure"
 
@@ -238,11 +241,12 @@ let generate_body is_toplevel ppf body =
             match is_toplevel vname with
             | Some arity ->
                 print_alloc_closure ppf vname arity;
-                printfn ppf "  mov qword [rsp%+d*8], rax ; arg %S" i vname
+                printfn ppf "  mov qword [rsp%+d*8], rax ; arg \"%a\"" i
+                  Ident.pp vname
             | None -> assert false)
         | AVar vname ->
-            printfn ppf "  mov qword r8, %a  ; arg %S"
-              Addr_of_local.pp_local_exn vname vname;
+            printfn ppf "  mov qword r8, %a  ; arg \"%a\""
+              Addr_of_local.pp_local_exn vname Ident.pp vname;
             printfn ppf "  mov qword [rsp%+d*8], r8" (count - 1 - i)
         | ALam _ -> failwith "Should it be representable in ANF?"
         | APrimitive _ -> assert false
@@ -400,11 +404,11 @@ let generate_body is_toplevel ppf body =
         if expected_arity = formal_arity then (
           let to_remove = allocate_args (arg1 :: args) in
 
-          printfn ppf "  call %s" f;
+          printfn ppf "  call %a" Ident.pp f;
           printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
           printfn ppf "  mov %a, rax" pp_dest dest)
         else if formal_arity < expected_arity then (
-          printfn ppf "  mov rdi, %s" f;
+          printfn ppf "  mov rdi, %a" Ident.pp f;
           printfn ppf "  mov rsi, %d" expected_arity;
           printfn ppf "  call rukaml_alloc_closure";
 
@@ -428,21 +432,24 @@ let generate_body is_toplevel ppf body =
     | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), [])
       ->
         assert (Option.is_none (is_toplevel f));
-
-        Addr_of_local.extend "temp_padding";
-        Addr_of_local.extend "arg1";
+        let arg1 = Ident.of_string "arg1" in
+        let temp_padding = Ident.of_string "temp_padding" in
+        Addr_of_local.extend temp_padding;
+        Addr_of_local.extend arg1;
         printfn ppf "  sub rsp, 8 ; padding";
-        printfn ppf "  sub rsp, 8 ; first arg of a function %s" f;
-        helper_a (DStack_var "arg1") arg;
+        printfn ppf "  sub rsp, 8 ; first arg of a function %a" Ident.pp f;
+        helper_a (DStack_var arg1) arg;
 
         printfn ppf "  mov rax, 0  ; no float arguments";
         printfn ppf "  mov rdi, %a" pp_dest (DStack_var f);
         printfn ppf "  mov rsi, 1";
-        printfn ppf "  mov rdx, %a" pp_dest (DStack_var "arg1");
+
+        printfn ppf "  mov rdx, %a" pp_dest (DStack_var arg1);
         printfn ppf "  call rukaml_applyN";
-        Addr_of_local.remove_local "arg1";
-        Addr_of_local.remove_local "temp_padding";
-        printfn ppf "  add rsp, 8*2 ; free space for args of function %S" f;
+        Addr_of_local.remove_local arg1;
+        Addr_of_local.remove_local temp_padding;
+        printfn ppf "  add rsp, 8*2 ; free space for args of function \"%a\""
+          Ident.pp f;
         printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (APrimitive "field", AConst (PConst_int n), [ (AVar _ as cont) ]) ->
         helper_a (DReg "rsi") cont;
@@ -477,8 +484,8 @@ let generate_body is_toplevel ppf body =
             printfn ppf
               "  mov qword rdx, %a ; use temp rdx to move from stack to stack"
               Addr_of_local.pp_local_exn vname;
-            printfn ppf "  mov qword %a, rdx ; access a var %S" pp_dest dest
-              vname
+            printfn ppf "  mov qword %a, rdx ; access a var \"%a\"" pp_dest dest
+              Ident.pp vname
         | Some arity ->
             alloc_closure ppf vname arity;
             printfn ppf "  mov %a, rax" pp_dest dest)
@@ -545,7 +552,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
       (fun (_, name, body) ->
         let pats, _ = Compile_lib.ANF.group_abstractions body in
         let argc = List.length pats in
-        assert (argc >= 1 || name = "main");
+        assert (argc >= 1 || name.Ident.hum_name = "main");
         Hashtbl.add hash name argc)
       anf;
 
@@ -613,8 +620,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
       |> List.iter (fun (_flg, name, expr) ->
              if Addr_of_local.size () <> 0 then
                failwiths
-                 "There are left over variables (before function %s): %s " name
-                 (Addr_of_local.keys ());
+                 "There are left over variables (before function %a): %s "
+                 Ident.pp name (Addr_of_local.keys ());
 
              (* printfn ppf "";
                 fprintf ppf "\t; %a\n" Loc_of_ident.pp (); *)
@@ -625,7 +632,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
                 (Loc_of_ident.size ()) name; *)
 
              (* printfn ppf "  sub rsp, %d" (8 * Loc_of_ident.size ()); *)
-             (if use_custom_main && name = "main" then
+             (if use_custom_main && name.Ident.hum_name = "main" then
                 printfn ppf
                   {|_start:
                     push    rbp
@@ -644,8 +651,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
                     xor rdi, rdi
                     syscall|}
               else
-                let () = printfn ppf "GLOBAL %s" name in
-                let () = printfn ppf "@[<h>%s:@]" name in
+                let () = printfn ppf "GLOBAL %a" Ident.pp name in
+                let () = printfn ppf "@[<h>%a:@]" Ident.pp name in
 
                 let pats, body = ANF.group_abstractions expr in
 
@@ -659,13 +666,13 @@ let codegen ?(wrap_main_into_start = true) anf file =
 
                 printfn ppf "  push rbp";
                 printfn ppf "  mov  rbp, rsp";
-                if name = "main" then (
+                if name.hum_name = "main" then (
                   printfn ppf "  mov rdi, rsp";
                   printfn ppf "  call rukaml_initialize");
                 generate_body is_toplevel ppf body;
                 Addr_of_local.remove_args names;
 
-                print_epilogue ppf name);
+                print_epilogue ppf name.hum_name);
              ());
       Format.pp_print_flush ppf ());
 

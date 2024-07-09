@@ -56,3 +56,8 @@ end = struct
   let iter_idents ~f (left, _) = Id_map.iter f left
   let map ~f (idents, names) = Id_map.map f idents, names
 end
+
+let concat_str idents =
+  let open Format in
+  asprintf "%a" (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp) idents
+;;

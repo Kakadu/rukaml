@@ -41,6 +41,14 @@ let pp_typ_hum =
 
 let rec pp_pattern ppf = function
   | Tpat_var id -> Ident.pp ppf id
+  | Tpat_tuple (h1, h2, []) ->
+    fprintf
+      ppf
+      "(%a, %a)"
+      pp_pattern
+      h1
+      pp_pattern
+      h2
   | Tpat_tuple (h1, h2, rest) ->
     fprintf
       ppf

@@ -16,7 +16,7 @@
                0
   Location argument "b" in [rbp+1]
   Location argument "a" in [rbp+0]
-  Removing info about args [ a b ]
+  Removing info about args [ a, b ]
   Removing info about args [  ]
   $ cat program.s | grep -v 'section .note.GNU-stack' | nl -ba
        1	.globl add

@@ -28,7 +28,7 @@
                0
   Location argument "n" in [rbp+1]
   Location argument "acc" in [rbp+0]
-  Removing info about args [ acc n ]
+  Removing info about args [ acc, n ]
   Removing info about args [  ]
   $ cat program.s | grep -v 'section .note.GNU-stack' | nl -ba
        1	.globl fac

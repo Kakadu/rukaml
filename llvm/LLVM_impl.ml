@@ -20,12 +20,14 @@ let on_vb (module LL : LL.S) : ANF.vb -> _ =
 
   (* It looks like number of arguments is a number of abstractions.
      because we can return functions; for example `(fun _ -> fac)` *)
-  let virt_of_named_hash : (_, Llvm.llvalue) Hashtbl.t = Hashtbl.create 23 in
+  let virt_of_named_hash : (Ident.t, Llvm.llvalue) Hashtbl.t =
+    Hashtbl.create 23
+  in
   let virt_of_name s =
     match Hashtbl.find virt_of_named_hash s with
     | e -> e
     | exception Not_found ->
-        failwiths "Can't find virtual register for name '%s'" s
+        failwiths "Can't find virtual register for name '%s'" s.hum_name
   in
   let add_virt_binding ~key v = Hashtbl.add virt_of_named_hash key v in
   let remove_virt_binding key = Hashtbl.remove virt_of_named_hash key in
@@ -41,9 +43,9 @@ let on_vb (module LL : LL.S) : ANF.vb -> _ =
     | AConst (Miniml.Parsetree.PConst_int n) -> LL.const_int i64_typ n
     | AVar name when Hashtbl.mem virt_of_named_hash name -> virt_of_name name
     | AVar name ->
-        assert (LL.has_toplevel_func name);
+        assert (LL.has_toplevel_func name.hum_name);
         let alloc_closure = LL.lookup_func_exn "rukaml_alloc_closure" in
-        let f = LL.lookup_func_exn name in
+        let f = LL.lookup_func_exn name.hum_name in
         let formal_params_count = LL.params f |> Array.length in
         let final_args =
           let ptr = LL.build_pointercast f i64_typ in
@@ -74,18 +76,19 @@ let on_vb (module LL : LL.S) : ANF.vb -> _ =
         let accessor = LL.lookup_func_exn "rukaml_field" in
         LL.build_call accessor [ LL.const_int i64_typ n; source ]
     | CApp (AVar f, arg1, args)
-      when LL.has_toplevel_func f && is_fully_applied f (arg1 :: args) ->
+      when LL.has_toplevel_func f.hum_name
+           && is_fully_applied f.hum_name (arg1 :: args) ->
         (* Full appication of toplevel function. We can omit primitives for partial application and make a direct call  *)
-        let f = LL.lookup_func_exn f in
+        let f = LL.lookup_func_exn f.hum_name in
         let final_args = List.map gen_a (arg1 :: args) in
         LL.build_call f final_args
-    | CApp (AVar f, arg1, args) when LL.has_toplevel_func f ->
+    | CApp (AVar f, arg1, args) when LL.has_toplevel_func f.hum_name ->
         (* log "%S is a toplevel func but not fully applied" f; *)
         let generated_args = List.map gen_a (arg1 :: args) in
         (* List.iteri
            (fun i v -> log "  arg %d: %s" i (Llvm.string_of_llvalue v))
            generated_args; *)
-        let f = LL.lookup_func_exn f in
+        let f = LL.lookup_func_exn f.hum_name in
 
         let fptr =
           let alloc_closure = LL.lookup_func_exn "rukaml_alloc_closure" in
@@ -180,8 +183,8 @@ let on_vb (module LL : LL.S) : ANF.vb -> _ =
         Format.eprintf "ANF: %a\n%!" ANF.pp_c anf;
         failwiths "Unsupported case %s %d" __FUNCTION__ __LINE__
   and gen : _ -> Llvm.llvalue = function
-    | ELet (_, Parsetree.PTuple _, _, _) -> assert false
-    | ELet (_, Miniml.Parsetree.PVar name, rhs, wher) ->
+    | ELet (_, Typedtree.Tpat_tuple _, _, _) -> assert false
+    | ELet (_, Tpat_var name, rhs, wher) ->
         let new_virt = gen_c rhs in
         with_virt_binding ~key:name new_virt ~f:(fun () ->
             let rez = gen wher in
@@ -194,7 +197,7 @@ let on_vb (module LL : LL.S) : ANF.vb -> _ =
     let args = Array.make (List.length args) i64_typ in
     Llvm.function_type i64_typ args
   in
-  let the_function = Llvm.declare_function name fun_typ LL.module_ in
+  let the_function = Llvm.declare_function name.hum_name fun_typ LL.module_ in
   List.iteri
     (fun n (ANF.APname key) ->
       let param = Llvm.param the_function n in

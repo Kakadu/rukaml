@@ -564,20 +564,27 @@ let vb ?(env = start_env) (flg, pat, body) : (_, [> error ]) Result.t =
       let tv = Typedtree.tv v ~level:(-1) in
       let env = Type_env.extend_string name (S (Var_set.empty, tv)) env in
       let* ty, tbody = infer env body in
-      return (ty, Tpat_var (Type_env.ident_of_string_exn name env), tbody)
+      return (env, ty, Tpat_var (Type_env.ident_of_string_exn name env), tbody)
     | Recursive, PVar name ->
       let* v = fresh in
       let tv = Typedtree.tv v ~level:(-1) in
       let env = Type_env.extend_string name (S (Var_set.empty, tv)) env in
       let* ty, tbody = infer env body in
       let* () = unify tv (type_of_expr tbody) in
-      return (ty, Tpat_var (Type_env.ident_of_string_exn name env), tbody)
+      return (env, ty, Tpat_var (Type_env.ident_of_string_exn name env), tbody)
     | Recursive, PTuple _ -> fail `Only_varibles_on_the_left_of_letrec
     | NonRecursive, PTuple _ -> failwith "Not implemented"
   in
   run comp
-  |> Result.map ~f:(fun (ty, pat, body) ->
-    value_binding flg pat body (generalize ~level:(-1) ty))
+  |> Result.map ~f:(fun (env, ty, tpat, body) ->
+    let vb = value_binding flg tpat body (generalize ~level:(-1) ty) in
+    let env : Type_env.t =
+      match pat, vb.Typedtree.tvb_pat with
+      | Parsetree.PVar varname, Tpat_var vident ->
+        Type_env.extend ~varname vident vb.Typedtree.tvb_typ env
+      | _ -> failwith "Not implemented"
+    in
+    env, vb)
   |> Result.map_error ~f:(function #error as x -> x)
 ;;
 
@@ -590,13 +597,7 @@ let structure ?(env = start_env) stru =
       ~init:(return (env, []))
       ~f:(fun acc item ->
         let* env, acc = acc in
-        let* new_item = vb ~env item in
-        let env : Type_env.t =
-          match new_item.Typedtree.tvb_pat with
-          | Tpat_var vident ->
-            Type_env.extend_by_ident vident new_item.Typedtree.tvb_typ env
-          | _ -> failwith "Not implemented"
-        in
+        let* env, new_item = vb ~env item in
         return (env, new_item :: acc))
   in
   return (List.rev items)

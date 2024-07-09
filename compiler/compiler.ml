@@ -14,8 +14,10 @@ let run_single text =
   let* xs =
     let f acc ((_, Parsetree.PVar name, _) as vb) =
       let* ans, env = acc in
-      let* rez = Inferencer.vb ~env vb in
-      Result.return (rez :: ans, (name, rez.tvb_typ) :: env)
+      let* env, rez = Inferencer.vb ~env vb in
+      let ident = Inferencer.Type_env.ident_of_string_exn name env in
+      Result.return
+        (rez :: ans, Inferencer.Type_env.extend ~varname:name ident rez.tvb_typ env)
     in
     List.fold stru ~init:(Result.return ([], Inferencer.start_env)) ~f
     |> Result.map ~f:(fun (vbs, _) -> List.rev vbs)
