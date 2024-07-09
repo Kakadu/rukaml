@@ -54,6 +54,5 @@
   $ nasm -felf64 program.asm -o program.o
   $ gcc-12 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe 
   $ ./program.exe && echo $?
-  :
   rukaml_print_int 10
   0

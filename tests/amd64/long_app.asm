@@ -42,7 +42,7 @@ GLOBAL test3
 test3:
   push rbp
   mov  rbp, rsp
-  sub rsp, 8*3 ; allocate for local variables t2, t1, t0
+  sub rsp, 8*3 ; allocate for local variables c, b, a
   sub rsp, 8 ; allocate padding for locals
   mov rdi, [rbp+2*8]
   call rukaml_print_int ; short
@@ -55,7 +55,7 @@ test3:
   mov [rbp-3*8], rax
   mov qword rax,  0
   add rsp, 8 ; deallocate padding for locals
-  add rsp, 8*3 ; deallocate local variables t2, t1, t0
+  add rsp, 8*3 ; deallocate local variables c, b, a
   pop rbp
   ret  ;;;; test3
 GLOBAL test7

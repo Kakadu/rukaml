@@ -1,12 +1,8 @@
 $ ls
   $ ./long_app.exe
-  �
   rukaml_print_int 1111111111
-  1
   rukaml_print_int 1
-  :
   rukaml_print_int 10
-  :
   rukaml_print_int 10
 # Shadowing introduces a bug
   $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm - #-vamd64
@@ -27,7 +23,7 @@ $ ls
       then f
       else f)
   let test3 a b c =
-    let a = print a  in
+    let a1 = print a  in
       let b = print b  in
         let c = print c  in
           0
@@ -45,3 +41,7 @@ $ ls
   /usr/bin/ld: program.o: warning: relocation in read-only section `.text'
   /usr/bin/ld: warning: creating DT_TEXTREL in a PIE
   $ ./program.exe && echo $?
+  rukaml_print_int 1
+  rukaml_print_int 10
+  rukaml_print_int 100
+  0

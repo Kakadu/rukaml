@@ -208,5 +208,4 @@
   /usr/bin/ld: program.o: warning: relocation in read-only section `.text'
   /usr/bin/ld: warning: creating DT_TEXTREL in a PIE
   $ chmod u+x program.exe && ./program.exe
-  ¨
   rukaml_print_int 120

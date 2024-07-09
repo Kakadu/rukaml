@@ -151,5 +151,4 @@ $ nasm -felf64 program.asm -o program.o && ld -o program.exe program.o && chmod 
   $ nasm -felf64 program.asm -o program.o
   $ gcc-12 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
   $ chmod u+x program.exe && ./program.exe
-  E
   rukaml_print_int 21

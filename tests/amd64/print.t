@@ -99,5 +99,4 @@
 
 $ ulimit -c 0
   $ chmod u+x program.exe && ./program.exe
-  D
   rukaml_print_int 20

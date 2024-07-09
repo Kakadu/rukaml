@@ -201,8 +201,8 @@ void rukaml_gc_print_stats(void)
 
 void rukaml_print_int(int x)
 {
-  putchar(0x30 + x);
-  putchar('\n');
+  // putchar(0x30 + x);
+  // putchar('\n');
   // char repr[15];
   // snprintf(repr, 15, "%d", x);
   // puts(repr);

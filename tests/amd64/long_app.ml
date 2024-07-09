@@ -1,9 +1,9 @@
 let wrap f = if 1 = 1 then f else f
 
 let test3 a b c =
-  let t0 = print a in
-  let t1 = print b in
-  let t2 = print c in
+  let a = print a in
+  let b = print b in
+  let c = print c in
   0
 
 let test7 a b c d e f g = a + b + c + d + e + f + g

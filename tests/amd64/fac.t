@@ -110,5 +110,4 @@
 
   $ nasm -felf64 program.asm -o program.o 
   $ gcc-12 -g -o program.exe ../../back_amd64/rukaml_stdlib.o program.o && ./program.exe
-  H
   rukaml_print_int 24

@@ -226,5 +226,4 @@ $ export RUKAMLRUNPARAM=v=2048,m=128
   Total allocations: 18(words)
   Currently allocated: 9(words)
   Current bank: 0
-  Z
   rukaml_print_int 42
