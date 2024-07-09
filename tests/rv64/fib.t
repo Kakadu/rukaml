@@ -54,11 +54,11 @@
       22	  addi t0, t0, -1
       23	  sd t0, 24(sp)
       24	  addi sp, sp, -8 # alloc space for RA register
-      25	# Allocate args to call fun "fib" arguments
-      26	  addi sp, sp, -8
-      27	  ld t0, 40(sp) # arg "temp3"
-      28	  sd t0, (sp)
-      29	  sd ra, 8(sp)
+      25	  sd ra, (sp)
+      26	# Allocate args to call fun "fib" arguments
+      27	  addi sp, sp, -8
+      28	  ld t0, 40(sp) # arg "temp3"
+      29	  sd t0, (sp)
       30	  call fib
       31	  addi sp, sp, 8 # deallocate 1 args
       32	  ld ra, (sp)
@@ -68,11 +68,11 @@
       36	  addi t5, t5, -2
       37	  sd t5, 8(sp)
       38	  addi sp, sp, -8 # alloc space for RA register
-      39	# Allocate args to call fun "fib" arguments
-      40	  addi sp, sp, -8
-      41	  ld t0, 24(sp) # arg "temp5"
-      42	  sd t0, (sp)
-      43	  sd ra, 8(sp)
+      39	  sd ra, (sp)
+      40	# Allocate args to call fun "fib" arguments
+      41	  addi sp, sp, -8
+      42	  ld t0, 24(sp) # arg "temp5"
+      43	  sd t0, (sp)
       44	  call fib
       45	  addi sp, sp, 8 # deallocate 1 args
       46	  ld ra, (sp)
@@ -92,11 +92,11 @@
       60	main:
       61	  addi sp, sp, -16 # allocate for local variables g, f
       62	  addi sp, sp, -8 # alloc space for RA register
-      63	# Allocate args to call fun "fib" arguments
-      64	  addi sp, sp, -8
-      65	  li t0, 6
-      66	  sd t0, (sp) # constant
-      67	  sd ra, 8(sp)
+      63	  sd ra, (sp)
+      64	# Allocate args to call fun "fib" arguments
+      65	  addi sp, sp, -8
+      66	  li t0, 6
+      67	  sd t0, (sp) # constant
       68	  call fib
       69	  addi sp, sp, 8 # deallocate 1 args
       70	  ld ra, (sp)
@@ -118,5 +118,4 @@
 $ riscv64-linux-gnu-gcc -g -o program.exe ../../back_rv64/rukaml_stdlib.o program.o && ./program.exe
   $ riscv64-linux-gnu-gcc -g program.o ../../back_rv64/rukaml_stdlib.o -o fib.exe 2>&1 | head -n5
   $ qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64  ./fib.exe 
-  8
   rukaml_print_int 8

@@ -147,5 +147,4 @@
   $ riscv64-linux-gnu-gcc -c -g program.s -o program.o  
   $ riscv64-linux-gnu-gcc -g program.o ../../back_rv64/rukaml_stdlib.o -o fac_acc.exe 2>&1 | head -n5
   $ qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64 ./fac_acc.exe 
-  H
   rukaml_print_int 24

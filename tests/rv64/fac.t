@@ -50,11 +50,11 @@
       21	  addi t0, t0, -1
       22	  sd t0, 8(sp)
       23	  addi sp, sp, -8 # alloc space for RA register
-      24	# Allocate args to call fun "fac" arguments
-      25	  addi sp, sp, -8
-      26	  ld t0, 24(sp) # arg "p"
-      27	  sd t0, (sp)
-      28	  sd ra, 8(sp)
+      24	  sd ra, (sp)
+      25	# Allocate args to call fun "fac" arguments
+      26	  addi sp, sp, -8
+      27	  ld t0, 24(sp) # arg "p"
+      28	  sd t0, (sp)
       29	  call fac
       30	  addi sp, sp, 8 # deallocate 1 args
       31	  ld ra, (sp)
@@ -74,11 +74,11 @@
       45	main:
       46	  addi sp, sp, -16 # allocate for local variables g, f
       47	  addi sp, sp, -8 # alloc space for RA register
-      48	# Allocate args to call fun "fac" arguments
-      49	  addi sp, sp, -8
-      50	  li t0, 4
-      51	  sd t0, (sp) # constant
-      52	  sd ra, 8(sp)
+      48	  sd ra, (sp)
+      49	# Allocate args to call fun "fac" arguments
+      50	  addi sp, sp, -8
+      51	  li t0, 4
+      52	  sd t0, (sp) # constant
       53	  call fac
       54	  addi sp, sp, 8 # deallocate 1 args
       55	  ld ra, (sp)
@@ -99,5 +99,4 @@
   $ riscv64-linux-gnu-gcc -c -g program.s -o program.o # 2>&1 | head -n5
   $ riscv64-linux-gnu-gcc -g program.o ../../back_rv64/rukaml_stdlib.o -o fac.exe 2>&1 | head -n5
   $ qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64  ./fac.exe
-  H
   rukaml_print_int 24

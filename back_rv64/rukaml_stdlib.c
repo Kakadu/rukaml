@@ -20,7 +20,7 @@
   } */
 
 #define DEBUG
-//#undef DEBUG
+#undef DEBUG
 
 static uint64_t log_level = 0;
 
@@ -201,8 +201,8 @@ void rukaml_gc_print_stats(void)
 
 void rukaml_print_int(int x)
 {
-  putchar(0x30 + x);
-  putchar('\n');
+  // putchar(0x30 + x);
+  // putchar('\n');
   // char repr[15];
   // snprintf(repr, 15, "%d", x);
   // puts(repr);
@@ -409,9 +409,10 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
       break;
 #pragma GCC diagnostic pop
     default:
-      printf("FUCK, f_closure->argsc = %lu\n", f_closure->argsc);
-      printf("Application of too many arguments is not implemented!");
-      assert(false);
+      void** stack_args = alloca(f_closure->argsc * 8); //8 bytes per argument (int64)
+      for (int i=0; i<f_closure->argsc; ++i)
+        stack_args[i] = (void*)f_closure->args[i];
+      return ((fun0)f_closure->code)();
     }
   }
   return f_closure;

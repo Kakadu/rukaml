@@ -302,16 +302,8 @@ let generate_body is_toplevel body =
          | AVar vname when Option.is_some (is_toplevel vname) -> (
              match is_toplevel vname with
              | Some arity ->
-                 store_ra_temp (fun ra_name ->
-                     emit lla (RU "a0") vname.hum_name;
-                     (* printfn ppf "  lla a0, %s" vname; *)
-                     emit li (RU "a1") arity;
-                     (* printfn ppf "  li a1, %d" arity; *)
-                     emit sd ra (pp_to_mach ra_name);
-                     (* printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
-                     emit call "rukaml_alloc_closure"
-                     (* printfn ppf "  call rukaml_alloc_closure" *)
-                     (* print_alloc_closure ppf vname arity *))
+                 emit_alloc_closure vname.hum_name arity;
+                 emit sd a0 (ROffset (SP, 0))
              (* printfn ppf "  mov qword [rsp%+d*8], rax # arg %S" i vname *)
              | None -> assert false)
          | AVar vname ->
@@ -540,17 +532,13 @@ let generate_body is_toplevel body =
         if expected_arity = formal_arity then
           let _ =
             store_ra_temp (fun ra_name ->
-                let to_remove = allocate_args_for_call ~f (arg1 :: args) in
-
                 emit sd (RU "ra") (Addr_of_local.pp_to_mach ra_name);
-                (* printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
+                let to_remove = allocate_args_for_call ~f (arg1 :: args) in
                 emit call f.hum_name;
-                (* printfn ppf "  call %s" f; *)
                 deallocate_args_for_call to_remove;
                 to_remove)
           in
           emit sd_dest (RU "a0") dest
-          (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *)
         else if formal_arity < expected_arity then (
           store_ra_temp (fun ra_name ->
               emit lla (RU "a0") f.hum_name;
