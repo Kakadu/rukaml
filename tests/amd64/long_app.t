@@ -37,7 +37,7 @@ $ ls
 ; generated code for amd64
   $ cat program.asm  | grep -v 'section .note.GNU-stack' | nl -ba > /dev/null
   $ nasm -felf64 program.asm -o program.o
-  $ gcc-12 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
+  $ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
   /usr/bin/ld: program.o: warning: relocation in read-only section `.text'
   /usr/bin/ld: warning: creating DT_TEXTREL in a PIE
   $ ./program.exe && echo $?

@@ -144,7 +144,7 @@
      111	  addi a0, x0, 0 # Use 0 return code
      112	  addi a7, x0, 93 # Service command code 93 terminates
      113	  ecall # Call linux to terminate the program
-  $ riscv64-linux-gnu-gcc -c -g program.s -o program.o  
-  $ riscv64-linux-gnu-gcc -g program.o ../../back_rv64/rukaml_stdlib.o -o fac_acc.exe 2>&1 | head -n5
-  $ qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64 ./fac_acc.exe 
+  $ riscv64-linux-gnu-gcc-13 -c -g program.s -o program.o
+  $ riscv64-linux-gnu-gcc-13 -g program.o ../../back_rv64/rukaml_stdlib.o -o fac_acc.exe 2>&1 | head -n5
+  $ qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64 ./fac_acc.exe
   rukaml_print_int 24

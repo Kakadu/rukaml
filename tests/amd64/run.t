@@ -9,13 +9,13 @@
   let double x =
     (x + x)
   let main =
-    sq 7 
+    sq 7
   ANF: let sq y =
          (y * y)
        let double x =
          (x + x)
        let main =
-         sq 7 
+         sq 7
   Location argument "y" in [rbp+2]
   Removing info about args [ y ]
   Location argument "x" in [rbp+2]
@@ -33,7 +33,7 @@
        7	extern rukaml_initialize
        8	extern rukaml_gc_compact
        9	extern rukaml_gc_print_stats
-      10	
+      10
       11	_start:
       12	              push    rbp
       13	              mov     rbp, rsp   ; prologue
@@ -42,7 +42,7 @@
       16	              mov rax, 60     ; exit syscall
       17	              syscall
       18	GLOBAL sq
-      19	
+      19
       20	sq:
       21	  push rbp
       22	  mov  rbp, rsp
@@ -78,6 +78,6 @@
       52	  ret  ;;;; main
 
   $ nasm -felf64 program.asm -o program.o
-  $ gcc-12 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
+  $ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
   $ ./program.exe && echo $?
   [49]

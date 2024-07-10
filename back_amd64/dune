@@ -39,7 +39,7 @@
  (deps rukaml_stdlib.c)
  (action
   (run
-   gcc-12
+   gcc-13
    -g
    -Wall
    -Wpedantic

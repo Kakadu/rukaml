@@ -51,7 +51,7 @@
        7	extern rukaml_initialize
        8	extern rukaml_gc_compact
        9	extern rukaml_gc_print_stats
-      10	
+      10
       11	_start:
       12	              push    rbp
       13	              mov     rbp, rsp   ; prologue
@@ -60,7 +60,7 @@
       16	              mov rax, 60     ; exit syscall
       17	              syscall
       18	GLOBAL fib
-      19	
+      19
       20	fib:
       21	  push rbp
       22	  mov  rbp, rsp
@@ -149,6 +149,6 @@
 
 $ nasm -felf64 program.asm -o program.o && ld -o program.exe program.o && chmod u+x program.exe && ./program.exe
   $ nasm -felf64 program.asm -o program.o
-  $ gcc-12 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
+  $ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
   $ chmod u+x program.exe && ./program.exe
   rukaml_print_int 21

@@ -1,5 +1,6 @@
 depexts: [
-  [ "nasm" "llvm-14-dev" "clang-14" "gcc-12" "pkg-config" 
-    "qemu-user-static" "binutils-riscv64-linux-gnu"
+  [ "nasm" "gcc-13" "pkg-config"
+    "llvm-14-dev" "clang-14"
+    "qemu-user-static" "binutils-riscv64-linux-gnu" "gcc-13-riscv64-linux-gnu"
   ] {os-distribution = "debian"}
 ]

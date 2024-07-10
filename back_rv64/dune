@@ -38,7 +38,7 @@
  (deps rukaml_stdlib.c)
  (action
   (run
-   riscv64-linux-gnu-gcc
+   riscv64-linux-gnu-gcc-13
    -g
    -fPIC
    -Wall

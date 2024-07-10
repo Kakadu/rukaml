@@ -22,7 +22,7 @@
   Removing info about args [ a b c ]
   Removing info about args [  ]
 
- 
+
 
   $ cat program.asm | grep -v 'section .note.GNU-stack'  | nl -ba
        1	section .text
@@ -34,9 +34,9 @@
        7	extern rukaml_initialize
        8	extern rukaml_gc_compact
        9	extern rukaml_gc_print_stats
-      10	
+      10
       11	GLOBAL prod
-      12	
+      12
       13	prod:
       14	  push rbp
       15	  mov  rbp, rsp
@@ -93,7 +93,7 @@
       66	  pop rbp
       67	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o
-  $ gcc-12 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe 
+  $ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
   /usr/bin/ld: program.o: warning: relocation in read-only section `.text'
   /usr/bin/ld: warning: creating DT_TEXTREL in a PIE
 

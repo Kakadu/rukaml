@@ -1,17 +1,17 @@
-  $ gcc-12 005print_int.c -c -o print_int.o
+  $ gcc-13 005print_int.c -c -o print_int.o
   $ nasm -felf64 005fac.s -o fac.o
-  $ gcc-12 fac.o print_int.o -o 005.exe
+  $ gcc-13 fac.o print_int.o -o 005.exe
   $ ./005.exe
   print_int 24
   $ echo $?
   0
   $ objdump -M intel -D fac.o | sed 's/[ \t]*$//'
-  
+
   fac.o:     file format elf64-x86-64
-  
-  
+
+
   Disassembly of section .text:
-  
+
   0000000000000000 <_start>:
      0:	55                   	push   rbp
      1:	48 89 e5             	mov    rbp,rsp
@@ -19,7 +19,7 @@
      9:	48 89 c7             	mov    rdi,rax
      c:	b8 3c 00 00 00       	mov    eax,0x3c
     11:	0f 05                	syscall
-  
+
   0000000000000013 <fac>:
     13:	48 83 ec 18          	sub    rsp,0x18
     17:	89 7c 24 0c          	mov    DWORD PTR [rsp+0xc],edi
@@ -31,14 +31,14 @@
     2b:	e8 e3 ff ff ff       	call   13 <fac>
     30:	0f af 44 24 0c       	imul   eax,DWORD PTR [rsp+0xc]
     35:	eb 05                	jmp    3c <fac.L4>
-  
+
   0000000000000037 <fac.L2>:
     37:	b8 01 00 00 00       	mov    eax,0x1
-  
+
   000000000000003c <fac.L4>:
     3c:	48 83 c4 18          	add    rsp,0x18
     40:	c3                   	ret
-  
+
   0000000000000041 <main>:
     41:	55                   	push   rbp
     42:	48 89 e5             	mov    rbp,rsp

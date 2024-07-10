@@ -19,7 +19,7 @@
 ;     -o
 ;     double.asm)
 ;    (run nasm -g -F dwarf -felf64 double.asm -o double.o)
-;    (run gcc-12 -g -o double.exe double.o))))
+;    (run gcc-13 -g -o double.exe double.o))))
 
 (rule
  (targets if.asm if.exe)
@@ -32,7 +32,7 @@
   (progn
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o if.asm)
    (run nasm -g -F dwarf -felf64 if.asm -o if.o)
-   (run gcc-12 -g -o if.exe %{stdlib} if.o))))
+   (run gcc-13 -g -o if.exe %{stdlib} if.o))))
 
 (rule
  (targets fac.asm fac.exe)
@@ -45,7 +45,7 @@
   (progn
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o fac.asm)
    (run nasm -g -F dwarf -felf64 fac.asm -o fac.o)
-   (run gcc-12 -g -o fac.exe %{stdlib} fac.o))))
+   (run gcc-13 -g -o fac.exe %{stdlib} fac.o))))
 
 (rule
  (targets fack.asm fack.exe)
@@ -63,7 +63,7 @@
     fack.asm
     -vamd64)
    (run nasm -g -F dwarf -felf64 fack.asm -o fack.o)
-   (run gcc-12 -g -o fack.exe %{stdlib} fack.o))))
+   (run gcc-13 -g -o fack.exe %{stdlib} fack.o))))
 
 (rule
  (targets gc1.asm gc1.exe)
@@ -76,7 +76,7 @@
   (progn
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o gc1.asm)
    (run nasm -g -F dwarf -felf64 gc1.asm -o gc1.o)
-   (run gcc-12 -g -o gc1.exe %{stdlib} gc1.o))))
+   (run gcc-13 -g -o gc1.exe %{stdlib} gc1.o))))
 
 (rule
  (targets app1.asm app1.exe)
@@ -94,7 +94,7 @@
     app1.asm
     -vamd64)
    (run nasm -g -F dwarf -felf64 app1.asm -o app1.o)
-   (run gcc-12 -g -o app1.exe %{stdlib} app1.o))))
+   (run gcc-13 -g -o app1.exe %{stdlib} app1.o))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -109,7 +109,7 @@
   (progn
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o hack.asm)
    (run nasm -g -F dwarf -felf64 hack.asm -o hack.o)
-   (run gcc-12 -g -no-pie hack.o %{stdlib} -o hack.exe))))
+   (run gcc-13 -g -no-pie hack.o %{stdlib} -o hack.exe))))
 
 ; (rule
 ;  (targets hack.exe)
@@ -121,4 +121,4 @@
 ;  (action
 ;   (progn
 ;    (run nasm -g -F dwarf -felf64 hack.asm -o hack.o)
-;    (run gcc-12 -g -o hack.exe %{stdlib} hack.o))))
+;    (run gcc-13 -g -o hack.exe %{stdlib} hack.o))))

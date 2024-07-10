@@ -7,7 +7,7 @@
       let temp2 = (if temp1
                   then 10
                   else 20) in
-        print temp2 
+        print temp2
 
 ; generated code for amd64
   $ cat program.asm  | grep -v 'section .note.GNU-stack' | nl -ba
@@ -20,7 +20,7 @@
        7	extern rukaml_initialize
        8	extern rukaml_gc_compact
        9	extern rukaml_gc_print_stats
-      10	
+      10
       11	_start:
       12	              push    rbp
       13	              mov     rbp, rsp   ; prologue
@@ -29,7 +29,7 @@
       16	              mov rax, 60     ; exit syscall
       17	              syscall
       18	GLOBAL main
-      19	
+      19
       20	main:
       21	  push rbp
       22	  mov  rbp, rsp
@@ -52,7 +52,7 @@
       39	  pop rbp
       40	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o
-  $ gcc-12 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe 
+  $ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
   $ ./program.exe && echo $?
   rukaml_print_int 10
   0

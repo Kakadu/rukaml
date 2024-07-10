@@ -33,7 +33,7 @@
   (progn
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o print.asm)
    (run nasm -g -F dwarf -felf64 print.asm -o print.o)
-   (run gcc-12 -g -no-pie print.o %{stdlib} -o print.exe))))
+   (run gcc-13 -g -no-pie print.o %{stdlib} -o print.exe))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -55,7 +55,7 @@
   (progn
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o if.asm)
    (run nasm -g -F dwarf -felf64 if.asm -o if.o)
-   (run gcc-12 -g -no-pie if.o %{stdlib} -o if.exe))))
+   (run gcc-13 -g -no-pie if.o %{stdlib} -o if.exe))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -78,7 +78,7 @@
   (progn
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o long_app.asm)
    (run nasm -g -F dwarf -felf64 long_app.asm -o long_app.o)
-   (run gcc-12 -g -no-pie long_app.o %{stdlib} -o long_app.exe))))
+   (run gcc-13 -g -no-pie long_app.o %{stdlib} -o long_app.exe))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

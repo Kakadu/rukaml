@@ -43,9 +43,9 @@
     --no-start
     -vamd64
     %{src})
-   (run riscv64-linux-gnu-gcc -g -c fac.s -o fac.o)
+   (run riscv64-linux-gnu-gcc-13 -g -c fac.s -o fac.o)
    (run
-    riscv64-linux-gnu-gcc
+    riscv64-linux-gnu-gcc-13
     -g
     %{project_root}/back_rv64/rukaml_stdlib.o
     fac.o
@@ -87,9 +87,9 @@
   (promote (until-clean)))
  (action
   (progn
-   (run riscv64-linux-gnu-gcc -g -c %{src} -o fib.o)
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o fib.o)
    (run
-    riscv64-linux-gnu-gcc
+    riscv64-linux-gnu-gcc-13
     -g
     %{project_root}/back_rv64/rukaml_stdlib.o
     fib.o
@@ -131,9 +131,9 @@
   (promote (until-clean)))
  (action
   (progn
-   (run riscv64-linux-gnu-gcc -g -c %{src} -o fib_acc.o)
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o fib_acc.o)
    (run
-    riscv64-linux-gnu-gcc
+    riscv64-linux-gnu-gcc-13
     -g
     %{project_root}/back_rv64/rukaml_stdlib.o
     fib_acc.o
@@ -176,9 +176,9 @@
   (promote (until-clean)))
  (action
   (progn
-   (run riscv64-linux-gnu-gcc -g -c %{src} -o add.o)
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o add.o)
    (run
-    riscv64-linux-gnu-gcc
+    riscv64-linux-gnu-gcc-13
     -g
     %{project_root}/back_rv64/rukaml_stdlib.o
     add.o
@@ -221,9 +221,9 @@
   (promote (until-clean)))
  (action
   (progn
-   (run riscv64-linux-gnu-gcc -g -c %{src} -o fac_acc.o)
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o fac_acc.o)
    (run
-    riscv64-linux-gnu-gcc
+    riscv64-linux-gnu-gcc-13
     -g
     %{project_root}/back_rv64/rukaml_stdlib.o
     fac_acc.o
@@ -265,9 +265,9 @@
   (promote (until-clean)))
  (action
   (progn
-   (run riscv64-linux-gnu-gcc -g -c %{src} -o fac_cps.o)
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o fac_cps.o)
    (run
-    riscv64-linux-gnu-gcc
+    riscv64-linux-gnu-gcc-13
     -g
     %{project_root}/back_rv64/rukaml_stdlib.o
     fac_cps.o
@@ -309,9 +309,9 @@
   (promote (until-clean)))
  (action
   (progn
-   (run riscv64-linux-gnu-gcc -g -c %{src} -o long_app.o)
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o long_app.o)
    (run
-    riscv64-linux-gnu-gcc
+    riscv64-linux-gnu-gcc-13
     -g
     %{project_root}/back_rv64/rukaml_stdlib.o
     long_app.o

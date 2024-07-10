@@ -25,7 +25,7 @@
   Location argument "n" in [rbp+0]
   Removing info about args [ n ]
   Removing info about args [  ]
- 
+
   $ cat program.s | grep -v 'section .note.GNU-stack' | nl -ba
        1	.globl fac
        2	fac:
@@ -96,7 +96,7 @@
       67	  addi a0, x0, 0 # Use 0 return code
       68	  addi a7, x0, 93 # Service command code 93 terminates
       69	  ecall # Call linux to terminate the program
-  $ riscv64-linux-gnu-gcc -c -g program.s -o program.o # 2>&1 | head -n5
-  $ riscv64-linux-gnu-gcc -g program.o ../../back_rv64/rukaml_stdlib.o -o fac.exe 2>&1 | head -n5
+  $ riscv64-linux-gnu-gcc-13 -c -g program.s -o program.o # 2>&1 | head -n5
+  $ riscv64-linux-gnu-gcc-13 -g program.o ../../back_rv64/rukaml_stdlib.o -o fac.exe 2>&1 | head -n5
   $ qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64  ./fac.exe
   rukaml_print_int 24
