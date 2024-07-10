@@ -51,7 +51,7 @@
        7	extern rukaml_initialize
        8	extern rukaml_gc_compact
        9	extern rukaml_gc_print_stats
-      10
+      10	
       11	_start:
       12	              push    rbp
       13	              mov     rbp, rsp   ; prologue
@@ -60,7 +60,7 @@
       16	              mov rax, 60     ; exit syscall
       17	              syscall
       18	GLOBAL fib
-      19
+      19	
       20	fib:
       21	  push rbp
       22	  mov  rbp, rsp

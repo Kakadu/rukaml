@@ -9,11 +9,11 @@
   After ANF transformation.
   let fresh_1 n k m =
     let temp1 = (n * m) in
-      k temp1
+      k temp1 
   let rec fack n k =
     let temp3 = (n = 1) in
       (if temp3
-      then k 1
+      then k 1 
       else let temp5 = (n - 1) in
              let temp6 = fack temp5  in
                let temp7 = fresh_1 n  in
@@ -37,9 +37,9 @@
        7	extern rukaml_initialize
        8	extern rukaml_gc_compact
        9	extern rukaml_gc_print_stats
-      10
+      10	
       11	GLOBAL fresh_1
-      12
+      12	
       13	fresh_1:
       14	  push rbp
       15	  mov  rbp, rsp

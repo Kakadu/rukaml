@@ -57,9 +57,9 @@
        7	extern rukaml_initialize
        8	extern rukaml_gc_compact
        9	extern rukaml_gc_print_stats
-      10
+      10	
       11	GLOBAL fst
-      12
+      12	
       13	fst:
       14	  push rbp
       15	  mov  rbp, rsp
