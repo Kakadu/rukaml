@@ -53,7 +53,7 @@
   
   define i64 @f(i64 %0, i64 %1) {
   entry:
-    %2 = call i64 @rukaml_alloc_closure(i64 ptrtoint (i64 (i64, i64)* @mydiv to i64), i64 2)
+    %2 = call i64 @rukaml_alloc_closure(i64 ptrtoint (ptr @mydiv to i64), i64 2)
     %3 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %2, i64 1, i64 %0)
     %4 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %3, i64 1, i64 %1)
     %5 = call i64 @rukaml_field(i64 0, i64 %4)
@@ -64,12 +64,12 @@
   
   define i64 @main() {
   entry:
-    %0 = call i64 @rukaml_alloc_closure(i64 ptrtoint (i64 (i64, i64)* @f to i64), i64 2)
+    %0 = call i64 @rukaml_alloc_closure(i64 ptrtoint (ptr @f to i64), i64 2)
     %1 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %0, i64 1, i64 7)
     %2 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %1, i64 1, i64 13)
     ret i64 %2
   }
-  $ clang-14 mydiv.ll ../../compiler/rukaml_stdlib.o -o mydiv.exe #--verbose
+  $ clang-16 mydiv.ll ../../compiler/rukaml_stdlib.o -o mydiv.exe #--verbose
   warning: overriding the module target triple with x86_64-pc-linux-gnu [-Woverride-module]
   1 warning generated.
   $ ./mydiv.exe

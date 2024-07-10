@@ -44,13 +44,13 @@
   
   define i64 @main() {
   entry:
-    %0 = call i64 @rukaml_alloc_closure(i64 ptrtoint (i64 (i64)* @id to i64), i64 1)
-    %1 = call i64 @rukaml_alloc_closure(i64 ptrtoint (i64 (i64, i64)* @foo to i64), i64 2)
+    %0 = call i64 @rukaml_alloc_closure(i64 ptrtoint (ptr @id to i64), i64 1)
+    %1 = call i64 @rukaml_alloc_closure(i64 ptrtoint (ptr @foo to i64), i64 2)
     %2 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %1, i64 1, i64 %0)
     %3 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %2, i64 1, i64 5)
     ret i64 %3
   }
-  $ clang-14 fack.ll ../../compiler/rukaml_stdlib.o -o fack.exe
+  $ clang-16 fack.ll ../../compiler/rukaml_stdlib.o -o fack.exe
   warning: overriding the module target triple with x86_64-pc-linux-gnu [-Woverride-module]
   1 warning generated.
   $ ./fack.exe
