@@ -12,7 +12,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: kakadu18/ocaml:llvm # TODO: add dune-site to image
+      image: kakadu18/ocaml:llvm16 # TODO: add dune-site to image
       options: --user root
 
     # The below probably could be used instead of styfle/cancel-workflow-action
