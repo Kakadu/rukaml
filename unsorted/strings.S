@@ -3,7 +3,6 @@
 .balign 4
 .global strcpy
 .global strlen
-.global main
 
 # size_t strlen(const char *str)
 # a0 holds *str
@@ -60,7 +59,7 @@
 #     bltu    a2,a3,myitoa_loop
 # myitoa_fin:
 #     ret
-
+.global _start
 _start:
     .option push
     .option norelax
