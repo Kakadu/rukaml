@@ -32,8 +32,7 @@
   angstrom
   (ocaml
    (>= 4.14))
-  (ppx_inline_test :with-test)
-  ppx_expect
+  (ppx_expect_nobase :with-test)
   ppx_show
   (llvm
    (= 14.0.6))

@@ -1,0 +1,8 @@
+[submodule "vendored/ppx_expect"]
+	path = vendored/ppx_expect
+	url = https://github.com/Kakadu/ppx_expect.git
+	branch = nobase
+[submodule "vendored/ppx_inline_test"]
+	path = vendored/ppx_inline_test
+	url = https://github.com/Kakadu/ppx_inline_test.git
+	branch = nobase
