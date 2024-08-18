@@ -259,7 +259,6 @@ let codegen : ANF.vb list -> _ =
   let () = assert (Llvm_executionengine.initialize ()) in
   let the_module = Llvm.create_module context "main" in
   let _the_execution_engine = Llvm_executionengine.create the_module in
-  let the_fpm = Llvm.PassManager.create_function the_module in
   let module LL = (val LL.make context builder the_module) in
   let i64_type = Llvm.i64_type context in
 
@@ -303,7 +302,7 @@ let codegen : ANF.vb list -> _ =
           (Llvm.string_of_llvalue the_function);
         Llvm_analysis.assert_valid_function the_function);
     (* Optimize the function. *)
-    let (_ : bool) = Llvm.PassManager.run_function the_function the_fpm in
+    let (_ : bool) = Llvm_analysis.verify_function the_function in
     (* Llvm.dump_value the_function; *)
     ()
   in
