@@ -49,6 +49,7 @@
   $ cat fack.ll | grep 'target datalayout' --invert-match
   ; ModuleID = 'main'
   source_filename = "main"
+  target triple = "x86_64-pc-linux-gnu"
   
   declare void @myputc(i64)
   
@@ -108,8 +109,6 @@
   }
 
   $ clang-16 fack.ll ../../compiler/rukaml_stdlib.o -o fack.exe
-  warning: overriding the module target triple with x86_64-pc-linux-gnu [-Woverride-module]
-  1 warning generated.
   $ ./fack.exe
   [24]
 
@@ -155,7 +154,5 @@
     let temp11 = fack 5  in
       temp11 fresh_2 
   $ clang-16 fack.ll ../../compiler/rukaml_stdlib.o -o fack.exe
-  warning: overriding the module target triple with x86_64-pc-linux-gnu [-Woverride-module]
-  1 warning generated.
   $ ./fack.exe
   [120]

@@ -1,7 +1,6 @@
 type cfg = {
   mutable out_file : string;
-  mutable input_file : string option;
-  mutable dump_ir : bool;
+  mutable input_file : string option; (* mutable dump_ir : bool; *)
 }
 
 open Miniml
@@ -18,7 +17,6 @@ module ToLLVM = struct
       Result.map_error (fun x -> (x :> [ Parsing.error | Inferencer.error ])) r
     in
     let ( let* ) x f = Result.bind x f in
-    (* let ( let+ ) x f = Result.map f x in *)
     let* stru = Miniml.Parsing.parse_structure text |> promote_error in
     let stru =
       let init = (CConv.standart_globals, []) in
@@ -47,7 +45,7 @@ module ToLLVM = struct
     LLVM_impl.codegen anf cfg.out_file |> promote_error
 end
 
-let cfg = { out_file = "aaa.ll"; input_file = None; dump_ir = false }
+let cfg = { out_file = "aaa.ll"; input_file = None (* dump_ir = false  *) }
 
 let print_errors = function
   | #Miniml.Parsing.error as e -> Format.printf "%a\n%!" Parsing.pp_error e

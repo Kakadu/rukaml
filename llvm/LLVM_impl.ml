@@ -21,7 +21,10 @@ end
 
 module String_map = Map.Make (String)
 
-module Top_defs = struct
+module Top_defs : sig
+  val add : string -> Llvm.lltype -> unit
+  val find_typ_exn : string -> Llvm.lltype
+end = struct
   let store : Llvm.lltype String_map.t ref = ref String_map.empty
   let add name typ = store := String_map.add name typ !store
   let find_typ_exn name = String_map.find name !store
@@ -240,7 +243,11 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
 
   (* Validate the generated code, checking for consistency. *)
   (match Llvm_analysis.verify_function the_function with
-  | true -> ()
+  | true ->
+      (* We register function to be able to discover it below.
+         TODO: for recursive functions it may be not enough.
+      *)
+      TD.add name.hum_name fun_typ
   | false ->
       Stdlib.Format.printf "invalid function generated\n%s\n"
         (Llvm.string_of_llvalue the_function);
@@ -258,6 +265,8 @@ let codegen : ANF.vb list -> _ =
   let builder = Llvm.builder context in
   let () = assert (Llvm_executionengine.initialize ()) in
   let the_module = Llvm.create_module context "main" in
+  Llvm.set_target_triple "x86_64-pc-linux-gnu" the_module;
+  (* TODO: experiment with other targets. *)
   let _the_execution_engine = Llvm_executionengine.create the_module in
   let module LL = (val LL.make context builder the_module) in
   let i64_type = Llvm.i64_type context in

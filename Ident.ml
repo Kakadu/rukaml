@@ -15,6 +15,7 @@ let of_string hum_name =
 let equal left { id; _ } = left.id = id
 let compare left { id; _ } = Int.compare left.id id
 let pp ppf { hum_name; _ } = Format.fprintf ppf "%s" hum_name
+let to_string = Format.asprintf "%a" pp
 
 module Id_map = Map.Make (struct
     type nonrec t = t

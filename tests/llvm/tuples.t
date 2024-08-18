@@ -33,6 +33,7 @@
       temp7 13 
   $ cat mydiv.ll | grep -E 'target datalayout|ModuleID' --invert-match
   source_filename = "main"
+  target triple = "x86_64-pc-linux-gnu"
   
   declare void @myputc(i64)
   
@@ -70,7 +71,5 @@
     ret i64 %2
   }
   $ clang-16 mydiv.ll ../../compiler/rukaml_stdlib.o -o mydiv.exe #--verbose
-  warning: overriding the module target triple with x86_64-pc-linux-gnu [-Woverride-module]
-  1 warning generated.
   $ ./mydiv.exe
   [27]
