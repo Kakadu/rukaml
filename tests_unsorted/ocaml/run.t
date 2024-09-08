@@ -1,4 +1,5 @@
-  $ ocamlopt -dcmm -dsel -dscheduling -c sum.ml
+This test is not stable when switching to flambda/without
+  $ ocamlopt -dcmm -dsel -dscheduling -c sum.ml #2> /dev/null
   
   cmm:
   (data)
@@ -221,5 +222,6 @@
     return R/0[%rax]
     
   (data)
+
 $ ls
 $ objdump -d sum.o
