@@ -1,0 +1,7 @@
+; (executable
+;  (name REPL)
+;  (modules REPL)
+;  (libraries stdio miniml compile_lib))
+
+(cram
+ (deps %{project_root}/compiler/cps_demo.exe))
