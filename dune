@@ -18,7 +18,9 @@
  (inline_tests)
  (libraries ppx_show.runtime angstrom)
  (preprocess
-  (pps ppx_show ppx_expect)))
+  (pps ppx_show ppx_expect))
+ (instrumentation
+  (backend mutaml)))
 
 (executable
  (name demo1)

@@ -9,7 +9,9 @@
    ppx_expect
    ;
    ))
- (inline_tests))
+ (inline_tests)
+ (instrumentation
+  (backend mutaml)))
 
 (library
  (public_name MiniML.cconv)
@@ -23,7 +25,9 @@
    ppx_expect
    ;
    ))
- (inline_tests))
+ (inline_tests)
+ (instrumentation
+  (backend mutaml)))
 
 (executable
  (name compiler)
