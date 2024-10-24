@@ -29,14 +29,15 @@
  (depends
   dune
   dune-site
-  angstrom
+  (angstrom
+   (= 0.16.0))
   (ocaml
    (>= 4.14))
   (ppx_inline_test :with-test)
   ppx_expect
   ppx_show
   (llvm
-   (= 14.0.6))
+   (>= 16.0.0))
   ctypes-foreign ; needed for LLVM
   ppx_blob
   (odoc :with-doc)
