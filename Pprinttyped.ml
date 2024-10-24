@@ -41,14 +41,7 @@ let pp_typ_hum =
 
 let rec pp_pattern ppf = function
   | Tpat_var id -> Ident.pp ppf id
-  | Tpat_tuple (h1, h2, []) ->
-    fprintf
-      ppf
-      "(%a, %a)"
-      pp_pattern
-      h1
-      pp_pattern
-      h2
+  | Tpat_tuple (h1, h2, []) -> fprintf ppf "(%a, %a)" pp_pattern h1 pp_pattern h2
   | Tpat_tuple (h1, h2, rest) ->
     fprintf
       ppf
@@ -69,7 +62,7 @@ let pp_expr =
     | body -> List.rev acc, body
   in
   let rec expr_gen ?(pars = true) ppf = function
-    | TUnit -> fprintf ppf "unit"
+    | TUnit -> fprintf ppf "()"
     | TConst c -> Pprint.pp_const ppf c
     | TVar (name, _, _) -> fprintf ppf "%s" name
     | TIf (cond, th, el, _) ->

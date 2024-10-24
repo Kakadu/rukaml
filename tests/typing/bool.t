@@ -15,4 +15,4 @@
   Parsed.
   let foo x = if x then print 52 else ()
   let foo: bool -> unit =
-    fun x -> (if x then print 52 else unit)
+    fun x -> (if x then print 52 else ())
