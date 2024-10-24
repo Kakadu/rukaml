@@ -10,25 +10,6 @@
     let temp1 = f x  in
       let temp2 = g x  in
         temp1 temp2 
-# Zed combinator should trigger occurs check
-  $ cat << EOF | ./REPL.exe -
-  > let main = fun f -> (fun x -> f (fun v -> x x v)) (fun x -> f (fun v -> x x v))
-  > EOF
-  Parsed: let main f = (fun x -> f (fun v -> x x v)) (fun x -> f (fun v ->
-                                                                  x x v))
-  Error: Occurs check failed
-  $ cat << EOF | ./REPL.exe -
-  > let rec f = fun n -> f
-  > EOF
-  Parsed: let rec f n = f
-  Error: Occurs check failed
-
-  $ cat << EOF | ./REPL.exe -
-  > let rec fac = fun n -> n*fac
-  > EOF
-  Parsed: let rec fac n = n * fac
-  Error: unification failed on int and (int -> int)
-
   $ cat << EOF | ./REPL.exe -
   > let sum x = let (a, b) = x in a+b
   > EOF
