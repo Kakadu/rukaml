@@ -134,10 +134,10 @@ value binding
             | _ -> if x then y else z
 
   $ cat << EOF | ./run.exe -e -
-  > if x then 
+  > if x then
   >   match y with
   >   | _ -> y
-  > else 
+  > else
   >   match z with
   >   | _ -> Z
   > EOF
@@ -170,7 +170,7 @@ value binding
 
   $ cat << EOF | ./run.exe -e -
   > match x with
-  > | A -> 
+  > | A ->
   >   (match y with
   >    | C -> c
   >    | D -> d)
