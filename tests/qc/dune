@@ -1,0 +1,14 @@
+(library
+ (name qc_lib)
+ (modules qc_lib)
+ (libraries Frontend qcheck)
+ (preprocess
+  (staged_pps ppx_import ppx_deriving_qcheck)))
+
+(executable
+ (name qc)
+ (modules qc)
+ (libraries qc_lib))
+
+(cram
+ (deps ./qc.exe))
