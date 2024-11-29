@@ -370,13 +370,13 @@ let rec extend_env env counts = function
     let cp1, env2, counts2 = extend_env env counts p1 in
     let cp2, env3, counts3 = extend_env env2 counts2 p2 in
     let cpp, env4, counts4 =
-      List.fold_left
-        (fun (cpp, env, counts) pn ->
+      List.fold_right
+        (fun pn (cpp, env, counts) ->
           extend_env env counts pn |> fun (cpn, e, c) -> cpn :: cpp, e, c)
-        ([], env3, counts3)
         pp
+        ([], env3, counts3)
     in
-    CPTuple (cp1, cp2, List.rev cpp), env4, counts4
+    CPTuple (cp1, cp2, cpp), env4, counts4
 ;;
 
 (* The top-level function *)
