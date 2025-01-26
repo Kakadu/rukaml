@@ -74,11 +74,10 @@ let frontend cfg =
   in
   let* typedtree =
     let env =
-      (* TODO: load types from RKMIs *)
-      let open Typedtree in
-      Inferencer.Type_env.extend_string "fac"
-        (S (Var_set.empty, tarrow int_typ int_typ))
-        Inferencer.start_env
+      Compile_lib.Rkmi.fold
+        (fun _ { Compile_lib.Rkmi.name; typ; _ } acc ->
+          Inferencer.Type_env.extend_string name typ acc)
+        Inferencer.start_env rkmis
     in
 
     Inferencer.structure ~env stru

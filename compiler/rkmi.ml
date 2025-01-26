@@ -23,3 +23,4 @@ let to_repr : info list -> repr =
 
 let find_exn : string -> repr -> item = SS.find
 let length = SS.cardinal
+let fold : _ -> _ -> repr -> _ = fun f acc xs -> SS.fold f xs acc
