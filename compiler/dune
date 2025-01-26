@@ -2,28 +2,34 @@
  (name compile_lib)
  (public_name MiniML.compile)
  (libraries stdio miniml cconv)
- (modules ANF rkmi compile_tests)
- (preprocess
-  (pps
-   ; ppx_blob
-   ppx_expect_nobase
-   ;
-   ))
- (inline_tests))
+ (modules ANF rkmi)
+ ;  (preprocess
+ ;   (pps
+ ;    ; ppx_blob
+ ;    ppx_expect_nobase
+ ;    ;
+ ;    ))
+ ;  (inline_tests)
+ )
 
 (library
  (public_name MiniML.cconv)
  (name cconv)
  (libraries miniml)
  (modules CConv monads)
- (wrapped false)
+ (wrapped false))
+
+(library
+ (name compile_lib_tests)
+ (modules compile_tests test_CConv test_ANF)
+ (libraries compile_lib)
+ (inline_tests)
  (preprocess
   (pps
    ; ppx_blob
    ppx_expect_nobase
    ;
-   ))
- (inline_tests))
+   )))
 
 (executable
  (name compiler)

@@ -28,3 +28,8 @@ val structure
   :  ?standart_globals:String_set.t
   -> Parsetree.structure
   -> Parsetree.value_binding list
+
+(** Test related stuff *)
+
+val simplify_vb : Parsetree.value_binding -> Parsetree.value_binding
+val without : String_set.t -> other:String_set.t -> String_set.t
