@@ -6,7 +6,7 @@
  (preprocess
   (pps
    ; ppx_blob
-   ppx_expect
+   ppx_expect_nobase
    ;
    ))
  (inline_tests))
@@ -20,7 +20,7 @@
  (preprocess
   (pps
    ; ppx_blob
-   ppx_expect
+   ppx_expect_nobase
    ;
    ))
  (inline_tests))

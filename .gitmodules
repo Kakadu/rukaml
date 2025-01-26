@@ -1,0 +1,4 @@
+[submodule "ppx_expect_nobase"]
+	path = ppx_expect_nobase
+	url = https://github.com/Kakadu/ppx_expect.git
+	branch = nobase
