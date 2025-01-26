@@ -59,8 +59,8 @@
       15	              mov rdi, rax    ; rdi stores return code
       16	              mov rax, 60     ; exit syscall
       17	              syscall
-      18	GLOBAL fib
-      19	
+      18	
+      19	GLOBAL fib
       20	fib:
       21	  push rbp
       22	  mov  rbp, rsp
@@ -126,26 +126,27 @@
       82	  add rsp, 8*6 ; deallocate local variables temp8, temp7, temp6, temp5, temp3, temp1
       83	  pop rbp
       84	  ret  ;;;; fib
-      85	GLOBAL main
-      86	main:
-      87	  push rbp
-      88	  mov  rbp, rsp
-      89	  mov rdi, rsp
-      90	  call rukaml_initialize
-      91	  sub rsp, 8*2 ; allocate for local variables u, temp10
-      92	  sub rsp, 8 ; trying to save alignment 16 bytes
-      93	  sub rsp, 8*1 ; fun arguments
-      94	  mov qword [rsp+0*8], 8 ; constant
-      95	  call fib
-      96	  add rsp, 8*2 ; dealloc args
-      97	  mov [rbp-1*8], rax
-      98	  mov rdi, [rbp-1*8]
-      99	  call rukaml_print_int ; short
-     100	  mov [rbp-2*8], rax
-     101	  mov qword rax,  0
-     102	  add rsp, 8*2 ; deallocate local variables u, temp10
-     103	  pop rbp
-     104	  ret  ;;;; main
+      85	
+      86	GLOBAL main
+      87	main:
+      88	  push rbp
+      89	  mov  rbp, rsp
+      90	  mov rdi, rsp
+      91	  call rukaml_initialize
+      92	  sub rsp, 8*2 ; allocate for local variables u, temp10
+      93	  sub rsp, 8 ; trying to save alignment 16 bytes
+      94	  sub rsp, 8*1 ; fun arguments
+      95	  mov qword [rsp+0*8], 8 ; constant
+      96	  call fib
+      97	  add rsp, 8*2 ; dealloc args
+      98	  mov [rbp-1*8], rax
+      99	  mov rdi, [rbp-1*8]
+     100	  call rukaml_print_int ; short
+     101	  mov [rbp-2*8], rax
+     102	  mov qword rax,  0
+     103	  add rsp, 8*2 ; deallocate local variables u, temp10
+     104	  pop rbp
+     105	  ret  ;;;; main
 
 $ nasm -felf64 program.asm -o program.o && ld -o program.exe program.o && chmod u+x program.exe && ./program.exe
   $ nasm -felf64 program.asm -o program.o

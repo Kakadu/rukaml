@@ -16,8 +16,8 @@ _start:
               mov rdi, rax    ; rdi stores return code
               mov rax, 60     ; exit syscall
               syscall
-GLOBAL wrap
 
+GLOBAL wrap
 wrap:
   push rbp
   mov  rbp, rsp
@@ -38,6 +38,7 @@ lab_endif_39:
   add rsp, 8*1 ; deallocate local variables temp1
   pop rbp
   ret  ;;;; wrap
+
 GLOBAL test3
 test3:
   push rbp
@@ -58,6 +59,7 @@ test3:
   add rsp, 8*3 ; deallocate local variables c, b, a
   pop rbp
   ret  ;;;; test3
+
 GLOBAL test7
 test7:
   push rbp
@@ -92,6 +94,7 @@ test7:
   add rsp, 8*5 ; deallocate local variables temp10, temp9, temp8, temp7, temp6
   pop rbp
   ret  ;;;; test7
+
 GLOBAL test10
 test10:
   push rbp
@@ -136,6 +139,7 @@ test10:
   add rsp, 8*8 ; deallocate local variables temp19, temp18, temp17, temp16, temp15, temp14, temp13, temp12
   pop rbp
   ret  ;;;; test10
+
 GLOBAL main
 main:
   push rbp

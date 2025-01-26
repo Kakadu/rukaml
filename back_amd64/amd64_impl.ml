@@ -18,12 +18,15 @@
    4) arguments go to the stack from rigth to the left (unexpected order)
    5) Variadic functions should AL:=0 to say that we don't have floating arguments.
 *)
+module ANF = Compile_lib.ANF
+module Ident = Miniml.Ident
+module Rkmi = Compile_lib.Rkmi
 
 let failwiths fmt = Format.kasprintf failwith fmt
 
-type config = { mutable verbose : bool }
+type config = { mutable verbose : bool; mutable rkmis : Compile_lib.Rkmi.repr }
 
-let cfg = { verbose = false }
+let cfg = { verbose = false; rkmis = Rkmi.to_repr [] }
 
 let log fmt =
   if cfg.verbose then Format.kasprintf (Format.printf "%s\n%!") fmt
@@ -39,7 +42,8 @@ let printfn ppf fmt = Format.kfprintf (fun ppf -> fprintf ppf "\n") ppf fmt
 let pp_space_list eta =
   Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf " ") eta
 
-let print_prologue ppf name =
+(* TODO: remove? *)
+let _print_prologue ppf name =
   if name = "main" then (
     printfn ppf "global _start";
     printfn ppf "_start:")
@@ -55,9 +59,6 @@ let print_epilogue ppf name =
   printfn ppf "  pop rbp";
   printfn ppf "  ret  ;;;; %s" name;
   fprintf ppf "%!"
-
-module ANF = Compile_lib.ANF
-module Ident = Miniml.Ident
 
 let gensym =
   let open ANF in
@@ -85,7 +86,8 @@ module Addr_of_local = struct
   let last_pos = ref 0
   let get_locals_count () = !last_pos
 
-  let clear () =
+  (* TODO: remove? *)
+  let _clear () =
     Hashtbl.clear store;
     last_pos := 0
 
@@ -115,7 +117,7 @@ module Addr_of_local = struct
     | exception Not_found ->
         failwiths "Can't find location of a variable %a" Miniml.Ident.pp name
 
-  let lookup_exn = find_exn
+  (* let lookup_exn = find_exn *)
 
   let add_arg ~argc i name =
     assert (i < argc);
@@ -129,6 +131,7 @@ module Addr_of_local = struct
     List.iter (Hashtbl.remove store) xs
 
   let pp_local_exn ppf name =
+    assert (contains name);
     let offset = find_exn name in
     (* 8 for 64 bit, 4 for 32bit *)
     if offset > 0 then fprintf ppf "[rbp-%d*8]" offset
@@ -141,9 +144,16 @@ module Addr_of_local = struct
          ""
 end
 
-let pp_dest ppf = function
+let pp_dest outer_func_used ppf = function
   | DReg s -> fprintf ppf "%s" s
-  | DStack_var name -> Addr_of_local.pp_local_exn ppf name
+  | DStack_var name when Addr_of_local.contains name ->
+      Addr_of_local.pp_local_exn ppf name
+  | DStack_var name -> (
+      match Rkmi.find_exn (Ident.to_string name) cfg.rkmis with
+      | { Rkmi.name; _ } ->
+          outer_func_used name;
+          (* TODO: Alloc closure? *)
+          fprintf ppf "%s" name)
 
 let alloc_closure ppf name arity =
   printfn ppf "  mov rdi, %a" Ident.pp name;
@@ -204,13 +214,14 @@ let print_alloc_closure ppf fname arity =
   printfn ppf "  mov rsi, %d" arity;
   printfn ppf "  call rukaml_alloc_closure"
 
-let list_iter_revindex ~f xs =
+(* TODO: remove? *)
+let _list_iter_revindex ~f xs =
   let l = List.length xs in
   List.iteri (fun n x -> f (l - n - 1) x) xs
 
 (**
     Argument [is_toplevel] returns None or Some arity. *)
-let generate_body is_toplevel ppf body =
+let generate_body is_toplevel outer_func_used ppf body =
   let open Miniml.Parsetree in
   let allocate_args args =
     (* log "XXX %s: [ %a ]" __FUNCTION__
@@ -239,7 +250,7 @@ let generate_body is_toplevel ppf body =
         | AConst (PConst_int n) -> pp_access ~doc:"constant" n
         | AVar vname when Option.is_some (is_toplevel vname) -> (
             match is_toplevel vname with
-            | Some arity ->
+            | Some (arity, _) ->
                 print_alloc_closure ppf vname arity;
                 printfn ppf "  mov qword [rsp%+d*8], rax ; arg \"%a\"" i
                   Ident.pp vname
@@ -254,6 +265,7 @@ let generate_body is_toplevel ppf body =
     count + _stack_padding
   in
 
+  let pp_dest = pp_dest outer_func_used in
   let rec helper dest = function
     | Compile_lib.ANF.EComplex c -> helper_c dest c
     | ELet (_, Tpat_var name, rhs, wher) ->
@@ -395,7 +407,7 @@ let generate_body is_toplevel ppf body =
     | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
         (* Callig a rukaml function uses custom calling convention.
            Pascal convention: all arguments on stack, LTR *)
-        let expected_arity = Option.get (is_toplevel f) in
+        let expected_arity, symbol_kind = Option.get (is_toplevel f) in
         let formal_arity = 1 + List.length args in
 
         (* printfn ppf "\t; expected_arity = %d\n\t; formal_arity = %d"
@@ -403,7 +415,7 @@ let generate_body is_toplevel ppf body =
            printfn ppf "\t; calling %S" f; *)
         if expected_arity = formal_arity then (
           let to_remove = allocate_args (arg1 :: args) in
-
+          if symbol_kind = `External then outer_func_used (Ident.to_string f);
           printfn ppf "  call %a" Ident.pp f;
           printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
           printfn ppf "  mov %a, rax" pp_dest dest)
@@ -486,7 +498,7 @@ let generate_body is_toplevel ppf body =
               Addr_of_local.pp_local_exn vname;
             printfn ppf "  mov qword %a, rdx ; access a var \"%a\"" pp_dest dest
               Ident.pp vname
-        | Some arity ->
+        | Some (arity, _) ->
             alloc_closure ppf vname arity;
             printfn ppf "  mov %a, rax" pp_dest dest)
     | ATuple (a, b, []) ->
@@ -503,7 +515,7 @@ let generate_body is_toplevel ppf body =
   helper (DReg "rax") body;
   dealloc_locals ~now:()
 
-let put_print_newline ppf =
+let _put_print_newline ppf =
   printfn ppf
     {|print_newline:
           mov rax, 1 ; 'write' syscall identifier
@@ -513,7 +525,7 @@ let put_print_newline ppf =
           syscall
           ret |}
 
-let put_print_hex ppf =
+let _put_print_hex ppf =
   printfn ppf
     {|
 print_hex:
@@ -540,9 +552,9 @@ iterate:
   ret
 |}
 
-let use_custom_main = false
-
-let codegen ?(wrap_main_into_start = true) anf file =
+let codegen ?(compile_only = false) rkmis anf file =
+  let _ = compile_only in
+  cfg.rkmis <- rkmis;
   (* log "Going to generate code here %s %d" __FUNCTION__ __LINE__; *)
   log "ANF: @[%a@]" Compile_lib.ANF.pp_stru anf;
 
@@ -558,25 +570,18 @@ let codegen ?(wrap_main_into_start = true) anf file =
 
     fun name ->
       match Hashtbl.find hash name with
-      | n -> Some n
-      | exception Not_found -> None
+      | n -> Some (n, `Local)
+      | exception Not_found -> (
+          match Rkmi.find_exn (Ident.to_string name) rkmis with
+          | exception Not_found -> None
+          | { Rkmi.arity; _ } -> Some (arity, `External))
   in
 
   Stdio.Out_channel.with_file file ~f:(fun ch ->
       let ppf = Format.formatter_of_out_channel ch in
       printfn ppf "section .note.GNU-stack noalloc noexec nowrite progbits";
-
-      if use_custom_main then
-        printfn ppf
-          {|section .data
-            newline_char: db 10
-            codes: db '0123456789abcdef' |};
       printfn ppf "section .text";
-
-      if use_custom_main then (
-        put_print_newline ppf;
-        put_print_hex ppf);
-
+      (* printfn ppf "; There are %d names in rkmis" (Rkmi.length rkmis); *)
       (* externs *)
       List.iter (printfn ppf "extern %s")
         [
@@ -591,21 +596,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
           "rukaml_gc_print_stats";
         ];
       printfn ppf "";
-
-      if use_custom_main then
-        (* TODO: use exit_group syscall (231)
-           https://filippo.io/linux-syscall-table/ *)
-        printfn ppf
-          {|_start:
-              push    rbp
-              mov     rbp, rsp   ; prologue
-              push 5
-              call sq
-              add rsp, 8
-              mov rdi, rax    ; rdi stores return code
-              mov rax, 60     ; exit syscall
-              syscall|}
-      else if wrap_main_into_start then
+      if not compile_only then
+        (* TODO: use exit_group syscall (231) *)
         printfn ppf
           {|_start:
               push    rbp
@@ -615,65 +607,50 @@ let codegen ?(wrap_main_into_start = true) anf file =
               mov rax, 60     ; exit syscall
               syscall|};
 
+      let code_ppf, code_buf =
+        let buf = Buffer.create 1000 in
+        (Format.formatter_of_buffer buf, buf)
+      in
       let open Compile_lib in
-      anf
-      |> List.iter (fun (_flg, name, expr) ->
-             if Addr_of_local.size () <> 0 then
-               failwiths
-                 "There are left over variables (before function %a): %s "
-                 Ident.pp name (Addr_of_local.keys ());
+      ListLabels.iter anf ~f:(fun (_flg, name, expr) ->
+          if Addr_of_local.size () <> 0 then
+            failwiths "There are left over variables (before function %a): %s "
+              Ident.pp name (Addr_of_local.keys ());
 
-             (* printfn ppf "";
-                fprintf ppf "\t; %a\n" Loc_of_ident.pp (); *)
+          (* printfn ppf "";
+             fprintf ppf "\t; %a\n" Loc_of_ident.pp (); *)
 
-             (* print_prologue ppf name; *)
+          (* print_prologue ppf name; *)
 
-             (* fprintf ppf "  ; There are %d known arguments in %s\n%!"
-                (Loc_of_ident.size ()) name; *)
+          (* fprintf ppf "  ; There are %d known arguments in %s\n%!"
+             (Loc_of_ident.size ()) name; *)
 
-             (* printfn ppf "  sub rsp, %d" (8 * Loc_of_ident.size ()); *)
-             (if use_custom_main && name.Ident.hum_name = "main" then
-                printfn ppf
-                  {|_start:
-                    push    rbp
-                    mov     rbp, rsp   ; prologue
-                    push 5
-                    call double
-                    add rsp, 8 ; pop 5
-                    mov rdi, rax
-                    call print_hex
-                    call print_newline
+          (* printfn ppf "  sub rsp, %d" (8 * Loc_of_ident.size ()); *)
+          let outer_func_used name = printfn ppf "extern %s" name in
+          (let () = printfn code_ppf "\nGLOBAL %a" Ident.pp name in
+           let () = printfn code_ppf "@[<h>%a:@]" Ident.pp name in
 
-                    mov rdi, 0x1122334455667788
-                    call print_hex
-                    call print_newline
-                    mov rax, 60
-                    xor rdi, rdi
-                    syscall|}
-              else
-                let () = printfn ppf "GLOBAL %a" Ident.pp name in
-                let () = printfn ppf "@[<h>%a:@]" Ident.pp name in
+           let pats, body = ANF.group_abstractions expr in
 
-                let pats, body = ANF.group_abstractions expr in
+           let argc = List.length pats in
+           let names = List.map (function ANF.APname name -> name) pats in
+           List.rev pats
+           |> ListLabels.iteri ~f:(fun i -> function
+                | ANF.APname name -> Addr_of_local.add_arg ~argc i name);
 
-                let argc = List.length pats in
-                let names =
-                  List.map (function ANF.APname name -> name) pats
-                in
-                List.rev pats
-                |> ListLabels.iteri ~f:(fun i -> function
-                     | ANF.APname name -> Addr_of_local.add_arg ~argc i name);
+           printfn code_ppf "  push rbp";
+           printfn code_ppf "  mov  rbp, rsp";
+           if name.hum_name = "main" then (
+             printfn code_ppf "  mov rdi, rsp";
+             printfn code_ppf "  call rukaml_initialize");
+           generate_body is_toplevel outer_func_used code_ppf body;
+           Addr_of_local.remove_args names;
 
-                printfn ppf "  push rbp";
-                printfn ppf "  mov  rbp, rsp";
-                if name.hum_name = "main" then (
-                  printfn ppf "  mov rdi, rsp";
-                  printfn ppf "  call rukaml_initialize");
-                generate_body is_toplevel ppf body;
-                Addr_of_local.remove_args names;
-
-                print_epilogue ppf name.hum_name);
-             ());
+           print_epilogue code_ppf name.hum_name);
+          ());
+      Format.pp_print_flush ppf ();
+      Format.pp_print_flush code_ppf ();
+      Format.pp_print_string ppf (Buffer.contents code_buf);
       Format.pp_print_flush ppf ());
 
   Result.Ok ()

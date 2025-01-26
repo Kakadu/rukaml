@@ -79,3 +79,4 @@ val pp_binder_set : Format.formatter -> binder_set -> unit
 val show_binder_set : binder_set -> string
 val pp_binder : Format.formatter -> binder -> unit
 val show_binder : binder -> string
+val arity_of_expr : expr -> int

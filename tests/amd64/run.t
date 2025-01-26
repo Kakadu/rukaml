@@ -41,8 +41,8 @@
       15	              mov rdi, rax    ; rdi stores return code
       16	              mov rax, 60     ; exit syscall
       17	              syscall
-      18	GLOBAL sq
-      19	
+      18	
+      19	GLOBAL sq
       20	sq:
       21	  push rbp
       22	  mov  rbp, rsp
@@ -52,30 +52,32 @@
       26	  mov rax, r11
       27	  pop rbp
       28	  ret  ;;;; sq
-      29	GLOBAL double
-      30	double:
-      31	  push rbp
-      32	  mov  rbp, rsp
-      33	  mov qword r11, [rbp+2*8]
-      34	  mov qword r12, [rbp+2*8]
-      35	  add  r11, r12
-      36	  mov rax, r11
-      37	  pop rbp
-      38	  ret  ;;;; double
-      39	GLOBAL main
-      40	main:
-      41	  push rbp
-      42	  mov  rbp, rsp
-      43	  mov rdi, rsp
-      44	  call rukaml_initialize
-      45	  sub rsp, 8 ; trying to save alignment 16 bytes
-      46	  sub rsp, 8*1 ; fun arguments
-      47	  mov qword [rsp+0*8], 7 ; constant
-      48	  call sq
-      49	  add rsp, 8*2 ; dealloc args
-      50	  mov rax, rax
-      51	  pop rbp
-      52	  ret  ;;;; main
+      29	
+      30	GLOBAL double
+      31	double:
+      32	  push rbp
+      33	  mov  rbp, rsp
+      34	  mov qword r11, [rbp+2*8]
+      35	  mov qword r12, [rbp+2*8]
+      36	  add  r11, r12
+      37	  mov rax, r11
+      38	  pop rbp
+      39	  ret  ;;;; double
+      40	
+      41	GLOBAL main
+      42	main:
+      43	  push rbp
+      44	  mov  rbp, rsp
+      45	  mov rdi, rsp
+      46	  call rukaml_initialize
+      47	  sub rsp, 8 ; trying to save alignment 16 bytes
+      48	  sub rsp, 8*1 ; fun arguments
+      49	  mov qword [rsp+0*8], 7 ; constant
+      50	  call sq
+      51	  add rsp, 8*2 ; dealloc args
+      52	  mov rax, rax
+      53	  pop rbp
+      54	  ret  ;;;; main
 
   $ nasm -felf64 program.asm -o program.o
   $ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe

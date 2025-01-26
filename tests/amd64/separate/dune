@@ -1,0 +1,72 @@
+(rule
+ (deps %{project_root}/back_amd64/amd64_compiler.exe)
+ (target compiler.exe)
+ (action
+  (copy %{deps} %{target})))
+
+(rule
+ (deps %{project_root}/back_amd64/rukaml_stdlib.o)
+ (target stdlib.o)
+ (action
+  (copy %{deps} %{target})))
+
+(cram
+ (deps
+  ;(package MiniML)
+  ;(package MiniML_amd64)
+  stdlib.o
+  compiler.exe
+  fac_main.exe
+  ;
+  ))
+
+(rule
+ (targets fac.asm fac.rkmi)
+ (deps
+  (:src fac.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -c -o fac.asm)
+   ;(run nasm -g -F dwarf -felf64 print.asm -o print.o)
+   ;(run gcc-13 -g -no-pie print.o %{stdlib} -o print.exe)
+   )))
+
+(rule
+ (targets fac_main.asm)
+ (deps
+  (:src fac_main.ml)
+  (:rkmi fac.rkmi)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (run
+   %{project_root}/back_amd64/amd64_compiler.exe
+   %{rkmi}
+   %{src}
+   -o
+   %{targets})))
+
+(rule
+ (targets fac_main.exe)
+ (deps
+  (:fac fac.asm)
+  (:fac_main fac_main.asm)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   ;(run %{project_root}/back_amd64/amd64_compiler.exe %{src} -c -o fac.asm)
+   (run nasm -g -F dwarf -felf64 fac.asm -o fac.o)
+   (run nasm -g -F dwarf -felf64 fac_main.asm -o fac_main.o)
+   (run gcc-13 -g fac.o fac_main.o %{stdlib} -o %{targets})
+   ;
+   )))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

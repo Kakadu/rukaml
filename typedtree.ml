@@ -102,6 +102,14 @@ let compact_expr =
   helper
 ;;
 
+let arity_of_expr =
+  let rec helper acc = function
+    | TLam (_, e, _) -> helper (acc + 1) e
+    | _ -> acc
+  in
+  helper 0
+;;
+
 type value_binding =
   { tvb_flag : Parsetree.rec_flag
   ; tvb_pat : pattern

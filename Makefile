@@ -10,6 +10,8 @@ watch:
 
 promote:
 	dune runtest --auto-promote
+clean:
+	dune clean
 
 DEBS += nasm clang-16 gcc-13 pkg-config
 DEBS += gcc-13-riscv64-linux-gnu libc6-dev-riscv64-cross qemu-user binutils-riscv64-linux-gnu

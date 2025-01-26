@@ -2,7 +2,7 @@
  (name compile_lib)
  (public_name MiniML.compile)
  (libraries stdio miniml cconv)
- (modules ANF compile_tests)
+ (modules ANF rkmi compile_tests)
  (preprocess
   (pps
    ; ppx_blob

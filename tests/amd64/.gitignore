@@ -1,4 +1,5 @@
 *.exe
+*.rkmi
 
 /print.asm
 /gdb.txt

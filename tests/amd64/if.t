@@ -28,8 +28,8 @@
       15	              mov rdi, rax    ; rdi stores return code
       16	              mov rax, 60     ; exit syscall
       17	              syscall
-      18	GLOBAL main
-      19	
+      18	
+      19	GLOBAL main
       20	main:
       21	  push rbp
       22	  mov  rbp, rsp
