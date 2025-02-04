@@ -216,12 +216,15 @@ let distr_ids_program ?(with_printing = false) =
         glob_vars
         (fun gv ds_vb fv -> helper gv (fun ds_vbs fv2 -> k (ds_vb :: ds_vbs) fv2) fv tl)
         free_vars
-    | [] -> k [] free_vars
+    | [] -> k [] free_vars glob_vars
   in
   helper
     (snd start_glob_envs)
-    (fun ds_vb free_vars ->
-      if SMap.is_empty free_vars then Result.ok ds_vb else Result.error free_vars)
+    (fun ds_vbs free_vars glob_vars ->
+      let main_id = SMap.find "main" glob_vars in
+      if SMap.is_empty free_vars
+      then Result.ok (ds_vbs, main_id)
+      else Result.error free_vars)
     SMap.empty
 ;;
 
@@ -276,27 +279,29 @@ let preconv_count_vb vb =
   preconv_count_helper vb (IMap.empty, empty, empty) Fun.id
 ;;
 
-let preconv_count_program =
+let preconv_count_program main_id =
   let open IMap in
-  let rec helper cntrs = function
+  let rec helper ((_, ref_once, no_refs) as cntrs) = function
     | hd :: tl -> preconv_count_helper hd cntrs (fun cntrs -> helper cntrs tl)
-    | [] -> cntrs
+    | [] ->
+      let open ISet in
+      if mem main_id no_refs
+      then add main_id ref_once, remove main_id no_refs
+      else remove main_id ref_once, no_refs
   in
   helper (empty, ISet.empty, ISet.empty)
 ;;
 
 let test_count text =
-  match Miniml.Parsing.parse_structure text with
-  | Result.Ok stru ->
-    let ds_stru = Result.get_ok (distr_ids_program ~with_printing:true stru) in
-    let counts, ref_once, no_refs = preconv_count_program ds_stru in
-    IMap.iter (Printf.printf "id: %d; counts %d\n") counts;
-    Printf.printf "ids that ref_once:\n";
-    ISet.iter (Printf.printf "%d\n") ref_once;
-    Printf.printf "ids that no_refs:\n";
-    ISet.iter (Printf.printf "%d\n") no_refs;
-    ANF.reset_gensym ()
-  | _ -> Format.printf "parsing error\n"
+  let vb = Miniml.Parsing.parse_vb_exn text in
+  let vb' = Result.get_ok (distr_ids_vb ~with_printing:true vb) in
+  let counts, ref_once, no_refs = preconv_count_vb vb' in
+  IMap.iter (Printf.printf "id: %d; counts %d\n") counts;
+  Printf.printf "ids that ref_once:\n";
+  ISet.iter (Printf.printf "%d\n") ref_once;
+  Printf.printf "ids that no_refs:\n";
+  ISet.iter (Printf.printf "%d\n") no_refs;
+  ANF.reset_gensym ()
 ;;
 
 let%expect_test "counts simple" =
@@ -380,7 +385,8 @@ let rec extend_env env counts = function
 ;;
 
 (* The top-level function *)
-let rec cps_glob ds_ref_once ds_no_refs glob_env =
+let rec cps_glob ?(main_id = 0) ds_ref_once ds_no_refs glob_env =
+  let cps_glob = cps_glob ~main_id ds_ref_once ds_no_refs in
   let one_ref i =
     match ISet.find_opt i.id ds_ref_once with
     | None -> false
@@ -406,7 +412,7 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
   and ret c a counts =
     let helper_toplevelletcont = function
       | (NonRecursive, y', e) :: tl -> ToplevelLetNonRecCont (y', tl), e, glob_env, counts
-      | [] -> AHALT, DEUnit, glob_env, counts
+      | [] -> AHALT, DEVar { id = main_id; hum_name = "main" }, glob_env, counts
       | (Recursive, y', e) :: tl ->
         let pat, glob_env', counts' = extend_env glob_env counts y' in
         ToplevelLetRecCont (pat, tl), e, glob_env', counts'
@@ -441,11 +447,11 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
     | ToplevelLetNonRecCont (y, vbs) ->
       let constr x b w = Let (NonRecursive, x, b, w) in
       let c'', e, glob_env', counts' = helper_toplevelletcont vbs in
-      bnd (cps_glob ds_ref_once ds_no_refs) y a e glob_env' c'' constr counts'
+      bnd cps_glob y a e glob_env' c'' constr counts'
     | ToplevelLetRecCont (pat, vbs) ->
       let c'', e, glob_env', counts' = helper_toplevelletcont vbs in
-      let constr b w = Let (NonRecursive, pat, b, w) in
-      bnd_rec (cps_glob ds_ref_once ds_no_refs) a e glob_env' c'' constr counts'
+      let constr b w = Let (Recursive, pat, b, w) in
+      bnd_rec cps_glob a e glob_env' c'' constr counts'
   and call f a c counts =
     match f with
     | AVar v when String.equal v.hum_name "print" ->
@@ -543,31 +549,20 @@ let cps_vb ds_ref_once ds_no_refs (rec_flag, ds_pat, ds_expr) =
   rec_flag, pat, p
 ;;
 
-let cps_program ds_ref_once ds_no_refs vbs =
+let cps_program main_id ds_ref_once ds_no_refs vbs =
   let open IMap in
   let open Miniml.Ident in
+  let cps_glob = cps_glob ~main_id ds_ref_once ds_no_refs in
   let p, _ =
     match vbs with
     | [] -> Ret (HALT, Triv TUnit), empty
     | (NonRecursive, ds_pat, ds_expr) :: tl ->
-      cps_glob
-        ds_ref_once
-        ds_no_refs
-        (fst start_glob_envs)
-        ds_expr
-        (ToplevelLetNonRecCont (ds_pat, tl))
-        empty
+      cps_glob (fst start_glob_envs) ds_expr (ToplevelLetNonRecCont (ds_pat, tl)) empty
     | (Recursive, ds_pat, ds_expr) :: tl ->
       let pat, glob_env, counts = extend_env (fst start_glob_envs) empty ds_pat in
-      cps_glob
-        ds_ref_once
-        ds_no_refs
-        glob_env
-        ds_expr
-        (ToplevelLetRecCont (pat, tl))
-        counts
+      cps_glob glob_env ds_expr (ToplevelLetRecCont (pat, tl)) counts
   in
-  NonRecursive, CPVar (of_string "cps_program"), p
+  NonRecursive, CPVar (of_string "main"), p
 ;;
 
 let cps_vb_to_parsetree_vb (rec_flag, pat, p) =
@@ -600,7 +595,6 @@ let cps_vb_to_parsetree_vb (rec_flag, pat, p) =
     | Lam (pat, i, p) ->
       (fun ptrn -> helper_p p (fun b -> elam ptrn (elam (pvar i.hum_name) b) |> k'))
       |> helper_pat pat
-    (* | Print t' -> helper_triv t' (fun e -> EApp (EVar "print", e) |> k') *)
     | PrimBinop (op, t1, t2) ->
       helper_triv t1 (fun e1 ->
         helper_triv t2 (fun e2 -> eapp (evar op.hum_name) [ e1; e2 ] |> k'))
@@ -648,9 +642,9 @@ let test_cps_program text =
   match Parsing.parse_structure text with
   | Result.Ok stru ->
     (match distr_ids_program stru with
-     | Ok ds_stru ->
-       let _, ref_once, no_refs = preconv_count_program ds_stru in
-       let cps_program = cps_program ref_once no_refs ds_stru in
+     | Ok (ds_stru, main_id) ->
+       let ref_once, no_refs = preconv_count_program main_id ds_stru in
+       let cps_program = cps_program main_id ref_once no_refs ds_stru in
        let vb' = cps_vb_to_parsetree_vb cps_program in
        Format.printf "%a" Pprint.pp_value_binding vb';
        ANF.reset_gensym ()
@@ -682,19 +676,18 @@ let%expect_test "cps simple prog" =
   let main = double (double 3)|};
   [%expect
     {| 
-  let cps_program = let double x k1 = k1 (2 * x) in double 3 (fun t2 ->
-                                                              double t2
-                                                              (fun t3 ->
-                                                               let main =
-                                                               t3 in ()))
+let main = let double x k1 = k1 (2 * x) in double 3 (fun t2 -> double
+                                                               t2 (fun
+                                                                  t3 ->
+                                                                   t3))
 |}]
 ;;
 
 let%expect_test "cps prog inlining" =
-  test_cps_program {| let y = 3 
+  test_cps_program {|let y = 3 
   let double x = 2 * x 
   let main = double (y + y)|};
-  [%expect {|  let cps_program = let main = 2 * (3 + 3) in ()
+  [%expect {|  let main = 2 * (3 + 3)
 |}]
 ;;
 
