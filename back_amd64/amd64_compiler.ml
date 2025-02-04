@@ -1,5 +1,6 @@
 type cfg = {
   mutable out_file : string;
+  mutable dsource : bool;
   mutable input_file : string option; (* mutable dump_ir : bool; *)
   mutable wrap_main_into_start : bool;
 }
@@ -19,6 +20,7 @@ let frontend cfg =
   let ( let* ) x f = Result.bind x f in
   (* let ( let+ ) x f = Result.map f x in *)
   let* stru = Miniml.Parsing.parse_structure text |> promote_error in
+  let () = if cfg.dsource then Format.printf "%a\n%!" Pprint.pp_stru stru in
   let stru =
     let init = (CConv.standart_globals, []) in
     Stdlib.ListLabels.fold_left
@@ -47,7 +49,13 @@ let frontend cfg =
     cfg.out_file
   |> promote_error
 
-let cfg = { out_file = "a.out"; input_file = None; wrap_main_into_start = true }
+let cfg =
+  {
+    out_file = "a.out";
+    dsource = false;
+    input_file = None;
+    wrap_main_into_start = true;
+  }
 
 let print_errors = function
   | #Miniml.Parsing.error as e -> Format.printf "%a\n%!" Parsing.pp_error e
@@ -58,6 +66,7 @@ let () =
   Arg.parse
     [
       ("-o", Arg.String (fun s -> cfg.out_file <- s), " set output file");
+      ("-dsource", Arg.Unit (fun () -> cfg.dsource <- true), " ");
       ("-", Arg.Unit (fun () -> cfg.input_file <- None), " read from stdin");
       ( "--no-start",
         Arg.Unit (fun () -> cfg.wrap_main_into_start <- false),
