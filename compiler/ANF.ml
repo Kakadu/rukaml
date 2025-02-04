@@ -445,7 +445,7 @@ let%expect_test "CPS factorial" =
     else fack (n-1) (fun p -> k (p*n)) |};
   [%expect
     {|
-    let fresh_2 n k p =
+    let fresh_1 n k p =
       let temp1 = (p * n) in
         k temp1
     let rec fack n k =
@@ -454,7 +454,7 @@ let%expect_test "CPS factorial" =
         then k 1
         else let temp5 = (n - 1) in
                let temp6 = fack temp5  in
-                 let temp7 = fresh_2 n  in
+                 let temp7 = fresh_1 n  in
                    let temp8 = temp7 k  in
                      temp6 temp8 ) |}]
 ;;
@@ -471,11 +471,11 @@ let%expect_test _ =
   test_anf {| let foo = ((fun x -> x), (fun y -> y)) |};
   [%expect
     {|
-    let fresh_3 x =
+    let fresh_2 x =
       x
-    let fresh_4 y =
+    let fresh_3 y =
       y
     let foo =
-      (fresh_3, fresh_4)
+      (fresh_2, fresh_3)
      |}]
 ;;
