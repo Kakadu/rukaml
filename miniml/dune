@@ -1,0 +1,34 @@
+(library
+ (name lib_miniml)
+ (modules AST parser)
+ (libraries ppx_show.runtime)
+ (inline_tests)
+ (wrapped false)
+ (preprocess
+  (pps
+   ; ppx_show
+   ppx_deriving.show
+   ppx_expect
+   ppx_inline_test)))
+
+(executable
+ (name driver)
+ ;(package pascal)
+ ;(public_name pascal)
+ (modules driver)
+ (libraries lib_pascal))
+
+(library
+ (name tests)
+ (modules tests)
+ (libraries lib_miniml)
+ (inline_tests)
+ (preprocess
+  (pps
+   ; ppx_show
+   ppx_deriving.show
+   ppx_expect
+   ppx_inline_test)))
+
+(cram
+ (deps ./driver.exe))
