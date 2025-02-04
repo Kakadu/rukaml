@@ -120,3 +120,16 @@ let%expect_test "uuu: lifting letrec " =
     let uuu n = loop n 0
        |}]
 ;;
+
+let%expect_test " nested let" =
+  (* CConv.set_logging true; *)
+  wrap "let main =\n    let id x = x in  5 ";
+  (* CConv.set_logging false; *)
+  [%expect {|
+    let main = let id x = x in 5
+    	~~[2 value bindings]~~>
+    let id x = x
+    let main = 5
+
+     |}]
+;;
