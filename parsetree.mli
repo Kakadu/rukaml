@@ -32,7 +32,8 @@ type expr =
   | ELam of pattern * expr (** fun ... -> ... *)
   | EApp of expr * expr (** Application f x *)
   | ETuple of expr * expr * expr list
-  | ELet of rec_flag * pattern * expr * expr (** let rec? .. = ... in ...  *)
+  | ELet of rec_flag * pattern * expr * expr (** let rec? .. = ... in ... *)
+  | EAccess of expr * expr (** [EAccess (x, i)] represents [Array.get x i]*)
 
 type value_binding = rec_flag * pattern * expr
 type structure_item = value_binding
@@ -61,4 +62,5 @@ val elt : expr -> expr -> expr
 val ele : expr -> expr -> expr
 val egt : expr -> expr -> expr
 val etuple : expr -> expr -> expr list -> expr
+val eaccess : expr -> expr -> expr
 val group_lams : expr -> pattern list * expr

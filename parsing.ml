@@ -44,7 +44,7 @@ let const = char '0' >>= fun c -> return (Printf.sprintf "%c" c)
 type dispatch =
   { prio : dispatch -> expr t
   ; expr_basic : dispatch -> expr t
-  ; expr_long : dispatch -> expr t
+  ; expr_long : dispatch -> expr t (** Parse space separated applications *)
   ; expr : dispatch -> expr t
   }
 
@@ -107,15 +107,15 @@ let pattern =
     fail ""
     <|> parens
           (return (fun a b ps -> PTuple (a, b, ps))
-          <*> pattern
-          <*> string "," *> ws *> pattern
-          <*> many (string "," *> ws *> pattern))
+           <*> pattern
+           <*> string "," *> ws *> pattern
+           <*> many (string "," *> ws *> pattern))
     <|> (ws *> ident >>= fun v -> return (pvar v) <* trace_pos v))
 ;;
 
 (* >>| fun x ->
-  log "pattern %a parsed" Pprint.pp_pattern x;
-  x *)
+   log "pattern %a parsed" Pprint.pp_pattern x;
+   x *)
 
 let keyword kwd =
   ws
@@ -154,7 +154,7 @@ let letdef erhs =
   <*> (trace_pos "let"
        *> keyword "let"
        *> option NonRecursive (keyword "rec" >>| fun _ -> Recursive)
-      <* ws)
+       <* ws)
   <*> pattern
   <*> many (ws *> pattern)
   <*> ws *> string "=" *> ws *> erhs
@@ -172,58 +172,91 @@ let letdef0 erhs =
   isrec, name, List.fold_right elam ps rhs
 ;;
 
+let conde = function
+  | [] -> failwith "bad argument"
+  | h :: tl -> List.fold_left ( <|> ) h tl
+;;
+
 let pack : dispatch =
   let open Format in
   let prio d =
-    prio
-      (d.expr_long d)
-      [| [ ws *> string "=", eeq
-         ; ws *> string "<=", ele
-         ; ws *> string "<", elt
-         ; ws *> string ">", egt
-         ]
-       ; [ ws *> string "+", eadd; ws *> string "-", esub ]
-       ; [ ws *> string "*", emul ]
-      |]
+    trace_pos "prio"
+    *> prio
+         (d.expr_long d)
+         [| [ ws *> string "=", eeq
+              (* ; ws *> string "<=", ele *)
+              (* ; ws *> string "<", elt *)
+              (* ; ws *> string ">", egt *)
+            ]
+          ; [ ws *> string "+", eadd; ws *> string "-", esub ]
+            (* ; [ ws *> string "*", emul ] *)
+         |]
+  in
+  let maybe_with_arrays ?(msg = "") d basic =
+    trace_pos (Format.asprintf "maybe_with_arrays %s" msg)
+    *>
+    let* base = basic in
+    let* () =
+      trace_pos (Format.asprintf "maybe_with_arrays.basic = %a" Pprint.pp_expr base)
+    in
+    let* offsets = many (ws *> string ".[" *> d.expr_long d <* string "]") in
+    let ans = List.fold_left eaccess base offsets in
+    let* () =
+      trace_pos (Format.asprintf "maybe_with_arrays.returns = %a" Pprint.pp_expr ans)
+    in
+    return ans
   in
   let expr_basic d =
     trace_pos "expr_basic"
     *> fix (fun _self ->
-         ws
-         *> (fail ""
-            <|> ws *> (number >>| fun n -> econst (const_int n))
-            <|> (ws *> char '(' *> char ')' >>| fun _ -> eunit)
-            <|> (ws *> ident
-                >>= function
-                | "true" -> return @@ econst (const_bool true)
-                | "false" -> return @@ econst (const_bool true)
-                | _ -> fail "Not a boolean constant")
-            <|> parens
-                  (return (fun a b xs -> etuple a b xs)
-                  <*> (d.expr d <* ws)
-                  <*> (string "," *> d.expr d <* ws)
-                  <*> many (string "," *> d.expr d <* ws))
-            <|> (ws *> ident >>| evar)
-            <|> (keyword "fun" *> pattern
-                >>= fun p ->
-                (* let () = log "Got a abstraction over %a" Pprint.pp_pattern p in *)
-                ws *> string "->" *> ws *> d.prio d >>= fun b -> return (elam p b))
-            <|> (keyword "if" *> d.prio d
-                >>= fun cond ->
-                keyword "then" *> d.prio d
-                >>= fun th ->
-                keyword "else" *> d.prio d >>= fun el -> return (eite cond th el))
-            <|> (letdef (d.prio d)
-                >>= fun (isrec, ident, rhs) ->
-                keyword "in" *> d.prio d >>= fun in_ -> return (elet ~isrec ident rhs in_)
-                )))
+      let* () = ws in
+      let* ans =
+        fail ""
+        <|> ws *> (number >>| fun n -> econst (const_int n))
+        <|> (ws *> char '(' *> char ')' >>| fun _ -> eunit)
+        (* <|> (ws *> ident
+               >>= function
+               | "true" -> return @@ econst (const_bool true)
+               | "false" -> return @@ econst (const_bool false)
+               | _ -> fail "Not a boolean constant") *)
+        (* <|> parens
+           (return (fun a b xs -> etuple a b xs)
+           <*> (d.expr d <* ws)
+           <*> (string "," *> d.expr d <* ws)
+           <*> many (string "," *> d.expr d <* ws)) *)
+        <|> (ws *> ident >>| evar)
+        (* <|> (keyword "fun" *> pattern
+           >>= fun p ->
+           (* let () = log "Got a abstraction over %a" Pprint.pp_pattern p in *)
+           ws *> string "->" *> ws *> d.prio d >>= fun b -> return (elam p b)) *)
+        (* <|> (keyword "if" *> d.prio d
+           >>= fun cond ->
+           keyword "then" *> d.prio d
+           >>= fun th ->
+           keyword "else" *> d.prio d >>= fun el -> return (eite cond th el)) *)
+        <|> (letdef (d.prio d)
+             >>= fun (isrec, ident, rhs) ->
+             keyword "in" *> d.prio d >>= fun in_ -> return (elet ~isrec ident rhs in_))
+      in
+      let* () = trace_pos (Format.asprintf "expr_basic returns %a" Pprint.pp_expr ans) in
+      return ans)
   in
   let expr_long d =
     fix (fun _self ->
-      many (ws *> (d.expr_basic d <|> parens (d.prio d)) <* ws)
+      let* () = trace_pos (Format.asprintf "  expr_long starts") in
+      many
+        (ws
+         *> conde
+              [ maybe_with_arrays d (d.expr_basic d)
+              ; maybe_with_arrays d (parens (d.expr_long d))
+              ; d.prio d
+              ]
+         <* ws)
       >>= function
       | [] -> fail "can't parse many expressions"
-      | [ h ] -> return h
+      | [ h ] ->
+        let* () = trace_pos (Format.asprintf "  expr_long returns %a" Pprint.pp_expr h) in
+        return h
       | foo :: args -> return @@ eapp foo args)
   in
   { expr_basic; expr_long; prio; expr = prio }

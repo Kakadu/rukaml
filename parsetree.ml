@@ -25,6 +25,7 @@ type expr =
   | EApp of expr * expr
   | ETuple of expr * expr * expr list
   | ELet of rec_flag * pattern * expr * expr
+  | EAccess of expr * expr
 [@@deriving show { with_path = false }]
 
 let const_int n = PConst_int n
@@ -50,6 +51,7 @@ let eeq a b = eapp (evar "=") [ a; b ]
 let elt a b = eapp (evar "<") [ a; b ]
 let ele a b = eapp (evar "<=") [ a; b ]
 let egt a b = eapp (evar ">") [ a; b ]
+let eaccess a b = EAccess (a, b)
 
 type value_binding = rec_flag * pattern * expr [@@deriving show { with_path = false }]
 type structure_item = value_binding [@@deriving show { with_path = false }]

@@ -51,6 +51,8 @@ let rec pp_expr_helper ?(ps = true) ppf = function
           no_pars)
       el
   | EVar s -> pp_print_string ppf s
+  | EAccess (EVar arr, offset) -> fprintf ppf "%s.[%a]" arr no_pars offset
+  | EAccess (arr, offset) -> fprintf ppf "%a.[%a]" maybe_pars arr no_pars offset
   | EApp (EApp (EVar ("<" as op), l), r)
   | EApp (EApp (EVar ("<=" as op), l), r)
   | EApp (EApp (EVar (">" as op), l), r)
