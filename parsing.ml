@@ -184,12 +184,12 @@ let pack : dispatch =
     *> prio
          (d.expr_long d)
          [| [ ws *> string "=", eeq
-              (* ; ws *> string "<=", ele *)
-              (* ; ws *> string "<", elt *)
-              (* ; ws *> string ">", egt *)
+            ; ws *> string "<=", ele
+            ; ws *> string "<", elt
+            ; ws *> string ">", egt
             ]
           ; [ ws *> string "+", eadd; ws *> string "-", esub ]
-            (* ; [ ws *> string "*", emul ] *)
+          ; [ ws *> string "*", emul ]
          |]
   in
   let maybe_with_arrays ?(msg = "") d basic =
@@ -214,26 +214,26 @@ let pack : dispatch =
         fail ""
         <|> ws *> (number >>| fun n -> econst (const_int n))
         <|> (ws *> char '(' *> char ')' >>| fun _ -> eunit)
-        (* <|> (ws *> ident
-               >>= function
-               | "true" -> return @@ econst (const_bool true)
-               | "false" -> return @@ econst (const_bool false)
-               | _ -> fail "Not a boolean constant") *)
-        (* <|> parens
-           (return (fun a b xs -> etuple a b xs)
-           <*> (d.expr d <* ws)
-           <*> (string "," *> d.expr d <* ws)
-           <*> many (string "," *> d.expr d <* ws)) *)
+        <|> (ws *> ident
+             >>= function
+             | "true" -> return @@ econst (const_bool true)
+             | "false" -> return @@ econst (const_bool false)
+             | _ -> fail "Not a boolean constant")
+        <|> parens
+              (return (fun a b xs -> etuple a b xs)
+               <*> (d.expr d <* ws)
+               <*> (string "," *> d.expr d <* ws)
+               <*> many (string "," *> d.expr d <* ws))
         <|> (ws *> ident >>| evar)
-        (* <|> (keyword "fun" *> pattern
-           >>= fun p ->
-           (* let () = log "Got a abstraction over %a" Pprint.pp_pattern p in *)
-           ws *> string "->" *> ws *> d.prio d >>= fun b -> return (elam p b)) *)
-        (* <|> (keyword "if" *> d.prio d
-           >>= fun cond ->
-           keyword "then" *> d.prio d
-           >>= fun th ->
-           keyword "else" *> d.prio d >>= fun el -> return (eite cond th el)) *)
+        <|> (keyword "fun" *> pattern
+             >>= fun p ->
+             (* let () = log "Got a abstraction over %a" Pprint.pp_pattern p in *)
+             ws *> string "->" *> ws *> d.prio d >>= fun b -> return (elam p b))
+        <|> (keyword "if" *> d.prio d
+             >>= fun cond ->
+             keyword "then" *> d.prio d
+             >>= fun th ->
+             keyword "else" *> d.prio d >>= fun el -> return (eite cond th el))
         <|> (letdef (d.prio d)
              >>= fun (isrec, ident, rhs) ->
              keyword "in" *> d.prio d >>= fun in_ -> return (elet ~isrec ident rhs in_))
@@ -247,9 +247,8 @@ let pack : dispatch =
       many
         (ws
          *> conde
-              [ maybe_with_arrays d (d.expr_basic d)
-              ; maybe_with_arrays d (parens (d.expr_long d))
-              ; d.prio d
+              [ maybe_with_arrays d (parens (d.prio d)) (* ; d.prio d *)
+              ; maybe_with_arrays d (d.expr_basic d)
               ]
          <* ws)
       >>= function
