@@ -3,6 +3,7 @@
 open Miniml.Parsetree
 open Miniml.Ident
 
+(* ds_pattern, ds_expr, ds_vb --- that's parsetree but every var has id*)
 type ds_pattern =
   | DPVar of ident
   | DPTuple of ds_pattern * ds_pattern * ds_pattern list
@@ -43,29 +44,26 @@ type pat =
 
 type p =
   | Call of triv * triv * cont
-  | Ret of cont * returnable
+  | Ret of cont * triv
   | CIf of triv * p * p
   | Let of rec_flag * pat * triv * p
+  | Primop of pat * var * triv list * p
   | Letc of var * cont * p
-
-and returnable =
-  | Triv of triv
-  | Print of triv
 
 and cont =
   | Cont of pat * p
   | CVar of var
   | HALT
 
-and tuple = triv * triv * triv list
-and primbinop = var * triv * triv
+and 'a tuple = 'a * 'a * 'a list
+and 'a safe_binop = var * 'a * 'a (* invarint:  division by zero isn't possible *)
 
 and triv =
   | Lam of pat * var * p
-  | PrimBinop of primbinop
+  | TSafeBinop of triv safe_binop
   | UVar of var
   | TConst of const
-  | TTuple of tuple
+  | TTuple of triv tuple
   | TUnit
 
 (* Abstract args *)
@@ -74,8 +72,8 @@ type a =
   | AClo of ds_pattern * ds_expr * env
   | AConst of const
   | AUnit
-  | ATuple of tuple
-  | APrimBinop of primbinop
+  | ATuple of a tuple
+  | ASafeBinop of a safe_binop
 
 and env = a IMap.t
 
@@ -86,13 +84,13 @@ type c =
   | FCont of ds_expr * env * c
   | ACont of a * c
   | ICont of ds_expr * ds_expr * env * c
-  | TupleBldCont of ds_expr list * triv list * env * c
+  | TupleBldCont of ds_expr list * a list * env * c
   | LetRecCont of pat * ds_expr * env * c
   | ToplevelLetRecCont of pat * ds_vb list
   | LetNonRecCont of ds_pattern * ds_expr * env * c
   | ToplevelLetNonRecCont of ds_pattern * ds_vb list
   | BinopsFirstArgCont of var * ds_expr * env * c
-  | BinopsSecondArgCont of var * triv * c
+  | BinopsSecondArgCont of var * a * c
 
 (* Extend a static environment with a new [y |-> a] entry. *)
 let extend y a env = IMap.add y a env
@@ -414,57 +412,45 @@ let rec cps_glob ?(main_id = 0) ds_ref_once ds_no_refs glob_env =
       | (NonRecursive, y', e) :: tl -> ToplevelLetNonRecCont (y', tl), e, glob_env, counts
       | [] -> AHALT, DEVar { id = main_id; hum_name = "main" }, glob_env, counts
       | (Recursive, y', e) :: tl ->
-        let pat, glob_env', counts' = extend_env glob_env counts y' in
-        ToplevelLetRecCont (pat, tl), e, glob_env', counts'
-    in
-    let bless_c_and_a c a =
-      let cont, counts2 = blessc c counts in
-      let arg, counts3 = blessa a counts2 in
-      cont, arg, counts3
+        let pat, glob_env', counts2 = extend_env glob_env counts y' in
+        ToplevelLetRecCont (pat, tl), e, glob_env', counts2
     in
     match c with
     | AHALT | KVar _ ->
-      let cont, arg, counts2 = bless_c_and_a c a in
-      Ret (cont, Triv arg), counts2
+      let cont, counts2 = blessc c counts in
+      let arg, counts3 = blessa a counts2 in
+      Ret (cont, arg), counts3
     | FCont (e, env, c') -> cps env e (ACont (a, c')) counts
     | ACont (a', c') -> call a' a c' counts
     | ICont (e1, e2, env, c') -> cif a e1 e2 c' env counts
-    | BinopsFirstArgCont (op, e, env, c') ->
-      let arg1, counts2 = blessa a counts in
-      cps env e (BinopsSecondArgCont (op, arg1, c')) counts2
-    | BinopsSecondArgCont (op, arg1, c') ->
-      let arg2, counts2 = blessa a counts in
-      ret c' (APrimBinop (op, arg1, arg2)) counts2
-    | TupleBldCont (ds_ee, trivs, env, c') ->
-      let arg, counts2 = blessa a counts in
+    | TupleBldCont (ds_ee, aa, env, c') ->
       (match ds_ee with
-       | [] -> ret c' (atuple (arg :: trivs)) counts2
-       | hd :: tl -> cps env hd (TupleBldCont (tl, arg :: trivs, env, c')) counts2)
+       | [] -> ret c' (atuple (a :: aa)) counts
+       | hd :: tl -> cps env hd (TupleBldCont (tl, a :: aa, env, c')) counts)
     | LetNonRecCont (y, wh, env, c') ->
       bnd cps y a wh env c' (fun x b w -> Let (NonRecursive, x, b, w)) counts
     | LetRecCont (pat, wh, env, c') ->
       bnd_rec cps a wh env c' (fun b w -> Let (Recursive, pat, b, w)) counts
     | ToplevelLetNonRecCont (y, vbs) ->
       let constr x b w = Let (NonRecursive, x, b, w) in
-      let c'', e, glob_env', counts' = helper_toplevelletcont vbs in
-      bnd cps_glob y a e glob_env' c'' constr counts'
+      let c'', e, glob_env', counts2 = helper_toplevelletcont vbs in
+      bnd cps_glob y a e glob_env' c'' constr counts2
     | ToplevelLetRecCont (pat, vbs) ->
-      let c'', e, glob_env', counts' = helper_toplevelletcont vbs in
+      let c'', e, glob_env', counts2 = helper_toplevelletcont vbs in
       let constr b w = Let (Recursive, pat, b, w) in
-      bnd_rec cps_glob a e glob_env' c'' constr counts'
+      bnd_rec cps_glob a e glob_env' c'' constr counts2
+    | BinopsFirstArgCont (op, e, env, c') ->
+      cps env e (BinopsSecondArgCont (op, a, c')) counts
+    | BinopsSecondArgCont (op, a1, c') -> binop op a1 a c' counts
   and call f a c counts =
     match f with
-    | AVar v when String.equal v.hum_name "print" ->
-      let arg, counts2 = blessa a counts in
+    | AVar v when String.equal v.hum_name "print" -> primop v [ a ] c counts
+    | AVar _ | AConst _ | AUnit | ASafeBinop _ | ATuple _ ->
+      let func, arg, counts2 = blessa2 f a counts in
       let cont, counts3 = blessc c counts2 in
-      Ret (cont, Print arg), counts3
-    | AVar _ | AConst _ | AUnit | APrimBinop _ | ATuple _ ->
-      let func, counts2 = blessa f counts in
-      let arg, counts3 = blessa a counts2 in
-      let cont, counts4 = blessc c counts3 in
-      Call (func, arg, cont), counts4
+      Call (func, arg, cont), counts3
     | AClo (y, body, env) ->
-      bnd cps y a body env c (fun x arg b -> Ret (Cont (x, b), Triv arg)) counts
+      bnd cps y a body env c (fun x arg b -> Ret (Cont (x, b), arg)) counts
   and cif a e1 e2 c env counts =
     match c with
     (* unit size conts*)
@@ -503,6 +489,16 @@ let rec cps_glob ?(main_id = 0) ds_ref_once ds_no_refs glob_env =
     let b, counts2 = blessa a counts in
     let w, counts3 = cps_func env wh c counts2 in
     constr b w, counts3
+  and binop op a1 a2 c counts =
+    match a1, a2, op.hum_name with
+    | _, (AConst (PConst_int 0) | AVar _), "/" -> primop op [ a1; a2 ] c counts
+    | _ -> ret c (ASafeBinop (op, a1, a2)) counts
+  and primop f aa c counts =
+    let counts2, args = blessa_many counts aa in
+    let x = gensym ~prefix:"x" () |> of_string in
+    let counts3 = new_count x.id counts2 in
+    let wh, counts4 = ret c (AVar x) counts3 in
+    Primop (CPVar x, f, args, wh), counts4
   (* Two "blessing" functions to render abstract continuations
      and abstract arguments into actual syntax. *)
   and blessc c counts =
@@ -519,8 +515,13 @@ let rec cps_glob ?(main_id = 0) ds_ref_once ds_no_refs glob_env =
     | AUnit -> TUnit, counts
     | AVar x -> UVar x, incr x.id counts
     | AConst z -> TConst z, counts
-    | ATuple t -> TTuple t, counts
-    | APrimBinop pb -> PrimBinop pb, counts
+    | ATuple (a1, a2, aa) ->
+      let t1, t2, counts2 = blessa2 a1 a2 counts in
+      let counts3, tt = blessa_many counts2 aa in
+      TTuple (t1, t2, tt), counts3
+    | ASafeBinop (op, a1, a2) ->
+      let arg1, arg2, counts2 = blessa2 a1 a2 counts in
+      TSafeBinop (op, arg1, arg2), counts2
     | AClo (y, body, env) ->
       let pat, env', counts' = extend_env env counts y in
       let k = gensym ~prefix:"k" () |> of_string in
@@ -533,6 +534,13 @@ let rec cps_glob ?(main_id = 0) ds_ref_once ds_no_refs glob_env =
          then f, counts'
          else Lam (pat, k, b), counts'
        | _ -> Lam (pat, k, b), counts')
+  and blessa_many counts =
+    let swapped_blessa counts a = blessa a counts |> fun (arg, counts) -> counts, arg in
+    List.fold_left_map swapped_blessa counts
+  and blessa2 a1 a2 counts =
+    let triv1, counts2 = blessa a1 counts in
+    let triv2, counts3 = blessa a2 counts2 in
+    triv1, triv2, counts3
   in
   cps glob_env
 ;;
@@ -555,7 +563,7 @@ let cps_program main_id ds_ref_once ds_no_refs vbs =
   let cps_glob = cps_glob ~main_id ds_ref_once ds_no_refs in
   let p, _ =
     match vbs with
-    | [] -> Ret (HALT, Triv TUnit), empty
+    | [] -> Ret (HALT, TUnit), empty
     | (NonRecursive, ds_pat, ds_expr) :: tl ->
       cps_glob (fst start_glob_envs) ds_expr (ToplevelLetNonRecCont (ds_pat, tl)) empty
     | (Recursive, ds_pat, ds_expr) :: tl ->
@@ -595,7 +603,7 @@ let cps_vb_to_parsetree_vb (rec_flag, pat, p) =
     | Lam (pat, i, p) ->
       (fun ptrn -> helper_p p (fun b -> elam ptrn (elam (pvar i.hum_name) b) |> k'))
       |> helper_pat pat
-    | PrimBinop (op, t1, t2) ->
+    | TSafeBinop (op, t1, t2) ->
       helper_triv t1 (fun e1 ->
         helper_triv t2 (fun e2 -> eapp (evar op.hum_name) [ e1; e2 ] |> k'))
   and helper_cont cont k' =
@@ -610,13 +618,9 @@ let cps_vb_to_parsetree_vb (rec_flag, pat, p) =
       (fun e1 ->
         helper_triv t2 (fun e2 -> helper_cont c (fun e3 -> eapp e1 [ e2; e3 ] |> k)))
       |> helper_triv t1
-    | Ret (HALT, Triv t) -> helper_triv t k
-    | Ret (HALT, Print t) -> (fun t -> eapp1 (evar "print") t |> k) |> helper_triv t
-    | Ret (c, Triv t) ->
+    | Ret (HALT, t) -> helper_triv t k
+    | Ret (c, t) ->
       (fun e1 -> helper_triv t (fun e2 -> eapp1 e1 e2 |> k)) |> helper_cont c
-    | Ret (c, Print t) ->
-      (fun e -> helper_triv t (fun arg -> eapp1 e (eapp1 (evar "print") arg) |> k))
-      |> helper_cont c
     | CIf (t, p1, p2) ->
       (fun e1 -> helper_p p1 (fun e2 -> helper_p p2 (fun e3 -> eite e1 e2 e3 |> k)))
       |> helper_triv t
@@ -626,6 +630,15 @@ let cps_vb_to_parsetree_vb (rec_flag, pat, p) =
       (fun ptrn ->
         helper_triv t (fun e1 ->
           helper_p p (fun e2 -> elet ~isrec:rec_flag ptrn e1 e2 |> k)))
+      |> helper_pat pat
+    | Primop (pat, f, tt, p) ->
+      (fun ptrn ->
+        helper_list
+          helper_triv
+          (fun ee ->
+            helper_p p (fun e2 ->
+              elet ~isrec:rec_flag ptrn (eapp (evar f.hum_name) ee) e2 |> k))
+          tt)
       |> helper_pat pat
   in
   (fun ptrn -> helper_p p (fun e -> rec_flag, ptrn, e)) |> helper_pat pat
@@ -727,21 +740,15 @@ let%expect_test "cps complex branching" =
 |}]
 ;;
 
-let%expect_test "cps double print" =
-  test_cps_vb {| let f g = print (print 1)|};
-  [%expect {| let f g k1 = (fun t2 -> k1 (print t2)) (print 1)
-|}]
-;;
-
-let%expect_test "cps arg-print " =
-  test_cps_vb {| let f = (fun x -> x) (print 1)|};
-  [%expect {| let f = (fun t1 -> t1) (print 1)
+let%expect_test "cps print" =
+  test_cps_vb {|let main  = (fun z -> 1) (print 0) |};
+  [%expect {|   let main = let x1 = print 0 in (fun z -> 1) x1
 |}]
 ;;
 
 let%expect_test "cps print alias " =
-  test_cps_vb {| let f = let p = print in p 0|};
-  [%expect {| let f = print 0
+  test_cps_vb {| let f = let p = print in let z = p 0 in z + 1|};
+  [%expect {| let f = let x1 = print 0 in x1 + 1
 |}]
 ;;
 
@@ -751,7 +758,6 @@ let%expect_test "cps one ref arg-binop" =
 |}]
 ;;
 
-(* или для результата арифм опреции всегда стоит вводить новую переменную?*)
 let%expect_test "cps one ref binop" =
   test_cps_vb {| let f g = let x = 2 * 2 in g x |};
   [%expect {| let f g k1 = g (2 * 2) k1 
@@ -764,7 +770,7 @@ let%expect_test "cps mult refs arg-const" =
 |}]
 ;;
 
-let%expect_test "cps  mult refs arg-binop" =
+let%expect_test "cps  mult refs arg-binop (inlining banned)" =
   test_cps_vb {| let f g = let x = 2 * 2 in g x x|};
   [%expect {| let f g k1 = let x = 2 * 2 in g x (fun t2 -> t2 x k1) 
 |}]
@@ -792,7 +798,7 @@ let%expect_test "cps free vars" =
 ;;
 
 let%expect_test "cps func in func" =
-  test_cps_vb {| let z = let f = fun x -> print in f 2 3|};
-  [%expect {|  let z = (fun x -> print 3) 2
+  test_cps_vb {| let z = let rec g y = y in  let f = fun x -> g in f 2 3|};
+  [%expect {|  let z = let rec g y k1 = k1 y in (fun x -> g 3 (fun x -> x)) 2
 |}]
 ;;
