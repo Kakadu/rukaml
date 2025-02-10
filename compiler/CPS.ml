@@ -20,15 +20,6 @@ type ds_expr =
 
 type ds_vb = rec_flag * ds_pattern * ds_expr
 
-let devar i = DEVar i
-let deite c t e = DEIf (c, t, e)
-let deconst n = DEConst n
-let delam v body = DELam (v, body)
-let deapp1 f x = DEApp (f, x)
-let dpvar i = DPVar i
-let detuple a b xs = DETuple (a, b, xs)
-let dptuple a b xs = DPTuple (a, b, xs)
-
 module SMap = Map.Make (String)
 module IMap = Map.Make (Int)
 module ISet = Set.Make (Int)
@@ -86,9 +77,9 @@ type c =
   | ICont of ds_expr * ds_expr * env * c
   | TupleBldCont of ds_expr list * a list * env * c
   | LetRecCont of pat * ds_expr * env * c
-  | ToplevelLetRecCont of pat * ds_vb list
+  | ToplevelLetRecCont of pat * ds_vb list * int
   | LetNonRecCont of ds_pattern * ds_expr * env * c
-  | ToplevelLetNonRecCont of ds_pattern * ds_vb list
+  | ToplevelLetNonRecCont of ds_pattern * ds_vb list * int
   | BinopsFirstArgCont of var * ds_expr * env * c
   | BinopsSecondArgCont of var * a * c
 
@@ -98,82 +89,6 @@ let extend y a env = IMap.add y a env
 (* Utilities to maintain reference counts of user vars in CPS term. *)
 let new_count x counts = IMap.add x 0 counts
 let incr x counts = IMap.add x (1 + IMap.find x counts) counts
-
-let distr_ids_helper ?(with_printing = false) (rec_flag, ptrn, expr) glob_vars k =
-  let open SMap in
-  let rec helper_e vars node k =
-    let rec helper_ee vars' k' node =
-      match node with
-      | [] -> k' []
-      | hd :: tl ->
-        helper_e vars' hd (fun _ np -> helper_ee vars' (fun nn -> k' (np :: nn)) tl)
-    in
-    match node with
-    | EUnit -> k vars DEUnit
-    | EConst x -> k vars (deconst x)
-    | EVar hum_name ->
-      fun free_vars ->
-        (match
-           Base.Option.first_some (find_opt hum_name vars) (find_opt hum_name free_vars)
-         with
-         | None ->
-           let ident = of_string hum_name in
-           k
-             (add ident.hum_name ident.id vars)
-             (devar { hum_name; id = ident.id })
-             (add hum_name ident.id free_vars)
-         | Some id -> k vars (devar { hum_name; id }) free_vars)
-    | EIf (e1, e2, e3) ->
-      (fun _ n1 ->
-        helper_e vars e2 (fun _ n2 ->
-          helper_e vars e3 (fun _ n3 -> deite n1 n2 n3 |> k vars)))
-      |> helper_e vars e1
-    | ELam (p, e) ->
-      (fun v np -> helper_e v e (fun _ n -> delam np n |> k vars)) |> helper_p p vars
-    | EApp (e1, e2) ->
-      (fun _ n1 -> helper_e vars e2 (fun _ n2 -> deapp1 n1 n2 |> k vars))
-      |> helper_e vars e1
-    | ETuple (e1, e2, ee) ->
-      (fun _ n1 ->
-        helper_e vars e2 (fun _ n2 ->
-          helper_ee vars (fun nn fv3 -> (detuple n1 n2 nn |> k vars) fv3) ee))
-      |> helper_e vars e1
-    | ELet (NonRecursive, p, e1, e2) ->
-      (fun _ n1 ->
-        helper_p p vars (fun v np ->
-          helper_e v e2 (fun _ n2 -> DELet (NonRecursive, np, n1, n2) |> k vars)))
-      |> helper_e vars e1
-    | ELet (Recursive, p, e1, e2) ->
-      (fun v np ->
-        helper_e v e1 (fun _ n1 ->
-          helper_e v e2 (fun _ n2 -> DELet (Recursive, np, n1, n2) |> k vars)))
-      |> helper_p p vars
-  and helper_p p vars k =
-    match p with
-    | PVar s ->
-      let ident = of_string s in
-      if with_printing then Printf.printf "var %s got id %d\n" s ident.id;
-      k (add ident.hum_name ident.id vars) (dpvar ident)
-    | PTuple (p1, p2, pp) ->
-      (fun v np1 ->
-        helper_p p2 v (fun v' np2 ->
-          helper_pp v' (fun v'' npp -> dptuple np1 np2 npp |> k v'') pp))
-      |> helper_p p1 vars
-  and helper_pp vars k = function
-    | [] -> k vars []
-    | hd :: tl ->
-      helper_p hd vars (fun v np -> helper_pp v (fun v' nn -> k v' (np :: nn)) tl)
-  in
-  match rec_flag with
-  | Recursive ->
-    (fun gv ds_ptrn ->
-      helper_e gv expr (fun _ ds_expr -> (rec_flag, ds_ptrn, ds_expr) |> k gv))
-    |> helper_p ptrn glob_vars
-  | NonRecursive ->
-    (fun _ ds_expr ->
-      helper_p ptrn glob_vars (fun gv ds_ptrn -> (rec_flag, ds_ptrn, ds_expr) |> k gv))
-    |> helper_e glob_vars expr
-;;
 
 let start_glob_envs =
   let extend v =
@@ -195,111 +110,140 @@ let start_glob_envs =
     |> SMap.add printi.hum_name printi.id )
 ;;
 
-let distr_ids_vb ?(with_printing = false) vb =
-  distr_ids_helper
-    ~with_printing
-    vb
-    (snd start_glob_envs)
-    (fun _ ds_vb free_vars ->
-      if SMap.is_empty free_vars then Result.ok ds_vb else Result.error free_vars)
-    SMap.empty
-;;
-
-let distr_ids_program ?(with_printing = false) =
-  let rec helper glob_vars k free_vars = function
-    | hd :: tl ->
-      distr_ids_helper
-        ~with_printing
-        hd
-        glob_vars
-        (fun gv ds_vb fv -> helper gv (fun ds_vbs fv2 -> k (ds_vb :: ds_vbs) fv2) fv tl)
-        free_vars
-    | [] -> k [] free_vars glob_vars
+let list_fold_map_k f =
+  let rec helper lst k =
+    match lst with
+    | [] -> k []
+    | hd :: tl -> f hd (fun hd' -> helper tl (fun tl' -> k (hd' :: tl')))
   in
   helper
-    (snd start_glob_envs)
-    (fun ds_vbs free_vars glob_vars ->
-      let main_id = SMap.find "main" glob_vars in
-      if SMap.is_empty free_vars
-      then Result.ok (ds_vbs, main_id)
-      else Result.error free_vars)
-    SMap.empty
 ;;
 
-let preconv_count_helper (_, p, e) containers =
-  let rec helper_e ((counts, ref_once, no_refs) as cntrs) node k =
-    let open IMap in
-    let upd id =
-      let n = find id counts in
-      ( add id (n + 1) counts
-      , (match n with
-         | 0 -> ISet.add id ref_once
-         | 1 -> ISet.remove id ref_once
-         | _ -> ref_once)
-      , if n == 0 then ISet.remove id no_refs else no_refs )
-      |> k
-    in
-    let rec helper_list f cntrs' k' = function
-      | [] -> k' cntrs'
-      | hd :: tl -> (fun c -> helper_list f c k' tl) |> f cntrs' hd
-    in
-    let rec helper_p ((counts', ref_once', no_refs') as cntrs) node k' =
-      match node with
-      | DPVar i -> (add i.id 0 counts', ref_once', ISet.add i.id no_refs') |> k'
-      | DPTuple (p1, p2, pp) -> helper_list helper_p cntrs k' (p1 :: p2 :: pp)
-    in
-    match node with
-    | DEUnit | DEConst _ -> k cntrs
-    | DEVar i ->
-      if i.hum_name |> fun h -> ANF.is_infix_binop h || String.equal "print" h
-      then k cntrs
-      else upd i.id
-    | DELam (p, e) -> (fun c -> helper_e c e k) |> helper_p cntrs p
-    | DEApp (e1, e2) -> helper_list helper_e cntrs k [ e1; e2 ]
-    | DELet (_, p, e1, e2) ->
-      (fun c -> helper_list helper_e c k [ e1; e2 ]) |> helper_p cntrs p
-    | DEIf (e1, e2, e3) -> helper_list helper_e cntrs k [ e1; e2; e3 ]
-    | DETuple (e1, e2, ee) -> helper_list helper_e cntrs k (e1 :: e2 :: ee)
-  and helper_list f cntrs' k' = function
-    | [] -> k' cntrs'
-    | hd :: tl -> (fun c -> helper_list f c k' tl) |> f cntrs' hd
-  and helper_p ((counts, ref_once, no_refs) as cntrs) node k' =
-    let open IMap in
-    match node with
-    | DPVar i -> (add i.id 0 counts, ref_once, ISet.add i.id no_refs) |> k'
-    | DPTuple (p1, p2, pp) -> helper_list helper_p cntrs k' (p1 :: p2 :: pp)
+let tuple_fold_map_k f el1 el2 els k =
+  f el1 (fun el1' ->
+    f el2 (fun el2' -> list_fold_map_k f els (fun els' -> k el1' el2' els')))
+;;
+
+let upd id k counts no_refs ref_once =
+  let n = IMap.find id counts in
+  let counts = IMap.add id (n + 1) counts in
+  let no_refs = if n = 0 then ISet.remove id no_refs else no_refs in
+  let ref_once =
+    match n with
+    | 0 -> ISet.add id ref_once
+    | 1 -> ISet.remove id ref_once
+    | _ -> ref_once
   in
-  fun k -> (fun c -> helper_e c e k) |> helper_p containers p
+  k counts no_refs ref_once
 ;;
 
-let preconv_count_vb vb =
-  let open ISet in
-  preconv_count_helper vb (IMap.empty, empty, empty) Fun.id
-;;
-
-let preconv_count_program main_id =
-  let open IMap in
-  let rec helper ((_, ref_once, no_refs) as cntrs) = function
-    | hd :: tl -> preconv_count_helper hd cntrs (fun cntrs -> helper cntrs tl)
-    | [] ->
-      let open ISet in
-      if mem main_id no_refs
-      then add main_id ref_once, remove main_id no_refs
-      else remove main_id ref_once, no_refs
+let preconv_chore ?(with_printing = false) (rec_flag, ptrn, e) k glob_vars free_vars =
+  let new_count name id k vars counts no_refs =
+    if with_printing then Printf.printf "var %s got id %d\n" name id;
+    let vars = SMap.add name id vars in
+    let no_refs = ISet.add id no_refs in
+    let counts = IMap.add id 0 counts in
+    k vars counts no_refs
   in
-  helper (empty, ISet.empty, ISet.empty)
+  let rec helper_p ptrn k =
+    match ptrn with
+    | PVar name ->
+      let ident = of_string name in
+      let k = k (DPVar ident) in
+      (new_count [@tailcall]) name ident.id k
+    | PTuple (p1, p2, pp) ->
+      (tuple_fold_map_k [@tailcall]) helper_p p1 p2 pp (fun dp1 dp2 dps ->
+        (k [@tailcall]) (DPTuple (dp1, dp2, dps)))
+  in
+  let rec helper_e e vars k free_vars =
+    match e with
+    | EUnit -> k DEUnit free_vars
+    | EConst c -> k (DEConst c) free_vars
+    | EVar hum_name ->
+      let from_vars = SMap.find_opt hum_name vars in
+      let builtins = snd start_glob_envs in
+      let from_builtins = SMap.find_opt hum_name builtins in
+      (match from_builtins with
+       | Some id -> k (DEVar { hum_name; id }) free_vars
+       | None ->
+         (match from_vars with
+          | None ->
+            let from_free_vars = SMap.find_opt hum_name free_vars in
+            (match from_free_vars with
+             | None ->
+               let ident = of_string hum_name in
+               let k = k (DEVar { hum_name; id = ident.id }) in
+               new_count hum_name ident.id k free_vars
+             | Some id ->
+               let k = k (DEVar { hum_name; id }) free_vars in
+               upd id k)
+          | Some id ->
+            let k = k (DEVar { hum_name; id }) free_vars in
+            upd id k))
+    | EIf (e1, e2, e3) ->
+      let k1 dp1 =
+        helper_e e2 vars (fun dp2 ->
+          helper_e e3 vars (fun dp3 -> k (DEIf (dp1, dp2, dp3))))
+      in
+      helper_e e1 vars k1 free_vars
+    | ELam (ptrn, e) ->
+      let k1 dp vars = helper_e e vars (fun de -> k (DELam (dp, de))) free_vars in
+      helper_p ptrn k1 vars
+    | EApp (e1, e2) ->
+      let k1 de1 = helper_e e2 vars (fun de2 -> k (DEApp (de1, de2))) in
+      helper_e e1 vars k1 free_vars
+    | ETuple (e1, e2, ee) ->
+      let k de1 de2 des = k (DETuple (de1, de2, des)) in
+      let helper_e e k = helper_e e vars k in
+      tuple_fold_map_k helper_e e1 e2 ee k free_vars
+    | ELet (NonRecursive, ptrn, e1, e2) ->
+      let k1 de1 free_vars =
+        let k2 dp vars =
+          helper_e e2 vars (fun de2 -> k (DELet (NonRecursive, dp, de1, de2))) free_vars
+        in
+        helper_p ptrn k2 vars
+      in
+      helper_e e1 vars k1 free_vars
+    | ELet (Recursive, ptrn, e1, e2) ->
+      let k1 dp vars =
+        let k2 de1 = helper_e e2 vars (fun de2 -> k (DELet (Recursive, dp, de1, de2))) in
+        helper_e e1 vars k2 free_vars
+      in
+      helper_p ptrn k1 vars
+  in
+  match rec_flag with
+  | Recursive ->
+    let k1 dp glob_vars =
+      helper_e e glob_vars (fun de -> k (rec_flag, dp, de) glob_vars) free_vars
+    in
+    helper_p ptrn k1 glob_vars
+  | NonRecursive ->
+    let k1 de free_vars =
+      let k2 dp glob_vars = k (rec_flag, dp, de) glob_vars free_vars in
+      helper_p ptrn k2 glob_vars
+    in
+    helper_e e glob_vars k1 free_vars
 ;;
 
 let test_count text =
   let vb = Miniml.Parsing.parse_vb_exn text in
-  let vb' = Result.get_ok (distr_ids_vb ~with_printing:true vb) in
-  let counts, ref_once, no_refs = preconv_count_vb vb' in
-  IMap.iter (Printf.printf "id: %d; counts %d\n") counts;
-  Printf.printf "ids that ref_once:\n";
-  ISet.iter (Printf.printf "%d\n") ref_once;
-  Printf.printf "ids that no_refs:\n";
-  ISet.iter (Printf.printf "%d\n") no_refs;
-  ANF.reset_gensym ()
+  let k _ _ _ counts no_refs ref_once =
+    IMap.iter (Printf.printf "id: %d; counts %d\n") counts;
+    Printf.printf "ids that ref_once:\n";
+    ISet.iter (Printf.printf "%d\n") ref_once;
+    Printf.printf "ids that no_refs:\n";
+    ISet.iter (Printf.printf "%d\n") no_refs;
+    ANF.reset_gensym ()
+  in
+  preconv_chore
+    ~with_printing:true
+    vb
+    k
+    SMap.empty
+    SMap.empty
+    IMap.empty
+    ISet.empty
+    ISet.empty
 ;;
 
 let%expect_test "counts simple" =
@@ -383,8 +327,8 @@ let rec extend_env env counts = function
 ;;
 
 (* The top-level function *)
-let rec cps_glob ?(main_id = 0) ds_ref_once ds_no_refs glob_env =
-  let cps_glob = cps_glob ~main_id ds_ref_once ds_no_refs in
+let rec cps_glob ds_ref_once ds_no_refs glob_env =
+  let cps_glob = cps_glob ds_ref_once ds_no_refs in
   let one_ref i =
     match ISet.find_opt i.id ds_ref_once with
     | None -> false
@@ -408,12 +352,13 @@ let rec cps_glob ?(main_id = 0) ds_ref_once ds_no_refs glob_env =
     | DETuple (e1, e2, ee) -> cps env e1 (TupleBldCont (e2 :: ee, [], env, c)) counts
   (* Three smart constructors, for RET, CALL & IF forms. *)
   and ret c a counts =
-    let helper_toplevelletcont = function
-      | (NonRecursive, y', e) :: tl -> ToplevelLetNonRecCont (y', tl), e, glob_env, counts
+    let helper_toplevelletcont main_id = function
+      | (NonRecursive, y', e) :: tl ->
+        ToplevelLetNonRecCont (y', tl, main_id), e, glob_env, counts
       | [] -> AHALT, DEVar { id = main_id; hum_name = "main" }, glob_env, counts
       | (Recursive, y', e) :: tl ->
         let pat, glob_env', counts2 = extend_env glob_env counts y' in
-        ToplevelLetRecCont (pat, tl), e, glob_env', counts2
+        ToplevelLetRecCont (pat, tl, main_id), e, glob_env', counts2
     in
     match c with
     | AHALT | KVar _ ->
@@ -431,12 +376,12 @@ let rec cps_glob ?(main_id = 0) ds_ref_once ds_no_refs glob_env =
       bnd cps y a wh env c' (fun x b w -> Let (NonRecursive, x, b, w)) counts
     | LetRecCont (pat, wh, env, c') ->
       bnd_rec cps a wh env c' (fun b w -> Let (Recursive, pat, b, w)) counts
-    | ToplevelLetNonRecCont (y, vbs) ->
+    | ToplevelLetNonRecCont (y, vbs, main_id) ->
       let constr x b w = Let (NonRecursive, x, b, w) in
-      let c'', e, glob_env', counts2 = helper_toplevelletcont vbs in
+      let c'', e, glob_env', counts2 = helper_toplevelletcont main_id vbs in
       bnd cps_glob y a e glob_env' c'' constr counts2
-    | ToplevelLetRecCont (pat, vbs) ->
-      let c'', e, glob_env', counts2 = helper_toplevelletcont vbs in
+    | ToplevelLetRecCont (pat, vbs, main_id) ->
+      let c'', e, glob_env', counts2 = helper_toplevelletcont main_id vbs in
       let constr b w = Let (Recursive, pat, b, w) in
       bnd_rec cps_glob a e glob_env' c'' constr counts2
     | BinopsFirstArgCont (op, e, env, c') ->
@@ -545,8 +490,21 @@ let rec cps_glob ?(main_id = 0) ds_ref_once ds_no_refs glob_env =
   cps glob_env
 ;;
 
-let cps_vb ds_ref_once ds_no_refs (rec_flag, ds_pat, ds_expr) =
+let free_vars_check k free_vars =
+  let has_not_free_vars = SMap.is_empty free_vars in
+  if has_not_free_vars then k () else Error free_vars
+;;
+
+let cps_conv_vb vb =
+  let ( let+ ) = Base.Result.( >>| ) in
   let open IMap in
+  let k ds_vb _ free_vars _ no_refs ref_once =
+    let k1 () = Ok (ds_vb, no_refs, ref_once) in
+    free_vars_check k1 free_vars
+  in
+  let+ (rec_flag, ds_pat, ds_expr), ds_no_refs, ds_ref_once =
+    preconv_chore vb k (snd start_glob_envs) SMap.empty IMap.empty ISet.empty ISet.empty
+  in
   let pat, glob_env, counts = extend_env (fst start_glob_envs) empty ds_pat in
   let p, _ =
     match rec_flag with
@@ -557,91 +515,109 @@ let cps_vb ds_ref_once ds_no_refs (rec_flag, ds_pat, ds_expr) =
   rec_flag, pat, p
 ;;
 
-let cps_program main_id ds_ref_once ds_no_refs vbs =
+let cps_conv_program vbs =
   let open IMap in
   let open Miniml.Ident in
-  let cps_glob = cps_glob ~main_id ds_ref_once ds_no_refs in
+  let ( let+ ) = Base.Result.( >>| ) in
+  let k ds_vbs glob_vars free_vars counts no_refs ref_once =
+    let main_id = SMap.find "main" glob_vars in
+    let k2 _ no_refs ref_once = Ok (ds_vbs, no_refs, ref_once, main_id) in
+    let k1 () = upd main_id k2 counts no_refs ref_once in
+    free_vars_check k1 free_vars
+  in
+  let+ ds_vbs, ds_no_refs, ds_ref_once, main_id =
+    list_fold_map_k
+      (preconv_chore ~with_printing:false)
+      vbs
+      k
+      (snd start_glob_envs)
+      SMap.empty
+      IMap.empty
+      ISet.empty
+      ISet.empty
+  in
+  let cps_glob = cps_glob ds_ref_once ds_no_refs in
   let p, _ =
-    match vbs with
+    match ds_vbs with
     | [] -> Ret (HALT, TUnit), empty
     | (NonRecursive, ds_pat, ds_expr) :: tl ->
-      cps_glob (fst start_glob_envs) ds_expr (ToplevelLetNonRecCont (ds_pat, tl)) empty
+      cps_glob
+        (fst start_glob_envs)
+        ds_expr
+        (ToplevelLetNonRecCont (ds_pat, tl, main_id))
+        empty
     | (Recursive, ds_pat, ds_expr) :: tl ->
       let pat, glob_env, counts = extend_env (fst start_glob_envs) empty ds_pat in
-      cps_glob glob_env ds_expr (ToplevelLetRecCont (pat, tl)) counts
+      cps_glob glob_env ds_expr (ToplevelLetRecCont (pat, tl, main_id)) counts
   in
   NonRecursive, CPVar (of_string "main"), p
 ;;
 
 let cps_vb_to_parsetree_vb (rec_flag, pat, p) =
-  let helper_ptuple dp1 dp2 dps k' = k' (PTuple (dp1, dp2, dps)) in
-  let rec helper_list f k' = function
-    | [] -> k' []
-    | hd :: tl -> (fun el -> helper_list f (fun els -> k' (el :: els)) tl) |> f hd
-  in
   let rec helper_pat pat k' =
     match pat with
-    | CPVar i -> k' (pvar i.hum_name)
+    | CPVar i -> k' (PVar i.hum_name)
     | CPTuple (pat1, pat2, pats) ->
-      (fun dp1 ->
-        helper_pat pat2 (fun dp2 ->
-          helper_list helper_pat (fun dps -> helper_ptuple dp1 dp2 dps k') pats))
-      |> helper_pat pat1
+      let k ptrn1 ptrn2 ptrns = k' (PTuple (ptrn1, ptrn2, ptrns)) in
+      tuple_fold_map_k helper_pat pat1 pat2 pats k
   in
-  let helper_econst z k' = k' (EConst z) in
-  let helper_etuple e1 e2 ee k' = k' (ETuple (e1, e2, ee)) in
   let rec helper_triv t k' =
     match t with
-    | TUnit -> EUnit |> k'
+    | TUnit -> k' EUnit
     | TTuple (t1, t2, tt) ->
-      (fun e1 ->
-        helper_triv t2 (fun e2 ->
-          helper_list helper_triv (fun ee -> helper_etuple e1 e2 ee k') tt))
-      |> helper_triv t1
-    | UVar i -> k' (evar i.hum_name)
-    | TConst d -> helper_econst d k'
+      tuple_fold_map_k helper_triv t1 t2 tt (fun e1 e2 ee -> k' (ETuple (e1, e2, ee)))
+    | UVar i -> k' (EVar i.hum_name)
+    | TConst d -> k' (EConst d)
     | Lam (pat, i, p) ->
-      (fun ptrn -> helper_p p (fun b -> elam ptrn (elam (pvar i.hum_name) b) |> k'))
-      |> helper_pat pat
+      let k1 ptrn =
+        helper_p p (fun b ->
+          let l1 = elam (pvar i.hum_name) b in
+          let l2 = elam ptrn l1 in
+          k' l2)
+      in
+      helper_pat pat k1
     | TSafeBinop (op, t1, t2) ->
       helper_triv t1 (fun e1 ->
-        helper_triv t2 (fun e2 -> eapp (evar op.hum_name) [ e1; e2 ] |> k'))
+        helper_triv t2 (fun e2 ->
+          let eop = evar op.hum_name in
+          let res = eapp eop [ e1; e2 ] in
+          k' res))
   and helper_cont cont k' =
     match cont with
     | Cont (pat, p) ->
-      (fun ptrn -> helper_p p (fun e -> elam ptrn e |> k')) |> helper_pat pat
-    | CVar v -> k' (evar v.hum_name)
-    | HALT -> ELam (PVar "x", EVar "x") |> k'
+      helper_pat pat (fun ptrn -> helper_p p (fun e -> k' (ELam (ptrn, e))))
+    | CVar v -> k' (EVar v.hum_name)
+    | HALT -> k' (ELam (PVar "x", EVar "x"))
   and helper_p p k =
     match p with
     | Call (t1, t2, c) ->
-      (fun e1 ->
-        helper_triv t2 (fun e2 -> helper_cont c (fun e3 -> eapp e1 [ e2; e3 ] |> k)))
-      |> helper_triv t1
+      helper_triv t1 (fun e1 ->
+        helper_triv t2 (fun e2 ->
+          helper_cont c (fun e3 ->
+            let res = eapp e1 [ e2; e3 ] in
+            k res)))
     | Ret (HALT, t) -> helper_triv t k
-    | Ret (c, t) ->
-      (fun e1 -> helper_triv t (fun e2 -> eapp1 e1 e2 |> k)) |> helper_cont c
+    | Ret (c, t) -> helper_cont c (fun e1 -> helper_triv t (fun e2 -> k (EApp (e1, e2))))
     | CIf (t, p1, p2) ->
-      (fun e1 -> helper_p p1 (fun e2 -> helper_p p2 (fun e3 -> eite e1 e2 e3 |> k)))
-      |> helper_triv t
+      helper_triv t (fun e1 ->
+        helper_p p1 (fun e2 -> helper_p p2 (fun e3 -> k (EIf (e1, e2, e3)))))
     | Letc (v, c, p) ->
-      helper_cont c (fun e1 -> helper_p p (fun e2 -> elet (pvar v.hum_name) e1 e2 |> k))
+      helper_cont c (fun e1 ->
+        helper_p p (fun e2 ->
+          let res = elet (PVar v.hum_name) e1 e2 in
+          k res))
     | Let (rec_flag, pat, t, p) ->
-      (fun ptrn ->
-        helper_triv t (fun e1 ->
-          helper_p p (fun e2 -> elet ~isrec:rec_flag ptrn e1 e2 |> k)))
-      |> helper_pat pat
+      helper_pat pat (fun ptrn ->
+        helper_triv t (fun e1 -> helper_p p (fun e2 -> k (ELet (rec_flag, ptrn, e1, e2)))))
     | Primop (pat, f, tt, p) ->
       (fun ptrn ->
-        helper_list
-          helper_triv
-          (fun ee ->
-            helper_p p (fun e2 ->
-              elet ~isrec:rec_flag ptrn (eapp (evar f.hum_name) ee) e2 |> k))
-          tt)
+        list_fold_map_k helper_triv tt (fun ee ->
+          helper_p p (fun e2 ->
+            let body = eapp (EVar f.hum_name) ee in
+            k (ELet (rec_flag, ptrn, body, e2)))))
       |> helper_pat pat
   in
-  (fun ptrn -> helper_p p (fun e -> rec_flag, ptrn, e)) |> helper_pat pat
+  helper_pat pat (fun ptrn -> helper_p p (fun e -> rec_flag, ptrn, e))
 ;;
 
 let error_message free_vars =
@@ -654,10 +630,8 @@ let test_cps_program text =
   let open Miniml in
   match Parsing.parse_structure text with
   | Result.Ok stru ->
-    (match distr_ids_program stru with
-     | Ok (ds_stru, main_id) ->
-       let ref_once, no_refs = preconv_count_program main_id ds_stru in
-       let cps_program = cps_program main_id ref_once no_refs ds_stru in
+    (match cps_conv_program stru with
+     | Ok cps_program ->
        let vb' = cps_vb_to_parsetree_vb cps_program in
        Format.printf "%a" Pprint.pp_value_binding vb';
        ANF.reset_gensym ()
@@ -667,12 +641,9 @@ let test_cps_program text =
 
 let test_cps_vb text =
   let open Miniml in
-  let vb = Parsing.parse_vb_exn text in
-  match distr_ids_vb vb with
+  match cps_conv_vb @@ Parsing.parse_vb_exn text with
   | Error free_vars -> print_endline (error_message free_vars)
-  | Ok ds_vb ->
-    let _, ref_once, no_refs = preconv_count_vb ds_vb in
-    let cps_vb = cps_vb ref_once no_refs ds_vb in
+  | Ok cps_vb ->
     let vb' = cps_vb_to_parsetree_vb cps_vb in
     Format.printf "%a" Pprint.pp_value_binding vb';
     ANF.reset_gensym ()
