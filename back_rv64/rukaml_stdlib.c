@@ -199,7 +199,10 @@ void rukaml_gc_print_stats(void)
   fflush(stdout);
 }
 
-void rukaml_print_int(int x)
+// TODO(Kakadu): All rukaml functions use CC RTL on stack,
+// and when we wrap function into closure, predefined functions should behave the same.
+// Because of that this dirty hack. Right thing to do is to switch Rukaml calling convention to default one
+void rukaml_print_int(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4 , uint64_t a5, uint64_t a6, uint64_t a7, int x)
 {
   // putchar(0x30 + x);
   // putchar('\n');
@@ -208,6 +211,7 @@ void rukaml_print_int(int x)
   // puts(repr);
   // printf("%s\n", __func__);
   // fflush(stdout);
+  //printf("%s a0=%d a1=%d a2=%d a3=%d a4=%d a5=%d a6=%d a7=%d\n", __func__, a0,a1,a2,a3,a4,a5,a6, a7);
   printf("%s %d\n", __func__, x);
   fflush(stdout);
 }

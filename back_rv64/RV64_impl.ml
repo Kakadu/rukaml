@@ -306,6 +306,10 @@ let generate_body is_toplevel body =
                  emit sd a0 (ROffset (SP, 0))
              (* printfn ppf "  mov qword [rsp%+d*8], rax # arg %S" i vname *)
              | None -> assert false)
+         | AVar { Ident.hum_name = "print"; _ } ->
+             emit_alloc_closure "rukaml_print_int" 1;
+             (* Result is in a0 *)
+             emit sd a0 (ROffset (SP, 0))
          | AVar vname ->
              emit ld t0 (pp_to_mach vname)
                ~comm:(sprintf "arg %S" vname.hum_name);
@@ -360,22 +364,27 @@ let generate_body is_toplevel body =
         match arg1 with
         | AVar v when Addr_of_local.has_key v ->
             store_ra_temp (fun ra_name ->
-                emit ld a0 (pp_to_mach v);
-                (* printfn ppf "  ld a0, %a" Addr_of_local.pp_local_exn v; *)
                 emit sd ra (pp_to_mach ra_name);
-                (* printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
+                emit ld a0 (pp_to_mach v);
+                emit addi SP SP (-8);
+                emit sd a0 (ROffset (SP, 0));
+                (* emit li a1 1;
+                   emit li a2 2;
+                   emit li a3 3;
+                   emit li a4 4;
+                   emit li a5 5;
+                   emit li a6 6;
+                   emit li a7 7; *)
                 emit call "rukaml_print_int";
-                (* printfn ppf "  call rukaml_print_int"; *)
-                emit sd_dest a0 dest
-                (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *))
+                emit addi SP SP 8;
+                emit sd_dest a0 dest)
         | AConst (PConst_int n) ->
             store_ra_temp (fun ra_name ->
+                emit addi SP SP (-8);
                 emit li a0 n;
-                (* printfn ppf "  li a0, %d" n; *)
+                emit sd a0 (ROffset (SP, 0));
                 emit sd ra (pp_to_mach ra_name);
-                (* printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
                 emit call "rukaml_print_int";
-                (* printfn ppf "  call rukaml_print_int"; *)
                 emit sd_dest a0 dest
                 (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *))
         | AConst (PConst_bool _)
@@ -542,13 +551,9 @@ let generate_body is_toplevel body =
         else if formal_arity < expected_arity then (
           store_ra_temp (fun ra_name ->
               emit lla (RU "a0") f.hum_name;
-              (* printfn ppf "  lla a0, %s" f; *)
               emit li (RU "a1") expected_arity;
-              (* printfn ppf "  li a1, %d" expected_arity; *)
               emit sd (RU "ra") (Addr_of_local.pp_to_mach ra_name);
-              (* printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
-              emit call "rukaml_alloc_closure"
-              (* printfn ppf "  call rukaml_alloc_closure" *));
+              emit call "rukaml_alloc_closure");
 
           (* printfn ppf "  add0 a0, a0, 0"; *)
           let partial_args_count = allocate_args_for_call ~f (arg1 :: args) in

@@ -103,17 +103,20 @@
       71	  addi sp, sp, 8 # free space of RA register
       72	  sd a0, 8(sp)
       73	  addi sp, sp, -8 # alloc space for RA register
-      74	  ld a0, 16(sp)
-      75	  sd ra, (sp)
-      76	  call rukaml_print_int
-      77	  sd a0, 8(sp)
-      78	  ld ra, (sp)
-      79	  addi sp, sp, 8 # free space of RA register
-      80	  li a0, 0
-      81	  addi sp, sp, 16 # deallocate local variables g, f
-      82	  addi a0, x0, 0 # Use 0 return code
-      83	  addi a7, x0, 93 # Service command code 93 terminates
-      84	  ecall # Call linux to terminate the program
+      74	  sd ra, (sp)
+      75	  ld a0, 16(sp)
+      76	  addi sp, sp, -8
+      77	  sd a0, (sp)
+      78	  call rukaml_print_int
+      79	  addi sp, sp, 8
+      80	  sd a0, 8(sp)
+      81	  ld ra, (sp)
+      82	  addi sp, sp, 8 # free space of RA register
+      83	  li a0, 0
+      84	  addi sp, sp, 16 # deallocate local variables g, f
+      85	  addi a0, x0, 0 # Use 0 return code
+      86	  addi a7, x0, 93 # Service command code 93 terminates
+      87	  ecall # Call linux to terminate the program
   $ riscv64-linux-gnu-gcc-13 -c -g program.s -o program.o
 $ riscv64-linux-gnu-gcc-13 -g -o program.exe ../../back_rv64/rukaml_stdlib.o program.o && ./program.exe
   $ riscv64-linux-gnu-gcc-13 -g program.o ../../back_rv64/rukaml_stdlib.o -o fib.exe 2>&1 | head -n5

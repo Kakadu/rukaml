@@ -326,3 +326,43 @@
   long_app.exe
   ;
   ))
+
+;;;;;
+
+(rule
+ (targets pass_print.s)
+ (deps
+  (:src pass_print.ml))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    --no-start
+    -vamd64
+    %{src}))))
+
+(rule
+ (targets pass_print.exe)
+ (deps
+  (:src pass_print.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o pass_print.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    pass_print.o
+    -o
+    %{targets}))))
+
+(cram
+ (applies_to pass_print)
+ (deps %{project_root}/back_rv64/rukaml_stdlib.o ./pass_print.exe))
