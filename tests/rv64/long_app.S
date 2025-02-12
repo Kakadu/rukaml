@@ -18,23 +18,32 @@ lab_endif_32:
 test3:
   addi sp, sp, -24 # allocate for local variables c, b, a
   addi sp, sp, -8 # alloc space for RA register
-  ld a0, 32(sp)
   sd ra, (sp)
+  ld a0, 32(sp)
+  addi sp, sp, -8
+  sd a0, (sp)
   call rukaml_print_int
+  addi sp, sp, 8
   sd a0, 24(sp)
   ld ra, (sp)
   addi sp, sp, 8 # free space of RA register
   addi sp, sp, -8 # alloc space for RA register
-  ld a0, 40(sp)
   sd ra, (sp)
+  ld a0, 40(sp)
+  addi sp, sp, -8
+  sd a0, (sp)
   call rukaml_print_int
+  addi sp, sp, 8
   sd a0, 16(sp)
   ld ra, (sp)
   addi sp, sp, 8 # free space of RA register
   addi sp, sp, -8 # alloc space for RA register
-  ld a0, 48(sp)
   sd ra, (sp)
+  ld a0, 48(sp)
+  addi sp, sp, -8
+  sd a0, (sp)
   call rukaml_print_int
+  addi sp, sp, 8
   sd a0, 8(sp)
   ld ra, (sp)
   addi sp, sp, 8 # free space of RA register
@@ -256,9 +265,12 @@ main:
   addi sp, sp, 8 # free space for args of function "temp24"
   sd a0, 40(sp)
   addi sp, sp, -8 # alloc space for RA register
-  ld a0, 48(sp)
   sd ra, (sp)
+  ld a0, 48(sp)
+  addi sp, sp, -8
+  sd a0, (sp)
   call rukaml_print_int
+  addi sp, sp, 8
   sd a0, 40(sp)
   ld ra, (sp)
   addi sp, sp, 8 # free space of RA register

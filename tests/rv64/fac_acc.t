@@ -133,17 +133,20 @@
      100	  addi sp, sp, 8 # free space for args of function "temp7"
      101	  sd a0, 8(sp)
      102	  addi sp, sp, -8 # alloc space for RA register
-     103	  ld a0, 16(sp)
-     104	  sd ra, (sp)
-     105	  call rukaml_print_int
-     106	  sd a0, 8(sp)
-     107	  ld ra, (sp)
-     108	  addi sp, sp, 8 # free space of RA register
-     109	  li a0, 0
-     110	  addi sp, sp, 24 # deallocate local variables g, f, temp7
-     111	  addi a0, x0, 0 # Use 0 return code
-     112	  addi a7, x0, 93 # Service command code 93 terminates
-     113	  ecall # Call linux to terminate the program
+     103	  sd ra, (sp)
+     104	  ld a0, 16(sp)
+     105	  addi sp, sp, -8
+     106	  sd a0, (sp)
+     107	  call rukaml_print_int
+     108	  addi sp, sp, 8
+     109	  sd a0, 8(sp)
+     110	  ld ra, (sp)
+     111	  addi sp, sp, 8 # free space of RA register
+     112	  li a0, 0
+     113	  addi sp, sp, 24 # deallocate local variables g, f, temp7
+     114	  addi a0, x0, 0 # Use 0 return code
+     115	  addi a7, x0, 93 # Service command code 93 terminates
+     116	  ecall # Call linux to terminate the program
   $ riscv64-linux-gnu-gcc-13 -c -g program.s -o program.o
   $ riscv64-linux-gnu-gcc-13 -g program.o ../../back_rv64/rukaml_stdlib.o -o fac_acc.exe 2>&1 | head -n5
   $ qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64 ./fac_acc.exe
