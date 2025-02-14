@@ -1,6 +1,5 @@
-let addk x y k = k (x + y)
-
-let foo print x = print x
+let addk k = k 0
+let foo f x = f x
 let main =
   let tmp = foo print in
-  addk 1 3 tmp
+  addk tmp
