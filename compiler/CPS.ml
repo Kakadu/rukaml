@@ -20,6 +20,9 @@ type ds_expr =
 
 type ds_vb = rec_flag * ds_pattern * ds_expr
 
+let ( let+ ) = Base.Result.( >>| )
+let ( let* ) = Base.Result.( >>= )
+
 module SMap = Map.Make (String)
 module IMap = Map.Make (Int)
 module ISet = Set.Make (Int)
@@ -68,6 +71,9 @@ type a =
 
 and env = a IMap.t
 
+type potent_not_allowed_expr = ds_expr option (* for rec bindings *)
+type main_id = int
+
 (* Abstract continuations *)
 type c =
   | AHALT
@@ -76,12 +82,17 @@ type c =
   | ACont of a * c
   | ICont of ds_expr * ds_expr * env * c
   | TupleBldCont of ds_expr list * a list * env * c
-  | LetRecCont of pat * ds_expr * env * c
-  | ToplevelLetRecCont of pat * ds_vb list * int
+  | LetRecCont of pat * ds_expr * env * c * ds_expr option
+  | ToplevelLetRecCont of pat * ds_vb list * main_id * ds_expr option
   | LetNonRecCont of ds_pattern * ds_expr * env * c
-  | ToplevelLetNonRecCont of ds_pattern * ds_vb list * int
+  | ToplevelLetNonRecCont of ds_pattern * ds_vb list * main_id
   | BinopsFirstArgCont of var * ds_expr * env * c
   | BinopsSecondArgCont of var * a * c
+
+type error =
+  [ `Free_vars_occured of int SMap.t
+  | `Let_rec_not_allowed of ds_expr
+  ]
 
 (* Extend a static environment with a new [y |-> a] entry. *)
 let extend y a env = IMap.add y a env
@@ -150,10 +161,9 @@ let preconv_chore ?(with_printing = false) (rec_flag, ptrn, e) k glob_vars free_
     | PVar name ->
       let ident = of_string name in
       let k = k (DPVar ident) in
-      (new_count [@tailcall]) name ident.id k
+      new_count name ident.id k
     | PTuple (p1, p2, pp) ->
-      (tuple_fold_map_k [@tailcall]) helper_p p1 p2 pp (fun dp1 dp2 dps ->
-        (k [@tailcall]) (DPTuple (dp1, dp2, dps)))
+      tuple_fold_map_k helper_p p1 p2 pp (fun dp1 dp2 dps -> k (DPTuple (dp1, dp2, dps)))
   in
   let rec helper_e e vars k free_vars =
     match e with
@@ -326,8 +336,22 @@ let rec extend_env env counts = function
     CPTuple (cp1, cp2, cpp), env4, counts4
 ;;
 
+let rec has_nonzero_counts_vars counts = function
+  | CPVar i -> IMap.find i.id counts <> 0
+  | CPTuple (cp1, cp2, cpp) ->
+    Option.is_some
+    @@ Base.List.find ~f:(has_nonzero_counts_vars counts) (cp1 :: cp2 :: cpp)
+;;
+
+let maybe_not_allowed_expr e =
+  match e with
+  | DELam _ -> None
+  | _ -> Some e
+;;
+
 (* The top-level function *)
 let rec cps_glob ds_ref_once ds_no_refs glob_env =
+  let open Base.Result in
   let cps_glob = cps_glob ds_ref_once ds_no_refs in
   let one_ref i =
     match ISet.find_opt i.id ds_ref_once with
@@ -348,7 +372,7 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
       cps env e1 (LetNonRecCont (ds_pat, e2, env, c)) counts
     | DELet (Recursive, ds_pat, e1, e2) ->
       let pat, env', counts' = extend_env env counts ds_pat in
-      cps env' e1 (LetRecCont (pat, e2, env', c)) counts'
+      cps env' e1 (LetRecCont (pat, e2, env', c, maybe_not_allowed_expr e1)) counts'
     | DETuple (e1, e2, ee) -> cps env e1 (TupleBldCont (e2 :: ee, [], env, c)) counts
   (* Three smart constructors, for RET, CALL & IF forms. *)
   and ret c a counts =
@@ -358,12 +382,15 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
       | [] -> AHALT, DEVar { id = main_id; hum_name = "main" }, glob_env, counts
       | (Recursive, y', e) :: tl ->
         let pat, glob_env', counts2 = extend_env glob_env counts y' in
-        ToplevelLetRecCont (pat, tl, main_id), e, glob_env', counts2
+        ( ToplevelLetRecCont (pat, tl, main_id, maybe_not_allowed_expr e)
+        , e
+        , glob_env'
+        , counts2 )
     in
     match c with
     | AHALT | KVar _ ->
-      let cont, counts2 = blessc c counts in
-      let arg, counts3 = blessa a counts2 in
+      let* cont, counts2 = blessc c counts in
+      let+ arg, counts3 = blessa a counts2 in
       Ret (cont, arg), counts3
     | FCont (e, env, c') -> cps env e (ACont (a, c')) counts
     | ACont (a', c') -> call a' a c' counts
@@ -374,16 +401,17 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
        | hd :: tl -> cps env hd (TupleBldCont (tl, a :: aa, env, c')) counts)
     | LetNonRecCont (y, wh, env, c') ->
       bnd cps y a wh env c' (fun x b w -> Let (NonRecursive, x, b, w)) counts
-    | LetRecCont (pat, wh, env, c') ->
-      bnd_rec cps a wh env c' (fun b w -> Let (Recursive, pat, b, w)) counts
+    | LetRecCont (pat, wh, env, c', dang_expr) ->
+      let constr b w = Let (Recursive, pat, b, w) in
+      bnd_rec cps a wh env c' constr counts dang_expr pat
     | ToplevelLetNonRecCont (y, vbs, main_id) ->
       let constr x b w = Let (NonRecursive, x, b, w) in
       let c'', e, glob_env', counts2 = helper_toplevelletcont main_id vbs in
       bnd cps_glob y a e glob_env' c'' constr counts2
-    | ToplevelLetRecCont (pat, vbs, main_id) ->
+    | ToplevelLetRecCont (pat, vbs, main_id, dang_expr) ->
       let c'', e, glob_env', counts2 = helper_toplevelletcont main_id vbs in
       let constr b w = Let (Recursive, pat, b, w) in
-      bnd_rec cps_glob a e glob_env' c'' constr counts2
+      bnd_rec cps_glob a e glob_env' c'' constr counts2 dang_expr pat
     | BinopsFirstArgCont (op, e, env, c') ->
       cps env e (BinopsSecondArgCont (op, a, c')) counts
     | BinopsSecondArgCont (op, a1, c') -> binop op a1 a c' counts
@@ -391,8 +419,8 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
     match f with
     | AVar v when String.equal v.hum_name "print" -> primop v [ a ] c counts
     | AVar _ | AConst _ | AUnit | ASafeBinop _ | ATuple _ ->
-      let func, arg, counts2 = blessa2 f a counts in
-      let cont, counts3 = blessc c counts2 in
+      let* func, arg, counts2 = blessa2 f a counts in
+      let+ cont, counts3 = blessc c counts2 in
       Call (func, arg, cont), counts3
     | AClo (y, body, env) ->
       bnd cps y a body env c (fun x arg b -> Ret (Cont (x, b), arg)) counts
@@ -400,91 +428,99 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
     match c with
     (* unit size conts*)
     | AHALT | KVar _ ->
-      let test, counts2 = blessa a counts in
-      let conseq, counts3 = cps env e1 c counts2 in
-      let alt, counts4 = cps env e2 c counts3 in
+      let* test, counts2 = blessa a counts in
+      let* conseq, counts3 = cps env e1 c counts2 in
+      let+ alt, counts4 = cps env e2 c counts3 in
       CIf (test, conseq, alt), counts4
     (* other conts*)
     | _ ->
       let jv = gensym ~prefix:"jv" () |> of_string in
-      let body, counts2 = cif a e1 e2 (KVar jv) env counts in
-      let join, counts3 = blessc c counts2 in
+      let* body, counts2 = cif a e1 e2 (KVar jv) env counts in
+      let+ join, counts3 = blessc c counts2 in
       Letc (jv, join, body), counts3
   and bnd cps_func y a wh env c constr counts =
     match y with
     | DPTuple _ ->
-      let b, counts2 = blessa a counts in
+      let* b, counts2 = blessa a counts in
       let pat, env', counts3 = extend_env env counts2 y in
-      let w, counts4 = cps_func env' wh c counts3 in
+      let+ w, counts4 = cps_func env' wh c counts3 in
       constr pat b w, counts4
     | DPVar i ->
       if one_ref i
       then cps_func (extend i.id a env) wh c counts
-      else (
-        let b, counts2 = blessa a counts in
-        match b, Option.is_some (ISet.find_opt i.id ds_no_refs) with
-        | TUnit, false -> cps_func (extend i.id AUnit env) wh c counts2
-        | UVar x, false -> cps_func (extend i.id (AVar x) env) wh c counts2
-        | TConst z, false -> cps_func (extend i.id (AConst z) env) wh c counts2
-        | _ ->
-          let pat, env', counts3 = extend_env env counts2 y in
-          let w, counts4 = cps_func env' wh c counts3 in
-          constr pat b w, counts4)
-  and bnd_rec cps_func a wh env c constr counts =
-    let b, counts2 = blessa a counts in
-    let w, counts3 = cps_func env wh c counts2 in
-    constr b w, counts3
+      else
+        let* b, counts2 = blessa a counts in
+        (match b, Option.is_some (ISet.find_opt i.id ds_no_refs) with
+         | TUnit, false -> cps_func (extend i.id AUnit env) wh c counts2
+         | UVar x, false -> cps_func (extend i.id (AVar x) env) wh c counts2
+         | TConst z, false -> cps_func (extend i.id (AConst z) env) wh c counts2
+         | _ ->
+           let pat, env', counts3 = extend_env env counts2 y in
+           let+ w, counts4 = cps_func env' wh c counts3 in
+           constr pat b w, counts4)
+  and bnd_rec cps_func a wh env c constr counts dang_expr pat =
+    let* b, counts2 = blessa a counts in
+    match dang_expr with
+    | Some e when has_nonzero_counts_vars counts2 pat -> Error (`Let_rec_not_allowed e)
+    | _ ->
+      let+ w, counts3 = cps_func env wh c counts2 in
+      constr b w, counts3
   and binop op a1 a2 c counts =
     match a1, a2, op.hum_name with
     | _, (AConst (PConst_int 0) | AVar _), "/" -> primop op [ a1; a2 ] c counts
     | _ -> ret c (ASafeBinop (op, a1, a2)) counts
   and primop f aa c counts =
-    let counts2, args = blessa_many counts aa in
+    let* counts2, args = blessa_many counts aa in
     let x = gensym ~prefix:"x" () |> of_string in
     let counts3 = new_count x.id counts2 in
-    let wh, counts4 = ret c (AVar x) counts3 in
+    let+ wh, counts4 = ret c (AVar x) counts3 in
     Primop (CPVar x, f, args, wh), counts4
   (* Two "blessing" functions to render abstract continuations
      and abstract arguments into actual syntax. *)
   and blessc c counts =
     match c with
-    | AHALT -> HALT, counts
-    | KVar kv -> CVar kv, counts
+    | AHALT -> Ok (HALT, counts)
+    | KVar kv -> Ok (CVar kv, counts)
     | _ ->
       let x = gensym ~prefix:"t" () |> of_string in
       let counts2 = new_count x.id counts in
-      let body, counts3 = ret c (AVar x) counts2 in
+      let+ body, counts3 = ret c (AVar x) counts2 in
       Cont (CPVar x, body), counts3
   and blessa a counts =
     match a with
-    | AUnit -> TUnit, counts
-    | AVar x -> UVar x, incr x.id counts
-    | AConst z -> TConst z, counts
+    | AUnit -> Ok (TUnit, counts)
+    | AVar x -> Ok (UVar x, incr x.id counts)
+    | AConst z -> Ok (TConst z, counts)
     | ATuple (a1, a2, aa) ->
-      let t1, t2, counts2 = blessa2 a1 a2 counts in
-      let counts3, tt = blessa_many counts2 aa in
+      let* t1, t2, counts2 = blessa2 a1 a2 counts in
+      let+ counts3, tt = blessa_many counts2 aa in
       TTuple (t1, t2, tt), counts3
     | ASafeBinop (op, a1, a2) ->
-      let arg1, arg2, counts2 = blessa2 a1 a2 counts in
+      let+ arg1, arg2, counts2 = blessa2 a1 a2 counts in
       TSafeBinop (op, arg1, arg2), counts2
     | AClo (y, body, env) ->
-      let pat, env', counts' = extend_env env counts y in
+      let pat, env', counts2 = extend_env env counts y in
       let k = gensym ~prefix:"k" () |> of_string in
-      let b, counts'' = cps env' body (KVar k) counts' in
+      let+ b, counts3 = cps env' body (KVar k) counts2 in
       (* The eta-reduction check. Note that we don't have to check
          reference counts on k, as continuation variables are linear. *)
       (match b, pat with
        | Call (f, UVar x', CVar k'), CPVar x ->
-         if x = x' && k = k' && IMap.find x.id counts'' = 1
-         then f, counts'
-         else Lam (pat, k, b), counts'
-       | _ -> Lam (pat, k, b), counts')
-  and blessa_many counts =
-    let swapped_blessa counts a = blessa a counts |> fun (arg, counts) -> counts, arg in
-    List.fold_left_map swapped_blessa counts
+         if x = x' && k = k' && IMap.find x.id counts3 = 1
+         then f, counts3
+         else Lam (pat, k, b), counts3
+       | _ -> Lam (pat, k, b), counts3)
+  and blessa_many counts aa =
+    let+ counts2, rev_tt =
+      Base.List.fold_result
+        ~f:(fun (counts, tt) a -> blessa a counts >>| fun (t, counts) -> counts, t :: tt)
+        ~init:(counts, [])
+        aa
+    in
+    counts2, List.rev rev_tt
   and blessa2 a1 a2 counts =
-    let triv1, counts2 = blessa a1 counts in
-    let triv2, counts3 = blessa a2 counts2 in
+    let* triv1, counts2 = blessa a1 counts in
+    let+ triv2, counts3 = blessa a2 counts2 in
     triv1, triv2, counts3
   in
   cps glob_env
@@ -492,21 +528,20 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
 
 let free_vars_check k free_vars =
   let has_not_free_vars = SMap.is_empty free_vars in
-  if has_not_free_vars then k () else Error free_vars
+  if has_not_free_vars then k () else Error (`Free_vars_occured free_vars)
 ;;
 
 let cps_conv_vb vb =
-  let ( let+ ) = Base.Result.( >>| ) in
   let open IMap in
   let k ds_vb _ free_vars _ no_refs ref_once =
     let k1 () = Ok (ds_vb, no_refs, ref_once) in
     free_vars_check k1 free_vars
   in
-  let+ (rec_flag, ds_pat, ds_expr), ds_no_refs, ds_ref_once =
+  let* (rec_flag, ds_pat, ds_expr), ds_no_refs, ds_ref_once =
     preconv_chore vb k (snd start_glob_envs) SMap.empty IMap.empty ISet.empty ISet.empty
   in
   let pat, glob_env, counts = extend_env (fst start_glob_envs) empty ds_pat in
-  let p, _ =
+  let+ p, _ =
     match rec_flag with
     | Recursive -> cps_glob ds_ref_once ds_no_refs glob_env ds_expr AHALT counts
     | NonRecursive ->
@@ -525,7 +560,7 @@ let cps_conv_program vbs =
     let k1 () = upd main_id k2 counts no_refs ref_once in
     free_vars_check k1 free_vars
   in
-  let+ ds_vbs, ds_no_refs, ds_ref_once, main_id =
+  let* ds_vbs, ds_no_refs, ds_ref_once, main_id =
     list_fold_map_k
       (preconv_chore ~with_printing:false)
       vbs
@@ -537,9 +572,9 @@ let cps_conv_program vbs =
       ISet.empty
   in
   let cps_glob = cps_glob ds_ref_once ds_no_refs in
-  let p, _ =
+  let+ p, _ =
     match ds_vbs with
-    | [] -> Ret (HALT, TUnit), empty
+    | [] -> Ok (Ret (HALT, TUnit), empty)
     | (NonRecursive, ds_pat, ds_expr) :: tl ->
       cps_glob
         (fst start_glob_envs)
@@ -548,7 +583,11 @@ let cps_conv_program vbs =
         empty
     | (Recursive, ds_pat, ds_expr) :: tl ->
       let pat, glob_env, counts = extend_env (fst start_glob_envs) empty ds_pat in
-      cps_glob glob_env ds_expr (ToplevelLetRecCont (pat, tl, main_id)) counts
+      cps_glob
+        glob_env
+        ds_expr
+        (ToplevelLetRecCont (pat, tl, main_id, maybe_not_allowed_expr ds_expr))
+        counts
   in
   NonRecursive, CPVar (of_string "main"), p
 ;;
@@ -620,29 +659,64 @@ let cps_vb_to_parsetree_vb (rec_flag, pat, p) =
   helper_pat pat (fun ptrn -> helper_p p (fun e -> rec_flag, ptrn, e))
 ;;
 
-let error_message free_vars =
-  String.concat
-    "\n"
-    ("Variables are not in scope:" :: SMap.fold (fun v _ acc -> v :: acc) free_vars [])
+let ds_expr_to_expr ds_expr =
+  let rec helper_p dp k =
+    match dp with
+    | DPVar { hum_name = n; _ } -> k (PVar n)
+    | DPTuple (dp1, dp2, dpp) ->
+      tuple_fold_map_k helper_p dp1 dp2 dpp (fun ptrn1 ptrn2 pp ->
+        k (PTuple (ptrn1, ptrn2, pp)))
+  in
+  let rec helper de k =
+    match de with
+    | DEUnit -> k EUnit
+    | DEConst c -> k (EConst c)
+    | DEVar { hum_name = n; _ } -> k (EVar n)
+    | DEIf (de1, de2, de3) ->
+      helper de1 (fun e1 ->
+        helper de2 (fun e2 -> helper de3 (fun e3 -> k (EIf (e1, e2, e3)))))
+    | DELam (dp, de) -> helper_p dp (fun ptrn -> helper de (fun e -> k (ELam (ptrn, e))))
+    | DEApp (de1, de2) -> helper de1 (fun e1 -> helper de2 (fun e2 -> k (EApp (e1, e2))))
+    | DETuple (de1, de2, dee) ->
+      tuple_fold_map_k helper de1 de2 dee (fun e1 e2 ee -> k (ETuple (e1, e2, ee)))
+    | DELet (rec_flag, dp, de1, de2) ->
+      helper_p dp (fun ptrn ->
+        helper de1 (fun e1 -> helper de2 (fun e2 -> k (ELet (rec_flag, ptrn, e1, e2)))))
+  in
+  helper ds_expr Fun.id
+;;
+
+let pp_error ppf : error -> _ = function
+  | `Let_rec_not_allowed ds_expr ->
+    Format.fprintf
+      ppf
+      " %a: This kind of expression is not allowed as right-hand side of `let rec'"
+      Miniml.Pprint.pp_expr
+      (ds_expr_to_expr ds_expr)
+  | `Free_vars_occured vars ->
+    let msg =
+      String.concat
+        "\n"
+        ("Variables are not in scope:" :: SMap.fold (fun v _ acc -> v :: acc) vars [])
+    in
+    Format.fprintf ppf "%s" msg
 ;;
 
 let test_cps_program text =
   let open Miniml in
-  match Parsing.parse_structure text with
-  | Result.Ok stru ->
-    (match cps_conv_program stru with
-     | Ok cps_program ->
-       let vb' = cps_vb_to_parsetree_vb cps_program in
-       Format.printf "%a" Pprint.pp_value_binding vb';
-       ANF.reset_gensym ()
-     | Error free_vars -> print_endline (error_message free_vars))
-  | _ -> Format.printf "parsing error\n"
+  let stru = Result.get_ok @@ Parsing.parse_structure text in
+  match cps_conv_program stru with
+  | Ok cps_program ->
+    let vb' = cps_vb_to_parsetree_vb cps_program in
+    Format.printf "%a" Pprint.pp_value_binding vb';
+    ANF.reset_gensym ()
+  | Error e -> Format.printf "%a\n%!" pp_error e
 ;;
 
 let test_cps_vb text =
   let open Miniml in
   match cps_conv_vb @@ Parsing.parse_vb_exn text with
-  | Error free_vars -> print_endline (error_message free_vars)
+  | Error e -> Format.printf "%a\n%!" pp_error e
   | Ok cps_vb ->
     let vb' = cps_vb_to_parsetree_vb cps_vb in
     Format.printf "%a" Pprint.pp_value_binding vb';
@@ -771,5 +845,25 @@ let%expect_test "cps free vars" =
 let%expect_test "cps func in func" =
   test_cps_vb {| let z = let rec g y = y in  let f = fun x -> g in f 2 3|};
   [%expect {|  let z = let rec g y k1 = k1 y in (fun x -> g 3 (fun x -> x)) 2
+|}]
+;;
+
+let%expect_test "cps not allowed let rec" =
+  test_cps_vb {| let main  = let rec  x =  x 0 in 0|};
+  [%expect
+    {|  (x 0): This kind of expression is not allowed as right-hand side of `let rec'
+|}]
+;;
+
+let%expect_test "cps not allowed let rec lambda complex" =
+  test_cps_vb {| let main  = let rec x = (fun z -> (fun y -> x )) 0 in 0|};
+  [%expect
+    {|  ((fun z -> (fun y -> x)) 0): This kind of expression is not allowed as right-hand side of `let rec'
+|}]
+;;
+
+let%expect_test "cps fake rec" =
+  test_cps_vb {| let main  = let rec x = (fun y -> 8) 12 in 0|};
+  [%expect {|  let main = (fun y -> let rec x = 8 in 0) 12
 |}]
 ;;
