@@ -243,7 +243,7 @@ let print_epilogue ppf fname =
   fprintf ppf "%!"
 
 let sd_dest k a = function
-  | DReg _ -> sd k a (Temp_reg 100500)
+  | DReg s -> mv k a (RU s)
   | DStack_var name -> sd k a (Addr_of_local.pp_to_mach name)
 
 let li_dest k a n =
@@ -262,9 +262,6 @@ let emit_alloc_closure fname arity =
   emit lla (RU "a0") fname;
   emit li (RU "a1") arity;
   emit call "rukaml_alloc_closure"
-(* printfn ppf "  lla a0, %s" fname;
-   printfn ppf "  li a1, %d" arity;
-   printfn ppf "  call rukaml_alloc_closure" *)
 
 (**
     Argument [is_toplevel] returns None or Some arity. *)
@@ -287,13 +284,10 @@ let generate_body is_toplevel body =
       ~f:
         (let pp_access ?(doc = "") v =
            emit li t0 v;
-           (* printfn ppf "  li t0, %d" v; *)
            emit sd t0 (ROffset (SP, 0)) ~comm:doc
-           (* Format.fprintf ppf "  sd t0, (sp)"; *)
            (* if doc <> "" then printfn ppf " # %s" doc else printfn ppf "" *)
          in
          emit addi SP SP (-8);
-         (* printfn ppf "  addi sp, sp, -8 #"; *)
          incr Addr_of_local.last_pos;
          function
          | Compile_lib.ANF.AUnit | AConst (PConst_bool false) -> pp_access 0
@@ -549,16 +543,22 @@ let generate_body is_toplevel body =
           in
           emit sd_dest (RU "a0") dest
         else if formal_arity < expected_arity then (
+          let func_clo_id = Ident.of_string "func_closure" in
+          Addr_of_local.extend func_clo_id;
+          emit addi sp sp (-8) ~comm:(sprintf " for func closure");
           store_ra_temp (fun ra_name ->
-              emit lla (RU "a0") f.hum_name;
-              emit li (RU "a1") expected_arity;
-              emit sd (RU "ra") (Addr_of_local.pp_to_mach ra_name);
-              emit call "rukaml_alloc_closure");
+              emit lla a0 f.hum_name;
+              emit li a1 expected_arity;
+              emit sd ra (Addr_of_local.pp_to_mach ra_name);
+              emit call "rukaml_alloc_closure"
+              (* Maybe I forgot to store result? *));
+          emit sd a0 (Addr_of_local.pp_to_mach func_clo_id);
 
           (* printfn ppf "  add0 a0, a0, 0"; *)
           let partial_args_count = allocate_args_for_call ~f (arg1 :: args) in
           let () =
             store_ra_temp (fun ra_name ->
+                emit ld a0 (Addr_of_local.pp_to_mach func_clo_id);
                 emit li a1 formal_arity;
                 (* printfn ppf "  li a1, %d" formal_arity; *)
                 assert (formal_arity < 5);
@@ -579,8 +579,9 @@ let generate_body is_toplevel body =
                 (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *)
                 (* Needed because we allocate temporary space to prepare arguments  *))
           in
-          deallocate_args_for_call formal_arity
-          (* printfn ppf "  sub rsp, 8*2 ; deallocate closure value and padding" *))
+          deallocate_args_for_call formal_arity;
+          emit addi sp sp 8 ~comm:"deallocate closure value";
+          Addr_of_local.remove_local func_clo_id)
         else failwith "Arity mismatch: over application"
     | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), [])
       ->

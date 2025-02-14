@@ -83,6 +83,33 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (cram
+ (applies_to pass_print)
+ (deps
+  ./pass_print.ml
+  pass_print.exe
+  ;
+  ))
+
+(rule
+ (targets pass_print.asm pass_print.exe)
+ (deps
+  (:src pass_print.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_amd64/amd64_compiler.exe
+    %{src}
+    -o
+    pass_print.asm)
+   (run nasm -g -F dwarf -felf64 pass_print.asm -o main.o)
+   (run gcc-13 -g -no-pie main.o %{stdlib} -o pass_print.exe))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(cram
  (applies_to run fib fack print tuples)
  (deps
   ../llvm/fack.ml

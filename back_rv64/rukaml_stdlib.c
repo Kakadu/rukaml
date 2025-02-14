@@ -20,7 +20,7 @@
   } */
 
 #define DEBUG
-#undef DEBUG
+// #undef DEBUG
 
 static uint64_t log_level = 0;
 
@@ -211,7 +211,7 @@ void rukaml_print_int(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3, uint64
   // puts(repr);
   // printf("%s\n", __func__);
   // fflush(stdout);
-  //printf("%s a0=%d a1=%d a2=%d a3=%d a4=%d a5=%d a6=%d a7=%d\n", __func__, a0,a1,a2,a3,a4,a5,a6, a7);
+  // printf("%s a0=%d a1=%d a2=%d a3=%d a4=%d a5=%d a6=%d a7=%d\n", __func__, a0,a1,a2,a3,a4,a5,a6, a7);
   printf("%s %d\n", __func__, x);
   fflush(stdout);
 }
