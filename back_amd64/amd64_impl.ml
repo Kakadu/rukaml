@@ -415,7 +415,7 @@ let generate_body is_toplevel ppf body =
         (* TODO: Maybe move this specialization to the case below  *)
     | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
         (* Callig a rukaml function uses custom calling convention.
-           Pascal convention: all arguments on stack, LTR *)
+           CDECL convention: all arguments on stack, LTR *)
         let expected_arity = Option.get (is_toplevel f) in
         let formal_arity = 1 + List.length args in
 
