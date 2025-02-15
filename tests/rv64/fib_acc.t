@@ -66,118 +66,126 @@
       28	  ld t4, 48(sp)
       29	  add  t5, t3, t4
       30	  sd t5, 16(sp)
-      31	  addi sp, sp, -8 # alloc space for RA register
-      32	  lla a0, fib_acc
-      33	  li a1, 3
-      34	  sd ra, (sp)
-      35	  call rukaml_alloc_closure
-      36	  ld ra, (sp)
-      37	  addi sp, sp, 8 # free space of RA register
-      38	# Allocate args to call fun "fib_acc" arguments
-      39	  addi sp, sp, -8
-      40	  ld t0, 56(sp) # arg "b"
-      41	  sd t0, (sp)
-      42	  addi sp, sp, -8 # alloc space for RA register
-      43	  li a1, 1
-      44	  ld a2, 8(sp) # arg 0
-      45	  sd ra, (sp)
-      46	  call rukaml_applyN
-      47	  sd a0, 24(sp)
-      48	  ld ra, (sp)
-      49	  addi sp, sp, 8 # free space of RA register
-      50	  addi sp, sp, 8 # deallocate 1 args
-      51	  addi sp, sp, -8 # first arg of a function temp5
-      52	  ld t5, 24(sp)
-      53	  sd t5, (sp) # access a var "ab"
-      54	  addi sp, sp, -8 # alloc space for RA register
-      55	  ld a0, 24(sp)
-      56	  li a1, 1
-      57	  ld a2, 8(sp)
-      58	  sd ra, (sp)
-      59	  call rukaml_applyN
-      60	  ld ra, (sp)
-      61	  addi sp, sp, 8 # free space of RA register
-      62	  addi sp, sp, 8 # free space for args of function "temp5"
-      63	  sd a0, (sp)
-      64	  addi sp, sp, -8 # first arg of a function temp6
-      65	  ld t5, 32(sp)
-      66	  sd t5, (sp) # access a var "n1"
-      67	  addi sp, sp, -8 # alloc space for RA register
-      68	  ld a0, 16(sp)
-      69	  li a1, 1
-      70	  ld a2, 8(sp)
-      71	  sd ra, (sp)
-      72	  call rukaml_applyN
-      73	  ld ra, (sp)
-      74	  addi sp, sp, 8 # free space of RA register
-      75	  addi sp, sp, 8 # free space for args of function "temp6"
-      76	lab_endif_15:
-      77	  addi sp, sp, 40 # deallocate local variables temp6, temp5, ab, n1, temp1
-      78	  ret # fib_acc
-      79	.globl main
-      80	main:
-      81	  addi sp, sp, -32 # allocate for local variables g, f, temp9, temp8
-      82	  addi sp, sp, -8 # alloc space for RA register
-      83	  lla a0, fib_acc
-      84	  li a1, 3
-      85	  sd ra, (sp)
-      86	  call rukaml_alloc_closure
-      87	  ld ra, (sp)
-      88	  addi sp, sp, 8 # free space of RA register
-      89	# Allocate args to call fun "fib_acc" arguments
-      90	  addi sp, sp, -8
-      91	  li t0, 0
-      92	  sd t0, (sp) # constant
-      93	  addi sp, sp, -8 # alloc space for RA register
-      94	  li a1, 1
-      95	  ld a2, 8(sp) # arg 0
-      96	  sd ra, (sp)
-      97	  call rukaml_applyN
-      98	  sd a0, 40(sp)
-      99	  ld ra, (sp)
-     100	  addi sp, sp, 8 # free space of RA register
-     101	  addi sp, sp, 8 # deallocate 1 args
-     102	  addi sp, sp, -8 # first arg of a function temp8
-     103	  li t0, 1
-     104	  sd t0, (sp)
-     105	  addi sp, sp, -8 # alloc space for RA register
-     106	  ld a0, 40(sp)
-     107	  li a1, 1
-     108	  ld a2, 8(sp)
-     109	  sd ra, (sp)
-     110	  call rukaml_applyN
-     111	  ld ra, (sp)
-     112	  addi sp, sp, 8 # free space of RA register
-     113	  addi sp, sp, 8 # free space for args of function "temp8"
-     114	  sd a0, 16(sp)
-     115	  addi sp, sp, -8 # first arg of a function temp9
-     116	  li t0, 4
-     117	  sd t0, (sp)
-     118	  addi sp, sp, -8 # alloc space for RA register
-     119	  ld a0, 32(sp)
-     120	  li a1, 1
-     121	  ld a2, 8(sp)
-     122	  sd ra, (sp)
-     123	  call rukaml_applyN
-     124	  ld ra, (sp)
-     125	  addi sp, sp, 8 # free space of RA register
-     126	  addi sp, sp, 8 # free space for args of function "temp9"
-     127	  sd a0, 8(sp)
-     128	  addi sp, sp, -8 # alloc space for RA register
-     129	  sd ra, (sp)
-     130	  ld a0, 16(sp)
-     131	  addi sp, sp, -8
-     132	  sd a0, (sp)
-     133	  call rukaml_print_int
-     134	  addi sp, sp, 8
+      31	  addi sp, sp, -8 #  for func closure
+      32	  addi sp, sp, -8 # alloc space for RA register
+      33	  lla a0, fib_acc
+      34	  li a1, 3
+      35	  sd ra, (sp)
+      36	  call rukaml_alloc_closure
+      37	  ld ra, (sp)
+      38	  addi sp, sp, 8 # free space of RA register
+      39	  sd a0, (sp)
+      40	# Allocate args to call fun "fib_acc" arguments
+      41	  addi sp, sp, -8
+      42	  ld t0, 64(sp) # arg "b"
+      43	  sd t0, (sp)
+      44	  addi sp, sp, -8 # alloc space for RA register
+      45	  ld a0, 16(sp)
+      46	  li a1, 1
+      47	  ld a2, 8(sp) # arg 0
+      48	  sd ra, (sp)
+      49	  call rukaml_applyN
+      50	  sd a0, 32(sp)
+      51	  ld ra, (sp)
+      52	  addi sp, sp, 8 # free space of RA register
+      53	  addi sp, sp, 8 # deallocate 1 args
+      54	  addi sp, sp, 8 # deallocate closure value
+      55	  addi sp, sp, -8 # first arg of a function temp5
+      56	  ld t5, 24(sp)
+      57	  sd t5, (sp) # access a var "ab"
+      58	  addi sp, sp, -8 # alloc space for RA register
+      59	  ld a0, 24(sp)
+      60	  li a1, 1
+      61	  ld a2, 8(sp)
+      62	  sd ra, (sp)
+      63	  call rukaml_applyN
+      64	  ld ra, (sp)
+      65	  addi sp, sp, 8 # free space of RA register
+      66	  addi sp, sp, 8 # free space for args of function "temp5"
+      67	  sd a0, (sp)
+      68	  addi sp, sp, -8 # first arg of a function temp6
+      69	  ld t5, 32(sp)
+      70	  sd t5, (sp) # access a var "n1"
+      71	  addi sp, sp, -8 # alloc space for RA register
+      72	  ld a0, 16(sp)
+      73	  li a1, 1
+      74	  ld a2, 8(sp)
+      75	  sd ra, (sp)
+      76	  call rukaml_applyN
+      77	  ld ra, (sp)
+      78	  addi sp, sp, 8 # free space of RA register
+      79	  addi sp, sp, 8 # free space for args of function "temp6"
+      80	lab_endif_15:
+      81	  addi sp, sp, 40 # deallocate local variables temp6, temp5, ab, n1, temp1
+      82	  ret # fib_acc
+      83	.globl main
+      84	main:
+      85	  addi sp, sp, -32 # allocate for local variables g, f, temp9, temp8
+      86	  addi sp, sp, -8 #  for func closure
+      87	  addi sp, sp, -8 # alloc space for RA register
+      88	  lla a0, fib_acc
+      89	  li a1, 3
+      90	  sd ra, (sp)
+      91	  call rukaml_alloc_closure
+      92	  ld ra, (sp)
+      93	  addi sp, sp, 8 # free space of RA register
+      94	  sd a0, (sp)
+      95	# Allocate args to call fun "fib_acc" arguments
+      96	  addi sp, sp, -8
+      97	  li t0, 0
+      98	  sd t0, (sp) # constant
+      99	  addi sp, sp, -8 # alloc space for RA register
+     100	  ld a0, 16(sp)
+     101	  li a1, 1
+     102	  ld a2, 8(sp) # arg 0
+     103	  sd ra, (sp)
+     104	  call rukaml_applyN
+     105	  sd a0, 48(sp)
+     106	  ld ra, (sp)
+     107	  addi sp, sp, 8 # free space of RA register
+     108	  addi sp, sp, 8 # deallocate 1 args
+     109	  addi sp, sp, 8 # deallocate closure value
+     110	  addi sp, sp, -8 # first arg of a function temp8
+     111	  li t0, 1
+     112	  sd t0, (sp)
+     113	  addi sp, sp, -8 # alloc space for RA register
+     114	  ld a0, 40(sp)
+     115	  li a1, 1
+     116	  ld a2, 8(sp)
+     117	  sd ra, (sp)
+     118	  call rukaml_applyN
+     119	  ld ra, (sp)
+     120	  addi sp, sp, 8 # free space of RA register
+     121	  addi sp, sp, 8 # free space for args of function "temp8"
+     122	  sd a0, 16(sp)
+     123	  addi sp, sp, -8 # first arg of a function temp9
+     124	  li t0, 4
+     125	  sd t0, (sp)
+     126	  addi sp, sp, -8 # alloc space for RA register
+     127	  ld a0, 32(sp)
+     128	  li a1, 1
+     129	  ld a2, 8(sp)
+     130	  sd ra, (sp)
+     131	  call rukaml_applyN
+     132	  ld ra, (sp)
+     133	  addi sp, sp, 8 # free space of RA register
+     134	  addi sp, sp, 8 # free space for args of function "temp9"
      135	  sd a0, 8(sp)
-     136	  ld ra, (sp)
-     137	  addi sp, sp, 8 # free space of RA register
-     138	  li a0, 0
-     139	  addi sp, sp, 32 # deallocate local variables g, f, temp9, temp8
-     140	  addi a0, x0, 0 # Use 0 return code
-     141	  addi a7, x0, 93 # Service command code 93 terminates
-     142	  ecall # Call linux to terminate the program
+     136	  addi sp, sp, -8 # alloc space for RA register
+     137	  sd ra, (sp)
+     138	  ld a0, 16(sp)
+     139	  addi sp, sp, -8
+     140	  sd a0, (sp)
+     141	  call rukaml_print_int
+     142	  addi sp, sp, 8
+     143	  sd a0, 8(sp)
+     144	  ld ra, (sp)
+     145	  addi sp, sp, 8 # free space of RA register
+     146	  li a0, 0
+     147	  addi sp, sp, 32 # deallocate local variables g, f, temp9, temp8
+     148	  addi a0, x0, 0 # Use 0 return code
+     149	  addi a7, x0, 93 # Service command code 93 terminates
+     150	  ecall # Call linux to terminate the program
   $ riscv64-linux-gnu-gcc-13 -c -g program.s -o program.o
 $ riscv64-linux-gnu-gcc-13 -g -o program.exe ../../back_rv64/rukaml_stdlib.o program.o && ./program.exe
   $ riscv64-linux-gnu-gcc-13 -g program.o ../../back_rv64/rukaml_stdlib.o -o fib_acc.exe 2>&1 | head -n5

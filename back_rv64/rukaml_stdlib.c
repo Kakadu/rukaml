@@ -20,7 +20,7 @@
   } */
 
 #define DEBUG
-// #undef DEBUG
+#undef DEBUG
 
 static uint64_t log_level = 0;
 
