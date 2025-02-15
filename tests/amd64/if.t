@@ -45,12 +45,15 @@
       32	lab_then_4:
       33	  mov qword [rbp-2*8],  20
       34	lab_endif_5:
-      35	  mov rdi, [rbp-2*8]
-      36	  call rukaml_print_int ; short
-      37	  mov rax, rax
-      38	  add rsp, 8*2 ; deallocate local variables temp2, temp1
-      39	  pop rbp
-      40	  ret  ;;;; main
+      35	  add rsp, -8*2
+      36	  mov r11, [rbp-2*8]
+      37	  mov qword [rsp], r11
+      38	  call rukaml_print_int ; short
+      39	  add rsp, 8*2
+      40	  mov rax, rax
+      41	  add rsp, 8*2 ; deallocate local variables temp2, temp1
+      42	  pop rbp
+      43	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o
   $ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
   $ ./program.exe && echo $?

@@ -139,13 +139,16 @@
       95	  call fib
       96	  add rsp, 8*2 ; dealloc args
       97	  mov [rbp-1*8], rax
-      98	  mov rdi, [rbp-1*8]
-      99	  call rukaml_print_int ; short
-     100	  mov [rbp-2*8], rax
-     101	  mov qword rax,  0
-     102	  add rsp, 8*2 ; deallocate local variables u, temp10
-     103	  pop rbp
-     104	  ret  ;;;; main
+      98	  add rsp, -8*2
+      99	  mov r11, [rbp-1*8]
+     100	  mov qword [rsp], r11
+     101	  call rukaml_print_int ; short
+     102	  add rsp, 8*2
+     103	  mov [rbp-2*8], rax
+     104	  mov qword rax,  0
+     105	  add rsp, 8*2 ; deallocate local variables u, temp10
+     106	  pop rbp
+     107	  ret  ;;;; main
 
 $ nasm -felf64 program.asm -o program.o && ld -o program.exe program.o && chmod u+x program.exe && ./program.exe
   $ nasm -felf64 program.asm -o program.o

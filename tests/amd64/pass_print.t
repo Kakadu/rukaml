@@ -17,3 +17,4 @@ $ nasm -felf64 program.asm -o program.o
 $ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
   $ ./pass_print.exe
   rukaml_print_int 21
+  rukaml_print_int 22
