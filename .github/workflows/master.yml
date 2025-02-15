@@ -10,13 +10,15 @@ on:
 
 env:
   OPAMROOT: /home/opam/.opam
+  OPAMYES: true
+  OPAMCONFIRMLEVEL: unsafe-yes
 
 jobs:
   build:
     runs-on: ubuntu-latest
     container:
       image: kakadu18/ocaml:llvm16
-      options: --user root
+      #options: --user root
 
     # The below probably could be used instead of styfle/cancel-workflow-action
     concurrency:
@@ -27,11 +29,7 @@ jobs:
       - run: opam --version
       - run: opam exec -- ocamlopt --version
       - run: opam list
-
-      #- name: Cancel Previous Runs
-      #  uses: styfle/cancel-workflow-action@0.11.0
-      #  with:
-      #    access_token: ${{ github.token }}
+      - run: sudo apt update
 
       # checking out the code seems to be important because local switch is used
       - name: Checkout code
@@ -42,8 +40,10 @@ jobs:
       - name: Install OPAM dependencies via Makefile
         #continue-on-error: true
         run: |
-          sudo apt update --yes
-          make deps
+          make debs
+          opam install . --deps-only --with-test
+        #opam install . --depext-only --with-test
+
 
       - run: opam exec -- dune build @default --profile=release
       - run: opam exec -- dune test
