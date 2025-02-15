@@ -98,13 +98,13 @@
       68	  mov qword r11, [rbp+2*8]
       69	  dec r11
       70	  mov qword [rbp-2*8], r11
-      71	  mov rdi, fack
-      72	  mov rsi, 2
-      73	  call rukaml_alloc_closure
-      74	  sub rsp, 8 ; trying to save alignment 16 bytes
-      75	  sub rsp, 8*1 ; fun arguments
-      76	  mov qword r8, [rbp-2*8]  ; arg "temp5"
-      77	  mov qword [rsp+0*8], r8
+      71	  sub rsp, 8 ; trying to save alignment 16 bytes
+      72	  sub rsp, 8*1 ; fun arguments
+      73	  mov qword r8, [rbp-2*8]  ; arg "temp5"
+      74	  mov qword [rsp+0*8], r8
+      75	  mov rdi, fack
+      76	  mov rsi, 2
+      77	  call rukaml_alloc_closure
       78	  mov rdi, rax
       79	  mov rsi, 1
       80	  mov rdx, [rsp+8*0]
@@ -112,13 +112,13 @@
       82	  call rukaml_applyN
       83	  add rsp, 8*2 ; deallocate args of rukaml_applyN
       84	  mov [rbp-3*8], rax
-      85	  mov rdi, fresh_1
-      86	  mov rsi, 3
-      87	  call rukaml_alloc_closure
-      88	  sub rsp, 8 ; trying to save alignment 16 bytes
-      89	  sub rsp, 8*1 ; fun arguments
-      90	  mov qword r8, [rbp+2*8]  ; arg "n"
-      91	  mov qword [rsp+0*8], r8
+      85	  sub rsp, 8 ; trying to save alignment 16 bytes
+      86	  sub rsp, 8*1 ; fun arguments
+      87	  mov qword r8, [rbp+2*8]  ; arg "n"
+      88	  mov qword [rsp+0*8], r8
+      89	  mov rdi, fresh_1
+      90	  mov rsi, 3
+      91	  call rukaml_alloc_closure
       92	  mov rdi, rax
       93	  mov rsi, 1
       94	  mov rdx, [rsp+8*0]
@@ -169,12 +169,12 @@
      139	  call rukaml_initialize
      140	  sub rsp, 8*3 ; allocate for local variables t, rez, temp11
      141	  sub rsp, 8 ; allocate padding for locals
-     142	  mov rdi, fack
-     143	  mov rsi, 2
-     144	  call rukaml_alloc_closure
-     145	  sub rsp, 8 ; trying to save alignment 16 bytes
-     146	  sub rsp, 8*1 ; fun arguments
-     147	  mov qword [rsp+0*8], 5 ; constant
+     142	  sub rsp, 8 ; trying to save alignment 16 bytes
+     143	  sub rsp, 8*1 ; fun arguments
+     144	  mov qword [rsp+0*8], 5 ; constant
+     145	  mov rdi, fack
+     146	  mov rsi, 2
+     147	  call rukaml_alloc_closure
      148	  mov rdi, rax
      149	  mov rsi, 1
      150	  mov rdx, [rsp+8*0]
@@ -195,14 +195,17 @@
      165	  call rukaml_applyN
      166	  add rsp, 8*2 ; free space for args of function "temp11"
      167	  mov [rbp-2*8], rax
-     168	  mov rdi, [rbp-2*8]
-     169	  call rukaml_print_int ; short
-     170	  mov [rbp-3*8], rax
-     171	  mov qword rax,  0
-     172	  add rsp, 8 ; deallocate padding for locals
-     173	  add rsp, 8*3 ; deallocate local variables t, rez, temp11
-     174	  pop rbp
-     175	  ret  ;;;; main
+     168	  add rsp, -8*2
+     169	  mov r11, [rbp-2*8]
+     170	  mov qword [rsp], r11
+     171	  call rukaml_print_int ; short
+     172	  add rsp, 8*2
+     173	  mov [rbp-3*8], rax
+     174	  mov qword rax,  0
+     175	  add rsp, 8 ; deallocate padding for locals
+     176	  add rsp, 8*3 ; deallocate local variables t, rez, temp11
+     177	  pop rbp
+     178	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o
   $ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
   /usr/bin/ld: program.o: warning: relocation in read-only section `.text'

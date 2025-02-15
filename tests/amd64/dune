@@ -8,19 +8,39 @@
   ;
   ))
 
+;;;;;;;;;;;;;;;;;;;
+
 (cram
  (applies_to fac)
+ (deps ./fac.ml fac.exe))
+
+(rule
+ (targets fac.asm)
  (deps
-  ./fac.ml
-  ;
-  ))
+  (:src fac.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o fac.asm)))
+
+(rule
+ (targets fac.exe)
+ (deps
+  (:src fac.asm)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run nasm -g -F dwarf -felf64 %{src} -o fac.o)
+   (run gcc-13 -g -no-pie fac.o %{stdlib} -o fac.exe))))
+
+;;;;;;;;;;;;;;;;;;;
 
 (cram
  (applies_to print)
- (deps
-  ./print.ml
-  ;
-  ))
+ (deps ./print.ml print.exe))
 
 (rule
  (targets print.asm print.exe)
@@ -34,6 +54,25 @@
    (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o print.asm)
    (run nasm -g -F dwarf -felf64 print.asm -o print.o)
    (run gcc-13 -g -no-pie print.o %{stdlib} -o print.exe))))
+
+;;;;;;;;;;;;;;;;;;;
+
+(cram
+ (applies_to print3)
+ (deps ./print3.ml print3.exe))
+
+(rule
+ (targets print3.asm print3.exe)
+ (deps
+  (:src print3.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o print3.asm)
+   (run nasm -g -F dwarf -felf64 print3.asm -o print3.o)
+   (run gcc-13 -g -no-pie print3.o %{stdlib} -o print3.exe))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -84,11 +123,7 @@
 
 (cram
  (applies_to pass_print)
- (deps
-  ./pass_print.ml
-  pass_print.exe
-  ;
-  ))
+ (deps ./pass_print.ml pass_print.exe))
 
 (rule
  (targets pass_print.asm pass_print.exe)
@@ -110,7 +145,35 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (cram
- (applies_to run fib fack print tuples)
+ (applies_to tuple0)
+ (deps ./tuple0.ml tuple0.exe))
+
+(rule
+ (targets tuple0.asm)
+ (deps
+  (:src tuple0.ml)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o tuple0.asm)))
+
+(rule
+ (targets tuple0.exe)
+ (deps
+  (:src tuple0.asm)
+  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run nasm -g -F dwarf -felf64 %{src} -o tuple0.o)
+   (run gcc-13 -g -no-pie tuple0.o %{stdlib} -o tuple0.exe))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(cram
+ (applies_to run fib fack tuples)
  (deps
   ../llvm/fack.ml
   fac.ml
