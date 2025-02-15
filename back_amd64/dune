@@ -36,16 +36,44 @@
 
 (rule
  (targets rukaml_stdlib.o)
- (deps rukaml_stdlib.c)
+ (deps
+  (:src rukaml_stdlib.c)
+  rukaml_stdlib.h)
  (action
   (run
    gcc-13
    -g
    -Wall
    -Wpedantic
-   %{deps}
+   %{src}
    -c
    -o
    %{targets}
    ;
    )))
+
+(rule
+ (target tests.exe)
+ (deps
+  (:stdlib rukaml_stdlib.o)
+  rukaml_stdlib.h
+  (:src tests.c))
+ (mode
+  (promote (until-clean)))
+ (action
+  (run
+   gcc-13
+   -g
+   -Wall
+   -Wpedantic
+   -o
+   %{target}
+   %{stdlib}
+   %{src}
+   -lcunit
+   ;
+   )))
+
+(cram
+ (applies_to tests)
+ (deps tests.exe))
