@@ -64,6 +64,8 @@ let gensym =
   reset_gensym ();
   gensym
 
+let gen_name ?(prefix = "") () = Printf.sprintf "%s%d" prefix (gensym ())
+
 let list_take_n n xs =
   let rec helper n forw xs =
     if n = 0 then (List.rev forw, xs)
@@ -199,7 +201,7 @@ let allocate_locals ppf input_anf : now:unit -> unit =
     let () = now in
     ()
 
-let print_alloc_closure ppf fname arity =
+let emit_alloc_closure ppf fname arity =
   printfn ppf "  mov rdi, %a" Ident.pp fname;
   printfn ppf "  mov rsi, %d" arity;
   printfn ppf "  call rukaml_alloc_closure"
@@ -240,10 +242,13 @@ let generate_body is_toplevel ppf body =
         | AVar vname when Option.is_some (is_toplevel vname) -> (
             match is_toplevel vname with
             | Some arity ->
-                print_alloc_closure ppf vname arity;
+                emit_alloc_closure ppf vname arity;
                 printfn ppf "  mov qword [rsp%+d*8], rax ; arg \"%a\"" i
                   Ident.pp vname
             | None -> assert false)
+        | AVar { Ident.hum_name = "print"; _ } ->
+            emit_alloc_closure ppf (Ident.of_string "rukaml_print_int") 1;
+            printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
         | AVar vname ->
             printfn ppf "  mov qword r8, %a  ; arg \"%a\""
               Addr_of_local.pp_local_exn vname Ident.pp vname;
@@ -288,13 +293,29 @@ let generate_body is_toplevel ppf body =
            && not (Addr_of_local.has_key f) -> (
         match arg1 with
         | AVar v when Addr_of_local.has_key v ->
-            printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn v;
+            let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+            let name2 = Ident.of_string @@ gen_name ~prefix:"print_arg" () in
+            Addr_of_local.extend name1;
+            Addr_of_local.extend name2;
+            printfn ppf "  add rsp, -8*2";
+            printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+            printfn ppf "  mov qword [rsp], r11";
             printfn ppf "  call rukaml_print_int ; short";
+            printfn ppf "  add rsp, 8*2";
+            Addr_of_local.remove_local name2;
+            Addr_of_local.remove_local name1;
             printfn ppf "  mov %a, rax" pp_dest dest
         | AConst (PConst_int n) ->
-            (* TODO: user Addr_of_local.pp_local_exn *)
-            printfn ppf "  mov rdi, %d" n;
+            let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+            let name2 = Ident.of_string @@ gen_name ~prefix:"print_arg" () in
+            Addr_of_local.extend name1;
+            Addr_of_local.extend name2;
+            printfn ppf "  add rsp, -8*2";
+            printfn ppf "  mov qword %a, %d" Addr_of_local.pp_local_exn name2 n;
             printfn ppf "  call rukaml_print_int";
+            printfn ppf "  add rsp, 8*2";
+            Addr_of_local.remove_local name2;
+            Addr_of_local.remove_local name1;
             printfn ppf "  mov %a, rax" pp_dest dest
         | AConst (PConst_bool _)
         | AVar _ | APrimitive _
@@ -408,11 +429,11 @@ let generate_body is_toplevel ppf body =
           printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
           printfn ppf "  mov %a, rax" pp_dest dest)
         else if formal_arity < expected_arity then (
+          let partial_args_count = allocate_args (arg1 :: args) in
+
           printfn ppf "  mov rdi, %a" Ident.pp f;
           printfn ppf "  mov rsi, %d" expected_arity;
           printfn ppf "  call rukaml_alloc_closure";
-
-          let partial_args_count = allocate_args (arg1 :: args) in
 
           printfn ppf "  mov rdi, rax";
           printfn ppf "  mov rsi, %d" formal_arity;
@@ -478,6 +499,9 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  mov qword %a, 1" pp_dest dest
     | AConst (Miniml.Parsetree.PConst_int n) ->
         printfn ppf "  mov qword %a,  %d" pp_dest dest n
+    | AVar ({ Ident.hum_name = "print"; _ } as v) when None = is_toplevel v ->
+        alloc_closure ppf (Ident.of_string "rukaml_print_int") 1;
+        printfn ppf "  mov %a, rax" pp_dest dest
     | AVar vname -> (
         match is_toplevel vname with
         | None ->
