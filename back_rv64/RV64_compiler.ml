@@ -6,6 +6,7 @@ type cfg = {
   mutable wrap_main_into_start : bool;
   mutable stop_after : stop_after_t;
   mutable dump_anf : bool;
+  mutable cps_on : bool;
 }
 
 open Miniml
@@ -18,11 +19,21 @@ let frontend cfg =
     | None -> Stdio.In_channel.(input_all stdin)
   in
   let promote_error r =
-    Result.map_error (fun x -> (x :> [ Parsing.error | Inferencer.error ])) r
+    Result.map_error
+      (fun x ->
+        (x :> [ Parsing.error | Inferencer.error | Compile_lib.CPS.error ]))
+      r
   in
   let ( let* ) x f = Result.bind x f in
-  (* let ( let+ ) x f = Result.map f x in *)
+  let ( let+ ) x f = Result.map f x in
   let* stru = Miniml.Parsing.parse_structure text |> promote_error in
+  let* stru =
+    if not cfg.cps_on then Ok stru
+    else
+      let open Compile_lib in
+      let+ cps_vb = CPS.cps_conv_program stru |> promote_error in
+      [ CPS.cps_vb_to_parsetree_vb cps_vb ]
+  in
   let stru =
     let init = (CConv.standart_globals, []) in
     Stdlib.ListLabels.fold_left
@@ -63,12 +74,15 @@ let cfg =
     wrap_main_into_start = true;
     stop_after = SA_dont;
     dump_anf = false;
+    cps_on = false;
   }
 
 let print_errors = function
   | #Miniml.Parsing.error as e -> Format.printf "%a\n%!" Parsing.pp_error e
   | #Miniml.Inferencer.error as e ->
       Format.printf "%a\n%!" Inferencer.pp_error e
+  | #Compile_lib.CPS.error as e ->
+      Format.printf "%a\n%!" Compile_lib.CPS.pp_error e
 
 let () =
   Arg.parse
@@ -92,6 +106,9 @@ let () =
       ( "-v",
         Arg.Unit (fun () -> RV64_impl.set_verbose true),
         " verbose output of RV64 backend" );
+      ( "-cps",
+        Arg.Unit (fun () -> cfg.cps_on <- true),
+        " include cps conversion" );
     ]
     (fun s -> cfg.input_file <- Some s)
     "help";

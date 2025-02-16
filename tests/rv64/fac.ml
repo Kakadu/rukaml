@@ -1,4 +1,4 @@
-let fac n =
+let rec fac n =
   if (n=1)
   then 1
   else (
