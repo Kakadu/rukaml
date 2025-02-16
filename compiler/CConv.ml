@@ -258,7 +258,10 @@ let conv ?(standart_globals = standart_globals)
              in
              rhs
            | NonRecursive ->
-             List.fold_left (fun acc name -> elam (PVar name) acc) rhs new_args
+             List.fold_left
+               (fun acc name -> elam (PVar name) acc)
+               (List.fold_right elam args_like rhs)
+               new_args
          in
          log "new rhs = %a" Pprint.pp_expr rhs;
          let () =
