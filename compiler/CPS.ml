@@ -24,6 +24,7 @@ let ( let+ ) = Base.Result.( >>| )
 let ( let* ) = Base.Result.( >>= )
 
 module SMap = Map.Make (String)
+type 'a string_map  = 'a SMap.t
 module IMap = Map.Make (Int)
 module ISet = Set.Make (Int)
 

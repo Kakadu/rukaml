@@ -1,4 +1,4 @@
-let fac n =
+let rec fac n =
   let temp = (n=1) in 
   if temp
   then 1
