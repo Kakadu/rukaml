@@ -9,6 +9,8 @@
 #include <errno.h>
 #include <unistd.h>
 
+#include "rukaml_stdlib.h"
+
 /* #define clean_errno() (errno == 0 ? "None" : strerror(errno))
 #define log_error(M, ...) fprintf(stderr, "[ERROR] (%s:%d: errno: %s) " M "\n", __FILE__, __LINE__, clean_errno(), ##__VA_ARGS__)
 #define assertf(A, M, ...)       \
@@ -199,7 +201,7 @@ void rukaml_gc_print_stats(void)
   fflush(stdout);
 }
 
-void rukaml_print_int(int x)
+void rukaml_print_int(int a0, int a1, int a2, int a3, int a4, int a5, int x)
 {
   // putchar(0x30 + x);
   // putchar('\n');
@@ -211,17 +213,6 @@ void rukaml_print_int(int x)
   printf("%s %d\n", __func__, x);
   fflush(stdout);
 }
-
-typedef void *(*fun0)(void);
-typedef void *(*fun1)(void *);
-typedef void *(*fun2)(void *, void *);
-typedef void *(*fun3)(void *, void *, void *);
-typedef void *(*fun7)(void *, void *, void *, void *, void *, void *, void *);
-typedef void *(*fun8)(void *, void *, void *, void *, void *, void *, void *, void *);
-typedef void *(*fun9)(void *, void *, void *, void *, void *, void *, void *, void *, void *);
-typedef void *(*fun10)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
-typedef void *(*fun11)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
-typedef void *(*fun12)(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
 
 void *rukaml_apply0(fun0 f)
 {

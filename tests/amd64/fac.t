@@ -100,13 +100,16 @@
       70	  call fac
       71	  add rsp, 8*2 ; dealloc args
       72	  mov [rbp-1*8], rax
-      73	  mov rdi, [rbp-1*8]
-      74	  call rukaml_print_int ; short
-      75	  mov [rbp-2*8], rax
-      76	  mov qword rax,  0
-      77	  add rsp, 8*2 ; deallocate local variables t, n
-      78	  pop rbp
-      79	  ret  ;;;; main
+      73	  add rsp, -8*2
+      74	  mov r11, [rbp-1*8]
+      75	  mov qword [rsp], r11
+      76	  call rukaml_print_int ; short
+      77	  add rsp, 8*2
+      78	  mov [rbp-2*8], rax
+      79	  mov qword rax,  0
+      80	  add rsp, 8*2 ; deallocate local variables t, n
+      81	  pop rbp
+      82	  ret  ;;;; main
 
   $ nasm -felf64 program.asm -o program.o
   $ gcc-13 -g -o program.exe ../../back_amd64/rukaml_stdlib.o program.o && ./program.exe

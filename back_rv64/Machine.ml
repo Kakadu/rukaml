@@ -27,6 +27,7 @@ type instr =
   | Lla of reg * string
   | Ld of reg * reg  (** [ld ra, (sp)] *)
   | Sd of reg * reg
+  | Mv of reg * reg
   | Beq of reg * reg * string
   | Blt of reg * reg * string
   | Label of string
@@ -48,6 +49,8 @@ let pp_instr ppf =
   | Ret -> fprintf ppf "ret"
   | Lla (r1, s) -> fprintf ppf "lla %a, %s" pp_reg r1 s
   | Ld (r1, r2) -> fprintf ppf "ld %a, %a" pp_reg r1 pp_reg r2
+  (* | Mv (rd, rs) -> fprintf ppf "addi %a, %a, %d" pp_reg rd pp_reg rs 0 *)
+  | Mv (rd, rs) -> fprintf ppf "mv %a, %a" pp_reg rd pp_reg rs
   | Sd (r1, r2) -> fprintf ppf "sd %a, %a" pp_reg r1 pp_reg r2
   | Beq (r1, r2, offset) ->
       fprintf ppf "beq %a, %a, %s" pp_reg r1 pp_reg r2 offset
@@ -68,6 +71,7 @@ let ret k = k Ret
 let lla k r name = k (Lla (r, name))
 let ld k a b = k (Ld (a, b))
 let sd k a b = k (Sd (a, b))
+let mv k a b = k (Mv (a, b))
 let beq k r1 r2 r3 = k @@ Beq (r1, r2, r3)
 let blt k r1 r2 r3 = k @@ Blt (r1, r2, r3)
 let label k s = k (Label s)
