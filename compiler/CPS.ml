@@ -358,6 +358,17 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
     | None -> false
     | Some _ -> true
   in
+  let helper_toplevelletcont main_id counts = function
+    | (NonRecursive, y', e) :: tl ->
+      ToplevelLetNonRecCont (y', tl, main_id), e, glob_env, counts
+    | [] -> AHALT, DEVar { id = main_id; hum_name = "main" }, glob_env, counts
+    | (Recursive, y', e) :: tl ->
+      let pat, glob_env', counts2 = extend_env glob_env counts y' in
+      ( ToplevelLetRecCont (pat, tl, main_id, maybe_not_allowed_expr e)
+      , e
+      , glob_env'
+      , counts2 )
+  in
   let rec cps env exp c counts =
     match exp with
     | DEVar y -> ret c (IMap.find y.id env) counts
@@ -376,17 +387,6 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
     | DETuple (e1, e2, ee) -> cps env e1 (TupleBldCont (e2 :: ee, [], env, c)) counts
   (* Three smart constructors, for RET, CALL & IF forms. *)
   and ret c a counts =
-    let helper_toplevelletcont main_id = function
-      | (NonRecursive, y', e) :: tl ->
-        ToplevelLetNonRecCont (y', tl, main_id), e, glob_env, counts
-      | [] -> AHALT, DEVar { id = main_id; hum_name = "main" }, glob_env, counts
-      | (Recursive, y', e) :: tl ->
-        let pat, glob_env', counts2 = extend_env glob_env counts y' in
-        ( ToplevelLetRecCont (pat, tl, main_id, maybe_not_allowed_expr e)
-        , e
-        , glob_env'
-        , counts2 )
-    in
     match c with
     | AHALT | KVar _ ->
       let* cont, counts2 = blessc c counts in
@@ -406,10 +406,10 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
       bnd_rec cps a wh env c' constr counts dang_expr pat
     | ToplevelLetNonRecCont (y, vbs, main_id) ->
       let constr x b w = Let (NonRecursive, x, b, w) in
-      let c'', e, glob_env', counts2 = helper_toplevelletcont main_id vbs in
+      let c'', e, glob_env', counts2 = helper_toplevelletcont main_id counts vbs in
       bnd cps_glob y a e glob_env' c'' constr counts2
     | ToplevelLetRecCont (pat, vbs, main_id, dang_expr) ->
-      let c'', e, glob_env', counts2 = helper_toplevelletcont main_id vbs in
+      let c'', e, glob_env', counts2 = helper_toplevelletcont main_id counts vbs in
       let constr b w = Let (Recursive, pat, b, w) in
       bnd_rec cps_glob a e glob_env' c'' constr counts2 dang_expr pat
     | BinopsFirstArgCont (op, e, env, c') ->
@@ -471,10 +471,21 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
     | _ -> ret c (ASafeBinop (op, a1, a2)) counts
   and primop f aa c counts =
     let* counts2, args = blessa_many counts aa in
-    let x = gensym ~prefix:"x" () |> of_string in
-    let counts3 = new_count x.id counts2 in
-    let+ wh, counts4 = ret c (AVar x) counts3 in
-    Primop (CPVar x, f, args, wh), counts4
+    match c with
+    | LetNonRecCont ((DPVar _ as dp_pat), wh, env, c') ->
+      let cp_pat, env', counts3 = extend_env env counts2 dp_pat in
+      let+ w, counts4 = cps env' wh c' counts3 in
+      Primop (cp_pat, f, args, w), counts4
+    | ToplevelLetNonRecCont ((DPVar _ as dp_pat), vbs, main_id) ->
+      let c', e, glob_env', counts2 = helper_toplevelletcont main_id counts2 vbs in
+      let cp_pat, glob_env'', counts3 = extend_env glob_env' counts2 dp_pat in
+      let+ wh, counts4 = cps_glob glob_env'' e c' counts3 in
+      Primop (cp_pat, f, args, wh), counts4
+    | _ ->
+      let x = gensym ~prefix:"x" () |> of_string in
+      let counts3 = new_count x.id counts2 in
+      let+ wh, counts4 = ret c (AVar x) counts3 in
+      Primop (CPVar x, f, args, wh), counts4
   (* Two "blessing" functions to render abstract continuations
      and abstract arguments into actual syntax. *)
   and blessc c counts =
@@ -776,6 +787,21 @@ let%expect_test "cps fac" =
 |}]
 ;;
 
+let%expect_test "cps fib" =
+  test_cps_vb {| 
+  let rec  fib n =
+if n < 2 then n else fib (n - 1) + fib (n - 2)
+  |};
+  [%expect
+    {| 
+let rec fib n k1 = if n < 2 then k1 n else fib (n - 1) (fun t2 -> fib
+                                                                  (n - 2)
+                                                                  (fun
+                                                                  t3 ->
+                                                                   k1
+                                                                   (t2 + t3)))|}]
+;;
+
 let%expect_test "cps complex branching" =
   test_cps_vb {| let x f = 1 + if (f 2) then 3 else 5|};
   [%expect
@@ -793,7 +819,7 @@ let%expect_test "cps print" =
 
 let%expect_test "cps print alias " =
   test_cps_vb {| let f = let p = print in let z = p 0 in z + 1|};
-  [%expect {| let f = let x1 = print 0 in x1 + 1
+  [%expect {| let f = let z = print 0 in z + 1
 |}]
 ;;
 
