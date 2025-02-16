@@ -1,4 +1,11 @@
 *.exe
 
 /print.asm
+/if.asm
+/long_app.asm
+/pass_print.asm
+/print3.asm
+/tuple0.asm
+
 /gdb.txt
+
