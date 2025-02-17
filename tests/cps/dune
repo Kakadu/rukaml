@@ -1,0 +1,104 @@
+(cram
+ (applies_to *)
+ (deps
+  (package MiniML)
+  (package MiniML_rv64)
+  ; %{project_root}/compiler.exe
+  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back_rv64/rukaml_stdlib.o
+  ;
+  ))
+
+;;;;; fac
+
+(rule
+ (targets fac_cpsoff.s)
+ (deps
+  (:src fac.ml))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    --no-start
+    -vamd64
+    %{src}))))
+
+(rule
+ (targets fac_cpsoff.exe)
+ (deps
+  (:src fac_cpsoff.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    fac_cpsoff.s
+    --no-start
+    -vamd64
+    %{src})
+   (run riscv64-linux-gnu-gcc-13 -g -c fac_cpsoff.s -o fac_cpsoff.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    fac_cpsoff.o
+    -o
+    %{targets}))))
+
+(rule
+ (targets fac_cpson.s)
+ (deps
+  (:src fac.ml))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    --no-start
+    -vamd64
+    %{src}))))
+
+(rule
+ (targets fac_cpson.exe)
+ (deps
+  (:src fac_cpson.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    fac_cpson.s
+    -cps
+    --no-start
+    -vamd64
+    %{src})
+   (run riscv64-linux-gnu-gcc-13 -g -c fac_cpson.s -o fac_cpson.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    fac_cpson.o
+    -o
+    %{targets}))))
+
+(cram
+ (applies_to fac)
+ (deps
+  %{project_root}/back_rv64/rukaml_stdlib.o
+  %{project_root}/tests/rv64/fac.ml
+  ;
+  ))
