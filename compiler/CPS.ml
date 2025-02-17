@@ -24,15 +24,19 @@ let ( let+ ) = Base.Result.( >>| )
 let ( let* ) = Base.Result.( >>= )
 
 module SMap = Map.Make (String)
-type 'a string_map  = 'a SMap.t
+
+type 'a string_map = 'a SMap.t
+
 module IMap = Map.Make (Int)
 module ISet = Set.Make (Int)
-
-type var = ident
 
 let gensym = ANF.gensym_s
 
 (* Syntax of CPS target language *)
+type var = ident
+type 'a tuple = 'a * 'a * 'a list
+type 'a safe_binop = var * 'a * 'a (* invarint:  division by zero isn't possible *)
+
 type pat =
   | CPVar of var
   | CPTuple of pat * pat * pat list
@@ -49,9 +53,6 @@ and cont =
   | Cont of pat * p
   | CVar of var
   | HALT
-
-and 'a tuple = 'a * 'a * 'a list
-and 'a safe_binop = var * 'a * 'a (* invarint:  division by zero isn't possible *)
 
 and triv =
   | Lam of pat * var * p
