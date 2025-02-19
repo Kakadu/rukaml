@@ -17,36 +17,30 @@ lab_endif_32:
 .globl test3
 test3:
   addi sp, sp, -24 # allocate for local variables c, b, a
-  addi sp, sp, -8 # alloc space for RA register
-  sd ra, (sp)
-  ld a0, 32(sp)
-  addi sp, sp, -8
-  sd a0, (sp)
+  addi sp, sp, -16
+  sd ra, 8(sp)
+  ld t0, 40(sp)
+  sd t0, (sp)
   call rukaml_print_int
-  addi sp, sp, 8
+  ld ra, 8(sp)
+  sd a0, 32(sp)
+  addi sp, sp, 16
+  addi sp, sp, -16
+  sd ra, 8(sp)
+  ld t0, 48(sp)
+  sd t0, (sp)
+  call rukaml_print_int
+  ld ra, 8(sp)
   sd a0, 24(sp)
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
-  addi sp, sp, -8 # alloc space for RA register
-  sd ra, (sp)
-  ld a0, 40(sp)
-  addi sp, sp, -8
-  sd a0, (sp)
+  addi sp, sp, 16
+  addi sp, sp, -16
+  sd ra, 8(sp)
+  ld t0, 56(sp)
+  sd t0, (sp)
   call rukaml_print_int
-  addi sp, sp, 8
+  ld ra, 8(sp)
   sd a0, 16(sp)
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
-  addi sp, sp, -8 # alloc space for RA register
-  sd ra, (sp)
-  ld a0, 48(sp)
-  addi sp, sp, -8
-  sd a0, (sp)
-  call rukaml_print_int
-  addi sp, sp, 8
-  sd a0, 8(sp)
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
+  addi sp, sp, 16
   li a0, 0
   addi sp, sp, 24 # deallocate local variables c, b, a
   ret # test3
@@ -134,146 +128,124 @@ main:
   ld ra, (sp)
   addi sp, sp, 8 # free space of RA register
   sd a0, 120(sp)
-  addi sp, sp, -8 # first arg of a function temp15
+  addi sp, sp, -16 # RA and 1st arg of function temp15
+  sd ra, 8(sp)
   li t0, 1
   sd t0, (sp)
-  addi sp, sp, -8 # alloc space for RA register
   ld a0, 136(sp)
   li a1, 1
-  ld a2, 8(sp)
-  sd ra, (sp)
+  ld a2, (sp)
   call rukaml_applyN
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
-  addi sp, sp, 8 # free space for args of function "temp15"
+  ld ra, 8(sp)
+  addi sp, sp, 16 # free space for ra and arg 1 of function "temp15"
   sd a0, 112(sp)
-  addi sp, sp, -8 # first arg of a function temp16
+  addi sp, sp, -16 # RA and 1st arg of function temp16
+  sd ra, 8(sp)
   li t0, 10
   sd t0, (sp)
-  addi sp, sp, -8 # alloc space for RA register
   ld a0, 128(sp)
   li a1, 1
-  ld a2, 8(sp)
-  sd ra, (sp)
+  ld a2, (sp)
   call rukaml_applyN
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
-  addi sp, sp, 8 # free space for args of function "temp16"
+  ld ra, 8(sp)
+  addi sp, sp, 16 # free space for ra and arg 1 of function "temp16"
   sd a0, 104(sp)
-  addi sp, sp, -8 # first arg of a function temp17
+  addi sp, sp, -16 # RA and 1st arg of function temp17
+  sd ra, 8(sp)
   li t0, 100
   sd t0, (sp)
-  addi sp, sp, -8 # alloc space for RA register
   ld a0, 120(sp)
   li a1, 1
-  ld a2, 8(sp)
-  sd ra, (sp)
+  ld a2, (sp)
   call rukaml_applyN
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
-  addi sp, sp, 8 # free space for args of function "temp17"
+  ld ra, 8(sp)
+  addi sp, sp, 16 # free space for ra and arg 1 of function "temp17"
   sd a0, 96(sp)
-  addi sp, sp, -8 # first arg of a function temp18
+  addi sp, sp, -16 # RA and 1st arg of function temp18
+  sd ra, 8(sp)
   li t0, 1000
   sd t0, (sp)
-  addi sp, sp, -8 # alloc space for RA register
   ld a0, 112(sp)
   li a1, 1
-  ld a2, 8(sp)
-  sd ra, (sp)
+  ld a2, (sp)
   call rukaml_applyN
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
-  addi sp, sp, 8 # free space for args of function "temp18"
+  ld ra, 8(sp)
+  addi sp, sp, 16 # free space for ra and arg 1 of function "temp18"
   sd a0, 88(sp)
-  addi sp, sp, -8 # first arg of a function temp19
+  addi sp, sp, -16 # RA and 1st arg of function temp19
+  sd ra, 8(sp)
   li t0, 10000
   sd t0, (sp)
-  addi sp, sp, -8 # alloc space for RA register
   ld a0, 104(sp)
   li a1, 1
-  ld a2, 8(sp)
-  sd ra, (sp)
+  ld a2, (sp)
   call rukaml_applyN
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
-  addi sp, sp, 8 # free space for args of function "temp19"
+  ld ra, 8(sp)
+  addi sp, sp, 16 # free space for ra and arg 1 of function "temp19"
   sd a0, 80(sp)
-  addi sp, sp, -8 # first arg of a function temp20
+  addi sp, sp, -16 # RA and 1st arg of function temp20
+  sd ra, 8(sp)
   li t0, 100000
   sd t0, (sp)
-  addi sp, sp, -8 # alloc space for RA register
   ld a0, 96(sp)
   li a1, 1
-  ld a2, 8(sp)
-  sd ra, (sp)
+  ld a2, (sp)
   call rukaml_applyN
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
-  addi sp, sp, 8 # free space for args of function "temp20"
+  ld ra, 8(sp)
+  addi sp, sp, 16 # free space for ra and arg 1 of function "temp20"
   sd a0, 72(sp)
-  addi sp, sp, -8 # first arg of a function temp21
+  addi sp, sp, -16 # RA and 1st arg of function temp21
+  sd ra, 8(sp)
   li t0, 1000000
   sd t0, (sp)
-  addi sp, sp, -8 # alloc space for RA register
   ld a0, 88(sp)
   li a1, 1
-  ld a2, 8(sp)
-  sd ra, (sp)
+  ld a2, (sp)
   call rukaml_applyN
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
-  addi sp, sp, 8 # free space for args of function "temp21"
+  ld ra, 8(sp)
+  addi sp, sp, 16 # free space for ra and arg 1 of function "temp21"
   sd a0, 64(sp)
-  addi sp, sp, -8 # first arg of a function temp22
+  addi sp, sp, -16 # RA and 1st arg of function temp22
+  sd ra, 8(sp)
   li t0, 10000000
   sd t0, (sp)
-  addi sp, sp, -8 # alloc space for RA register
   ld a0, 80(sp)
   li a1, 1
-  ld a2, 8(sp)
-  sd ra, (sp)
+  ld a2, (sp)
   call rukaml_applyN
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
-  addi sp, sp, 8 # free space for args of function "temp22"
+  ld ra, 8(sp)
+  addi sp, sp, 16 # free space for ra and arg 1 of function "temp22"
   sd a0, 56(sp)
-  addi sp, sp, -8 # first arg of a function temp23
+  addi sp, sp, -16 # RA and 1st arg of function temp23
+  sd ra, 8(sp)
   li t0, 100000000
   sd t0, (sp)
-  addi sp, sp, -8 # alloc space for RA register
   ld a0, 72(sp)
   li a1, 1
-  ld a2, 8(sp)
-  sd ra, (sp)
+  ld a2, (sp)
   call rukaml_applyN
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
-  addi sp, sp, 8 # free space for args of function "temp23"
+  ld ra, 8(sp)
+  addi sp, sp, 16 # free space for ra and arg 1 of function "temp23"
   sd a0, 48(sp)
-  addi sp, sp, -8 # first arg of a function temp24
+  addi sp, sp, -16 # RA and 1st arg of function temp24
+  sd ra, 8(sp)
   li t0, 1000000000
   sd t0, (sp)
-  addi sp, sp, -8 # alloc space for RA register
   ld a0, 64(sp)
   li a1, 1
-  ld a2, 8(sp)
-  sd ra, (sp)
+  ld a2, (sp)
   call rukaml_applyN
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
-  addi sp, sp, 8 # free space for args of function "temp24"
+  ld ra, 8(sp)
+  addi sp, sp, 16 # free space for ra and arg 1 of function "temp24"
   sd a0, 40(sp)
-  addi sp, sp, -8 # alloc space for RA register
-  sd ra, (sp)
-  ld a0, 48(sp)
-  addi sp, sp, -8
-  sd a0, (sp)
+  addi sp, sp, -16
+  sd ra, 8(sp)
+  ld t0, 56(sp)
+  sd t0, (sp)
   call rukaml_print_int
-  addi sp, sp, 8
-  sd a0, 40(sp)
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
+  ld ra, 8(sp)
+  sd a0, 48(sp)
+  addi sp, sp, 16
   addi sp, sp, -8 # alloc space for RA register
   sd ra, (sp)
 # Allocate args to call fun "wrap" arguments
@@ -287,44 +259,38 @@ main:
   ld ra, (sp)
   addi sp, sp, 8 # free space of RA register
   sd a0, 24(sp)
-  addi sp, sp, -8 # first arg of a function temp27
+  addi sp, sp, -16 # RA and 1st arg of function temp27
+  sd ra, 8(sp)
   li t0, 1
   sd t0, (sp)
-  addi sp, sp, -8 # alloc space for RA register
   ld a0, 40(sp)
   li a1, 1
-  ld a2, 8(sp)
-  sd ra, (sp)
+  ld a2, (sp)
   call rukaml_applyN
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
-  addi sp, sp, 8 # free space for args of function "temp27"
+  ld ra, 8(sp)
+  addi sp, sp, 16 # free space for ra and arg 1 of function "temp27"
   sd a0, 16(sp)
-  addi sp, sp, -8 # first arg of a function temp28
+  addi sp, sp, -16 # RA and 1st arg of function temp28
+  sd ra, 8(sp)
   li t0, 10
   sd t0, (sp)
-  addi sp, sp, -8 # alloc space for RA register
   ld a0, 32(sp)
   li a1, 1
-  ld a2, 8(sp)
-  sd ra, (sp)
+  ld a2, (sp)
   call rukaml_applyN
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
-  addi sp, sp, 8 # free space for args of function "temp28"
+  ld ra, 8(sp)
+  addi sp, sp, 16 # free space for ra and arg 1 of function "temp28"
   sd a0, 8(sp)
-  addi sp, sp, -8 # first arg of a function temp29
+  addi sp, sp, -16 # RA and 1st arg of function temp29
+  sd ra, 8(sp)
   li t0, 100
   sd t0, (sp)
-  addi sp, sp, -8 # alloc space for RA register
   ld a0, 24(sp)
   li a1, 1
-  ld a2, 8(sp)
-  sd ra, (sp)
+  ld a2, (sp)
   call rukaml_applyN
-  ld ra, (sp)
-  addi sp, sp, 8 # free space of RA register
-  addi sp, sp, 8 # free space for args of function "temp29"
+  ld ra, 8(sp)
+  addi sp, sp, 16 # free space for ra and arg 1 of function "temp29"
   sd a0, (sp)
   li a0, 0
   addi sp, sp, 128 # deallocate local variables temp2, temp29, temp28, temp27, temp1, temp0, temp24, temp23, temp22, temp21, temp20, temp19, temp18, temp17, temp16, temp15
