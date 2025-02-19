@@ -419,6 +419,7 @@
 (rule
  (targets anon1.s)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src anon1.ml))
  (mode
   (promote (until-clean)))
@@ -435,6 +436,7 @@
 (rule
  (targets anon1.exe)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src anon1.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
  (mode
@@ -454,5 +456,56 @@
  (applies_to anon1)
  (deps
   %{project_root}/back_rv64/rukaml_stdlib.o
-  ;./anon1.exe
-  anon1.ml))
+  ./anon1.exe
+  anon1.ml
+  anon1.s
+  ;
+  ))
+
+;;;;;
+
+(rule
+ (targets order1.s)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src order1.ml))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    --no-start
+    -vamd64
+    %{src}))))
+
+(rule
+ (targets order1.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src order1.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o order1.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    order1.o
+    -o
+    %{targets}))))
+
+(cram
+ (applies_to order1)
+ (deps
+  %{project_root}/back_rv64/rukaml_stdlib.o
+  ./order1.exe
+  order1.ml
+  order1.s
+  ;
+  ))
