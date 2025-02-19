@@ -413,3 +413,46 @@
   %{project_root}/back_rv64/rukaml_stdlib.o
   ;./pass_print2.exe
   pass_print2.ml))
+
+;;;;;
+
+(rule
+ (targets anon1.s)
+ (deps
+  (:src anon1.ml))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    --no-start
+    -vamd64
+    %{src}))))
+
+(rule
+ (targets anon1.exe)
+ (deps
+  (:src anon1.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o anon1.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    anon1.o
+    -o
+    %{targets}))))
+
+(cram
+ (applies_to anon1)
+ (deps
+  %{project_root}/back_rv64/rukaml_stdlib.o
+  ;./anon1.exe
+  anon1.ml))
