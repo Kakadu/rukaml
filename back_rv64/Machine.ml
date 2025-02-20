@@ -50,6 +50,7 @@ let pp_instr ppf =
   | Lla (r1, s) -> fprintf ppf "lla %a, %s" pp_reg r1 s
   | Ld (r1, r2) -> fprintf ppf "ld %a, %a" pp_reg r1 pp_reg r2
   (* | Mv (rd, rs) -> fprintf ppf "addi %a, %a, %d" pp_reg rd pp_reg rs 0 *)
+  | Mv (ROffset (SP, 0), rs) -> fprintf ppf "sd %a, (sp)" pp_reg rs
   | Mv (rd, rs) -> fprintf ppf "mv %a, %a" pp_reg rd pp_reg rs
   | Sd (r1, r2) -> fprintf ppf "sd %a, %a" pp_reg r1 pp_reg r2
   | Beq (r1, r2, offset) ->

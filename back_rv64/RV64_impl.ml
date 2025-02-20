@@ -229,17 +229,23 @@ let store_ra_temp f =
   Addr_of_local.remove_local ra_temp_name;
   rez
 
+let with_two_slots f =
+  let slot1 = Ident.of_string @@ Printf.sprintf "x%d" (gensym ()) in
+  let slot2 = Ident.of_string @@ Printf.sprintf "x%d" (gensym ()) in
+  Addr_of_local.extend slot1;
+  Addr_of_local.extend slot2;
+  (* TODO: +-16 on SP should go here  *)
+  let rez = f slot1 slot2 in
+  Addr_of_local.remove_local slot2;
+  Addr_of_local.remove_local slot1;
+  rez
+
 let print_epilogue ppf fname =
-  (* printfn ppf "  pop rbp"; *)
   if fname <> "main" then emit ret ~comm:fname
-    (* printfn ppf "  ret  # %s" fname *)
   else (
     emit addi (RU "a0") (RU "x0") 0 ~comm:"Use 0 return code";
-    (* printfn ppf "  addi    a0, x0, 0   # Use 0 return code"; *)
     emit addi (RU "a7") (RU "x0") 93 ~comm:"Service command code 93 terminates";
-    (* printfn ppf "  addi    a7, x0, 93  # Service command code 93 terminates"; *)
-    emit ecall ~comm:"Call linux to terminate the program"
-    (* printfn ppf "  ecall               # Call linux to terminate the program" *));
+    emit ecall ~comm:"Call linux to terminate the program");
   fprintf ppf "%!"
 
 let sd_dest k a = function
@@ -357,11 +363,11 @@ let generate_body is_toplevel body =
            && not (Addr_of_local.has_key f) -> (
         match arg1 with
         | AVar v when Addr_of_local.has_key v ->
-            store_ra_temp (fun ra_name ->
+            with_two_slots (fun ra_name arg_name ->
+                emit addi SP SP (-16);
                 emit sd ra (pp_to_mach ra_name);
-                emit ld a0 (pp_to_mach v);
-                emit addi SP SP (-8);
-                emit sd a0 (ROffset (SP, 0));
+                emit ld t0 (pp_to_mach v);
+                emit mv (pp_to_mach arg_name) t0;
                 (* emit li a1 1;
                    emit li a2 2;
                    emit li a3 3;
@@ -370,17 +376,19 @@ let generate_body is_toplevel body =
                    emit li a6 6;
                    emit li a7 7; *)
                 emit call "rukaml_print_int";
-                emit addi SP SP 8;
-                emit sd_dest a0 dest)
+                emit ld ra (pp_to_mach ra_name);
+                emit sd_dest a0 dest;
+                emit addi SP SP 16)
         | AConst (PConst_int n) ->
-            store_ra_temp (fun ra_name ->
-                emit addi SP SP (-8);
+            with_two_slots (fun ra_name arg_name ->
+                emit addi SP SP (-16);
                 emit li a0 n;
-                emit sd a0 (ROffset (SP, 0));
+                emit sd a0 (pp_to_mach arg_name);
                 emit sd ra (pp_to_mach ra_name);
                 emit call "rukaml_print_int";
-                emit sd_dest a0 dest
-                (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *))
+                emit ld ra (pp_to_mach ra_name);
+                emit sd_dest a0 dest;
+                emit addi SP SP 16)
         | AConst (PConst_bool _)
         | AVar _ | APrimitive _
         | ATuple (_, _, _)
@@ -585,31 +593,23 @@ let generate_body is_toplevel body =
         else failwith "Arity mismatch: over application"
     | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), [])
       ->
+        (* A 1 argument application *)
         assert (Option.is_none (is_toplevel f));
-        let arg1 = Ident.of_string "arg1" in
-        Addr_of_local.extend arg1;
-        emit addi SP SP (-8)
-          ~comm:(sprintf "first arg of a function %s" f.hum_name);
-        (* printfn ppf "  addi sp, sp, -8 #first arg of a function %s" f; *)
-        helper_a (DStack_var arg1) arg;
-        store_ra_temp (fun ra_name ->
-            emit ld (RU "a0") (Addr_of_local.pp_to_mach f);
-            (* printfn ppf "  ld a0, %a" Addr_of_local.pp_dest (DStack_var f); *)
-            emit li (RU "a1") 1;
-            (* printfn ppf "  li a1, 1"; *)
-            emit ld (RU "a2") (Addr_of_local.pp_to_mach arg1);
-            (* printfn ppf "  ld a2, %a" Addr_of_local.pp_dest (DStack_var "arg1"); *)
-            emit sd (RU "ra") (Addr_of_local.pp_to_mach ra_name);
-            (* printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
-            emit call "rukaml_applyN"
-            (* printfn ppf "  call rukaml_applyN" *));
-        Addr_of_local.remove_local arg1;
+        with_two_slots (fun ra_slot arg1 ->
+            emit addi SP SP (-16)
+              ~comm:(sprintf "RA and 1st arg of function %s" f.hum_name);
+            emit sd ra (Addr_of_local.pp_to_mach ra_slot);
+            helper_a (DStack_var arg1) arg;
 
-        emit addi SP SP 8
-          ~comm:(sprintf "free space for args of function %S" f.hum_name);
-        (* printfn ppf "  addi sp, sp, 8 # free space for args of function %S" f; *)
+            emit ld (RU "a0") (Addr_of_local.pp_to_mach f);
+            emit li (RU "a1") 1;
+            emit ld (RU "a2") (Addr_of_local.pp_to_mach arg1);
+            emit call "rukaml_applyN";
+            emit ld ra (Addr_of_local.pp_to_mach ra_slot);
+            emit addi SP SP 16
+              ~comm:
+                (sprintf "free space for ra and arg 1 of function %S" f.hum_name));
         if dest <> DReg "a0" then emit sd_dest (RU "a0") dest
-        (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *)
     | CApp (APrimitive "field", AConst (PConst_int _n), [ AVar _ ]) ->
         failwiths "Not implemented"
         (* helper_a (DReg "rsi") cont;
@@ -802,39 +802,39 @@ let codegen ?(wrap_main_into_start = true) anf file =
               syscall|};
 
       let open Compile_lib in
-      anf
-      |> List.iter (fun (_flg, name, expr) ->
-             if Addr_of_local.size () <> 0 then
-               failwiths
-                 "There are left over variables (before function %s): %s "
-                 name.Ident.hum_name (Addr_of_local.keys ());
+      let on_vb (_flg, name, expr) =
+        if Addr_of_local.size () <> 0 then
+          failwiths "There are left over variables (before function %s): %s "
+            name.Ident.hum_name (Addr_of_local.keys ());
 
-             (* printfn ppf "";
-                fprintf ppf "\t; %a\n" Loc_of_ident.pp (); *)
+        (* printfn ppf "";
+           fprintf ppf "\t; %a\n" Loc_of_ident.pp (); *)
 
-             (* print_prologue ppf name; *)
+        (* print_prologue ppf name; *)
 
-             (* fprintf ppf "  ; There are %d known arguments in %s\n%!"
-                (Loc_of_ident.size ()) name; *)
+        (* fprintf ppf "  ; There are %d known arguments in %s\n%!"
+           (Loc_of_ident.size ()) name; *)
 
-             (* printfn ppf "  sub rsp, %d" (8 * Loc_of_ident.size ()); *)
-             (let () = printfn ppf ".globl %s" name.Ident.hum_name in
-              let () = printfn ppf "%s:" name.Ident.hum_name in
+        (* printfn ppf "  sub rsp, %d" (8 * Loc_of_ident.size ()); *)
+        let () = printfn ppf ".globl %s" name.Ident.hum_name in
+        let () = printfn ppf "%s:" name.Ident.hum_name in
 
-              let pats, body = ANF.group_abstractions expr in
+        let pats, body = ANF.group_abstractions expr in
 
-              let argc = List.length pats in
-              let names = List.map (function ANF.APname name -> name) pats in
-              List.rev pats
-              |> ListLabels.iteri ~f:(fun i -> function
-                   | ANF.APname name -> Addr_of_local.add_arg ~argc i name);
+        let argc = List.length pats in
+        let names = List.map (function ANF.APname name -> name) pats in
+        List.rev pats
+        |> ListLabels.iteri ~f:(fun i -> function
+             | ANF.APname name -> Addr_of_local.add_arg ~argc i name);
 
-              generate_body is_toplevel body;
-              Addr_of_local.remove_args names;
+        generate_body is_toplevel body;
+        Addr_of_local.remove_args names;
 
-              print_epilogue ppf name.hum_name;
-              Machine.flush_queue ppf);
-             ());
+        print_epilogue ppf name.hum_name;
+        Machine.flush_queue ppf
+      in
+
+      List.iter on_vb anf;
       Format.pp_print_flush ppf ());
 
   Result.Ok ()

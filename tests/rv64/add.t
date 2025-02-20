@@ -56,34 +56,30 @@
       35	  addi sp, sp, 8 # free space of RA register
       36	  addi sp, sp, 8 # deallocate 1 args
       37	  addi sp, sp, 8 # deallocate closure value
-      38	  addi sp, sp, -8 # first arg of a function temp2
-      39	  li t0, 10
-      40	  sd t0, (sp)
-      41	  addi sp, sp, -8 # alloc space for RA register
+      38	  addi sp, sp, -16 # RA and 1st arg of function temp2
+      39	  sd ra, 8(sp)
+      40	  li t0, 10
+      41	  sd t0, (sp)
       42	  ld a0, 32(sp)
       43	  li a1, 1
-      44	  ld a2, 8(sp)
-      45	  sd ra, (sp)
-      46	  call rukaml_applyN
-      47	  ld ra, (sp)
-      48	  addi sp, sp, 8 # free space of RA register
-      49	  addi sp, sp, 8 # free space for args of function "temp2"
-      50	  sd a0, 8(sp)
-      51	  addi sp, sp, -8 # alloc space for RA register
-      52	  sd ra, (sp)
-      53	  ld a0, 16(sp)
-      54	  addi sp, sp, -8
-      55	  sd a0, (sp)
-      56	  call rukaml_print_int
-      57	  addi sp, sp, 8
-      58	  sd a0, 8(sp)
-      59	  ld ra, (sp)
-      60	  addi sp, sp, 8 # free space of RA register
-      61	  li a0, 0
-      62	  addi sp, sp, 24 # deallocate local variables y, x, temp2
-      63	  addi a0, x0, 0 # Use 0 return code
-      64	  addi a7, x0, 93 # Service command code 93 terminates
-      65	  ecall # Call linux to terminate the program
+      44	  ld a2, (sp)
+      45	  call rukaml_applyN
+      46	  ld ra, 8(sp)
+      47	  addi sp, sp, 16 # free space for ra and arg 1 of function "temp2"
+      48	  sd a0, 8(sp)
+      49	  addi sp, sp, -16
+      50	  sd ra, 8(sp)
+      51	  ld t0, 24(sp)
+      52	  sd t0, (sp)
+      53	  call rukaml_print_int
+      54	  ld ra, 8(sp)
+      55	  sd a0, 16(sp)
+      56	  addi sp, sp, 16
+      57	  li a0, 0
+      58	  addi sp, sp, 24 # deallocate local variables y, x, temp2
+      59	  addi a0, x0, 0 # Use 0 return code
+      60	  addi a7, x0, 93 # Service command code 93 terminates
+      61	  ecall # Call linux to terminate the program
   $ riscv64-linux-gnu-gcc-13 -c -g program.s -o program.o
 $ riscv64-linux-gnu-gcc-13 -g -o program.exe ../../back_rv64/rukaml_stdlib.o program.o && ./program.exe
   $ riscv64-linux-gnu-gcc-13 -g program.o ../../back_rv64/rukaml_stdlib.o -o fib_acc.exe 2>&1 | head -n5
