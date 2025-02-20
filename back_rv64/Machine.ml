@@ -94,6 +94,7 @@ let a6 = RU "a6"
 let a7 = RU "a7"
 let t0 = Temp_reg 0
 let t1 = Temp_reg 1
+let t2 = Temp_reg 2
 let t3 = Temp_reg 3
 let t4 = Temp_reg 4
 let t5 = Temp_reg 5
