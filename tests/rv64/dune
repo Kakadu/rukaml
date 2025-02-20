@@ -526,6 +526,53 @@
   order1.ml
   order1.s))
 
+;;;;; nikita3
+
+(rule
+ (targets nikita3.s)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src nikita3.ml))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    --no-start
+    -vamd64
+    %{src}))))
+
+
+(rule
+ (targets nikita3.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src nikita3.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o nikita3.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    nikita3.o
+    -o
+    %{targets}))))
+
+(cram
+ (applies_to nikita3)
+ (deps
+  %{project_root}/back_rv64/rukaml_stdlib.o
+  ./nikita3.exe
+  nikita3.ml
+  nikita3.s))
+
 ;;;;; fib2
 
 (rule

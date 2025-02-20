@@ -23,7 +23,7 @@ let tests =
     "pass_print2";
     "anon1";
     "order1";
-    
+    "nikita3";
     "fib2";
   ]
 
