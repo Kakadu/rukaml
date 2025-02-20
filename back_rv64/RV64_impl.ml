@@ -286,40 +286,42 @@ let generate_body is_toplevel body =
     emit comment
       (sprintf "Allocate args to call fun %S arguments"
          (Option.get f).Ident.hum_name);
-    ListLabels.iter args
-      ~f:
-        (let pp_access ?(doc = "") v =
-           emit li t0 v;
-           emit sd t0 (ROffset (SP, 0)) ~comm:doc
-           (* if doc <> "" then printfn ppf " # %s" doc else printfn ppf "" *)
-         in
-         emit addi SP SP (-8);
-         incr Addr_of_local.last_pos;
-         function
-         | Compile_lib.ANF.AUnit | AConst (PConst_bool false) -> pp_access 0
-         | AConst (PConst_bool true) -> pp_access 1
-         | AConst (PConst_int n) -> pp_access ~doc:"constant" n
-         | AVar vname when Option.is_some (is_toplevel vname) -> (
-             match is_toplevel vname with
-             | Some arity ->
-                 emit_alloc_closure vname.hum_name arity;
-                 emit sd a0 (ROffset (SP, 0))
-             (* printfn ppf "  mov qword [rsp%+d*8], rax # arg %S" i vname *)
-             | None -> assert false)
-         | AVar { Ident.hum_name = "print"; _ } ->
-             emit_alloc_closure "rukaml_print_int" 1;
-             (* Result is in a0 *)
-             emit sd a0 (ROffset (SP, 0))
-         | AVar vname ->
-             emit ld t0 (pp_to_mach vname)
-               ~comm:(sprintf "arg %S" vname.hum_name);
-             (* printfn ppf "  ld t0, %a  # arg %S" Addr_of_local.pp_local_exn vname
-                vname; *)
-             emit sd t0 (ROffset (SP, 0))
-             (* printfn ppf "  sd t0, (sp)" *)
-         | ALam _ -> failwith "Should it be representable in ANF?"
-         | APrimitive _ -> assert false
-         | ATuple _ -> assert false);
+
+    (* TODO(Kakadu): check RTL *)
+    (* TODO(Kakadu): Rwrite to emit less code *)
+    let pp_access ?(doc = "") v =
+      emit li t0 v;
+      emit sd t0 (ROffset (SP, 0)) ~comm:doc
+    in
+    let on_arg i arg =
+      emit addi SP SP (-8);
+      incr Addr_of_local.last_pos;
+      match arg with
+      | Compile_lib.ANF.AUnit | AConst (PConst_bool false) -> pp_access 0
+      | AConst (PConst_bool true) -> pp_access 1
+      | AConst (PConst_int n) -> pp_access ~doc:"constant" n
+      | AVar vname when Option.is_some (is_toplevel vname) -> (
+          match is_toplevel vname with
+          | Some arity ->
+              emit_alloc_closure vname.hum_name arity;
+              emit sd a0 (ROffset (SP, 0))
+          (* printfn ppf "  mov qword [rsp%+d*8], rax # arg %S" i vname *)
+          | None -> assert false)
+      | AVar { Ident.hum_name = "print"; _ } ->
+          emit_alloc_closure "rukaml_print_int" 1;
+          (* Result is in a0 *)
+          emit sd a0 (ROffset (SP, 0))
+      | AVar vname ->
+          emit ld t0 (pp_to_mach vname) ~comm:(sprintf "arg %S" vname.hum_name);
+          (* printfn ppf "  ld t0, %a  # arg %S" Addr_of_local.pp_local_exn vname
+             vname; *)
+          emit sd t0 (ROffset (SP, 0))
+          (* printfn ppf "  sd t0, (sp)" *)
+      | ALam _ -> failwith "Should it be representable in ANF?"
+      | APrimitive _ -> assert false
+      | ATuple _ -> assert false
+    in
+    ListLabels.iteri args ~f:on_arg;
     (* printfn ppf "  addi sp, sp, -8*%d # fun %S arguments" count (Option.get f); *)
     count
   in
@@ -495,16 +497,15 @@ let generate_body is_toplevel body =
       -> (
         match is_toplevel vname with
         | None ->
-            failwiths "not implemented %d" __LINE__
-            (* printfn ppf "  mov qword r11, %a #" Addr_of_local.pp_local_exn vname;
-               printfn ppf "  %s r11, %d"
-                 (match prim with
-                 | "+" -> "add "
-                 | "*" -> "imul"
-                 | op ->
-                     Format.asprintf ";;; TODO %s. %s %d" op __FUNCTION__ __LINE__)
-                 n;
-               printfn ppf "  mov qword %a, r11" Addr_of_local.pp_dest dest *)
+            emit ld t0 (Addr_of_local.pp_to_mach vname);
+            emit li t1 n;
+            emit
+              (match prim with
+              | "+" -> add
+              | "*" -> mulw
+              | op -> failwiths "not implemented '%s' on %d" op __LINE__)
+              t2 t0 t1;
+            emit sd_dest t2 dest
         | Some _ ->
             (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
             failwiths "not implemented %d" __LINE__)
@@ -550,46 +551,38 @@ let generate_body is_toplevel body =
                 to_remove)
           in
           emit sd_dest (RU "a0") dest
-        else if formal_arity < expected_arity then (
-          let func_clo_id = Ident.of_string "func_closure" in
-          Addr_of_local.extend func_clo_id;
-          emit addi sp sp (-8) ~comm:(sprintf " for func closure");
-          store_ra_temp (fun ra_name ->
+        else if formal_arity < expected_arity then
+          with_two_slots (fun ra_name func_clo_id ->
+              emit addi sp sp (-16) ~comm:(sprintf " RA + closure");
+              emit sd ra (Addr_of_local.pp_to_mach ra_name);
               emit lla a0 f.hum_name;
               emit li a1 expected_arity;
-              emit sd ra (Addr_of_local.pp_to_mach ra_name);
-              emit call "rukaml_alloc_closure"
-              (* Maybe I forgot to store result? *));
-          emit sd a0 (Addr_of_local.pp_to_mach func_clo_id);
+              emit call "rukaml_alloc_closure";
+              emit sd a0 (Addr_of_local.pp_to_mach func_clo_id);
 
-          (* printfn ppf "  add0 a0, a0, 0"; *)
-          let partial_args_count = allocate_args_for_call ~f (arg1 :: args) in
-          let () =
-            store_ra_temp (fun ra_name ->
+              (* let old_locs = Addr_of_local.pp_to_mach ra_name in  *)
+              let _partial_args_count =
+                allocate_args_for_call ~f (arg1 :: args)
+                (* Needed because we allocate temporary space to prepare arguments  *)
+              in
+
+              let () =
                 emit ld a0 (Addr_of_local.pp_to_mach func_clo_id);
                 emit li a1 formal_arity;
-                (* printfn ppf "  li a1, %d" formal_arity; *)
                 assert (formal_arity < 5);
                 (* See calling convention *)
                 List.iteri
                   (fun i rname ->
                     emit ~comm:(sprintf "arg %d" i) ld (RU rname)
-                      (ROffset (SP, 8 * (formal_arity - i)))
-                    (* printfn ppf "  ld %s, %+d*8(sp) # arg %d" rname
-                       (formal_arity - i) i) *))
-                  (list_take formal_arity [ (*"a0"; *) "a2"; "a3"; "a4"; "a5" ]);
+                      (ROffset (SP, 8 * i)))
+                  (list_take formal_arity [ (*"a0"; *) "a2"; "a3"; "a4"; "a5" ])
+              in
 
-                emit sd (RU "ra") (Addr_of_local.pp_to_mach ra_name);
-                (* printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
-                emit call "rukaml_applyN";
-                (* printfn ppf "  call rukaml_applyN"; *)
-                emit sd_dest (RU "a0") dest
-                (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *)
-                (* Needed because we allocate temporary space to prepare arguments  *))
-          in
-          deallocate_args_for_call formal_arity;
-          emit addi sp sp 8 ~comm:"deallocate closure value";
-          Addr_of_local.remove_local func_clo_id)
+              emit call "rukaml_applyN";
+              emit sd_dest (RU "a0") dest;
+              deallocate_args_for_call formal_arity;
+              emit ld ra (Addr_of_local.pp_to_mach ra_name);
+              emit addi sp sp 16 ~comm:"deallocate RA + closure")
         else failwith "Arity mismatch: over application"
     | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), [])
       ->
