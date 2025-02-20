@@ -1,0 +1,17 @@
+;;;;; add
+
+(rule
+ (targets add.exe)
+ (deps
+  (:src add.s)
+  (:stdlib ../rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o add.o)
+   (run riscv64-linux-gnu-gcc-13 -g %{stdlib} add.o -o %{targets}))))
+
+(cram
+ (applies_to add)
+ (deps ../rukaml_stdlib.o ./add.exe add.s))

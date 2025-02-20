@@ -32,54 +32,48 @@
       11	.globl main
       12	main:
       13	  addi sp, sp, -24 # allocate for local variables y, x, temp2
-      14	  addi sp, sp, -8 #  for func closure
-      15	  addi sp, sp, -8 # alloc space for RA register
+      14	  addi sp, sp, -16 #  RA + closure
+      15	  sd ra, 8(sp)
       16	  lla a0, add
       17	  li a1, 2
-      18	  sd ra, (sp)
-      19	  call rukaml_alloc_closure
-      20	  ld ra, (sp)
-      21	  addi sp, sp, 8 # free space of RA register
-      22	  sd a0, (sp)
-      23	# Allocate args to call fun "add" arguments
-      24	  addi sp, sp, -8
-      25	  li t0, 1
-      26	  sd t0, (sp) # constant
-      27	  addi sp, sp, -8 # alloc space for RA register
-      28	  ld a0, 16(sp)
-      29	  li a1, 1
-      30	  ld a2, 8(sp) # arg 0
-      31	  sd ra, (sp)
-      32	  call rukaml_applyN
-      33	  sd a0, 40(sp)
-      34	  ld ra, (sp)
-      35	  addi sp, sp, 8 # free space of RA register
-      36	  addi sp, sp, 8 # deallocate 1 args
-      37	  addi sp, sp, 8 # deallocate closure value
-      38	  addi sp, sp, -16 # RA and 1st arg of function temp2
-      39	  sd ra, 8(sp)
-      40	  li t0, 10
-      41	  sd t0, (sp)
-      42	  ld a0, 32(sp)
-      43	  li a1, 1
-      44	  ld a2, (sp)
-      45	  call rukaml_applyN
-      46	  ld ra, 8(sp)
-      47	  addi sp, sp, 16 # free space for ra and arg 1 of function "temp2"
-      48	  sd a0, 8(sp)
-      49	  addi sp, sp, -16
-      50	  sd ra, 8(sp)
-      51	  ld t0, 24(sp)
-      52	  sd t0, (sp)
-      53	  call rukaml_print_int
-      54	  ld ra, 8(sp)
-      55	  sd a0, 16(sp)
-      56	  addi sp, sp, 16
-      57	  li a0, 0
-      58	  addi sp, sp, 24 # deallocate local variables y, x, temp2
-      59	  addi a0, x0, 0 # Use 0 return code
-      60	  addi a7, x0, 93 # Service command code 93 terminates
-      61	  ecall # Call linux to terminate the program
+      18	  call rukaml_alloc_closure
+      19	  sd a0, (sp)
+      20	# Allocate args to call fun "add" arguments
+      21	  addi sp, sp, -8
+      22	  li t0, 1
+      23	  sd t0, (sp) # constant
+      24	  ld a0, 8(sp)
+      25	  li a1, 1
+      26	  ld a2, (sp) # arg 0
+      27	  call rukaml_applyN
+      28	  sd a0, 40(sp)
+      29	  addi sp, sp, 8 # deallocate 1 args
+      30	  ld ra, 8(sp)
+      31	  addi sp, sp, 16 # deallocate RA + closure
+      32	  addi sp, sp, -16 # RA and 1st arg of function temp2
+      33	  sd ra, 8(sp)
+      34	  li t0, 10
+      35	  sd t0, (sp)
+      36	  ld a0, 32(sp)
+      37	  li a1, 1
+      38	  ld a2, (sp)
+      39	  call rukaml_applyN
+      40	  ld ra, 8(sp)
+      41	  addi sp, sp, 16 # free space for ra and arg 1 of function "temp2"
+      42	  sd a0, 8(sp)
+      43	  addi sp, sp, -16
+      44	  sd ra, 8(sp)
+      45	  ld t0, 24(sp)
+      46	  sd t0, (sp)
+      47	  call rukaml_print_int
+      48	  ld ra, 8(sp)
+      49	  sd a0, 16(sp)
+      50	  addi sp, sp, 16
+      51	  li a0, 0
+      52	  addi sp, sp, 24 # deallocate local variables y, x, temp2
+      53	  addi a0, x0, 0 # Use 0 return code
+      54	  addi a7, x0, 93 # Service command code 93 terminates
+      55	  ecall # Call linux to terminate the program
   $ riscv64-linux-gnu-gcc-13 -c -g program.s -o program.o
 $ riscv64-linux-gnu-gcc-13 -g -o program.exe ../../back_rv64/rukaml_stdlib.o program.o && ./program.exe
   $ riscv64-linux-gnu-gcc-13 -g program.o ../../back_rv64/rukaml_stdlib.o -o fib_acc.exe 2>&1 | head -n5
