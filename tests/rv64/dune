@@ -14,6 +14,7 @@
 (rule
  (targets fac.s)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src fac.ml))
  (mode
   (promote (until-clean)))
@@ -27,23 +28,18 @@
     -vamd64
     %{src}))))
 
+
 (rule
  (targets fac.exe)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src fac.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
  (mode
   (promote (until-clean)))
  (action
   (progn
-   (run
-    %{project_root}/back_rv64/RV64_compiler.exe
-    -o
-    fac.s
-    --no-start
-    -vamd64
-    %{src})
-   (run riscv64-linux-gnu-gcc-13 -g -c fac.s -o fac.o)
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o fac.o)
    (run
     riscv64-linux-gnu-gcc-13
     -g
@@ -56,15 +52,16 @@
  (applies_to fac)
  (deps
   %{project_root}/back_rv64/rukaml_stdlib.o
-  ./fac.ml
-  ;
-  ))
+  ./fac.exe
+  fac.ml
+  fac.s))
 
 ;;;;; fib
 
 (rule
  (targets fib.s)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src fib.ml))
  (mode
   (promote (until-clean)))
@@ -78,9 +75,11 @@
     -vamd64
     %{src}))))
 
+
 (rule
  (targets fib.exe)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src fib.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
  (mode
@@ -100,15 +99,16 @@
  (applies_to fib)
  (deps
   %{project_root}/back_rv64/rukaml_stdlib.o
-  ./fib.ml
-  ;
-  ))
+  ./fib.exe
+  fib.ml
+  fib.s))
 
 ;;;;; fib_acc
 
 (rule
  (targets fib_acc.s)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src fib_acc.ml))
  (mode
   (promote (until-clean)))
@@ -122,9 +122,11 @@
     -vamd64
     %{src}))))
 
+
 (rule
  (targets fib_acc.exe)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src fib_acc.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
  (mode
@@ -144,16 +146,16 @@
  (applies_to fib_acc)
  (deps
   %{project_root}/back_rv64/rukaml_stdlib.o
-  ./fib_acc.ml
-  ;./fib_acc.s
-  ;
-  ))
+  ./fib_acc.exe
+  fib_acc.ml
+  fib_acc.s))
 
 ;;;;; add
 
 (rule
  (targets add.s)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src add.ml))
  (mode
   (promote (until-clean)))
@@ -167,9 +169,11 @@
     -vamd64
     %{src}))))
 
+
 (rule
  (targets add.exe)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src add.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
  (mode
@@ -189,16 +193,16 @@
  (applies_to add)
  (deps
   %{project_root}/back_rv64/rukaml_stdlib.o
-  ./add.ml
-  ;./fib_acc.s
-  ;
-  ))
+  ./add.exe
+  add.ml
+  add.s))
 
 ;;;;; fac_acc
 
 (rule
  (targets fac_acc.s)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src fac_acc.ml))
  (mode
   (promote (until-clean)))
@@ -212,9 +216,11 @@
     -vamd64
     %{src}))))
 
+
 (rule
  (targets fac_acc.exe)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src fac_acc.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
  (mode
@@ -234,15 +240,16 @@
  (applies_to fac_acc)
  (deps
   %{project_root}/back_rv64/rukaml_stdlib.o
-  ./fac_acc.ml
-  ;
-  ))
+  ./fac_acc.exe
+  fac_acc.ml
+  fac_acc.s))
 
 ;;;;; fac_cps
 
 (rule
  (targets fac_cps.s)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src fac_cps.ml))
  (mode
   (promote (until-clean)))
@@ -256,9 +263,11 @@
     -vamd64
     %{src}))))
 
+
 (rule
  (targets fac_cps.exe)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src fac_cps.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
  (mode
@@ -278,15 +287,16 @@
  (applies_to fac_cps)
  (deps
   %{project_root}/back_rv64/rukaml_stdlib.o
-  ./fac_cps.ml
-  ;
-  ))
+  ./fac_cps.exe
+  fac_cps.ml
+  fac_cps.s))
 
 ;;;;; long_app
 
 (rule
- (targets long_app.S)
+ (targets long_app.s)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src long_app.ml))
  (mode
   (promote (until-clean)))
@@ -300,10 +310,12 @@
     -vamd64
     %{src}))))
 
+
 (rule
  (targets long_app.exe)
  (deps
-  (:src long_app.S)
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src long_app.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
  (mode
   (promote (until-clean)))
@@ -322,16 +334,16 @@
  (applies_to long_app)
  (deps
   %{project_root}/back_rv64/rukaml_stdlib.o
-  ./long_app.ml
-  long_app.exe
-  ;
-  ))
+  ./long_app.exe
+  long_app.ml
+  long_app.s))
 
-;;;;;
+;;;;; pass_print
 
 (rule
  (targets pass_print.s)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src pass_print.ml))
  (mode
   (promote (until-clean)))
@@ -345,9 +357,11 @@
     -vamd64
     %{src}))))
 
+
 (rule
  (targets pass_print.exe)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src pass_print.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
  (mode
@@ -368,14 +382,15 @@
  (deps
   %{project_root}/back_rv64/rukaml_stdlib.o
   ./pass_print.exe
-  ./pass_print.s
-  pass_print.ml))
+  pass_print.ml
+  pass_print.s))
 
-;;;;;
+;;;;; pass_print2
 
 (rule
  (targets pass_print2.s)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src pass_print2.ml))
  (mode
   (promote (until-clean)))
@@ -389,9 +404,11 @@
     -vamd64
     %{src}))))
 
+
 (rule
  (targets pass_print2.exe)
  (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
   (:src pass_print2.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
  (mode
@@ -411,10 +428,11 @@
  (applies_to pass_print2)
  (deps
   %{project_root}/back_rv64/rukaml_stdlib.o
-  ;./pass_print2.exe
-  pass_print2.ml))
+  ./pass_print2.exe
+  pass_print2.ml
+  pass_print2.s))
 
-;;;;;
+;;;;; anon1
 
 (rule
  (targets anon1.s)
@@ -432,6 +450,7 @@
     --no-start
     -vamd64
     %{src}))))
+
 
 (rule
  (targets anon1.exe)
@@ -458,11 +477,9 @@
   %{project_root}/back_rv64/rukaml_stdlib.o
   ./anon1.exe
   anon1.ml
-  anon1.s
-  ;
-  ))
+  anon1.s))
 
-;;;;;
+;;;;; order1
 
 (rule
  (targets order1.s)
@@ -480,6 +497,7 @@
     --no-start
     -vamd64
     %{src}))))
+
 
 (rule
  (targets order1.exe)
@@ -506,6 +524,52 @@
   %{project_root}/back_rv64/rukaml_stdlib.o
   ./order1.exe
   order1.ml
-  order1.s
-  ;
-  ))
+  order1.s))
+
+;;;;; fib2
+
+(rule
+ (targets fib2.s)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src fib2.ml))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    --no-start
+    -vamd64
+    %{src}))))
+
+
+(rule
+ (targets fib2.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src fib2.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o fib2.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    fib2.o
+    -o
+    %{targets}))))
+
+(cram
+ (applies_to fib2)
+ (deps
+  %{project_root}/back_rv64/rukaml_stdlib.o
+  ./fib2.exe
+  fib2.ml
+  fib2.s))
+
