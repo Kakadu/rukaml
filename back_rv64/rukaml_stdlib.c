@@ -231,7 +231,7 @@ void *rukaml_apply0(fun0 f)
   // TODO: I'm not sure that zero-argument call is needed
   return f();
 }
-
+#define ZERO6 0,0,0,0,0,0
 // NOTE: Below we pass first 6 arguments as zeros, because they go to the registers.
 // Others will go on stack
 void *rukaml_apply1(fun7 foo, void *arg1)
@@ -239,24 +239,24 @@ void *rukaml_apply1(fun7 foo, void *arg1)
 #ifdef DEBUG
   printf("%s f = %" PRIx64 ", arg = %" PRIx64 "\n", __func__, foo, arg1);
 #endif
-  return foo(0, 0, 0, 0, 0, 0, arg1);
+  return foo(ZERO6, arg1);
 }
 
-void *rukaml_apply2(fun10 f, void *arg1, void *arg2)
+void *rukaml_apply2(fun8 f, void *arg1, void *arg2)
 {
 #ifdef DEBUG
   printf("call %s with code ptr = 0x%" PRIx64 "\n", __func__, (uint64_t)f);
   printf("arg1 = 0x%" PRIx64 "; arg2 = 0x%" PRIx64 "\n", (uint64_t)arg1, (uint64_t)arg2);
   fflush(stdout);
 #endif
-  void* rez = f(0, 0, 0, 0, 0, 0, 0, 0, arg1, arg2);
+  void* rez = f(ZERO6, arg1, arg2);
 #ifdef DEBUG
   printf("Returned from function with a value 0x%" PRIx64 "\n", rez);
 #endif
   return rez;
 }
 
-void *rukaml_apply3(fun11 f, void *arg1, void *arg2, void *arg3)
+void *rukaml_apply3(fun9 f, void *arg1, void *arg2, void *arg3)
 {
 #ifdef DEBUG
   printf("call %s with code ptr = 0x%" PRIx64 "\n", __func__, (uint64_t)f);
@@ -264,7 +264,7 @@ void *rukaml_apply3(fun11 f, void *arg1, void *arg2, void *arg3)
     (uint64_t)arg1, (uint64_t)arg2, (uint64_t)arg3);
   fflush(stdout);
 #endif
-  void* rez = f(0, 0, 0, 0, 0, 0, 0, 0, arg1, arg2, arg3);
+  void* rez = f(ZERO6, arg1, arg2, arg3);
 #ifdef DEBUG
   printf("Returned from function with a value 0x%" PRIx64 "\n", rez);
 #endif
@@ -272,11 +272,17 @@ void *rukaml_apply3(fun11 f, void *arg1, void *arg2, void *arg3)
 }
 void *rukaml_apply4(fun10 f, void *arg1, void *arg2, void *arg3, void *arg4)
 {
-  return f(0, 0, 0, 0, 0, 0, arg1, arg2, arg3, arg4);
+#ifdef DEBUG
+  printf("call %s with code ptr = 0x%" PRIx64 "\n", __func__, (uint64_t)f);
+  printf("arg1 = 0x%" PRIx64 "; arg2 = 0x%" PRIx64"; arg3 = 0x%" PRIx64"; arg4 = 0x%" PRIx64 "\n",
+    (uint64_t)arg1, (uint64_t)arg2, (uint64_t)arg3, (uint64_t)arg4);
+  fflush(stdout);
+#endif
+  return f(ZERO6, arg1, arg2, arg3, arg4);
 }
 void *rukaml_apply5(fun11 f, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5)
 {
-  return f(0, 0, 0, 0, 0, 0, arg1, arg2, arg3, arg4, arg5);
+  return f(ZERO6, arg1, arg2, arg3, arg4, arg5);
 }
 
 typedef struct
@@ -372,52 +378,54 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
   //  printf("%d\n", __LINE__);
   assert(f_closure->args_received + argc <= f_closure->argsc);
 
-  for (size_t i = 0; i < argc; i++)
-  {
+  if (f_closure->args_received + argc == f_closure->argsc) {
+    // for full application we can omit copying closure
+    void* *args_copy = malloc(f_closure->argsc * sizeof(void*));
+    for (size_t i=0; i<f_closure->args_received; ++i)
+      args_copy[i] = f_closure->args[i];
+
+    // rest of the args
+    for (size_t i = 0; i < argc; i++) {
+      void *arg1 = va_arg(argp, void *);
+      args_copy[f_closure->args_received+i] = arg1;
+#ifdef DEBUG
+      printf("Add new arg 0x0%x at pos %d\n", arg1, f_closure->args_received+i);
+      printf("args_copy[%d] = 0x0%x\n", f_closure->args_received+i, arg1);
+      fflush(stdout);
+#endif
+    }
+
+    // all args in stack
+    void** stack_args = alloca(f_closure->argsc * 8); //8 bytes per argument (int64)
+    for (int i=0; i<f_closure->argsc; ++i) {
+      stack_args[i] = (void*)args_copy[i];
+#ifdef DEBUG
+      printf("Stack arg[%d] = 0x0%x\n", i, stack_args[i]);
+      fflush(stdout);
+#endif
+    }
+    return ((fun0)f_closure->code)();
+  }
+
+  // There we have under application
+  rukaml_closure *ans_closure = copy_closure(f_closure);
+  f_closure = NULL; // error avoidance
+
+
+  for (size_t i = 0; i < argc; i++) {
     // printf("%d\n", __LINE__);
-    void *arg1 = va_arg(argp, void *);
+    void *arg = va_arg(argp, void *);
     //printf("arg[%lu] = %p, ", i, arg1);
     fflush(stdout);
-    f_closure->args[f_closure->args_received++] = arg1;
+    ans_closure->args[ans_closure->args_received++] = arg;
   }
 #ifdef DEBUG
   printf("\nf->arg_received = %lu, f->argc = %lu\n",
-         f_closure->args_received,
-         f_closure->argsc);
+         ans_closure->args_received,
+         ans_closure->argsc);
   fflush(stdout);
 #endif
   va_end(argp);
-  if (f_closure->argsc == f_closure->args_received)
-  {
-    switch (f_closure->argsc)
-    {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
-    case 0:
-      return rukaml_apply0(f_closure->code);
-      break;
-    case 1:
-      return rukaml_apply1(f_closure->code, f_closure->args[0]);
-      break;
-    case 2:
-      return rukaml_apply2(f_closure->code, f_closure->args[0], f_closure->args[1]);
-      break;
-    case 3:
-      return rukaml_apply3(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2]);
-      break;
-    case 4:
-      return rukaml_apply4(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2], f_closure->args[3]);
-      break;
-    case 5:
-      return rukaml_apply5(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2], f_closure->args[3], f_closure->args[4]);
-      break;
-#pragma GCC diagnostic pop
-    default:
-      void** stack_args = alloca(f_closure->argsc * 8); //8 bytes per argument (int64)
-      for (int i=0; i<f_closure->argsc; ++i)
-        stack_args[i] = (void*)f_closure->args[i];
-      return ((fun0)f_closure->code)();
-    }
-  }
-  return f_closure;
+
+  return ans_closure;
 }

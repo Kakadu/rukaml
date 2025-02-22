@@ -6,9 +6,12 @@ target remote :1234
 #layout reg
 #layout asm
 tui layout example
-focus cmd
+
 b main
 b fib
+b k3
+b k2
+#b id
 c
 x/8xg $sp
-
+focus cmd

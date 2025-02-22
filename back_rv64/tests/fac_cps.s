@@ -16,7 +16,7 @@ k0:
    #li t0, 102
   sd t2, (sp)
   call rukaml_print_int
-  ld ra, 8(sp)
+  #ld ra, 8(sp)
 
   ld a0, 16(sp) # k
   li a1, 1
@@ -56,14 +56,14 @@ lab_else_34: # else is recursive call
   li a1, 3
   call rukaml_alloc_closure
   sd a0, (sp)
-  ld ra, 8(sp)  # Is it needed?
+  #ld ra, 8(sp)  # Is it needed?
   # call k0 k n
   # a0 is already a Clo(k0)
   li a1, 2
   ld a2, 24(sp)  # k
   ld a3, 16(sp) # n
   call rukaml_applyN # new cont is in a0
-  ld ra, 8(sp)  # Is it needed?
+  #ld ra, 8(sp)  # Is it needed?
   addi sp, sp, -16 #  faccps args                      # 4 locals
   sd a0, 8(sp)
   ld t0, 32(sp) # access n
