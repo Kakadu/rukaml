@@ -14,8 +14,8 @@ k0:
   mulw t2, t0, t1 # t2 = n*m
 
    #li t0, 102
-  sd t2, (sp)
-  call rukaml_print_int
+  # sd t2, (sp)
+  # call rukaml_print_int
   #ld ra, 8(sp)
 
   ld a0, 16(sp) # k

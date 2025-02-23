@@ -360,8 +360,8 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
   write(STDERR_FILENO, "HERE\n", 5);
   printf("%s argc = %lu, closure = %" PRIx64 "\n\n", __func__, argc, (uint64_t)f);
   fflush(stdout);
-  printf("\tsaved code ptr = %" PRIx64, (uint64_t)(((rukaml_closure *)f)->code));
-  fflush(stdout);
+  // printf("\tsaved code ptr = %" PRIx64, (uint64_t)(((rukaml_closure *)f)->code));
+  // fflush(stdout);
 
 #endif
   va_list argp;
@@ -396,14 +396,17 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
     }
 
     // all args in stack
-    void** stack_args = alloca(f_closure->argsc * 8); //8 bytes per argument (int64)
-    for (int i=0; i<f_closure->argsc; ++i) {
-      stack_args[i] = (void*)args_copy[i];
 #ifdef DEBUG
-      printf("Stack arg[%d] = 0x0%x\n", i, stack_args[i]);
+    for (int i=0; i<f_closure->argsc; ++i) {
+      printf("args_copy[%d] = 0x0%x\n", i, args_copy[i]);
       fflush(stdout);
-#endif
     }
+#endif
+
+    void** stack_args = alloca(f_closure->argsc * 8); //8 bytes per argument (int64)
+    for (int i=0; i<f_closure->argsc; ++i)
+      stack_args[i] = (void*)args_copy[i];
+
     return ((fun0)f_closure->code)();
   }
 
