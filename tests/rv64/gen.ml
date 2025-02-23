@@ -12,7 +12,9 @@ let preamble = {|(cram
 |}
 
 let tests =
-  [ "fac";
+  [ "empty";
+    "fac";
+    "ite0";
     "fib";
     "fib_acc";
     "add";
@@ -23,14 +25,15 @@ let tests =
     "pass_print2";
     "anon1";
     "order1";
+    "nikita2";
     "nikita3";
-    "fib2";
+    "fib_cps";
   ]
 
-let () = 
-  Out_channel.with_open_text "dune" (fun ch -> 
+let () =
+  Out_channel.with_open_text "dune" (fun ch ->
     Printf.fprintf ch "%s" preamble;
-    let on_test test = 
+    let on_test test =
       if not (Sys.file_exists (test^".ml"))
         then Format.eprintf "Source file for '%s' not found\n" test;
 
@@ -50,7 +53,6 @@ let () =
     -o
     %%{targets}
     --no-start
-    -vamd64
     %%{src}))))
 
 |} test test;
@@ -86,7 +88,7 @@ let () =
   %s.s))
 
 |}
-      test test test test 
+      test test test test
     in
     List.iter on_test tests
     )

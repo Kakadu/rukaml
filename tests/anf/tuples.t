@@ -55,8 +55,7 @@
     let temp1 = (a + b) in
       (temp1, a)
   let f a b =
-    let temp3 = mydiv a  in
-      let temp5 = temp3 b  in
-        let u = field 0 temp5 in
-          let v = field 1 temp5 in
-            (u + v)
+    let temp5 = mydiv a b in
+      let u = field 0 temp5 in
+        let v = field 1 temp5 in
+          (u + v)
