@@ -1,10 +1,18 @@
 (* https://www.cs.swarthmore.edu/~jpolitz/cs75/s16/n_anf-tutorial.html *)
 
-let log_enabled = ref false
-let set_logging b = log_enabled := b
+type config =
+  { mutable log_enabled : bool
+  ; mutable opt_arity_inline : bool
+  ; mutable opt_cmp_into_if_inline : bool
+  }
+
+let cfg = { log_enabled = false; opt_arity_inline = true; opt_cmp_into_if_inline = true }
+let disable_arity_inline () = cfg.opt_arity_inline <- false
+let disable_cmp_into_if_inline () = cfg.opt_cmp_into_if_inline <- false
+let set_logging b = cfg.log_enabled <- b
 
 let log fmt =
-  if !log_enabled
+  if cfg.log_enabled
   then Format.kasprintf (Format.printf "%s\n%!") fmt
   else Format.ifprintf Format.std_formatter fmt
 ;;
@@ -23,7 +31,7 @@ type imm_expr =
 
 and c_expr =
   | CApp of imm_expr * imm_expr * imm_expr list
-  | CIte of imm_expr * expr * expr
+  | CIte of c_expr * expr * expr
   | CAtom of imm_expr
 
 and expr =
@@ -35,10 +43,14 @@ type vb = Parsetree.rec_flag * Ident.t * expr
 (* TODO: only complex expression should be there *)
 
 let complex_of_atom x = EComplex (CAtom x)
+let ecomplex x = EComplex x
 let make_let_nonrec name rhs wher = ELet (NonRecursive, Typedtree.Tpat_var name, rhs, wher)
+let catom i = CAtom i
 let cvar name = CAtom (AVar name)
+let cite cond th el = CIte (cond, th, el)
 let alam name e = ALam (APname name, e)
 let elam name e = complex_of_atom (alam name e)
+let elet flg pat cexp exp = ELet (flg, pat, cexp, exp)
 
 let group_abstractions =
   let rec helper acc = function
@@ -96,13 +108,21 @@ include struct
     | CApp (APrimitive binop, arg1, [ arg2 ]) when is_infix_binop binop ->
       fprintf ppf "(%a %s %a)" helper_a arg1 binop helper_a arg2
     | CApp (f, arg1, args) ->
-      fprintf ppf "@[%a %a %a@]" helper_a f helper_a arg1 (pp_print_list helper_a) args
+      fprintf
+        ppf
+        "@[%a %a %a@]"
+        helper_a
+        f
+        helper_a
+        arg1
+        (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " ") helper_a)
+        args
     | CAtom a -> helper_a ppf a
     | CIte (acond, th, el) ->
       fprintf
         ppf
         "@[<v>@[(if %a@]@ @[then %a@]@ @[else %a)@]@]"
-        helper_a
+        helper_c
         acond
         helper
         th
@@ -154,39 +174,215 @@ include struct
   let pp_stru ppf xs = fprintf ppf "@[<v>%a@]" (pp_print_list pp_vb) xs
 end
 
-let simplify : expr -> expr =
-  let rec helper_a = function
-    | ALam (name, e) -> ALam (name, helper e)
+let used_once_as_function ~where name =
+  (* This test allows us to inline partial applications into bigger once.
+     We only can do this correctly, if var is used only once, and as a function
+     (The last part was not trivial) *)
+  let used = ref 0 in
+  let used_as_fun = ref 0 in
+  let rec helper_c = function
+    | CIte (ccond, ethen, eelse) ->
+      helper_c ccond;
+      helper ethen;
+      helper eelse
+    | CApp (AVar f, arg1, args) when Ident.equal name f ->
+      incr used_as_fun;
+      helper_i arg1;
+      List.iter helper_i args
+    | CApp (f, arg1, args) ->
+      helper_i f;
+      helper_i arg1;
+      List.iter helper_i args
+    | CAtom i -> helper_i i
+  and helper_i = function
+    | AVar id when Ident.equal id name -> incr used
+    | APrimitive _ | AUnit | AConst _ | AVar _ -> ()
+    | ALam (_, e) -> helper e
+    | ATuple (a, b, cs) ->
+      helper_i a;
+      helper_i b;
+      List.iter helper_i cs
+  and helper : expr -> unit = function
+    | EComplex c -> helper_c c
+    | ELet (_, _path, cexpr, expr) ->
+      (* TODO: support hiding *)
+      helper_c cexpr;
+      helper expr
+  in
+  helper where;
+  (* TODO(Kakadu): Maybe 0 is OK too? *)
+  !used = 0 && !used_as_fun = 1
+;;
+
+let used_once_in_if ~where name =
+  let used_in_if = ref 0 in
+  let used = ref 0 in
+  (* let rec is_not_used *)
+  let rec helper_c = function
+    | CIte (CAtom (AVar id), ethen, eelse) when Ident.equal id name ->
+      incr used_in_if;
+      helper ethen;
+      helper eelse
+    | CIte (_, ethen, eelse) ->
+      helper ethen;
+      helper eelse
+    | CApp (f, arg1, args) ->
+      helper_i f;
+      helper_i arg1;
+      List.iter helper_i args
+    | CAtom (AVar id) when Ident.equal id name -> incr used
+    | CAtom i -> helper_i i
+  and helper_i = function
+    | AVar id when Ident.equal id name -> incr used
+    | APrimitive _ | AUnit | AConst _ | AVar _ -> ()
+    | ALam (_, e) -> helper e
+    | ATuple (a, b, cs) ->
+      helper_i a;
+      helper_i b;
+      List.iter helper_i cs
+  and helper : expr -> unit = function
+    | EComplex c -> helper_c c
+    | ELet (_, _path, cexpr, expr) ->
+      (* TODO: support hiding *)
+      helper_c cexpr;
+      helper expr
+  in
+  helper where;
+  !used_in_if = 1 && !used = 0
+;;
+
+let substitute ~where ident1 (rhs : c_expr) : expr =
+  let rec helper = function
+    | EComplex c -> ecomplex (helper_c c)
+    | ELet (flg, pat, cexpr, expr) -> elet flg pat (helper_c cexpr) (helper expr)
+  and helper_c = function
+    | CAtom (AVar x) when Ident.equal x ident1 -> rhs
+    | CAtom (AVar _) as c -> c
+    | CAtom i -> catom (helperi i)
+    | CIte (CAtom (AVar name), ethen, eelse) when Ident.equal ident1 name ->
+      cite rhs ethen eelse
+    | CApp (AVar x, arg1, args) when Ident.equal x ident1 ->
+      (match rhs with
+       | CApp (f, arg0, arg_mid) -> CApp (f, arg0, arg_mid @ (arg1 :: args))
+       | _ -> assert false)
+    | ( CApp ((APrimitive _ as _f), _arg1, _args)
+      | CApp ((AVar _ as _f), _arg1, _args) (* not ident1 *) ) as is ->
+      (* TODO: Do we  need to lookup inside args? *)
+      is
+    | c ->
+      Format.eprintf "%a\n%!" pp_c c;
+      assert false
+  and helperi = function
+    | (ATuple _ | APrimitive _ | AConst _ | AUnit) as i -> i
+    | AVar _ -> failwith "Should not happen"
+    | i ->
+      Format.eprintf "%a\n%!" pp_a i;
+      assert false
+  in
+  let ans = helper where in
+  log
+    "@[<v>@[  %a |-> %a@]@ @[%a@] ~~~> @[%a@]@]"
+    Ident.pp
+    ident1
+    pp_c
+    rhs
+    pp
+    where
+    pp
+    ans;
+  ans
+;;
+
+let%expect_test _ =
+  let vx = Ident.of_string "x" in
+  let v7 = Ident.of_string "v7" in
+  let v9 = Ident.of_string "v9" in
+  let vf = Ident.of_string "vf" in
+  let ans = EComplex (CAtom (AVar vx)) in
+  Format.printf "%a\n" pp ans;
+  [%expect {| x |}];
+  Format.printf "%a\n" pp
+  @@ substitute
+       vx
+       (CApp (AVar vf, AConst (Parsetree.PConst_int 1), []))
+       ~where:
+         (elet
+            NonRecursive
+            (Typedtree.Tpat_var v7)
+            (CAtom (AVar vf))
+            (EComplex (CApp (AVar vx, AVar v9, []))));
+  [%expect {|
+    let v7 = vf in
+      vf 1 v9 |}]
+;;
+
+module Arity_map = struct
+  include Map.Make (String)
+
+  let is_under ident arity acc =
+    match find ident.Ident.hum_name acc with
+    | exception Not_found -> false
+    | x -> x > arity
+  ;;
+end
+
+let simplify : _ Arity_map.t -> expr -> expr =
+  let is_comparison : c_expr -> bool = function
+    | CApp (APrimitive ("<" | "=" | "<="), _, [ _ ]) ->
+      (* TODO(Kakadu): fix here, when we get user-defined operators *)
+      true
+    | _ -> false
+  in
+  let rec helper_a acc = function
+    | ALam (name, e) -> ALam (name, helper acc e)
     | x -> x
-  and helper_c e =
+  and helper_c acc e =
     let rez =
       match e with
-      | CAtom a -> CAtom (helper_a a)
-      | CApp (f, arg1, args) -> CApp (helper_a f, helper_a arg1, List.map helper_a args)
-      | CIte (cond, th, el) -> CIte (helper_a cond, helper th, helper el)
+      | CAtom a -> CAtom (helper_a acc a)
+      | CApp (f, arg1, args) ->
+        CApp (helper_a acc f, helper_a acc arg1, List.map (helper_a acc) args)
+      | CIte (cond, th, el) -> CIte (helper_c acc cond, helper acc th, helper acc el)
     in
     (* log "Simpl_c: @[%a@] ~~> @[%a@] " pp_c e pp_c rez; *)
     rez
-  and helper e =
+  and helper acc e =
     let rez =
       match e with
-      | EComplex e -> EComplex (helper_c e)
+      | EComplex e -> EComplex (helper_c acc e)
+      | ELet
+          ( Parsetree.NonRecursive
+          , Tpat_var name1
+          , (CApp (AVar fname, _arg1, args) as rhs)
+          , where_ )
+        when used_once_as_function name1 ~where:where_
+             && Arity_map.is_under fname (1 + List.length args) acc
+             && cfg.opt_arity_inline -> helper acc (substitute ~where:where_ name1 rhs)
       | ELet (Parsetree.NonRecursive, Tpat_var name1, body, EComplex (CAtom (AVar name2)))
-        when Ident.equal name1 name2 -> EComplex (helper_c body)
+        when Ident.equal name1 name2 ->
+        (* let x = x in ... *)
+        EComplex (helper_c acc body)
       | ELet
           ( NonRecursive
           , Tpat_var name1
           , body
           , ELet (NonRecursive, var2, CAtom (AVar name2), wher_) )
-        when Ident.equal name1 name2 -> helper (ELet (NonRecursive, var2, body, wher_))
-      | ELet (flg, name, body, wher) -> ELet (flg, name, helper_c body, helper wher)
+        when Ident.equal name1 name2 ->
+        (* let name1 = ... in
+           let name1 = ... in *)
+        helper acc (ELet (NonRecursive, var2, body, wher_))
+      | ELet (NonRecursive, Tpat_var v1, rhs, where)
+        when used_once_in_if v1 ~where && is_comparison rhs && cfg.opt_cmp_into_if_inline
+        -> helper acc (substitute ~where v1 rhs)
+      | ELet (flg, name, body, wher) ->
+        ELet (flg, name, helper_c acc body, helper acc wher)
     in
     (* log "Simpl: @[%a@] ~~> @[%a@] " pp e pp rez; *)
     rez
   in
-  fun e ->
+  fun acc e ->
     (* log "Simplification of @[%a@]" pp e; *)
-    helper e
+    helper acc e
 ;;
 
 let%expect_test _ =
@@ -199,12 +395,15 @@ let%expect_test _ =
       (CAtom (alam f_id (complex_of_atom (alam x_id (complex_of_atom (AVar x_id))))))
       (complex_of_atom (AVar temp1_id))
   in
-  Format.printf "%a\n~~>\n%a\n%!" pp ex1 pp (simplify ex1);
+  Format.printf "%a\n~~>\n%a\n%!" pp ex1 pp (simplify Arity_map.empty ex1);
   [%expect {|
-    let temp1 f = (fun x -> x) in
-      temp1
-    ~~>
-    (fun f x -> x) |}];
+  let temp1 f = (fun x -> x) in
+    temp1
+  ~~>
+  (fun f x -> x) |}]
+;;
+
+let%expect_test _ =
   let ex1 =
     let temp1_id = Ident.of_string "temp1" in
     let temp2_id = Ident.of_string "temp2" in
@@ -221,7 +420,7 @@ let%expect_test _ =
                (complex_of_atom (AVar temp2_id)))))
       (complex_of_atom (AVar temp1_id))
   in
-  Format.printf "%a\n~~>\n%a\n%!" pp ex1 pp (simplify ex1);
+  Format.printf "%a\n~~>\n%a\n%!" pp ex1 pp (simplify Arity_map.empty ex1);
   [%expect
     {|
     let temp1 f = let temp2 x = x in
@@ -231,8 +430,26 @@ let%expect_test _ =
     (fun f x -> x) |}]
 ;;
 
-let simplify_vb (flag, name, body) = flag, name, simplify body
-let simplify_stru eta = List.map simplify_vb eta
+let simplify_vb acc (flag, name, body) =
+  let get_arity x =
+    match group_abstractions x with
+    | [], _ -> 0
+    | xs, _ -> List.length xs
+  in
+  match flag, name.Ident.hum_name with
+  | Parsetree.Recursive, s ->
+    let arity = get_arity body in
+    let new_acc = Arity_map.add s arity acc in
+    new_acc, (flag, name, simplify new_acc body)
+  | NonRecursive, s ->
+    let arity = get_arity body in
+    let new_acc = Arity_map.add s arity acc in
+    new_acc, (flag, name, simplify acc body)
+;;
+
+let simplify_stru : vb list -> vb list =
+  fun stru -> Stdppx.List.fold_left_map ~f:simplify_vb ~init:Arity_map.empty stru |> snd
+;;
 
 let reset_gensym, gensym =
   let n = ref 0 in
@@ -387,7 +604,7 @@ let anf =
         let name = gensym_id () in
         make_let_nonrec
           name
-          (CIte (eimm, helper eth complex_of_atom, helper el complex_of_atom))
+          (CIte (CAtom eimm, helper eth complex_of_atom, helper el complex_of_atom))
           (k (AVar name)))
     | TVar ("=", _id, _) ->
       (* TODO: Could be a bug. Check id too. *)
@@ -424,7 +641,7 @@ let anf_vb vb : vb =
 
 let anf_stru = List.map anf_vb
 
-let test_anf text =
+let test_anf ?(print_before = false) text =
   reset_gensym ();
   let ( let* ) x f = Result.bind x f in
   match
@@ -432,7 +649,12 @@ let test_anf text =
     let vbs = CConv.structure [ stru ] in
     let* vbs_typed = Inferencer.structure vbs in
     (* Format.printf "%s %d\n%!" __FILE__ __LINE__; *)
-    anf_stru vbs_typed |> List.map simplify_vb |> Result.ok
+    let anf = anf_stru vbs_typed in
+    if print_before
+    then (
+      Format.printf "Before simplify:\n%!";
+      Format.printf "@[<v>%a@]\n\n%!" (Format.pp_print_list pp_vb) anf);
+    anf |> simplify_stru |> Result.ok
   with
   | Result.Error err -> Format.printf "%a\n%!" Inferencer.pp_error err
   | Ok anf -> Format.printf "@[<v>%a@]\n%!" (Format.pp_print_list pp_vb) anf
@@ -440,8 +662,9 @@ let test_anf text =
 
 let%expect_test "CPS factorial" =
   test_anf
-    {| let rec fack n k =
-    if n=0 then k 1
+    {|
+  let rec fack n k =
+    if n = 0 then k 1
     else fack (n-1) (fun p -> k (p*n)) |};
   [%expect
     {|
@@ -449,14 +672,11 @@ let%expect_test "CPS factorial" =
       let temp1 = (p * n) in
         k temp1
     let rec fack n k =
-      let temp3 = (n = 0) in
-        (if temp3
-        then k 1
-        else let temp5 = (n - 1) in
-               let temp6 = fack temp5  in
-                 let temp7 = fresh_1 n  in
-                   let temp8 = temp7 k  in
-                     temp6 temp8 ) |}]
+      (if (n = 0)
+      then k 1
+      else let temp5 = (n - 1) in
+             let temp8 = fresh_1 n k in
+               fack temp5 temp8) |}]
 ;;
 
 let%expect_test _ =

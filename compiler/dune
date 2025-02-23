@@ -1,7 +1,7 @@
 (library
  (name compile_lib)
  (public_name MiniML.compile)
- (libraries stdio miniml cconv)
+ (libraries stdio miniml cconv ppxlib.stdppx)
  (modules ANF compile_tests)
  (preprocess
   (pps
