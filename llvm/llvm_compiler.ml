@@ -39,6 +39,8 @@ module ToLLVM = struct
     in
     (* let* typedtree = Inferencer.structure ast |> promote_error in *)
     (* let typedtree = Typedtree.compact_expr typedtree in *)
+    (* TODO(Kakadu): fix LLVM backend to make optimization applicable *)
+    Compile_lib.ANF.disable_arity_inline ();
     let anf = Compile_lib.ANF.(anf_stru typedtree |> simplify_stru) in
     Format.printf "After ANF transformation.\n%!";
     Format.printf "%a\n%!" Compile_lib.ANF.pp_stru anf;

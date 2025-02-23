@@ -42,6 +42,8 @@ let frontend cfg =
   in
   (* let* typedtree = Inferencer.structure ast |> promote_error in *)
   (* let typedtree = Typedtree.compact_expr typedtree in *)
+  Compile_lib.ANF.disable_arity_inline ();
+  Compile_lib.ANF.disable_cmp_into_if_inline ();
   let anf = Compile_lib.ANF.(anf_stru typedtree |> simplify_stru) in
   Format.printf "After ANF transformation.\n%!";
   Format.printf "%a\n%!" Compile_lib.ANF.pp_stru anf;

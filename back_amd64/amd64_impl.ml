@@ -271,11 +271,11 @@ let generate_body is_toplevel ppf body =
         helper dest wher
     | ELet (_, Tpat_tuple (_, _, _), _, _) -> assert false
   and helper_c (dest : dest) = function
-    | CIte (AConst (Miniml.Parsetree.PConst_bool true), bth, _bel) ->
+    | CIte (CAtom (AConst (Miniml.Parsetree.PConst_bool true)), bth, _bel) ->
         helper dest bth
-    | CIte (AConst (Miniml.Parsetree.PConst_bool false), _bth, bel) ->
+    | CIte (CAtom (AConst (Miniml.Parsetree.PConst_bool false)), _bth, bel) ->
         helper dest bel
-    | CIte (AVar econd, bth, bel) when Addr_of_local.contains econd ->
+    | CIte (CAtom (AVar econd), bth, bel) when Addr_of_local.contains econd ->
         (* if on global or local variable  *)
         printfn ppf "  mov qword rdx, %a" Addr_of_local.pp_local_exn econd;
         printfn ppf "  cmp rdx, 0";
