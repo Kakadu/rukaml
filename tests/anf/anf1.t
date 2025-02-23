@@ -59,14 +59,11 @@
     let temp1 = (n * m) in
       k temp1 
   let rec fack n k =
-    let temp3 = (n = 1) in
-      (if temp3
-      then k 1 
-      else let temp5 = (n - 1) in
-             let temp6 = fack temp5  in
-               let temp7 = fresh_1 n  in
-                 let temp8 = temp7 k  in
-                   temp6 temp8 )
+    (if (n = 1)
+    then k 1 
+    else let temp5 = (n - 1) in
+           let temp8 = fresh_1 n k in
+             fack temp5 temp8)
 
 # CPS Fibonacci
   $ cat << EOF | ./REPL.exe -
@@ -94,19 +91,14 @@
   let fresh_1 n k fibk p =
     let temp3 = (n - 2) in
       let temp4 = fibk temp3  in
-        let temp5 = fresh_2 p  in
-          let temp6 = temp5 k  in
-            temp4 temp6 
+        let temp6 = fresh_2 p k in
+          temp4 temp6 
   let rec fibk n k =
-    let temp8 = (n < 1) in
-      (if temp8
-      then k 1 
-      else let temp10 = (n - 1) in
-             let temp11 = fibk temp10  in
-               let temp12 = fresh_1 n  in
-                 let temp13 = temp12 k  in
-                   let temp14 = temp13 fibk  in
-                     temp11 temp14 )
+    (if (n < 1)
+    then k 1 
+    else let temp10 = (n - 1) in
+           let temp14 = fresh_1 n k fibk in
+             fibk temp10 temp14)
 
 # Polyvariadic uncurrying
   $ cat << EOF | ./REPL.exe  -
@@ -187,9 +179,8 @@
     let temp3 = (arg, rest) in
       f temp3 
   let succ prev f arg =
-    let temp5 = fresh_1 f  in
-      let temp6 = temp5 arg  in
-        prev temp6 
+    let temp6 = fresh_1 f arg in
+      prev temp6 
   let three =
     succ two 
   let four =
@@ -245,9 +236,8 @@
   let fresh_1 x =
     x
   let temp =
-    let temp12 = two fresh_1  in
-      let temp13 = (1, 2) in
-        temp12 temp13 
+    let temp13 = (1, 2) in
+      two fresh_1 temp13
 
   $ cat << EOF | ./REPL.exe - #-vcc -vanf
   > let foo f x = x

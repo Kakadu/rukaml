@@ -1,120 +1,89 @@
-  $ cat fib.ml | ../../back_rv64/RV64_compiler.exe -o program.s --no-start -vamd64 -
+  $ ../../back_rv64/RV64_compiler.exe -o program.s --no-start -danf fib.ml
   After ANF transformation.
   let fib n =
-    let temp = (n < 2) in
-      (if temp
-      then n
-      else let temp3 = (n - 1) in
-             let p1 = fib temp3  in
-               let temp5 = (n - 2) in
-                 let p2 = fib temp5  in
-                   (p1 + p2))
+    (if (n < 2)
+    then n
+    else let temp3 = (n - 1) in
+           let p1 = fib temp3  in
+             let temp5 = (n - 2) in
+               let p2 = fib temp5  in
+                 (p1 + p2))
   let main =
     let f = fib 6  in
       let g = print f  in
         0
-  ANF: let fib n =
-         let temp = (n < 2) in
-           (if temp
-           then n
-           else let temp3 = (n - 1) in
-                  let p1 = fib temp3  in
-                    let temp5 = (n - 2) in
-                      let p2 = fib temp5  in
-                        (p1 + p2))
-       let main =
-         let f = fib 6  in
-           let g = print f  in
-             0
-  Location argument "n" in [rbp+0]
-  Removing info about args [ n ]
-  Removing info about args [  ]
-  $ cat program.s | grep -v 'section .note.GNU-stack' | nl -ba
-       1	.globl fib
-       2	fib:
-       3	  addi sp, sp, -40 # allocate for local variables p2, temp5, p1, temp3, temp
-       4	# 40(sp), find_exn "n" = 0, last_pos = 5
-       5	  ld t0, 40(sp) # locals = 5
-       6	  li t1, 2
-       7	  blt t0, t1, lab_10
-       8	  sd zero, 32(sp)
-       9	  beq zero, zero, lab_11
-      10	lab_10:
-      11	  li t0, 1
-      12	  sd t0, 32(sp) # dest = 32(sp)
-      13	  beq zero, zero, lab_11
-      14	lab_11:
-      15	  ld t0, 32(sp)
-      16	  beq t0, zero, lab_else_12
-      17	  ld t5, 40(sp)
-      18	  addi a0, t5, 0
-      19	  beq zero, zero, lab_endif_13
-      20	lab_else_12: # temp is 0
-      21	  ld t0, 40(sp)
-      22	  addi t0, t0, -1
-      23	  sd t0, 24(sp)
-      24	  addi sp, sp, -8 # alloc space for RA register
-      25	  sd ra, (sp)
-      26	# Allocate args to call fun "fib" arguments
-      27	  addi sp, sp, -8
-      28	  ld t0, 40(sp) # arg "temp3"
-      29	  sd t0, (sp)
-      30	  call fib
-      31	  addi sp, sp, 8 # deallocate 1 args
-      32	  ld ra, (sp)
-      33	  addi sp, sp, 8 # free space of RA register
-      34	  sd a0, 16(sp)
-      35	  ld t5, 40(sp)
-      36	  addi t5, t5, -2
-      37	  sd t5, 8(sp)
-      38	  addi sp, sp, -8 # alloc space for RA register
-      39	  sd ra, (sp)
-      40	# Allocate args to call fun "fib" arguments
-      41	  addi sp, sp, -8
-      42	  ld t0, 24(sp) # arg "temp5"
-      43	  sd t0, (sp)
-      44	  call fib
-      45	  addi sp, sp, 8 # deallocate 1 args
-      46	  ld ra, (sp)
-      47	  addi sp, sp, 8 # free space of RA register
-      48	  sd a0, (sp)
-      49	# p1 is stored in 3
-      50	# p2 is stored in 5
-      51	# last_pos = 5
-      52	  ld t3, 16(sp)
-      53	  ld t4, (sp)
-      54	  add  t5, t3, t4
-      55	  addi a0, t5, 0
-      56	lab_endif_13:
-      57	  addi sp, sp, 40 # deallocate local variables p2, temp5, p1, temp3, temp
-      58	  ret # fib
-      59	.globl main
-      60	main:
-      61	  addi sp, sp, -16 # allocate for local variables g, f
-      62	  addi sp, sp, -8 # alloc space for RA register
-      63	  sd ra, (sp)
-      64	# Allocate args to call fun "fib" arguments
-      65	  addi sp, sp, -8
-      66	  li t0, 6
-      67	  sd t0, (sp) # constant
-      68	  call fib
-      69	  addi sp, sp, 8 # deallocate 1 args
-      70	  ld ra, (sp)
-      71	  addi sp, sp, 8 # free space of RA register
-      72	  sd a0, 8(sp)
-      73	  addi sp, sp, -16
-      74	  sd ra, 8(sp)
-      75	  ld t0, 24(sp)
-      76	  sd t0, (sp)
-      77	  call rukaml_print_int
-      78	  ld ra, 8(sp)
-      79	  sd a0, 16(sp)
-      80	  addi sp, sp, 16
-      81	  li a0, 0
-      82	  addi sp, sp, 16 # deallocate local variables g, f
-      83	  addi a0, x0, 0 # Use 0 return code
-      84	  addi a7, x0, 93 # Service command code 93 terminates
-      85	  ecall # Call linux to terminate the program
+  $ cat program.s | grep -v 'section .note.GNU-stack'
+  
+  .globl fib
+  fib:
+    addi sp, sp, -48 # allocate for Pad, RA, and 4 locals temp5, temp3, p2, p1
+    sd ra, 32(sp)
+    ld t0, 48(sp) # access n
+    li t1, 2
+    blt t0, t1, lab_then_10
+    ld t0, 48(sp)
+    addi t0, t0, -1
+    sd t0, 8(sp)
+  # Allocate args to call fun "fib" with args
+    addi sp, sp, -16 # last_pos = 8
+    ld t0, 24(sp) # arg "temp3"
+    sd t0, (sp)
+    call fib
+    addi sp, sp, 16 # deallocate 1 args
+    sd a0, 24(sp)
+    ld t5, 48(sp)
+    addi t5, t5, -2
+    sd t5, (sp)
+  # Allocate args to call fun "fib" with args
+    addi sp, sp, -16 # last_pos = 8
+    ld t0, 16(sp) # arg "temp5"
+    sd t0, (sp)
+    call fib
+    addi sp, sp, 16 # deallocate 1 args
+    sd a0, 16(sp)
+  # p1 is stored in 3
+  # p2 is stored in 4
+  # last_pos = 6
+    ld t3, 24(sp)
+    ld t4, 16(sp)
+    add  t5, t3, t4
+    addi a0, t5, 0
+    beq zero, zero, lab_fin_11
+  lab_then_10:
+    ld t5, 48(sp)
+    addi a0, t5, 0
+  lab_fin_11:
+    ld ra, 32(sp)
+    addi sp, sp, 48 # DEallocate for Pad, RA and 4 locals variables temp5, temp3, p2, p1
+    ret # fib
+  
+  .globl main
+  main:
+  # this is main
+    addi sp, sp, -32 # allocate for Pad, RA, and 2 locals g, f
+    sd ra, 16(sp)
+  # Allocate args to call fun "fib" with args
+    addi sp, sp, -16 # last_pos = 6
+    li t0, 6
+    sd t0, (sp) # constant
+    call fib
+    addi sp, sp, 16 # deallocate 1 args
+    sd a0, 8(sp)
+    addi sp, sp, -16
+    sd ra, 8(sp)
+    ld t0, 24(sp)
+    sd t0, (sp)
+    call rukaml_print_int
+    ld ra, 8(sp)
+    sd a0, 16(sp)
+    addi sp, sp, 16
+    li a0, 0
+    ld ra, 16(sp)
+    addi sp, sp, 32 # DEallocate for Pad, RA and 2 locals variables g, f
+  #  fin
+    addi a0, x0, 0 # Use 0 return code
+    addi a7, x0, 93 # Service command code 93 terminates
+    ecall # Call linux to terminate the program
   $ riscv64-linux-gnu-gcc-13 -c -g program.s -o program.o
 $ riscv64-linux-gnu-gcc-13 -g -o program.exe ../../back_rv64/rukaml_stdlib.o program.o && ./program.exe
   $ riscv64-linux-gnu-gcc-13 -g program.o ../../back_rv64/rukaml_stdlib.o -o fib.exe 2>&1 | head -n5

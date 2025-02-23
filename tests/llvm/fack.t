@@ -15,14 +15,13 @@
     let temp1 = (n * m) in
       k temp1 
   let rec fack k n =
-    let temp3 = (n = 1) in
-      (if temp3
-      then k 1 
-      else let temp5 = fresh_1 n  in
-             let temp6 = temp5 k  in
-               let temp7 = fack temp6  in
-                 let temp8 = (n - 1) in
-                   temp7 temp8 )
+    (if (n = 1)
+    then k 1 
+    else let temp5 = fresh_1 n  in
+           let temp6 = temp5 k  in
+             let temp7 = fack temp6  in
+               let temp8 = (n - 1) in
+                 temp7 temp8 )
   let id x =
     x
   let main =
@@ -32,14 +31,13 @@
     let temp1 = (n * m) in
       k temp1 
   let rec fack k n =
-    let temp3 = (n = 1) in
-      (if temp3
-      then k 1 
-      else let temp5 = fresh_1 n  in
-             let temp6 = temp5 k  in
-               let temp7 = fack temp6  in
-                 let temp8 = (n - 1) in
-                   temp7 temp8 )
+    (if (n = 1)
+    then k 1 
+    else let temp5 = fresh_1 n  in
+           let temp6 = temp5 k  in
+             let temp7 = fack temp6  in
+               let temp8 = (n - 1) in
+                 temp7 temp8 )
   let id x =
     x
   let main =
@@ -70,27 +68,25 @@
   
   define i64 @fack(i64 %0, i64 %1) {
   entry:
-    %2 = icmp eq i64 %1, 1
-    %name = zext i1 %2 to i64
-    %ifcond = icmp ne i64 %name, 0
+    %ifcond = icmp eq i64 %1, 1
     br i1 %ifcond, label %fack_then, label %fack_else
   
   fack_cont:                                        ; preds = %fack_else, %fack_then
-    %phi_result = phi i64 [ %10, %fack_then ], [ %9, %fack_else ]
+    %phi_result = phi i64 [ %9, %fack_then ], [ %8, %fack_else ]
     ret i64 %phi_result
   
   fack_else:                                        ; preds = %entry
-    %3 = call i64 @rukaml_alloc_closure(i64 ptrtoint (ptr @fresh_1 to i64), i64 3)
-    %4 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %3, i64 1, i64 %1)
-    %5 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %4, i64 1, i64 %0)
-    %6 = call i64 @rukaml_alloc_closure(i64 ptrtoint (ptr @fack to i64), i64 2)
-    %7 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %6, i64 1, i64 %5)
-    %8 = sub i64 %1, 1
-    %9 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %7, i64 1, i64 %8)
+    %2 = call i64 @rukaml_alloc_closure(i64 ptrtoint (ptr @fresh_1 to i64), i64 3)
+    %3 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %2, i64 1, i64 %1)
+    %4 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %3, i64 1, i64 %0)
+    %5 = call i64 @rukaml_alloc_closure(i64 ptrtoint (ptr @fack to i64), i64 2)
+    %6 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %5, i64 1, i64 %4)
+    %7 = sub i64 %1, 1
+    %8 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %6, i64 1, i64 %7)
     br label %fack_cont
   
   fack_then:                                        ; preds = %entry
-    %10 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %0, i64 1, i64 1)
+    %9 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %0, i64 1, i64 1)
     br label %fack_cont
   }
   
@@ -123,14 +119,13 @@
     let temp1 = (n * m) in
       k temp1 
   let rec fack n k =
-    let temp3 = (n = 1) in
-      (if temp3
-      then k 1 
-      else let temp5 = (n - 1) in
-             let temp6 = fack temp5  in
-               let temp7 = fresh_1 n  in
-                 let temp8 = temp7 k  in
-                   temp6 temp8 )
+    (if (n = 1)
+    then k 1 
+    else let temp5 = (n - 1) in
+           let temp6 = fack temp5  in
+             let temp7 = fresh_1 n  in
+               let temp8 = temp7 k  in
+                 temp6 temp8 )
   let fresh_2 x =
     x
   let main =
@@ -140,14 +135,13 @@
     let temp1 = (n * m) in
       k temp1 
   let rec fack n k =
-    let temp3 = (n = 1) in
-      (if temp3
-      then k 1 
-      else let temp5 = (n - 1) in
-             let temp6 = fack temp5  in
-               let temp7 = fresh_1 n  in
-                 let temp8 = temp7 k  in
-                   temp6 temp8 )
+    (if (n = 1)
+    then k 1 
+    else let temp5 = (n - 1) in
+           let temp6 = fack temp5  in
+             let temp7 = fresh_1 n  in
+               let temp8 = temp7 k  in
+                 temp6 temp8 )
   let fresh_2 x =
     x
   let main =
