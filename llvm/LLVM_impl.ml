@@ -167,9 +167,22 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
         (* rez *)
     | CIte (cond, then_, else_) ->
         let cond =
-          let cond_rez = gen_a cond in
-          LL.build_icmp Llvm.Icmp.Ne ~name:"ifcond" cond_rez
-            (Llvm.const_int (Llvm.i64_type LL.context) 0)
+          match cond with
+          | CApp (APrimitive "<", l, [ r ]) ->
+              let l = gen_a l in
+              let r = gen_a r in
+              LL.build_icmp Llvm.Icmp.Ult ~name:"ifcond" l r
+          | CApp (APrimitive "=", l, [ r ]) ->
+              let l = gen_a l in
+              let r = gen_a r in
+              LL.build_icmp Llvm.Icmp.Eq ~name:"ifcond" l r
+          | CAtom cond ->
+              let cond_rez = gen_a cond in
+              LL.build_icmp Llvm.Icmp.Ne ~name:"ifcond" cond_rez
+                (Llvm.const_int (Llvm.i64_type LL.context) 0)
+          | CIte _ | _ ->
+              (* TODO(Kakadu): FIXME *)
+              failwith "Should not happen"
         in
 
         (* get current function since basic blocks have to be inserted into a function *)
