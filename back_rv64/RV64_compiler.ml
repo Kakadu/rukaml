@@ -1,7 +1,11 @@
+type stop_after_t = SA_dont | SA_ANF
+
 type cfg = {
   mutable out_file : string;
   mutable input_file : string option; (* mutable dump_ir : bool; *)
   mutable wrap_main_into_start : bool;
+  mutable stop_after : stop_after_t;
+  mutable dump_anf : bool;
 }
 
 open Miniml
@@ -38,16 +42,28 @@ let frontend cfg =
     Inferencer.structure stru
     |> Result.map_error (function #Inferencer.error as e -> e)
   in
+
   (* let* typedtree = Inferencer.structure ast |> promote_error in *)
   (* let typedtree = Typedtree.compact_expr typedtree in *)
   let anf = Compile_lib.ANF.(anf_stru typedtree |> simplify_stru) in
-  Format.printf "After ANF transformation.\n%!";
-  Format.printf "%a\n%!" Compile_lib.ANF.pp_stru anf;
+  let () =
+    if cfg.dump_anf then (
+      Format.printf "After ANF transformation.\n%!";
+      Format.printf "%a\n%!" Compile_lib.ANF.pp_stru anf)
+  in
+  if cfg.stop_after = SA_ANF then exit 0;
   RV64_impl.codegen ~wrap_main_into_start:cfg.wrap_main_into_start anf
     cfg.out_file
   |> promote_error
 
-let cfg = { out_file = "a.out"; input_file = None; wrap_main_into_start = true }
+let cfg =
+  {
+    out_file = "a.out";
+    input_file = None;
+    wrap_main_into_start = true;
+    stop_after = SA_dont;
+    dump_anf = false;
+  }
 
 let print_errors = function
   | #Miniml.Parsing.error as e -> Format.printf "%a\n%!" Parsing.pp_error e
@@ -62,7 +78,18 @@ let () =
       ( "--no-start",
         Arg.Unit (fun () -> cfg.wrap_main_into_start <- false),
         " Dont wrap main into _start automatically" );
+      ("-danf", Arg.Unit (fun () -> cfg.dump_anf <- true), "");
+      ( "-stop-after",
+        Arg.String
+          (function
+          | "anf" -> cfg.stop_after <- SA_ANF
+          | _ -> failwith "Bad argument of -stop-after"),
+        " " );
       ( "-vamd64",
+        (* TODO: remove this *)
+        Arg.Unit (fun () -> RV64_impl.set_verbose true),
+        " verbose output of RV64 backend" );
+      ( "-v",
         Arg.Unit (fun () -> RV64_impl.set_verbose true),
         " verbose output of RV64 backend" );
     ]

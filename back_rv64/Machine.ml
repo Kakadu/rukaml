@@ -30,6 +30,7 @@ type instr =
   | Mv of reg * reg
   | Beq of reg * reg * string
   | Blt of reg * reg * string
+  | Ble of reg * reg * string
   | Label of string
   | Comment of string
 
@@ -57,6 +58,8 @@ let pp_instr ppf =
       fprintf ppf "beq %a, %a, %s" pp_reg r1 pp_reg r2 offset
   | Blt (r1, r2, offset) ->
       fprintf ppf "blt %a, %a, %s" pp_reg r1 pp_reg r2 offset
+  | Ble (r1, r2, offset) ->
+      fprintf ppf "ble %a, %a, %s" pp_reg r1 pp_reg r2 offset
   | Label s -> fprintf ppf "%s:" s
   | Comment s -> fprintf ppf "# %s" s
 (* | _ -> failwith "Not implemented" *)
@@ -75,6 +78,7 @@ let sd k a b = k (Sd (a, b))
 let mv k a b = k (Mv (a, b))
 let beq k r1 r2 r3 = k @@ Beq (r1, r2, r3)
 let blt k r1 r2 r3 = k @@ Blt (r1, r2, r3)
+let ble k r1 r2 r3 = k @@ Ble (r1, r2, r3)
 let label k s = k (Label s)
 let comment k s = k (Comment s)
 (* TODO: add format    *)
