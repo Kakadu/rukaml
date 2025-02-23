@@ -1,3 +1,8 @@
+type config = { mutable verbose : bool }
+
+let config = { verbose = false }
+let set_verbose verbose = config.verbose <- verbose
+
 type t =
   { id : int
   ; hum_name : string
@@ -14,7 +19,13 @@ let of_string hum_name =
 
 let equal left { id; _ } = left.id = id
 let compare left { id; _ } = Int.compare left.id id
-let pp ppf { hum_name; _ } = Format.fprintf ppf "%s" hum_name
+
+let pp ppf { hum_name; id } =
+  if config.verbose
+  then Format.fprintf ppf "%s/%d" hum_name id
+  else Format.fprintf ppf "%s" hum_name
+;;
+
 let to_string = Format.asprintf "%a" pp
 
 module Id_map = Map.Make (struct
@@ -62,3 +73,14 @@ let concat_str idents =
   let open Format in
   asprintf "%a" (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp) idents
 ;;
+
+module Ident_set = struct
+  include Set.Make (struct
+      type nonrec t = t
+
+      let compare = compare
+    end)
+
+  let to_string set = fold (fun id acc -> Format.asprintf "%a%s" pp id acc) set ""
+  let to_list set = fold List.cons set []
+end
