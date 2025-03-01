@@ -1,6 +1,6 @@
   $ ../../back_rv64/RV64_compiler.exe -o program.s --no-start -danf fac.ml
   After ANF transformation.
-  let fac n =
+  let rec fac n =
     (if (n = 1)
     then 1
     else let p = (n - 1) in
