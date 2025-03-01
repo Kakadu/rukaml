@@ -1,4 +1,4 @@
-let fib n =
+let rec fib n =
   let temp = n < 2 in
   if temp
   then n
