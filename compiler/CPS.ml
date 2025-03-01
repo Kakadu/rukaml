@@ -173,19 +173,19 @@ let preconv_chore ?(with_printing = false) (rec_flag, ptrn, e) k glob_vars free_
     | EUnit -> k DEUnit free_vars
     | EConst c -> k (DEConst c) free_vars
     | EVar hum_name ->
-      let from_vars = SMap.find_opt hum_name vars in
       let builtins = snd start_glob_envs in
       let from_builtins = SMap.find_opt hum_name builtins in
       (match from_builtins with
        | Some id -> k (DEVar { hum_name; id }) free_vars
        | None ->
+         let from_vars = SMap.find_opt hum_name vars in
          (match from_vars with
           | None ->
             let from_free_vars = SMap.find_opt hum_name free_vars in
             (match from_free_vars with
              | None ->
                let ident = of_string hum_name in
-               let k = k (DEVar { hum_name; id = ident.id }) in
+               let k = k (DEVar ident) in
                new_count hum_name ident.id k free_vars
              | Some id ->
                let k = k (DEVar { hum_name; id }) free_vars in
@@ -356,11 +356,7 @@ let maybe_not_allowed_expr e =
 let rec cps_glob ds_ref_once ds_no_refs glob_env =
   let open Base.Result in
   let cps_glob = cps_glob ds_ref_once ds_no_refs in
-  let one_ref i =
-    match ISet.find_opt i.id ds_ref_once with
-    | None -> false
-    | Some _ -> true
-  in
+  let one_ref i = ISet.mem i.id ds_ref_once in
   let helper_toplevelletcont main_id counts = function
     | (NonRecursive, y', e) :: tl ->
       ToplevelLetNonRecCont (y', tl, main_id), e, glob_env, counts
@@ -453,7 +449,7 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
       then cps_func (extend i.id a env) wh c counts
       else
         let* b, counts2 = blessa a counts in
-        (match b, Option.is_some (ISet.find_opt i.id ds_no_refs) with
+        (match b, ISet.mem i.id ds_no_refs with
          | TUnit, false -> cps_func (extend i.id AUnit env) wh c counts2
          | UVar x, false -> cps_func (extend i.id (AVar x) env) wh c counts2
          | TConst z, false -> cps_func (extend i.id (AConst z) env) wh c counts2
