@@ -1,6 +1,6 @@
   $ ../../back_rv64/RV64_compiler.exe -o program.s --no-start -danf fib.ml
   After ANF transformation.
-  let fib n =
+  let rec fib n =
     (if (n < 2)
     then n
     else let temp3 = (n - 1) in
