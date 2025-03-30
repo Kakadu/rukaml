@@ -1,7 +1,7 @@
 
 
 # CPS Factorial
-  $ cat << EOF | ../../llvm/llvm_compiler.exe -o fack.ll #-vllvm
+  $ cat << EOF | ./compiler.exe -o fack.ll #-vllvm
   > let fresh_1 m k n = k (n * m)
   > let rec fack k n =
   >   if n=1
@@ -109,7 +109,7 @@
   [24]
 
 
-  $ cat << EOF | ../../llvm/llvm_compiler.exe -o fack.ll
+  $ cat << EOF | ./compiler.exe -o fack.ll
   > let rec fack n k =
   >   if n=1 then k 1 else fack (n-1) (fun m -> k (n*m))
   > let main = fack 5 (fun x -> x)

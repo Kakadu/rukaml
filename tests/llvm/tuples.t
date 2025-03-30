@@ -1,5 +1,5 @@
 
-  $ cat << EOF | ../../llvm/llvm_compiler.exe -o mydiv.ll #-vllvm
+  $ cat << EOF | ./compiler.exe -o mydiv.ll #-vllvm
   > let mydiv a b = (a+b, a)
   > let f a b =
   >    let (u,v) = mydiv a b in

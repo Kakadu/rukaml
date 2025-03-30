@@ -1,4 +1,4 @@
-  $ cat << EOF | ../../llvm/llvm_compiler.exe -o fack.ll #-vllvm
+  $ cat << EOF | ./compiler.exe -o fack.ll #-vllvm
   > let id x = x
   > let foo f x = x
   > let main = foo id 5
