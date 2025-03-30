@@ -44,6 +44,5 @@ jobs:
           opam install . --deps-only --with-test
         #opam install . --depext-only --with-test
 
-
       - run: opam exec -- dune build @default --profile=release
-      - run: opam exec -- dune test
+      - run: opam exec -- dune build @runtest @check
