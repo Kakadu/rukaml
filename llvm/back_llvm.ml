@@ -1,10 +1,10 @@
 let extra_switches = []
 
-type error = [ `Typing_error of Miniml.Inferencer.error ]
+open Frontend
+
+type error = [ `Typing_error of Inferencer.error ]
 
 let pp_error ppf _ = Format.fprintf ppf "error?"
-
-open Miniml
 
 let prepare_llvm _anf ~filename:_ =
   print_endline "LLVM backend is running111";
