@@ -333,7 +333,7 @@ let rec extend_env env counts = function
     let cpp, env4, counts4 =
       List.fold_right
         (fun pn (cpp, env, counts) ->
-          extend_env env counts pn |> fun (cpn, e, c) -> cpn :: cpp, e, c)
+           extend_env env counts pn |> fun (cpn, e, c) -> cpn :: cpp, e, c)
         pp
         ([], env3, counts3)
     in
@@ -837,12 +837,14 @@ let test_cps_vb text =
 
 let%expect_test "cps simple func" =
   test_cps_vb {| let double x = 2 * x|};
-  [%expect {| let double x k1 = k1 (2 * x)
+  [%expect
+    {| let double x k1 = k1 (2 * x)
 |}]
 ;;
 
 let%expect_test "cps simple prog" =
-  test_cps_program {| let double x = 2 * x
+  test_cps_program
+    {| let double x = 2 * x
   let main = double (double 3)|};
   [%expect
     {|
@@ -853,30 +855,37 @@ let main = let double x k1 = k1 (2 * x) in double 3 (fun t2 -> double t2
 ;;
 
 let%expect_test "cps prog inlining" =
-  test_cps_program {|let y = 3
+  test_cps_program
+    {|let y = 3
   let double x = 2 * x
   let main = double (y + y)|};
-  [%expect {|  let main = 2 * (3 + 3)
+  [%expect
+    {|  let main = 2 * (3 + 3)
 |}]
 ;;
 
 let%expect_test "cps rec func (inlining banned)" =
   test_cps_vb {| let y = let rec t x = t 1 in t 2|};
-  [%expect {| let y = let rec t x k1 = t 1 k1 in t 2 (fun x -> x)
+  [%expect
+    {| let y = let rec t x k1 = t 1 k1 in t 2 (fun x -> x)
 |}]
 ;;
 
 let%expect_test "cps eta" =
-  test_cps_vb {|
+  test_cps_vb
+    {|
    let main = let g x = x in (fun x -> g x) g|};
-  [%expect {| let main = let g x k1 = k1 x in g g (fun x -> x)
+  [%expect
+    {| let main = let g x k1 = k1 x in g g (fun x -> x)
 |}]
 ;;
 
 let%expect_test "cps eta let" =
-  test_cps_vb {|
+  test_cps_vb
+    {|
    let main = let g x = x in let f y = g y in f (g 0)|};
-  [%expect {| let main = let g x k1 = k1 x in g 0 (fun t2 -> g t2 (fun x -> x))
+  [%expect
+    {| let main = let g x k1 = k1 x in g 0 (fun t2 -> g t2 (fun x -> x))
 |}]
 ;;
 
@@ -888,7 +897,8 @@ let%expect_test "cps fac" =
 ;;
 
 let%expect_test "cps fib" =
-  test_cps_vb {|
+  test_cps_vb
+    {|
   let rec  fib n =
 if n < 2 then n else fib (n - 1) + fib (n - 2)
   |};
@@ -910,55 +920,64 @@ let%expect_test "cps complex branching" =
 
 let%expect_test "cps print" =
   test_cps_vb {|let main  = (fun z -> 1) (print 0) |};
-  [%expect {|   let main = let x1 = print 0 in (fun z -> (fun x -> x) 1) x1
+  [%expect
+    {|   let main = let x1 = print 0 in (fun z -> (fun x -> x) 1) x1
 |}]
 ;;
 
 let%expect_test "cps print alias " =
   test_cps_vb {| let f = let p = print in let z = p 0 in z + 1|};
-  [%expect {| let f = let z = print 0 in (fun x -> x) (z + 1)
+  [%expect
+    {| let f = let z = print 0 in (fun x -> x) (z + 1)
 |}]
 ;;
 
 let%expect_test "cps one ref arg-binop" =
   test_cps_vb {| let f = let g x = x + 1 in g (2 * 2)   |};
-  [%expect {| let f = (2 * 2) + 1
+  [%expect
+    {| let f = (2 * 2) + 1
 |}]
 ;;
 
 let%expect_test "cps one ref binop" =
   test_cps_vb {| let f g = let x = 2 * 2 in g x |};
-  [%expect {| let f g k1 = g (2 * 2) k1
+  [%expect
+    {| let f g k1 = g (2 * 2) k1
 |}]
 ;;
 
 let%expect_test "cps mult refs arg-const" =
   test_cps_vb {| let f g = let x = 2 in g x x|};
-  [%expect {| let f g k1 = g 2 (fun t2 -> t2 2 k1)
+  [%expect
+    {| let f g k1 = g 2 (fun t2 -> t2 2 k1)
 |}]
 ;;
 
 let%expect_test "cps  mult refs arg-binop (inlining banned)" =
   test_cps_vb {| let f g = let x = 2 * 2 in g x x|};
-  [%expect {| let f g k1 = let x = 2 * 2 in g x (fun t2 -> t2 x k1)
+  [%expect
+    {| let f g k1 = let x = 2 * 2 in g x (fun t2 -> t2 x k1)
 |}]
 ;;
 
 let%expect_test "cps complex tuple-arg" =
   test_cps_vb {| let f g = g (g 3, 1)|};
-  [%expect {| let f g k1 = g 3 (fun t2 -> g (t2, 1) k1)
+  [%expect
+    {| let f g k1 = g 3 (fun t2 -> g (t2, 1) k1)
 |}]
 ;;
 
 let%expect_test "cps ptuple" =
   test_cps_vb {| let f (x,y) = x + y|};
-  [%expect {| let f (x, y) k1 = k1 (x + y)
+  [%expect
+    {| let f (x, y) k1 = k1 (x + y)
 |}]
 ;;
 
 let%expect_test "cps free vars" =
   test_cps_vb {| let f x = x + y + z|};
-  [%expect {|
+  [%expect
+    {|
   Variables are not in scope:
   z
   y
@@ -967,7 +986,8 @@ let%expect_test "cps free vars" =
 
 let%expect_test "cps func in func" =
   test_cps_vb {| let z = let rec g y = y in  let f = fun x -> g in f 2 3|};
-  [%expect {|  let z = let rec g y k1 = k1 y in (fun x -> g 3 (fun x -> x)) 2
+  [%expect
+    {|  let z = let rec g y k1 = k1 y in (fun x -> g 3 (fun x -> x)) 2
 |}]
 ;;
 
@@ -987,6 +1007,7 @@ let%expect_test "cps not allowed let rec lambda complex" =
 
 let%expect_test "cps fake rec" =
   test_cps_vb {| let main  = let rec x = (fun y -> 8) 12 in 0|};
-  [%expect {|  let main = (fun y -> let rec x = 8 in (fun x -> x) 0) 12
+  [%expect
+    {|  let main = (fun y -> let rec x = 8 in (fun x -> x) 0) 12
 |}]
 ;;

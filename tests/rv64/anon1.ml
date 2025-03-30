@@ -1,4 +1,5 @@
-let revapply x k = k x
+let revapply x k =
+   k x
 let const0 x = 0
 let fresh1 z x = z const0
 let z k = 0

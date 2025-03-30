@@ -35,17 +35,17 @@ end = struct
   let run m init = m init
 
   let ( <*> ) : 'acc 'a 'b. ('acc, 'a -> 'b) t -> ('acc, 'a) t -> ('acc, 'b) t =
-   fun f arg acc ->
+    fun f arg acc ->
     let acc2, f = f acc in
     let acc3, arg = arg acc2 in
     acc3, f arg
- ;;
+  ;;
 
   let ( >>= ) : 'acc 'a 'b. ('acc, 'a) t -> ('a -> ('acc, 'b) t) -> ('acc, 'b) t =
-   fun x f st ->
+    fun x f st ->
     let st, rez = x st in
     f rez st
- ;;
+  ;;
 
   let ( let* ) = ( >>= )
 end

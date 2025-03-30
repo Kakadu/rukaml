@@ -185,9 +185,9 @@ module Var_set = struct
   let fold_R f acc set =
     fold
       (fun x acc ->
-        let open R.Syntax in
-        let* acc = acc in
-        f acc x)
+         let open R.Syntax in
+         let* acc = acc in
+         f acc x)
       acc
       set
   ;;
@@ -261,7 +261,8 @@ end
 let%expect_test " " =
   Format.printf "%a\n" Var_set.pp (Type.free_vars (tv 1 ~level:1));
   Format.printf "%a\n" Var_set.pp (Scheme.free_vars (S (Var_set.empty, tv 1 ~level:1)));
-  [%expect {|
+  [%expect
+    {|
     [ 1; ]
     [ 1; ] |}]
 ;;
@@ -360,9 +361,9 @@ let instantiate ?(level = 0) : scheme -> ty R.t =
   in
   Var_set.fold_R
     (fun typ name ->
-      let* f1 = next_name () in
-      (* log "create fresh variable %d for name %d" f1 name; *)
-      return @@ Subst.apply (Subst.singleton name (tv f1 ~level)) typ)
+       let* f1 = next_name () in
+       (* log "create fresh variable %d for name %d" f1 name; *)
+       return @@ Subst.apply (Subst.singleton name (tv f1 ~level)) typ)
     bs
     (return t)
 ;;
@@ -443,90 +444,92 @@ let infer env expr =
   in
   let rec (helper : Type_env.t -> Parsetree.expr -> (ty * Typedtree.expr) R.t) =
     fun env -> function
-    (* | Parsetree.EVar "=" ->
+      (* | Parsetree.EVar "=" ->
        (* TODO: make equality predefined *)
        let typ = tarrow int_typ (tarrow int_typ bool_typ) in
        return (typ, TVar ("=", typ)) *)
-    | Parsetree.EVar x ->
-      let* scheme = lookup_scheme_by_string x env in
-      let* typ = instantiate ~level:!current_level scheme in
-      return (typ, TVar (x, Type_env.ident_of_string_exn x env, typ))
-    | EUnit -> return (unit_typ, TUnit)
-    (* lambda abstraction *)
-    | ELam (PVar x, e1) ->
-      let* tx = fresh_var ~level:!current_level in
-      let xID = Ident.of_string x in
-      let env2 = Type_env.extend ~varname:x xID (S (Var_set.empty, tx)) env in
-      let* ty, tbody = helper env2 e1 in
-      let trez = tarrow tx ty in
-      return (trez, TLam (Tpat_var xID, tbody, trez))
-    | Parsetree.ELam ((PTuple _ as pat), body) ->
-      let* env, pat, tp = check_pat ~level:!current_level env pat in
-      let* ty, tbody = helper env body in
-      let trez = tarrow tp ty in
-      return (trez, TLam (pat, tbody, trez))
-    | EApp (e1, e2) ->
-      let* t1, te1 = helper env e1 in
-      let* t2, te2 = helper env e2 in
-      let* tv = fresh_var ~level:0 in
-      let* () = unify t1 (tarrow t2 tv) in
-      (* log "t1 = %a" pp_ty t1; *)
-      (* log "t2 = %a" pp_ty t2; *)
-      (* log "tv = %a" pp_ty tv; *)
-      return (tv, TApp (te1, te2, tv))
-    | EConst (PConst_int _n as c) -> return (int_typ, TConst c)
-    | EConst (PConst_bool _b as c) -> return (bool_typ, TConst c)
-    | Parsetree.EIf (c, th, el) ->
-      let* t1, tc = helper env c in
-      let* t2, tth = helper env th in
-      let* t3, tel = helper env el in
-      let* () = unify t1 bool_typ in
-      let* () = unify t2 t3 in
-      R.return (t2, TIf (tc, tth, tel, t2))
-    | ETuple (a, b, es) ->
-      let* ta, ea = helper env a in
-      let* tb, eb = helper env b in
-      let* typs, exprs =
-        list_foldm
-          ~init:(return ([], []))
-          ~f:(fun (typs, exprs) e ->
-            let* t1, e1 = helper env e in
-            return (t1 :: typs, e1 :: exprs))
-          es
-      in
-      let tup_typ = tprod ta tb typs in
-      return (tup_typ, TTuple (ea, eb, exprs, tup_typ))
-    | Parsetree.ELet (NonRecursive, PVar x, rhs, e2) ->
-      enter_level ();
-      let* t1, typed_rhs = helper env rhs in
-      leave_level ();
-      let t2 = generalize ~level:!current_level t1 in
-      let x_ident = Ident.of_string x in
-      let* t3, typed_in = helper (Type_env.extend ~varname:x x_ident t2 env) e2 in
-      return (t3, TLet (NonRecursive, Tpat_var x_ident, t2, typed_rhs, typed_in))
-    | Parsetree.ELet (Recursive, PVar f, erhs, wher) ->
-      let* tf = fresh_var ~level:!current_level in
-      (* log "  var %s will have type %a (%d)" f Pprint.pp_typ tf Stdlib.__LINE__; *)
-      enter_level ();
-      let f_ident = Ident.of_string f in
-      let* t1, typed_rhs =
-        let env = Type_env.extend ~varname:f f_ident (S (Var_set.empty, tf)) env in
-        helper env erhs
-      in
-      leave_level ();
-      let* () = unify tf t1 in
-      (* log "  var %s will have type %a" f Pprint.pp_typ tf; *)
-      let t2 = generalize ~level:!current_level tf in
-      (* log "letrec  result = %a\n%!" pp_scheme t2; *)
-      let* twher, typed_wher = helper (Type_env.extend ~varname:f f_ident t2 env) wher in
-      return (twher, TLet (Recursive, Tpat_var f_ident, t2, typed_rhs, typed_wher))
-    | ELet (Recursive, PTuple _, _, _) -> fail `Only_varibles_on_the_left_of_letrec
-    | ELet (NonRecursive, (PTuple _ as pat), rhs, wher) ->
-      let* env, pat, tp = check_pat ~level:!current_level env pat in
-      let* _ty, tbody = helper env rhs in
-      let* () = unify tp _ty in
-      let* twher, typed_wher = helper env wher in
-      return (twher, TLet (NonRecursive, pat, Scheme.make_mono _ty, tbody, typed_wher))
+      | Parsetree.EVar x ->
+        let* scheme = lookup_scheme_by_string x env in
+        let* typ = instantiate ~level:!current_level scheme in
+        return (typ, TVar (x, Type_env.ident_of_string_exn x env, typ))
+      | EUnit -> return (unit_typ, TUnit)
+      (* lambda abstraction *)
+      | ELam (PVar x, e1) ->
+        let* tx = fresh_var ~level:!current_level in
+        let xID = Ident.of_string x in
+        let env2 = Type_env.extend ~varname:x xID (S (Var_set.empty, tx)) env in
+        let* ty, tbody = helper env2 e1 in
+        let trez = tarrow tx ty in
+        return (trez, TLam (Tpat_var xID, tbody, trez))
+      | Parsetree.ELam ((PTuple _ as pat), body) ->
+        let* env, pat, tp = check_pat ~level:!current_level env pat in
+        let* ty, tbody = helper env body in
+        let trez = tarrow tp ty in
+        return (trez, TLam (pat, tbody, trez))
+      | EApp (e1, e2) ->
+        let* t1, te1 = helper env e1 in
+        let* t2, te2 = helper env e2 in
+        let* tv = fresh_var ~level:0 in
+        let* () = unify t1 (tarrow t2 tv) in
+        (* log "t1 = %a" pp_ty t1; *)
+        (* log "t2 = %a" pp_ty t2; *)
+        (* log "tv = %a" pp_ty tv; *)
+        return (tv, TApp (te1, te2, tv))
+      | EConst (PConst_int _n as c) -> return (int_typ, TConst c)
+      | EConst (PConst_bool _b as c) -> return (bool_typ, TConst c)
+      | Parsetree.EIf (c, th, el) ->
+        let* t1, tc = helper env c in
+        let* t2, tth = helper env th in
+        let* t3, tel = helper env el in
+        let* () = unify t1 bool_typ in
+        let* () = unify t2 t3 in
+        R.return (t2, TIf (tc, tth, tel, t2))
+      | ETuple (a, b, es) ->
+        let* ta, ea = helper env a in
+        let* tb, eb = helper env b in
+        let* typs, exprs =
+          list_foldm
+            ~init:(return ([], []))
+            ~f:(fun (typs, exprs) e ->
+              let* t1, e1 = helper env e in
+              return (t1 :: typs, e1 :: exprs))
+            es
+        in
+        let tup_typ = tprod ta tb typs in
+        return (tup_typ, TTuple (ea, eb, exprs, tup_typ))
+      | Parsetree.ELet (NonRecursive, PVar x, rhs, e2) ->
+        enter_level ();
+        let* t1, typed_rhs = helper env rhs in
+        leave_level ();
+        let t2 = generalize ~level:!current_level t1 in
+        let x_ident = Ident.of_string x in
+        let* t3, typed_in = helper (Type_env.extend ~varname:x x_ident t2 env) e2 in
+        return (t3, TLet (NonRecursive, Tpat_var x_ident, t2, typed_rhs, typed_in))
+      | Parsetree.ELet (Recursive, PVar f, erhs, wher) ->
+        let* tf = fresh_var ~level:!current_level in
+        (* log "  var %s will have type %a (%d)" f Pprint.pp_typ tf Stdlib.__LINE__; *)
+        enter_level ();
+        let f_ident = Ident.of_string f in
+        let* t1, typed_rhs =
+          let env = Type_env.extend ~varname:f f_ident (S (Var_set.empty, tf)) env in
+          helper env erhs
+        in
+        leave_level ();
+        let* () = unify tf t1 in
+        (* log "  var %s will have type %a" f Pprint.pp_typ tf; *)
+        let t2 = generalize ~level:!current_level tf in
+        (* log "letrec  result = %a\n%!" pp_scheme t2; *)
+        let* twher, typed_wher =
+          helper (Type_env.extend ~varname:f f_ident t2 env) wher
+        in
+        return (twher, TLet (Recursive, Tpat_var f_ident, t2, typed_rhs, typed_wher))
+      | ELet (Recursive, PTuple _, _, _) -> fail `Only_varibles_on_the_left_of_letrec
+      | ELet (NonRecursive, (PTuple _ as pat), rhs, wher) ->
+        let* env, pat, tp = check_pat ~level:!current_level env pat in
+        let* _ty, tbody = helper env rhs in
+        let* () = unify tp _ty in
+        let* twher, typed_wher = helper env wher in
+        return (twher, TLet (NonRecursive, pat, Scheme.make_mono _ty, tbody, typed_wher))
   in
   helper env expr
 ;;

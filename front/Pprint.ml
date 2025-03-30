@@ -41,14 +41,14 @@ let rec pp_expr_helper ?(ps = true) ppf = function
   | EIf (c, th, el) ->
     (if ps then fprintf ppf "(%a)" else fprintf ppf "%a")
       (fun ppf ->
-        fprintf
-          ppf
-          "@[<hov>@[if %a@ @]@[then %a@ @]@[else %a@]@]"
-          no_pars
-          c
-          no_pars
-          th
-          no_pars)
+         fprintf
+           ppf
+           "@[<hov>@[if %a@ @]@[then %a@ @]@[else %a@]@]"
+           no_pars
+           c
+           no_pars
+           th
+           no_pars)
       el
   | EVar s -> pp_print_string ppf s
   | EApp (EApp (EVar ("<" as op), l), r)

@@ -43,5 +43,8 @@
   ctypes-foreign ; needed for LLVM
   ppx_blob
   (odoc :with-doc)
-  (ocamlformat :build)
+  (ocamlformat
+   (and
+    (= 0.27.0)
+    :with-dev))
   base))

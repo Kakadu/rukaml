@@ -13,12 +13,13 @@ let prepare_llvm _anf ~filename:_ =
   let the_module = Llvm.create_module context "main" in
   let module LL = (val LL.make context builder the_module) in
   Result.Ok ()
+;;
 
 let compile stru _stru_typed ~filename =
   let ( let* ) x f = Result.bind x f in
   (* Format.printf "Parsed: %a\n%!" pp stru; *)
   let stru =
-    let init = (CConv.standart_globals, []) in
+    let init = CConv.standart_globals, [] in
     Stdlib.ListLabels.fold_left
       (stru : Parsetree.structure)
       ~init
@@ -29,7 +30,7 @@ let compile stru _stru_typed ~filename =
             | _, Parsetree.PVar s, _ -> CConv.String_set.add s acc
             | _, PTuple _, _ -> acc)
         in
-        (new_glob, List.append ans new_strus))
+        new_glob, List.append ans new_strus)
     |> snd
   in
   let* stru_typed =
@@ -43,6 +44,7 @@ let compile stru _stru_typed ~filename =
   Format.printf "%a\n%!" Compile_lib.ANF.pp_stru anf;
   (* Result.return () *)
   prepare_llvm anf ~filename
+;;
 
 let () =
   let module B = struct
@@ -50,5 +52,7 @@ let () =
 
     let pp_error = pp_error
     let run = compile
-  end in
+  end
+  in
   Registration.register_backend_exn "llvm" (module B) []
+;;

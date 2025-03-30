@@ -1,7 +1,6 @@
 open Base
 module Format = Stdlib.Format
 open Format
-(* open rukaml *)
 open Frontend
 
 let run_single parser pp pp_err text =

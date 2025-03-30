@@ -311,7 +311,8 @@ let%expect_test _ =
             (Typedtree.Tpat_var v7)
             (CAtom (AVar vf))
             (EComplex (CApp (AVar vx, AVar v9, []))));
-  [%expect {|
+  [%expect
+    {|
     let v7 = vf in
       vf 1 v9 |}]
 ;;
@@ -396,7 +397,8 @@ let%expect_test _ =
       (complex_of_atom (AVar temp1_id))
   in
   Format.printf "%a\n~~>\n%a\n%!" pp ex1 pp (simplify Arity_map.empty ex1);
-  [%expect {|
+  [%expect
+    {|
   let temp1 f = (fun x -> x) in
     temp1
   ~~>
@@ -681,7 +683,8 @@ let%expect_test "CPS factorial" =
 
 let%expect_test _ =
   test_anf {| let double = ((let b = 1 in b), 2) |};
-  [%expect {|
+  [%expect
+    {|
     let double =
       let b = 1 in
         (b, 2) |}]

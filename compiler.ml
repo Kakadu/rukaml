@@ -50,7 +50,8 @@ let () =
     let* input = read_input !Config.input in
     let* parsed = Parsing.parse_structure input in
     let () =
-      if !Config.dump_parsetree then Format.printf "%a\n%!" Frontend.Pprint.structure parsed
+      if !Config.dump_parsetree
+      then Format.printf "%a\n%!" Frontend.Pprint.structure parsed
     in
     let* typed = Inferencer.(structure ~env:start_env) parsed in
     let () =

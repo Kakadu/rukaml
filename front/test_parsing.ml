@@ -44,9 +44,11 @@ let%expect_test _ =
 ;;
 
 let%expect_test _ =
-  print_end_parse_exn {|let mul5 x = repeat 5 (fun acc -> x) 0
+  print_end_parse_exn
+    {|let mul5 x = repeat 5 (fun acc -> x) 0
      |};
-  [%expect {|
+  [%expect
+    {|
     let mul5 x = repeat 5 (fun acc -> x) 0 |}]
 ;;
 
@@ -88,7 +90,8 @@ let%expect_test _ =
 ;;
 
 let%expect_test _ =
-  print_end_parse_exn {|
+  print_end_parse_exn
+    {|
     let a = reeee (fun acc -> x)
      |};
   [%expect {| let a = reeee (fun acc -> x) |}]
@@ -97,14 +100,16 @@ let%expect_test _ =
 let%expect_test _ =
   print_end_parse_exn {| let fresh_1 x acc = x |};
   print_end_parse_exn {| let mul5 x = repeat 5 (fresh_1 x) 0 |};
-  [%expect {|
+  [%expect
+    {|
     let fresh_1 x acc = x
     let mul5 x = repeat 5 (fresh_1 x) 0 |}]
 ;;
 
 let%expect_test _ =
   parse_expr_exn {| 1+1 |};
-  [%expect {|
+  [%expect
+    {|
     (1 + 1) |}]
 ;;
 

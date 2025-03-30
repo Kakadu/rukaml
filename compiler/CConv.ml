@@ -289,9 +289,9 @@ let conv ?(standart_globals = standart_globals)
     fun es ->
     List.fold_left
       (fun acc e ->
-        let* acc = acc in
-        let* e = helper globals e in
-        return (e :: acc))
+         let* acc = acc in
+         let* e = helper globals e in
+         return (e :: acc))
       (return [])
       es
   in
@@ -320,12 +320,11 @@ let structure ?(standart_globals = standart_globals) stru =
     ~f:(fun (glob, ans) stru ->
       let new_strus = conv ~standart_globals:glob stru in
       let new_glob =
-        ListLabels.fold_left ~init:glob new_strus ~f:(fun acc ->
-            function
-            | _, Parsetree.PVar s, _ -> String_set.add s acc
-            | _, PTuple _, _ ->
-              (* TODO(Kakadu): add other names too *)
-              acc)
+        ListLabels.fold_left ~init:glob new_strus ~f:(fun acc -> function
+          | _, Parsetree.PVar s, _ -> String_set.add s acc
+          | _, PTuple _, _ ->
+            (* TODO(Kakadu): add other names too *)
+            acc)
       in
       new_glob, List.append ans new_strus)
   |> snd

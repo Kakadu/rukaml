@@ -51,4 +51,3 @@
 (cram
  (applies_to fac_cps)
  (deps ../rukaml_stdlib.o ./fac_cps.exe fac_cps.s))
-

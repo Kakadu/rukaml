@@ -44,8 +44,9 @@ let%test _ =
     "(let x = y in fun y -> x)"
     (elet (pvar "x") (evar "y") (elam (pvar "y") (evar "x")))
 ;;
+
 (*
-let%test _ = okexpr "_1 _2" (eapp (evar 1) [ evar 2 ])
+   let%test _ = okexpr "_1 _2" (eapp (evar 1) [ evar 2 ])
 
 (* let%test _ =
   okexpr "let rec _1 = 1 in 1" (elet ~isrec:true (pvar 1) (econst 1) (econst 1))
@@ -207,7 +208,7 @@ let%expect_test _ =
   [%expect {| [ 2 -> int 1 -> int ] |}]
 ;;
 *)
- *)
+*)
 
 (** inferencer tests *)
 

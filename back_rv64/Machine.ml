@@ -14,18 +14,19 @@ let rec pp_reg ppf =
   | ROffset (r, 0) -> fprintf ppf "(%a)" pp_reg r
   | ROffset (r, n) -> fprintf ppf "%d(%a)" n pp_reg r
   | User _ -> failwith "not implemented (User _)"
+;;
 
 type instr =
   | Addi of reg * reg * int
   | Add of reg * reg * reg
   | Sub of reg * reg * reg
-  | Mulw of reg * reg * reg  (** RV64M *)
+  | Mulw of reg * reg * reg (** RV64M *)
   | Li of reg * int
   | Ecall
   | Call of string
   | Ret
   | Lla of reg * string
-  | Ld of reg * reg  (** [ld ra, (sp)] *)
+  | Ld of reg * reg (** [ld ra, (sp)] *)
   | Sd of reg * reg
   | Mv of reg * reg
   | Beq of reg * reg * string
@@ -38,12 +39,9 @@ let pp_instr ppf =
   let open Format in
   function
   | Addi (r1, r2, n) -> fprintf ppf "addi %a, %a, %d" pp_reg r1 pp_reg r2 n
-  | Add (r1, r2, r3) ->
-      fprintf ppf "add  %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
-  | Sub (r1, r2, r3) ->
-      fprintf ppf "sub %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
-  | Mulw (r1, r2, r3) ->
-      fprintf ppf "mulw %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Add (r1, r2, r3) -> fprintf ppf "add  %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Sub (r1, r2, r3) -> fprintf ppf "sub %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Mulw (r1, r2, r3) -> fprintf ppf "mulw %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
   | Li (r, n) -> fprintf ppf "li %a, %d" pp_reg r n
   | Ecall -> fprintf ppf "ecall"
   | Call f -> fprintf ppf "call %s" f
@@ -54,14 +52,13 @@ let pp_instr ppf =
   | Mv (ROffset (SP, 0), rs) -> fprintf ppf "sd %a, (sp)" pp_reg rs
   | Mv (rd, rs) -> fprintf ppf "mv %a, %a" pp_reg rd pp_reg rs
   | Sd (r1, r2) -> fprintf ppf "sd %a, %a" pp_reg r1 pp_reg r2
-  | Beq (r1, r2, offset) ->
-      fprintf ppf "beq %a, %a, %s" pp_reg r1 pp_reg r2 offset
-  | Blt (r1, r2, offset) ->
-      fprintf ppf "blt %a, %a, %s" pp_reg r1 pp_reg r2 offset
-  | Ble (r1, r2, offset) ->
-      fprintf ppf "ble %a, %a, %s" pp_reg r1 pp_reg r2 offset
+  | Beq (r1, r2, offset) -> fprintf ppf "beq %a, %a, %s" pp_reg r1 pp_reg r2 offset
+  | Blt (r1, r2, offset) -> fprintf ppf "blt %a, %a, %s" pp_reg r1 pp_reg r2 offset
+  | Ble (r1, r2, offset) -> fprintf ppf "ble %a, %a, %s" pp_reg r1 pp_reg r2 offset
   | Label s -> fprintf ppf "%s:" s
   | Comment s -> fprintf ppf "# %s" s
+;;
+
 (* | _ -> failwith "Not implemented" *)
 
 let addi k r1 r2 n = k @@ Addi (r1, r2, n)
@@ -107,25 +104,28 @@ let t5 = Temp_reg 5
 let code : (instr * string) Queue.t = Queue.create ()
 
 let rec flush_queue ppf =
-  if Queue.is_empty code then ()
+  if Queue.is_empty code
+  then ()
   else
     let open Format in
     let i, comm = Queue.pop code in
     (match i with
-    | Comment "" -> ()
-    | Comment s -> fprintf ppf "# %s\n%!" s
-    | Label _ ->
-        fprintf ppf "%a" pp_instr i;
-        if comm <> "" then fprintf ppf " # %s" comm;
-        fprintf ppf "\n"
-    | _ ->
-        fprintf ppf "  %a" pp_instr i;
-        if comm <> "" then fprintf ppf " # %s" comm;
-        fprintf ppf "\n");
+     | Comment "" -> ()
+     | Comment s -> fprintf ppf "# %s\n%!" s
+     | Label _ ->
+       fprintf ppf "%a" pp_instr i;
+       if comm <> "" then fprintf ppf " # %s" comm;
+       fprintf ppf "\n"
+     | _ ->
+       fprintf ppf "  %a" pp_instr i;
+       if comm <> "" then fprintf ppf " # %s" comm;
+       fprintf ppf "\n");
     flush_queue ppf
+;;
 
 let emit ?(comm = "") instr = instr (fun i -> Queue.add (i, comm) code)
 
 let __ () =
   let _x = emit addi SP SP 4 in
   ()
+;;

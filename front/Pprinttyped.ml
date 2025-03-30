@@ -31,9 +31,9 @@ let pp_typ_hum =
         ppf
         fmt
         (fun ppf () ->
-          fprintf ppf "@[%a * %a" (pp_typ CTuple) a (pp_typ CTuple) b;
-          List.iter (fprintf ppf " * %a" (pp_typ CTuple)) ts;
-          fprintf ppf "@]")
+           fprintf ppf "@[%a * %a" (pp_typ CTuple) a (pp_typ CTuple) b;
+           List.iter (fprintf ppf " * %a" (pp_typ CTuple)) ts;
+           fprintf ppf "@]")
         ()
   in
   pp_typ CArrow_right

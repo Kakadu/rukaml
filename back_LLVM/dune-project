@@ -7,5 +7,6 @@
 (package
  (name rukaml_llvm)
  (depends frontend)
+ (allow_empty)
  ;
  )

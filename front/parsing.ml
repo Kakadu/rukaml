@@ -107,9 +107,9 @@ let pattern =
     fail ""
     <|> parens
           (return (fun a b ps -> PTuple (a, b, ps))
-          <*> pattern
-          <*> string "," *> ws *> pattern
-          <*> many (string "," *> ws *> pattern))
+           <*> pattern
+           <*> string "," *> ws *> pattern
+           <*> many (string "," *> ws *> pattern))
     <|> (ws *> ident >>= fun v -> return (pvar v) <* trace_pos v))
 ;;
 
@@ -154,7 +154,7 @@ let letdef erhs =
   <*> (trace_pos "let"
        *> keyword "let"
        *> option NonRecursive (keyword "rec" >>| fun _ -> Recursive)
-      <* ws)
+       <* ws)
   <*> pattern
   <*> many (ws *> pattern)
   <*> ws *> string "=" *> ws *> erhs
@@ -189,34 +189,34 @@ let pack : dispatch =
   let expr_basic d =
     trace_pos "expr_basic"
     *> fix (fun _self ->
-         ws
-         *> (fail ""
-            <|> ws *> (number >>| fun n -> econst (const_int n))
-            <|> (ws *> char '(' *> char ')' >>| fun _ -> eunit)
-            <|> (ws *> ident
-                >>= function
-                | "true" -> return @@ econst (const_bool true)
-                | "false" -> return @@ econst (const_bool true)
-                | _ -> fail "Not a boolean constant")
-            <|> parens
-                  (return (fun a b xs -> etuple a b xs)
-                  <*> (d.expr d <* ws)
-                  <*> (string "," *> d.expr d <* ws)
-                  <*> many (string "," *> d.expr d <* ws))
-            <|> (ws *> ident >>| evar)
-            <|> (keyword "fun" *> pattern
-                >>= fun p ->
-                (* let () = log "Got a abstraction over %a" Pprint.pp_pattern p in *)
-                ws *> string "->" *> ws *> d.prio d >>= fun b -> return (elam p b))
-            <|> (keyword "if" *> d.prio d
-                >>= fun cond ->
-                keyword "then" *> d.prio d
-                >>= fun th ->
-                keyword "else" *> d.prio d >>= fun el -> return (eite cond th el))
-            <|> (letdef (d.prio d)
-                >>= fun (isrec, ident, rhs) ->
-                keyword "in" *> d.prio d >>= fun in_ -> return (elet ~isrec ident rhs in_)
-                )))
+      ws
+      *> (fail ""
+          <|> ws *> (number >>| fun n -> econst (const_int n))
+          <|> (ws *> char '(' *> char ')' >>| fun _ -> eunit)
+          <|> (ws *> ident
+               >>= function
+               | "true" -> return @@ econst (const_bool true)
+               | "false" -> return @@ econst (const_bool true)
+               | _ -> fail "Not a boolean constant")
+          <|> parens
+                (return (fun a b xs -> etuple a b xs)
+                 <*> (d.expr d <* ws)
+                 <*> (string "," *> d.expr d <* ws)
+                 <*> many (string "," *> d.expr d <* ws))
+          <|> (ws *> ident >>| evar)
+          <|> (keyword "fun" *> pattern
+               >>= fun p ->
+               (* let () = log "Got a abstraction over %a" Pprint.pp_pattern p in *)
+               ws *> string "->" *> ws *> d.prio d >>= fun b -> return (elam p b))
+          <|> (keyword "if" *> d.prio d
+               >>= fun cond ->
+               keyword "then" *> d.prio d
+               >>= fun th ->
+               keyword "else" *> d.prio d >>= fun el -> return (eite cond th el))
+          <|> (letdef (d.prio d)
+               >>= fun (isrec, ident, rhs) ->
+               keyword "in" *> d.prio d >>= fun in_ -> return (elet ~isrec ident rhs in_)
+              )))
   in
   let expr_long d =
     fix (fun _self ->
@@ -243,15 +243,12 @@ let parse str =
   Result.map_error (fun x -> `Parse_error x) (parse_pack pack.prio str)
 ;;
 
-
-
 let structure = many value_binding
 
 let parse_structure str =
   parse_string ~consume:All structure str
   |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
 ;;
-
 
 (** {1} Testing stuff *)
 

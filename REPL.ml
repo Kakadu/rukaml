@@ -47,7 +47,7 @@ let () =
     (fun _ -> assert false)
     "TODO";
   (if opts.batch
-  then fun () -> Stdio.In_channel.(input_all stdin) |> String.rstrip |> run_single
-  else run_repl)
+   then fun () -> Stdio.In_channel.(input_all stdin) |> String.rstrip |> run_single
+   else run_repl)
     ()
 ;;

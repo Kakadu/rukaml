@@ -50,8 +50,10 @@ let%expect_test " " =
       let iter n = loop n 0 |}]
 ;;
 
-let anon1 = {|
+let anon1 =
+  {|
 let mul5 x = repeat 5 (fun acc -> x) 0|}
+;;
 
 let%expect_test " " =
   wrap ~verbose:false ~standart_globals:(String_set.add "repeat" standart_globals) anon1;
@@ -104,10 +106,12 @@ let%expect_test "repeat " =
        |}]
 ;;
 
-let uuu = {|
+let uuu =
+  {|
 let uuu n =
   let rec loop m last = m+n+last in
   loop 0 |}
+;;
 
 let%expect_test "uuu: lifting letrec " =
   wrap uuu;
@@ -125,7 +129,8 @@ let%expect_test " nested let" =
   (* CConv.set_logging true; *)
   wrap "let main =\n    let id x = x in  5 ";
   (* CConv.set_logging false; *)
-  [%expect {|
+  [%expect
+    {|
     let main = let id x = x in 5
     	~~[2 value bindings]~~>
     let id x = x
