@@ -1,8 +1,8 @@
 (cram
  (applies_to *)
  (deps
-  (package MiniML)
-  (package MiniML_rv64)
+  (package rukaml)
+  ;(package rukaml_rv64)
   ; %{project_root}/compiler.exe
   %{project_root}/back_rv64/RV64_compiler.exe
   %{project_root}/back_rv64/rukaml_stdlib.o
@@ -26,7 +26,6 @@
     %{targets}
     --no-start
     %{src}))))
-
 
 (rule
  (targets empty.exe)
@@ -73,7 +72,6 @@
     --no-start
     %{src}))))
 
-
 (rule
  (targets fac.exe)
  (deps
@@ -95,11 +93,7 @@
 
 (cram
  (applies_to fac)
- (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
-  ./fac.exe
-  fac.ml
-  fac.s))
+ (deps %{project_root}/back_rv64/rukaml_stdlib.o ./fac.exe fac.ml fac.s))
 
 ;;;;; ite0
 
@@ -118,7 +112,6 @@
     %{targets}
     --no-start
     %{src}))))
-
 
 (rule
  (targets ite0.exe)
@@ -141,11 +134,7 @@
 
 (cram
  (applies_to ite0)
- (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
-  ./ite0.exe
-  ite0.ml
-  ite0.s))
+ (deps %{project_root}/back_rv64/rukaml_stdlib.o ./ite0.exe ite0.ml ite0.s))
 
 ;;;;; fib
 
@@ -164,7 +153,6 @@
     %{targets}
     --no-start
     %{src}))))
-
 
 (rule
  (targets fib.exe)
@@ -187,11 +175,7 @@
 
 (cram
  (applies_to fib)
- (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
-  ./fib.exe
-  fib.ml
-  fib.s))
+ (deps %{project_root}/back_rv64/rukaml_stdlib.o ./fib.exe fib.ml fib.s))
 
 ;;;;; fib_acc
 
@@ -210,7 +194,6 @@
     %{targets}
     --no-start
     %{src}))))
-
 
 (rule
  (targets fib_acc.exe)
@@ -257,7 +240,6 @@
     --no-start
     %{src}))))
 
-
 (rule
  (targets add.exe)
  (deps
@@ -279,11 +261,7 @@
 
 (cram
  (applies_to add)
- (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
-  ./add.exe
-  add.ml
-  add.s))
+ (deps %{project_root}/back_rv64/rukaml_stdlib.o ./add.exe add.ml add.s))
 
 ;;;;; fac_acc
 
@@ -302,7 +280,6 @@
     %{targets}
     --no-start
     %{src}))))
-
 
 (rule
  (targets fac_acc.exe)
@@ -349,7 +326,6 @@
     --no-start
     %{src}))))
 
-
 (rule
  (targets fac_cps.exe)
  (deps
@@ -394,7 +370,6 @@
     %{targets}
     --no-start
     %{src}))))
-
 
 (rule
  (targets long_app.exe)
@@ -441,7 +416,6 @@
     --no-start
     %{src}))))
 
-
 (rule
  (targets pass_print.exe)
  (deps
@@ -486,7 +460,6 @@
     %{targets}
     --no-start
     %{src}))))
-
 
 (rule
  (targets pass_print2.exe)
@@ -533,7 +506,6 @@
     --no-start
     %{src}))))
 
-
 (rule
  (targets anon1.exe)
  (deps
@@ -578,7 +550,6 @@
     %{targets}
     --no-start
     %{src}))))
-
 
 (rule
  (targets order1.exe)
@@ -625,7 +596,6 @@
     --no-start
     %{src}))))
 
-
 (rule
  (targets nikita2.exe)
  (deps
@@ -670,7 +640,6 @@
     %{targets}
     --no-start
     %{src}))))
-
 
 (rule
  (targets nikita3.exe)
@@ -717,7 +686,6 @@
     --no-start
     %{src}))))
 
-
 (rule
  (targets fib_cps.exe)
  (deps
@@ -744,4 +712,3 @@
   ./fib_cps.exe
   fib_cps.ml
   fib_cps.s))
-

@@ -5,7 +5,7 @@
 
 (library
  (name LL)
- (public_name MiniML_llvm.LL)
+ ;(public_name rukaml.LL)
  (modules LL)
  (libraries llvm)
  (inline_tests)
@@ -16,7 +16,7 @@
 
 (library
  (name LLVM_impl)
- (public_name MiniML_llvm.impl)
+ ;  (public_name rukaml_llvm.impl)
  (modules LLVM_impl)
  (libraries
   llvm
@@ -42,15 +42,15 @@
  (deps ./llvm_compiler.exe))
 
 (library
- (public_name MiniML_llvm.backend)
+ ;(public_name rukaml_llvm.backend)
  (name llvm_backend)
  (modules back_llvm)
  (flags
   (:standard -linkall))
  (libraries rukaml.register rukaml.cconv rukaml.compile llvm LL))
 
-(plugin
- (name plugin_llvm)
- (libraries MiniML_llvm.backend)
- (site
-  (rukaml plugins)))
+; (plugin
+;  (name plugin_llvm)
+;  (libraries rukaml_llvm.backend)
+;  (site
+;   (rukaml plugins)))

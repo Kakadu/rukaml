@@ -57,7 +57,7 @@ let print_epilogue ppf name =
   fprintf ppf "%!"
 
 module ANF = Compile_lib.ANF
-module Ident = Miniml.Ident
+module Ident = Frontend.Ident
 
 let gensym =
   let open ANF in
@@ -80,10 +80,10 @@ let list_take n xs =
   (* TODO: it's not optimal *)
   fst (list_take_n n xs)
 
-type dest = DReg of string | DStack_var of Miniml.Ident.t
+type dest = DReg of string | DStack_var of Frontend.Ident.t
 
 module Addr_of_local = struct
-  let store : (Miniml.Ident.t, _) Hashtbl.t = Hashtbl.create 13
+  let store : (Frontend.Ident.t, _) Hashtbl.t = Hashtbl.create 13
   let last_pos = ref 0
   let get_locals_count () = !last_pos
 
@@ -104,7 +104,7 @@ module Addr_of_local = struct
       Hashtbl.remove store name)
     else
       failwiths "Something bad %d. Can't remove local variable %a" __LINE__
-        Miniml.Ident.pp name
+        Ident.pp name
 
   let count () = Hashtbl.length store
   let size = count
@@ -115,7 +115,7 @@ module Addr_of_local = struct
     match Hashtbl.find store name with
     | v -> v
     | exception Not_found ->
-        failwiths "Can't find location of a variable %a" Miniml.Ident.pp name
+        failwiths "Can't find location of a variable %a" Ident.pp name
 
   let lookup_exn = find_exn
 
@@ -123,11 +123,11 @@ module Addr_of_local = struct
     assert (i < argc);
     let loc = -2 - argc + 1 + i in
     assert (loc < 0);
-    log "Location argument \"%a\" in [rbp+%d]" Miniml.Ident.pp name (-loc);
+    log "Location argument \"%a\" in [rbp+%d]" Ident.pp name (-loc);
     Hashtbl.add store name loc
 
   let remove_args xs =
-    log "Removing info about args [ %a ]" (pp_space_list Miniml.Ident.pp) xs;
+    log "Removing info about args [ %a ]" (pp_space_list Ident.pp) xs;
     List.iter (Hashtbl.remove store) xs
 
   let pp_local_exn ppf name =
@@ -139,7 +139,7 @@ module Addr_of_local = struct
   let keys () =
     Hashtbl.to_seq_keys store
     |> Seq.fold_left
-         (fun acc x -> Format.asprintf "%s %a" acc Miniml.Ident.pp x)
+         (fun acc x -> Format.asprintf "%s %a" acc Ident.pp x)
          ""
 end
 
@@ -213,7 +213,7 @@ let list_iter_revindex ~f xs =
 (**
     Argument [is_toplevel] returns None or Some arity. *)
 let generate_body is_toplevel ppf body =
-  let open Miniml.Parsetree in
+  let open Frontend.Parsetree in
   let allocate_args args =
     (* log "XXX %s: [ %a ]" __FUNCTION__
        (Format.pp_print_list
@@ -271,9 +271,9 @@ let generate_body is_toplevel ppf body =
         helper dest wher
     | ELet (_, Tpat_tuple (_, _, _), _, _) -> assert false
   and helper_c (dest : dest) = function
-    | CIte (CAtom (AConst (Miniml.Parsetree.PConst_bool true)), bth, _bel) ->
+    | CIte (CAtom (AConst (Frontend.Parsetree.PConst_bool true)), bth, _bel) ->
         helper dest bth
-    | CIte (CAtom (AConst (Miniml.Parsetree.PConst_bool false)), _bth, bel) ->
+    | CIte (CAtom (AConst (Frontend.Parsetree.PConst_bool false)), _bth, bel) ->
         helper dest bel
     | CIte (CAtom (AVar econd), bth, bel) when Addr_of_local.contains econd ->
         (* if on global or local variable  *)
@@ -477,11 +477,11 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  mov rdi, %d" n;
         printfn ppf "  call rukaml_field";
         printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar id, AUnit, []) when id.Miniml.Ident.hum_name = "gc_compact" ->
+    | CApp (AVar id, AUnit, []) when id.Frontend.Ident.hum_name = "gc_compact" ->
         printfn ppf "  mov rdi, rsp";
         printfn ppf "  mov rsi, 0";
         printfn ppf "  call rukaml_gc_compact"
-    | CApp (AVar id, AUnit, []) when id.Miniml.Ident.hum_name = "gc_stats" ->
+    | CApp (AVar id, AUnit, []) when id.Frontend.Ident.hum_name = "gc_stats" ->
         printfn ppf "  mov rdi, 0";
         printfn ppf "  mov rsi, 0";
         printfn ppf "  call rukaml_gc_print_stats"
@@ -495,9 +495,9 @@ let generate_body is_toplevel ppf body =
   and helper_a (dest : dest) x =
     (* log "  %s: dest=`%a`, expr = %a" __FUNCTION__ pp_dest dest ANF.pp_a x; *)
     match x with
-    | AConst (Miniml.Parsetree.PConst_bool true) ->
+    | AConst (Frontend.Parsetree.PConst_bool true) ->
         printfn ppf "  mov qword %a, 1" pp_dest dest
-    | AConst (Miniml.Parsetree.PConst_int n) ->
+    | AConst (Frontend.Parsetree.PConst_int n) ->
         printfn ppf "  mov qword %a,  %d" pp_dest dest n
     | AVar ({ Ident.hum_name = "print"; _ } as v) when None = is_toplevel v ->
         alloc_closure ppf (Ident.of_string "rukaml_print_int") 1;

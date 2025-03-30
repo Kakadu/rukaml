@@ -6,8 +6,8 @@ module type BACK = sig
   val pp_error : Format.formatter -> error -> unit
 
   val run
-    :  Miniml.Parsetree.structure
-    -> Miniml.Typedtree.structure
+    :  Frontend.Parsetree.structure
+    -> Frontend.Typedtree.structure
     -> filename:string
     -> (unit, error) Result.t
 end

@@ -1,6 +1,6 @@
 (cram
  (deps
-  (package MiniML)
+  (package rukaml)
   %{project_root}/compiler.exe
   ;%{project_root}/llvm/llvm_backend.cmxs # issues with linksing C code
   %{project_root}/llvm/llvm_compiler.exe

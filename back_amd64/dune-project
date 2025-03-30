@@ -5,4 +5,4 @@
 (generate_opam_files true)
 
 (package
- (name MiniML_amd64))
+ (name rukaml_amd64))

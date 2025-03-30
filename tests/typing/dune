@@ -1,7 +1,7 @@
 (executable
  (name REPL)
  (modules REPL)
- (libraries stdio miniml))
+ (libraries stdio Frontend))
 
 (cram
  (deps ./REPL.exe))

@@ -1,7 +1,7 @@
 (executable
  (name REPL)
  (modules REPL)
- (libraries stdio miniml compile_lib))
+ (libraries stdio compile_lib rukaml.frontend base))
 
 (cram
  (deps ./REPL.exe))

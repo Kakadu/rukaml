@@ -1,7 +1,7 @@
 open Base
 module Format = Stdlib.Format
 open Format
-open Miniml
+open Frontend
 
 let run_single parser pp pp_typed pp_err text =
   let ( let* ) x f = Result.bind x ~f in

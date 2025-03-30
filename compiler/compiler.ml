@@ -1,13 +1,13 @@
 open Base
 module Format = Stdlib.Format
 open Stdio
-open Miniml
+open Frontend
 
 let run_single text =
   Format.set_margin 1000;
   Format.set_max_indent 100;
   let ( let* ) x f = Result.bind x ~f in
-  let* stru = Miniml.Parsing.parse_structure text in
+  let* stru = Frontend.Parsing.parse_structure text in
   (* List.iter ~f:(Format.printf "%a\n%!" Pprint.pp_value_binding) stru; *)
   let stru = List.concat_map ~f:CConv.conv stru in
   (* List.iter ~f:(Format.printf "%a\n%!" Pprint.pp_value_binding) stru; *)

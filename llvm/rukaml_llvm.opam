@@ -2,7 +2,7 @@
 opam-version: "2.0"
 depends: [
   "dune" {>= "3.6"}
-  "MiniML"
+  "frontend"
   "odoc" {with-doc}
 ]
 build: [

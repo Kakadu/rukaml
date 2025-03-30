@@ -1,8 +1,8 @@
 (cram
  (applies_to *)
  (deps
-  (package MiniML)
-  (package MiniML_rv64)
+  (package rukaml)
+  ;(package rukaml_rv64)
   ; %{project_root}/compiler.exe
   %{project_root}/back_rv64/RV64_compiler.exe
   %{project_root}/back_rv64/rukaml_stdlib.o
@@ -196,7 +196,6 @@
   %{project_root}/tests/rv64/fib.ml
   ;
   ))
-
 
 ;;;;; anon1
 
@@ -1078,7 +1077,13 @@
     --no-start
     -vamd64
     %{src})
-   (run riscv64-linux-gnu-gcc-13 -g -c pass_print_cpsoff.s -o pass_print_cpsoff.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    -c
+    pass_print_cpsoff.s
+    -o
+    pass_print_cpsoff.o)
    (run
     riscv64-linux-gnu-gcc-13
     -g
@@ -1121,7 +1126,13 @@
     --no-start
     -vamd64
     %{src})
-   (run riscv64-linux-gnu-gcc-13 -g -c pass_print_cpson.s -o pass_print_cpson.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    -c
+    pass_print_cpson.s
+    -o
+    pass_print_cpson.o)
    (run
     riscv64-linux-gnu-gcc-13
     -g

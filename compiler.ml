@@ -29,7 +29,7 @@ let read_input = function
     Result.Ok str
 ;;
 
-open Miniml
+open Frontend
 
 let ( let* ) = Result.bind
 
@@ -50,12 +50,12 @@ let () =
     let* input = read_input !Config.input in
     let* parsed = Parsing.parse_structure input in
     let () =
-      if !Config.dump_parsetree then Format.printf "%a\n%!" Miniml.Pprint.structure parsed
+      if !Config.dump_parsetree then Format.printf "%a\n%!" Frontend.Pprint.structure parsed
     in
     let* typed = Inferencer.(structure ~env:start_env) parsed in
     let () =
       if !Config.dump_typedtree
-      then Format.printf "%a\n%!" Miniml.Pprinttyped.pp_stru typed
+      then Format.printf "%a\n%!" Frontend.Pprinttyped.pp_stru typed
     in
     apply_backend parsed typed ~filename:!Config.out_file
   with

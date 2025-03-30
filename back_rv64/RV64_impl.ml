@@ -65,7 +65,7 @@ let list_take n xs =
   (* TODO: it's not optimal *)
   fst (list_take_n n xs)
 
-module Ident = Miniml.Ident
+open Frontend
 
 type dest = DReg of string | DStack_var of Ident.t
 
@@ -148,7 +148,7 @@ module Addr_of_local = struct
   let keys () =
     Hashtbl.to_seq_keys store
     |> Seq.fold_left
-         (fun acc x -> Format.asprintf "%s %a" acc Miniml.Ident.pp x)
+         (fun acc x -> Format.asprintf "%s %a" acc Ident.pp x)
          ""
 
   let pp ppf () =
@@ -289,7 +289,7 @@ let emit_alloc_closure fname arity =
 (**
     Argument [is_toplevel] returns None or Some arity. *)
 let generate_body is_toplevel body =
-  let open Miniml.Parsetree in
+  let open Parsetree in
   let dealloc_locals, locals = allocate_locals body in
   let deallocate_args_for_call argc =
     let padded_argc : int = if argc mod 2 = 0 then argc else argc + 1 in
@@ -357,9 +357,9 @@ let generate_body is_toplevel body =
         helper dest wher
     | ELet (_, Tpat_tuple (_, _, _), _, _) -> assert false
   and helper_c (dest : dest) = function
-    | CIte (CAtom (AConst (Miniml.Parsetree.PConst_bool true)), bth, _bel) ->
+    | CIte (CAtom (AConst (Parsetree.PConst_bool true)), bth, _bel) ->
         helper dest bth
-    | CIte (CAtom (AConst (Miniml.Parsetree.PConst_bool false)), _bth, bel) ->
+    | CIte (CAtom (AConst (Parsetree.PConst_bool false)), _bth, bel) ->
         helper dest bel
     | CIte (CAtom (AVar econd), bth, bel) when Addr_of_local.contains econd ->
         (* if on global or local variable  *)
@@ -668,10 +668,10 @@ let generate_body is_toplevel body =
   and helper_a (dest : dest) x =
     (* log "  %s: dest=`%a`, expr = %a" __FUNCTION__ pp_dest dest ANF.pp_a x; *)
     match x with
-    | AConst (Miniml.Parsetree.PConst_bool true) ->
+    | AConst (Parsetree.PConst_bool true) ->
         emit li_dest dest 1
         (* printfn ppf "  li %a, 1" Addr_of_local.pp_dest dest *)
-    | AConst (Miniml.Parsetree.PConst_int n) -> (
+    | AConst (Parsetree.PConst_int n) -> (
         match dest with
         | DReg r -> emit li (RU r) n
         (* printfn ppf "  li %a, %d" Addr_of_local.pp_dest dest n *)

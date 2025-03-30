@@ -1,7 +1,7 @@
 (library
  (name compile_lib)
  (public_name rukaml.compile)
- (libraries stdio miniml cconv ppxlib.stdppx)
+ (libraries stdio Frontend cconv ppxlib.stdppx)
  (modules ANF CPS compile_tests)
  (preprocess
   (pps
@@ -14,7 +14,7 @@
 (library
  (public_name rukaml.cconv)
  (name cconv)
- (libraries miniml)
+ (libraries Frontend)
  (modules CConv monads)
  (wrapped false)
  (preprocess
@@ -28,7 +28,7 @@
 (executable
  (name compiler)
  (modules compiler)
- (libraries stdio base miniml compile_lib))
+ (libraries stdio base Frontend compile_lib))
 
 (cram
  ;(enabled_if

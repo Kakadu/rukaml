@@ -1,7 +1,7 @@
 open Base
 module Format = Stdlib.Format
 open Format
-open Miniml
+open Frontend
 
 let run_single parser pp pp_err text =
   let ast = Angstrom.parse_string ~consume:All parser text in

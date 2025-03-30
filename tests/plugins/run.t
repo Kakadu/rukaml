@@ -1,1 +1,1 @@
-$ minimlc -help
+$ rukamlc -help

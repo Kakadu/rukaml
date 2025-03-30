@@ -1,8 +1,8 @@
 let preamble = {|(cram
  (applies_to *)
  (deps
-  (package MiniML)
-  (package MiniML_rv64)
+  (package rukaml)
+  (package rukaml_rv64)
   ; %{project_root}/compiler.exe
   %{project_root}/back_rv64/RV64_compiler.exe
   %{project_root}/back_rv64/rukaml_stdlib.o

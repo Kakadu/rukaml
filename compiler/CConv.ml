@@ -1,6 +1,6 @@
 (* https://gist.github.com/jozefg/652f1d7407b7f0266ae9 *)
 module Format = Stdlib.Format
-open Miniml
+open Frontend
 
 let log_enabled = ref false
 let set_logging b = log_enabled := b

@@ -1,7 +1,7 @@
 open Base
 module Format = Stdlib.Format
 open Format
-open Miniml
+open Frontend
 
 let run_single text =
   let ast = Parsing.parse_structure text in

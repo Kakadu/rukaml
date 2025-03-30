@@ -6,7 +6,7 @@
 (executable
  (name REPL)
  (modules REPL)
- (libraries stdio miniml))
+ (libraries stdio Frontend))
 
 (cram
  (deps ./REPL.exe))
@@ -17,7 +17,7 @@
  (public_name rukaml.register)
  (name registration)
  (modules registration)
- (libraries miniml))
+ (libraries Frontend))
 
 (executable
  (public_name minimlc)

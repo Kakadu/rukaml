@@ -17,7 +17,7 @@ let log fmt =
   else Format.ifprintf Format.std_formatter fmt
 ;;
 
-open Miniml
+open Frontend
 
 type apat = APname of Ident.t
 
@@ -498,7 +498,7 @@ let anf_pat pat ?(kbefore = fun _ -> Fun.id) k =
 let test_anf_pat text =
   reset_gensym ();
   match
-    let pat = Miniml.Parsing.parse_pat_exn text in
+    let pat = Frontend.Parsing.parse_pat_exn text in
     anf_pat ~kbefore:elam (Typedtree.of_untyped_pattern pat) (fun _name ->
       complex_of_atom (AVar (Ident.of_string "use_pattern_vars_here")))
     |> Result.ok
@@ -645,7 +645,7 @@ let test_anf ?(print_before = false) text =
   reset_gensym ();
   let ( let* ) x f = Result.bind x f in
   match
-    let stru = Miniml.Parsing.parse_vb_exn text in
+    let stru = Frontend.Parsing.parse_vb_exn text in
     let vbs = CConv.structure [ stru ] in
     let* vbs_typed = Inferencer.structure vbs in
     (* Format.printf "%s %d\n%!" __FILE__ __LINE__; *)

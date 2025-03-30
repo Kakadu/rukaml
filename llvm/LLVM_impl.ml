@@ -1,6 +1,6 @@
 open Compile_lib
 open ANF
-open Miniml
+open Frontend
 
 let failwiths fmt = Format.kasprintf failwith fmt
 
@@ -59,7 +59,7 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
   let i64_typ = Llvm.i64_type LL.context in
 
   let rec gen_a = function
-    | AConst (Miniml.Parsetree.PConst_int n) -> LL.const_int i64_typ n
+    | AConst (Parsetree.PConst_int n) -> LL.const_int i64_typ n
     | AVar name when Hashtbl.mem virt_of_named_hash name -> virt_of_name name
     | AVar name ->
         assert (LL.has_toplevel_func name.hum_name);

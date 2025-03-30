@@ -1,7 +1,7 @@
 (cram
  (deps
-  (package MiniML)
-  (package MiniML_amd64)
+  (package rukaml)
+  (package rukaml_amd64)
   %{project_root}/compiler.exe
   %{project_root}/back_amd64/amd64_compiler.exe
   %{project_root}/back_amd64/rukaml_stdlib.o

@@ -1,7 +1,8 @@
 (* https://www.khoury.northeastern.edu/home/shivers/papers/nobrainer-cps.pdf *)
 
-open Miniml.Parsetree
-open Miniml.Ident
+open Frontend
+open Frontend.Parsetree
+open Frontend.Ident
 
 (* ds_pattern, ds_expr, ds_vb --- that's parsetree but every var has id*)
 type ds_pattern =
@@ -106,10 +107,10 @@ let incr x counts = IMap.add x (1 + IMap.find x counts) counts
 
 let start_glob_envs =
   let extend v =
-    let ident = Miniml.Ident.of_string v in
+    let ident = Frontend.Ident.of_string v in
     SMap.add ident.hum_name ident.id
   in
-  let printi = Miniml.Ident.of_string "print" in
+  let printi = Frontend.Ident.of_string "print" in
   ( IMap.add printi.id (AVar printi) IMap.empty
   , SMap.empty
     |> extend "<"
@@ -239,7 +240,7 @@ let preconv_chore ?(with_printing = false) (rec_flag, ptrn, e) k glob_vars free_
 ;;
 
 let test_count text =
-  let vb = Miniml.Parsing.parse_vb_exn text in
+  let vb = Frontend.Parsing.parse_vb_exn text in
   let k _ _ _ counts no_refs ref_once =
     IMap.iter (Printf.printf "id: %d; counts %d\n") counts;
     Printf.printf "ids that ref_once:\n";
@@ -562,7 +563,7 @@ let cps_conv_vb vb =
 
 let cps_conv_program vbs =
   let open IMap in
-  let open Miniml.Ident in
+  let open Ident in
   let ( let+ ) = Base.Result.( >>| ) in
   let k ds_vbs glob_vars free_vars counts no_refs ref_once =
     let main_id = SMap.find "main" glob_vars in
@@ -672,7 +673,7 @@ let cps_vb_to_parsetree_vb (rec_flag, pat, p) =
 open Format
 
 let rec pp_pat ppf = function
-  | CPVar v -> Miniml.Ident.pp ppf v
+  | CPVar v -> Ident.pp ppf v
   | CPTuple (pat1, pat2, pats) ->
     fprintf ppf "@[(%a" pp_pat pat1;
     List.iter (fprintf ppf ", %a" pp_pat) (pat2 :: pats);
@@ -682,10 +683,10 @@ let rec pp_pat ppf = function
 let rec pp_cont ppf = function
   | HALT -> fprintf ppf "@[%s@]" "(fun x -> x)"
   | Cont (pat, p) -> fprintf ppf "@[(fun %a ->@[ %a@])" pp_pat pat pp_p p
-  | CVar v -> Miniml.Ident.pp ppf v
+  | CVar v -> Frontend.Ident.pp ppf v
 
 and pp_triv ?(ps = true) ppf =
-  let open Miniml in
+  let open Frontend in
   function
   | Lam (pat, k, b) -> fprintf ppf "@[(fun %a %a ->@[ %a@])" pp_pat pat Ident.pp k pp_p b
   | TSafeBinop (op, l, r) when ANF.is_infix_binop op.hum_name ->
@@ -704,7 +705,7 @@ and pp_triv ?(ps = true) ppf =
   | TSafeBinop _ -> failwith "not a binop in TSafeBinop"
 
 and pp_p ppf =
-  let open Miniml in
+  let open Frontend in
   function
   | Call (f, a, k) -> fprintf ppf "@[<hv>%a %a %a@]" maybe_pars f maybe_pars a pp_cont k
   | Ret (k, a) -> fprintf ppf "@[<hv>%a %a@]" pp_cont k maybe_pars a
@@ -752,8 +753,8 @@ and pp_p ppf =
 
 and pp_binop ppf (ps, op, l, r) =
   if ps
-  then fprintf ppf "(%a %a %a)" maybe_pars l Miniml.Ident.pp op maybe_pars r
-  else fprintf ppf "%a %a %a" maybe_pars l Miniml.Ident.pp op maybe_pars r
+  then fprintf ppf "(%a %a %a)" maybe_pars l Ident.pp op maybe_pars r
+  else fprintf ppf "%a %a %a" maybe_pars l Ident.pp op maybe_pars r
 
 and pp_vb ppf (rec_flag, pat, p) =
   let () =
@@ -765,7 +766,7 @@ and pp_vb ppf (rec_flag, pat, p) =
   in
   match p with
   | Ret (HALT, Lam (pat', k, b)) ->
-    fprintf ppf "%a@ %a@ =@ @]@[%a@]@] " pp_pat pat' Miniml.Ident.pp k pp_p b
+    fprintf ppf "%a@ %a@ =@ @]@[%a@]@] " pp_pat pat' Ident.pp k pp_p b
   | Ret (HALT, t) -> fprintf ppf "=@ @]@[%a@]@]" no_pars t
   | _ -> fprintf ppf "=@ @]@[%a@]@]" pp_p p
 
@@ -804,7 +805,7 @@ let pp_error ppf : error -> _ = function
     Format.fprintf
       ppf
       " %a: This kind of expression is not allowed as right-hand side of `let rec'"
-      Miniml.Pprint.pp_expr
+      Pprint.pp_expr
       (ds_expr_to_expr ds_expr)
   | `Free_vars_occured vars ->
     let msg =
@@ -816,7 +817,7 @@ let pp_error ppf : error -> _ = function
 ;;
 
 let test_cps_program text =
-  let open Miniml in
+  let open Frontend in
   let stru = Result.get_ok @@ Parsing.parse_structure text in
   match cps_conv_program stru with
   | Ok cps_prog ->
@@ -826,7 +827,7 @@ let test_cps_program text =
 ;;
 
 let test_cps_vb text =
-  let open Miniml in
+  let open Frontend in
   match cps_conv_vb @@ Parsing.parse_vb_exn text with
   | Ok cps_vb ->
     Format.printf "%a" pp_vb cps_vb;
@@ -841,10 +842,10 @@ let%expect_test "cps simple func" =
 ;;
 
 let%expect_test "cps simple prog" =
-  test_cps_program {| let double x = 2 * x 
+  test_cps_program {| let double x = 2 * x
   let main = double (double 3)|};
   [%expect
-    {| 
+    {|
 let main = let double x k1 = k1 (2 * x) in double 3 (fun t2 -> double t2
                                                                (fun t3 ->
                                                                 (fun x -> x) t3))
@@ -852,8 +853,8 @@ let main = let double x k1 = k1 (2 * x) in double 3 (fun t2 -> double t2
 ;;
 
 let%expect_test "cps prog inlining" =
-  test_cps_program {|let y = 3 
-  let double x = 2 * x 
+  test_cps_program {|let y = 3
+  let double x = 2 * x
   let main = double (y + y)|};
   [%expect {|  let main = 2 * (3 + 3)
 |}]
@@ -866,14 +867,14 @@ let%expect_test "cps rec func (inlining banned)" =
 ;;
 
 let%expect_test "cps eta" =
-  test_cps_vb {| 
+  test_cps_vb {|
    let main = let g x = x in (fun x -> g x) g|};
   [%expect {| let main = let g x k1 = k1 x in g g (fun x -> x)
 |}]
 ;;
 
 let%expect_test "cps eta let" =
-  test_cps_vb {| 
+  test_cps_vb {|
    let main = let g x = x in let f y = g y in f (g 0)|};
   [%expect {| let main = let g x k1 = k1 x in g 0 (fun t2 -> g t2 (fun x -> x))
 |}]
@@ -887,12 +888,12 @@ let%expect_test "cps fac" =
 ;;
 
 let%expect_test "cps fib" =
-  test_cps_vb {| 
+  test_cps_vb {|
   let rec  fib n =
 if n < 2 then n else fib (n - 1) + fib (n - 2)
   |};
   [%expect
-    {| 
+    {|
 let rec fib n k1 = if n < 2 then k1 n else fib (n - 1) (fun t2 -> fib (n - 2)
                                                                   (fun t3 ->
                                                                    k1 (t2 + t3)))|}]
@@ -901,7 +902,7 @@ let rec fib n k1 = if n < 2 then k1 n else fib (n - 1) (fun t2 -> fib (n - 2)
 let%expect_test "cps complex branching" =
   test_cps_vb {| let x f = 1 + if (f 2) then 3 else 5|};
   [%expect
-    {| 
+    {|
     let x f k1 = f 2 (fun t2 -> let jv3 t4 = k1 (1 + t4) in if t2 then jv3 3
                                                             else jv3 5)
 |}]
@@ -921,13 +922,13 @@ let%expect_test "cps print alias " =
 
 let%expect_test "cps one ref arg-binop" =
   test_cps_vb {| let f = let g x = x + 1 in g (2 * 2)   |};
-  [%expect {| let f = (2 * 2) + 1 
+  [%expect {| let f = (2 * 2) + 1
 |}]
 ;;
 
 let%expect_test "cps one ref binop" =
   test_cps_vb {| let f g = let x = 2 * 2 in g x |};
-  [%expect {| let f g k1 = g (2 * 2) k1 
+  [%expect {| let f g k1 = g (2 * 2) k1
 |}]
 ;;
 
@@ -939,13 +940,13 @@ let%expect_test "cps mult refs arg-const" =
 
 let%expect_test "cps  mult refs arg-binop (inlining banned)" =
   test_cps_vb {| let f g = let x = 2 * 2 in g x x|};
-  [%expect {| let f g k1 = let x = 2 * 2 in g x (fun t2 -> t2 x k1) 
+  [%expect {| let f g k1 = let x = 2 * 2 in g x (fun t2 -> t2 x k1)
 |}]
 ;;
 
 let%expect_test "cps complex tuple-arg" =
   test_cps_vb {| let f g = g (g 3, 1)|};
-  [%expect {| let f g k1 = g 3 (fun t2 -> g (t2, 1) k1) 
+  [%expect {| let f g k1 = g 3 (fun t2 -> g (t2, 1) k1)
 |}]
 ;;
 
@@ -957,7 +958,7 @@ let%expect_test "cps ptuple" =
 
 let%expect_test "cps free vars" =
   test_cps_vb {| let f x = x + y + z|};
-  [%expect {| 
+  [%expect {|
   Variables are not in scope:
   z
   y

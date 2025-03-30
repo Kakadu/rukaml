@@ -6,7 +6,7 @@ type cfg = {
   mutable cps_on : bool;
 }
 
-open Miniml
+open Frontend
 
 let frontend cfg =
   let text =
@@ -23,7 +23,7 @@ let frontend cfg =
   in
   let ( let* ) x f = Result.bind x f in
   let ( let+ ) x f = Result.map f x in
-  let* stru = Miniml.Parsing.parse_structure text |> promote_error in
+  let* stru = Parsing.parse_structure text |> promote_error in
   let () = if cfg.dsource then Format.printf "%a\n%!" Pprint.pp_stru stru in
   let* stru =
     if not cfg.cps_on then Ok stru
@@ -72,8 +72,8 @@ let cfg =
   }
 
 let print_errors = function
-  | #Miniml.Parsing.error as e -> Format.printf "%a\n%!" Parsing.pp_error e
-  | #Miniml.Inferencer.error as e ->
+  | #Parsing.error as e -> Format.printf "%a\n%!" Parsing.pp_error e
+  | #Inferencer.error as e ->
       Format.printf "%a\n%!" Inferencer.pp_error e
   | #Compile_lib.CPS.error as e ->
       Format.printf "%a\n%!" Compile_lib.CPS.pp_error e

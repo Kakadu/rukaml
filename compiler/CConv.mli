@@ -6,7 +6,7 @@ module String_set : sig
   val pp : Format.formatter -> t -> unit
 end
 
-open Miniml
+open Frontend
 
 val free_vars_of_expr : Parsetree.expr -> String_set.t
 val standart_globals : String_set.t
