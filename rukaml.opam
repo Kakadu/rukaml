@@ -21,7 +21,7 @@ depends: [
   "ctypes-foreign"
   "ppx_blob"
   "odoc" {with-doc}
-  "ocamlformat" {build}
+  "ocamlformat" {= "0.27.0" & with-dev}
   "base"
 ]
 build: [
