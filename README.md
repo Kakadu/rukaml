@@ -1,14 +1,20 @@
-[![RuKaml master][1]][![RuKaml RiscV64][2]][3]
+[![Build master](https://github.com/Kakadu/rukaml/actions/workflows/master.yml/badge.svg)](https://github.com/Kakadu/rukaml/actions/workflows/master.yml)
 [![License](https://img.shields.io/badge/license-LGPL-blue)](https://github.com/Kakadu/miniml/blob/master/LICENSE.md)
 [![API docs](https://img.shields.io/badge/API-documentation-yellowgreen)](https://kakadu.github.io/miniml/api)
 
+##### Rukaml --- miniML compiler
 
-[1]:  https://github.com/Kakadu/miniml/actions/workflows/master.yml/badge.svg
-[2]:  https://github.com/Kakadu/miniml/actions/workflows/riscv64.yml/badge.svg
-[3]:  https://github.com/Kakadu/miniml/actions
+In future it may become closer to real OCaml compiler but now we have only this:
 
+* HM Type checker
+* functions
+* tuple
+* primitives (like `print_int`)
+* Simple copying GC
 
-##### TODO
+Backends:
 
+* RISC V (most mature one)
+* AMD64
+* LLVM
 
-Было бы прикольно скомпилять всё в .NET, чтобы Generic Transformers ускорились
