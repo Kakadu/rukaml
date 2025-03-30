@@ -35,7 +35,7 @@ let%test _ = okexpr "(1)" (econst (const_int 1))
 let%expect_test _ =
   let ast = Base.Result.ok_or_failwith @@ parse Parsing.(pack.expr_long) "f (x x)" in
   print_string @@ Parsetree.show_expr ast;
-  [%expect {| EApp (EVar ("f"), EApp (EVar ("x"), EVar ("x"))) |}]
+  [%expect {| (EApp ((EVar "f"), (EApp ((EVar "x"), (EVar "x"))))) |}]
 ;;
 
 let%test _ =
