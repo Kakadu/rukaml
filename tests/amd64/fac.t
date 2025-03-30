@@ -1,16 +1,4 @@
   $ cat fac.ml | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 -
-  After ANF transformation.
-  let fac n =
-    let temp1 = (n = 1) in
-      (if temp1
-      then 1
-      else let p = (n - 1) in
-             let p2 = fac p  in
-               (n * p2))
-  let main =
-    let n = fac 4  in
-      let t = print n  in
-        0
   ANF: let fac n =
          let temp1 = (n = 1) in
            (if temp1

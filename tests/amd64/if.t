@@ -1,13 +1,6 @@
   $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm - #-vamd64
   > let main = print (if 1=1 then 10 else 20)
   > EOF
-  After ANF transformation.
-  let main =
-    let temp1 = (1 = 1) in
-      let temp2 = (if temp1
-                  then 10
-                  else 20) in
-        print temp2 
 
 ; generated code for amd64
   $ cat program.asm  | grep -v 'section .note.GNU-stack' | nl -ba

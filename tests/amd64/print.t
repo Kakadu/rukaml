@@ -1,13 +1,4 @@
   $ cat print.ml | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 --no-start -
-  After ANF transformation.
-  let prod a b c =
-    (2 * c)
-  let main =
-    let temp2 = prod 1  in
-      let temp3 = temp2 8  in
-        let w = temp3 10  in
-          let u = print w  in
-            0
   ANF: let prod a b c =
          (2 * c)
        let main =

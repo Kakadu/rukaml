@@ -6,26 +6,6 @@
   >   let t = print rez in
   >   0
   > EOF
-  After ANF transformation.
-  let fresh_1 n k m =
-    let temp1 = (n * m) in
-      k temp1 
-  let rec fack n k =
-    let temp3 = (n = 1) in
-      (if temp3
-      then k 1 
-      else let temp5 = (n - 1) in
-             let temp6 = fack temp5  in
-               let temp7 = fresh_1 n  in
-                 let temp8 = temp7 k  in
-                   temp6 temp8 )
-  let id u =
-    u
-  let main =
-    let temp11 = fack 5  in
-      let rez = temp11 id  in
-        let t = print rez  in
-          0
 
   $ cat program.asm  | grep -v 'section .note.GNU-stack' | nl -ba
        1	section .text

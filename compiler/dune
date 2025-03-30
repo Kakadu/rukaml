@@ -2,7 +2,7 @@
  (name compile_lib)
  (public_name rukaml.compile)
  (libraries stdio Frontend cconv ppxlib.stdppx)
- (modules ANF CPS compile_tests)
+ (modules ANF CPS CFlags compile_tests)
  (preprocess
   (pps
    ; ppx_blob

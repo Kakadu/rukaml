@@ -1,14 +1,4 @@
-type stop_after_t = SA_dont | SA_ANF
-
-type cfg = {
-  mutable out_file : string;
-  mutable input_file : string option; (* mutable dump_ir : bool; *)
-  mutable wrap_main_into_start : bool;
-  mutable stop_after : stop_after_t;
-  mutable dump_anf : bool;
-  mutable cps_on : bool;
-}
-
+open Compile_lib.CFlags
 open Frontend
 
 let frontend cfg =
@@ -74,6 +64,7 @@ let cfg =
     wrap_main_into_start = true;
     stop_after = SA_dont;
     dump_anf = false;
+    dsource = false;
     cps_on = false;
   }
 

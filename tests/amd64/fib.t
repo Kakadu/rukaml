@@ -3,23 +3,6 @@
   >   if n=0 then 0 else if n=1 then 1 else fib (n-2) + fib (n-1)
   > let main = let u = print (fib 8) in 0
   > EOF
-  After ANF transformation.
-  let rec fib n =
-    let temp1 = (n = 0) in
-      (if temp1
-      then 0
-      else let temp3 = (n = 1) in
-             (if temp3
-             then 1
-             else let temp5 = (n - 2) in
-                    let temp6 = fib temp5  in
-                      let temp7 = (n - 1) in
-                        let temp8 = fib temp7  in
-                          (temp6 + temp8)))
-  let main =
-    let temp10 = fib 8  in
-      let u = print temp10  in
-        0
   ANF: let rec fib n =
          let temp1 = (n = 0) in
            (if temp1

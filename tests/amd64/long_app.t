@@ -16,23 +16,6 @@ $ ls
   >   let temp2 = wrap test3 1 10 100 in
   >   0
   > EOF
-  After ANF transformation.
-  let wrap f =
-    let temp1 = (1 = 1) in
-      (if temp1
-      then f
-      else f)
-  let test3 a b c =
-    let a1 = print a  in
-      let b = print b  in
-        let c = print c  in
-          0
-  let main =
-    let temp6 = wrap test3  in
-      let temp7 = temp6 1  in
-        let temp8 = temp7 10  in
-          let temp2 = temp8 100  in
-            0
 
 ; generated code for amd64
   $ cat program.asm  | grep -v 'section .note.GNU-stack' | nl -ba > /dev/null

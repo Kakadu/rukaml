@@ -1,11 +1,4 @@
-type cfg = {
-  mutable out_file : string;
-  mutable dsource : bool;
-  mutable input_file : string option; (* mutable dump_ir : bool; *)
-  mutable wrap_main_into_start : bool;
-  mutable cps_on : bool;
-}
-
+open Compile_lib.CFlags
 open Frontend
 
 let frontend cfg =
@@ -56,8 +49,11 @@ let frontend cfg =
   Compile_lib.ANF.disable_arity_inline ();
   Compile_lib.ANF.disable_cmp_into_if_inline ();
   let anf = Compile_lib.ANF.(anf_stru typedtree |> simplify_stru) in
-  Format.printf "After ANF transformation.\n%!";
-  Format.printf "%a\n%!" Compile_lib.ANF.pp_stru anf;
+  let () =
+    if cfg.dump_anf then
+      (Format.printf "After ANF transformation.\n%!";
+      Format.printf "%a\n%!" Compile_lib.ANF.pp_stru anf)
+  in
   Amd64_impl.codegen ~wrap_main_into_start:cfg.wrap_main_into_start anf
     cfg.out_file
   |> promote_error
@@ -69,6 +65,8 @@ let cfg =
     input_file = None;
     wrap_main_into_start = true;
     cps_on = false;
+    dump_anf = false;
+    stop_after = SA_dont;
   }
 
 let print_errors = function

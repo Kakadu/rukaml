@@ -3,13 +3,6 @@
   > let double x = x+x
   > let main = sq 7
   > EOF
-  After ANF transformation.
-  let sq y =
-    (y * y)
-  let double x =
-    (x + x)
-  let main =
-    sq 7 
   ANF: let sq y =
          (y * y)
        let double x =
