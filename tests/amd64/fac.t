@@ -1,4 +1,4 @@
-  $ cat fac.ml | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 -
+  $ cat fac.ml | ../../back_amd64/amd64_compiler.exe -o program.asm - -vamd64
   ANF: let fac n =
          let temp1 = (n = 1) in
            (if temp1

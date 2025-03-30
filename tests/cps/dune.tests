@@ -17,7 +17,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -34,7 +33,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -102,7 +100,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -119,7 +116,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -187,7 +183,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -204,7 +199,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -272,7 +266,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -289,7 +282,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -357,7 +349,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -374,7 +365,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -442,7 +432,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -459,7 +448,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -527,7 +515,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -544,7 +531,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -612,7 +598,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -629,7 +614,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -697,7 +681,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -714,7 +697,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -782,7 +764,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -799,7 +780,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -867,7 +847,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -884,7 +863,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -952,7 +930,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule
@@ -969,7 +946,6 @@
     %{targets}
     -cps
     --no-start
-    -vamd64
     %{src}))))
 
 (rule

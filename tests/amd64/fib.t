@@ -1,4 +1,4 @@
-  $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 -
+  $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm - -vamd64
   > let rec fib n =
   >   if n=0 then 0 else if n=1 then 1 else fib (n-2) + fib (n-1)
   > let main = let u = print (fib 8) in 0

@@ -33,7 +33,6 @@ let () =
     %%{targets}
     -cps
     --no-start
-    -vamd64
     %%{src}))))
 |}
   in

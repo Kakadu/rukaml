@@ -1,9 +1,9 @@
 let fst p =
-  let a, b = p in
+  let (a, b) = p in
   a
 
 let snd p =
-  let a, b = p in
+  let (a, b) = p in
   b
 
 let fac3 n =

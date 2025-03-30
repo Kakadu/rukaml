@@ -61,7 +61,8 @@
     %{src}
     -o
     fack.asm
-    -vamd64)
+    ;-vamd64
+    )
    (run nasm -g -F dwarf -felf64 fack.asm -o fack.o)
    (run gcc-13 -g -o fack.exe %{stdlib} fack.o))))
 
