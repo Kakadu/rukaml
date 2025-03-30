@@ -3,28 +3,6 @@
   (flags
    (:standard -w -32-33 -warn-error -8-9-26-27-34-37-39-69))))
 
-(library
- (name miniml)
- (public_name MiniML.frontend)
- (modules
-  parsetree
-  Pprint
-  parsing
-  Ident
-  typedtree
-  Pprinttyped
-  inferencer
-  stuff)
- (inline_tests)
- (libraries ppx_deriving.runtime angstrom)
- (preprocess
-  (pps ppx_deriving.show ppx_expect)))
-
-(executable
- (name demo1)
- (modules demo1)
- (libraries miniml))
-
 (executable
  (name REPL)
  (modules REPL)
