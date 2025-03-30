@@ -1,3 +1,4 @@
+open Frontend
 open Parsetree
 open Angstrom
 
@@ -207,3 +208,7 @@ let%expect_test _ =
 ;;
 *)
  *)
+
+(** inferencer tests *)
+
+open Typedtree

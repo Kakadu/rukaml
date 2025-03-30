@@ -7,15 +7,24 @@
  (name Frontend)
  (public_name rukaml.frontend)
  (modules
-  parsetree
-  Pprint
-  parsing
   Ident
-  typedtree
-  Pprinttyped
   inferencer
-  stuff)
+  parsetree
+  parsing
+  Pprinttyped
+  Pprint
+  typedtree
+  ;
+  )
+ ;(inline_tests)
+ (libraries ppx_deriving.runtime angstrom base)
+ (preprocess
+  (pps ppx_deriving.show ppx_expect)))
+
+(library
+ (name frontend_tests)
+ (libraries Frontend)
  (inline_tests)
- (libraries ppx_deriving.runtime angstrom)
+ (modules test_stuff test_parsing)
  (preprocess
   (pps ppx_deriving.show ppx_expect)))
