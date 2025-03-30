@@ -203,8 +203,8 @@
  (targets anon1_cpsoff.s)
  (deps
   (:src %{project_root}/tests/rv64/anon1.ml))
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -220,8 +220,8 @@
  (deps
   (:src anon1_cpsoff.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -244,8 +244,8 @@
  (targets anon1_cpson.s)
  (deps
   (:src %{project_root}/tests/rv64/anon1.ml))
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -262,8 +262,8 @@
  (deps
   (:src anon1_cpson.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -297,8 +297,8 @@
  (targets empty_cpsoff.s)
  (deps
   (:src %{project_root}/tests/rv64/empty.ml))
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -314,8 +314,8 @@
  (deps
   (:src empty_cpsoff.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -338,8 +338,8 @@
  (targets empty_cpson.s)
  (deps
   (:src %{project_root}/tests/rv64/empty.ml))
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -356,8 +356,8 @@
  (deps
   (:src empty_cpson.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -391,8 +391,8 @@
  (targets fac_acc_cpsoff.s)
  (deps
   (:src %{project_root}/tests/rv64/fac_acc.ml))
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -408,8 +408,8 @@
  (deps
   (:src fac_acc_cpsoff.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -432,8 +432,8 @@
  (targets fac_acc_cpson.s)
  (deps
   (:src %{project_root}/tests/rv64/fac_acc.ml))
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -450,8 +450,8 @@
  (deps
   (:src fac_acc_cpson.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -485,8 +485,8 @@
  (targets fac_cps_cpsoff.s)
  (deps
   (:src %{project_root}/tests/rv64/fac_cps.ml))
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -502,8 +502,8 @@
  (deps
   (:src fac_cps_cpsoff.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -526,8 +526,8 @@
  (targets fac_cps_cpson.s)
  (deps
   (:src %{project_root}/tests/rv64/fac_cps.ml))
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -544,8 +544,8 @@
  (deps
   (:src fac_cps_cpson.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -579,8 +579,8 @@
  (targets fib_acc_cpsoff.s)
  (deps
   (:src %{project_root}/tests/rv64/fib_acc.ml))
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -596,8 +596,8 @@
  (deps
   (:src fib_acc_cpsoff.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -620,8 +620,8 @@
  (targets fib_acc_cpson.s)
  (deps
   (:src %{project_root}/tests/rv64/fib_acc.ml))
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -638,8 +638,8 @@
  (deps
   (:src fib_acc_cpson.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -673,8 +673,8 @@
  (targets fib_cps_cpsoff.s)
  (deps
   (:src %{project_root}/tests/rv64/fib_cps.ml))
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -690,8 +690,8 @@
  (deps
   (:src fib_cps_cpsoff.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -714,8 +714,8 @@
  (targets fib_cps_cpson.s)
  (deps
   (:src %{project_root}/tests/rv64/fib_cps.ml))
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -732,8 +732,8 @@
  (deps
   (:src fib_cps_cpson.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -767,8 +767,8 @@
  (targets nikita2_cpsoff.s)
  (deps
   (:src %{project_root}/tests/rv64/nikita2.ml))
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -784,8 +784,8 @@
  (deps
   (:src nikita2_cpsoff.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -808,8 +808,8 @@
  (targets nikita2_cpson.s)
  (deps
   (:src %{project_root}/tests/rv64/nikita2.ml))
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -826,8 +826,8 @@
  (deps
   (:src nikita2_cpson.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -861,8 +861,8 @@
  (targets nikita3_cpsoff.s)
  (deps
   (:src %{project_root}/tests/rv64/nikita3.ml))
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
@@ -878,8 +878,8 @@
  (deps
   (:src nikita3_cpsoff.s)
   %{project_root}/back_rv64/rukaml_stdlib.o)
- (mode
-  (promote (until-clean)))
+ ;  (mode
+ ;   (promote (until-clean)))
  (action
   (progn
    (run
