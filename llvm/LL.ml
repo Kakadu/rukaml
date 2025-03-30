@@ -12,7 +12,7 @@ module type S = sig
   val build_add : ?name:string -> llvalue -> llvalue -> llvalue
   val build_sub : ?name:string -> llvalue -> llvalue -> llvalue
   val build_mul : ?name:string -> llvalue -> llvalue -> llvalue
-  val build_sdiv : ?name:string -> llvalue -> llvalue -> llvalue [@@inline]
+  val build_sdiv : ?name:string -> llvalue -> llvalue -> llvalue
   val build_icmp : ?name:string -> Icmp.t -> llvalue -> llvalue -> llvalue
 
   val set_metadata :

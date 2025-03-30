@@ -16,9 +16,9 @@
   inferencer
   stuff)
  (inline_tests)
- (libraries ppx_show.runtime angstrom)
+ (libraries ppx_deriving.runtime angstrom)
  (preprocess
-  (pps ppx_show ppx_expect)))
+  (pps ppx_deriving.show ppx_expect)))
 
 (executable
  (name demo1)

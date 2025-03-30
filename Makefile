@@ -22,5 +22,5 @@ debs:
 
 deps: debs
 	opam install --confirm-level=yes \
-		dune-site angstrom.0.16.0 ppx_blob ppx_show ppx_expect llvm.16.0.6+nnp ctypes-foreign
+		dune-site angstrom.0.16.0 ppx_blob ppx_deriving.6.0.3 ppx_expect llvm.16.0.6+nnp ctypes-foreign
 
