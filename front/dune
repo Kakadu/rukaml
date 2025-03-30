@@ -19,7 +19,7 @@
  ;(inline_tests)
  (libraries ppx_deriving.runtime angstrom base)
  (preprocess
-  (pps ppx_deriving.show ppx_expect)))
+  (pps ppx_deriving.show bisect_ppx ppx_expect)))
 
 (library
  (name frontend_tests)

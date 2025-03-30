@@ -10,7 +10,9 @@
  (public_name rukaml_amd64.impl)
  (modules amd64_impl)
  (wrapped false)
- (libraries rukaml.cconv rukaml.compile))
+ (libraries rukaml.cconv rukaml.compile)
+ (preprocess
+  (pps bisect_ppx)))
 
 (executable
  (name amd64_compiler)

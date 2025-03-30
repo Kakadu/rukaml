@@ -37,7 +37,8 @@
     (>= 5.3.0)))
   (ppx_inline_test :with-test)
   ppx_expect
-  ppx_show
+  ppx_deriving
+  bisect_ppx
   (llvm
    (>= 16.0.0))
   ctypes-foreign ; needed for LLVM
