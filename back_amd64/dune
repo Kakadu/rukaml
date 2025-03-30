@@ -10,7 +10,7 @@
  (public_name MiniML_amd64.impl)
  (modules amd64_impl)
  (wrapped false)
- (libraries MiniML.cconv MiniML.compile))
+ (libraries rukaml.cconv rukaml.compile))
 
 (executable
  (name amd64_compiler)
@@ -22,17 +22,17 @@
  (name plugin1_impl)
  (modules back_amd64)
  (libraries
-  MiniML.frontend
-  MiniML.compile
-  MiniML.register
-  MiniML.cconv
+  rukaml.frontend
+  rukaml.compile
+  rukaml.register
+  rukaml.cconv
   amd64_impl))
 
 (plugin
  (name plugin1)
  (libraries MiniML_amd64.backend)
  (site
-  (MiniML plugins)))
+  (rukaml plugins)))
 
 (rule
  (targets rukaml_stdlib.o)

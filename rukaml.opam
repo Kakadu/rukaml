@@ -8,12 +8,12 @@ maintainer: ["Kakadu"]
 authors: ["Kakadu@pm.me"]
 license: "LGPL-3.0-only"
 homepage: "FIXME"
-bug-reports: "FIXME"
+bug-reports: "https://github.com/Kakadu/rukaml/issues"
 depends: [
   "dune" {>= "3.6"}
   "dune-site"
   "angstrom" {= "0.16.0"}
-  "ocaml" {>= "4.14"}
+  "ocaml" {= "4.14.2" | >= "5.3.0"}
   "ppx_inline_test" {with-test}
   "ppx_expect"
   "ppx_show"

@@ -25,8 +25,8 @@
   llvm.target
   llvm.all_backends
   LL
-  MiniML.cconv
-  MiniML.compile)
+  rukaml.cconv
+  rukaml.compile)
  (inline_tests)
  (flags
   (:standard -linkall))
@@ -36,7 +36,7 @@
 (executable
  (name llvm_compiler)
  (modules llvm_compiler)
- (libraries stdio LL MiniML.frontend MiniML.cconv MiniML.compile LLVM_impl))
+ (libraries stdio LL rukaml.frontend rukaml.cconv rukaml.compile LLVM_impl))
 
 (cram
  (deps ./llvm_compiler.exe))
@@ -47,10 +47,10 @@
  (modules back_llvm)
  (flags
   (:standard -linkall))
- (libraries MiniML.register MiniML.cconv MiniML.compile llvm LL))
+ (libraries rukaml.register rukaml.cconv rukaml.compile llvm LL))
 
 (plugin
  (name plugin_llvm)
  (libraries MiniML_llvm.backend)
  (site
-  (MiniML plugins)))
+  (rukaml plugins)))

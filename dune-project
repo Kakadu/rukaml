@@ -12,14 +12,14 @@
 
 (maintainers "Kakadu")
 
-(bug_reports "FIXME")
+(bug_reports "https://github.com/Kakadu/rukaml/issues")
 
 (homepage "FIXME")
 
-(name MiniML)
+(name rukaml)
 
 (package
- (name MiniML)
+ (name rukaml)
  (synopsis "A MiniML interpreter")
  (description
   "FIXME. A longer description, for example, which are the most interesing features being supported, etc.")
@@ -32,7 +32,9 @@
   (angstrom
    (= 0.16.0))
   (ocaml
-   (>= 4.14))
+   (or
+    (= 4.14.2)
+    (>= 5.3.0)))
   (ppx_inline_test :with-test)
   ppx_expect
   ppx_show

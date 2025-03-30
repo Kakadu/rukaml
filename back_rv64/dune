@@ -9,7 +9,7 @@
  (public_name MiniML_rv64.impl)
  (modules RV64_impl Machine)
  (wrapped false)
- (libraries MiniML.cconv MiniML.compile))
+ (libraries rukaml.cconv rukaml.compile))
 
 (executable
  (name RV64_compiler)

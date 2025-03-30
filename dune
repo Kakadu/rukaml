@@ -14,7 +14,7 @@
 ; Compiler executable and plugins
 
 (library
- (public_name MiniML.register)
+ (public_name rukaml.register)
  (name registration)
  (modules registration)
  (libraries miniml))
@@ -28,4 +28,4 @@
 (generate_sites_module
  (module sites)
  (plugins
-  (MiniML plugins)))
+  (rukaml plugins)))
