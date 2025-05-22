@@ -1,0 +1,3 @@
+[submodule "vendor/simdparse"]
+	path = vendor/simdparse
+	url = https://github.com/hunyadi/simdparse.git
