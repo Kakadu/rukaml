@@ -43,7 +43,12 @@ let%expect_test "b*c+a" =
   parse_print_expr "b*c+a";
   [%expect
     {|
-    (EBinop ("+", (EBinop ("*", (EVar "b"), (EVar "c"))), (EVar "a"))) |}]
+      (EBinop ("+", (EBinop ("*", (EVar "b"), (EVar "c"))), (EVar "a"))) |}]
+
+let%expect_test "????" =
+  logoff ();
+  parse_print_expr "b*c(a)";
+  [%expect {| (EBinop ("*", (EVar "b"), (EVar "c"))) |}]
 
 let%expect_test "a+b*c+1" =
   logoff ();

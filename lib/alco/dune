@@ -1,0 +1,16 @@
+(executables
+ (names floats parser1test)
+ (modes exe)
+ (libraries alcotest parser1 parseSIMD))
+
+; (rule
+;  (alias runtest)
+;  (package pascal)
+;  (action
+;   (run %{dep:floats.exe})))
+
+(rule
+ (alias runtest)
+ (package pascal)
+ (action
+  (run %{dep:parser1test.exe})))

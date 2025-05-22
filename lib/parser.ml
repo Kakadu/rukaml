@@ -144,11 +144,13 @@ let rec expr_plus () =
   | None -> None
   | Some head ->
       (* log "got a head: %S" ([%show: AST.expr] head); *)
-      if lookahead_paren () then
-        let b1 : bool = char '(' in
-        let rez = expr_plus () in
-        let b2 : bool = char ')' in
-        match rez with Some x when b1 && b2 -> Some x | _ -> None
+      (* TODO: Where we eat operand? *)
+      (* if lookahead_paren () then
+         let b1 : bool = char '(' in
+         let rez = expr_plus () in
+         let b2 : bool = char ')' in
+         match rez with Some x when b1 && b2 -> Some x | _ -> None *)
+      if false then None
       else
         let acc = ref head in
         let rec loop = function

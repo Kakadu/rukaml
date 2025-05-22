@@ -14,6 +14,7 @@
  (name parser1)
  (modules parser parser1_tests)
  (libraries AST)
+ (inline_tests)
  (wrapped false)
  (preprocess
   (pps

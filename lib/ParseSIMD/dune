@@ -1,0 +1,12 @@
+(library
+ (name parseSIMD)
+ (modules parseSIMD)
+ (foreign_stubs
+  (language cxx)
+  (names src3)
+  (include_dirs ../../vendor/simdparse/include/simdparse)
+  (extra_deps ../../vendor/simdparse/include/simdparse/hexadecimal.hpp)
+  (flags -O2 -fPIC))
+ (libraries AST))
+
+; (copy_files ../../vendor/simdparse/include/simdparse/format.hpp)
