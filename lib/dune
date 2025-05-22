@@ -1,7 +1,31 @@
 (library
- (name lib_pascal)
- (modules AST parser machine codegen)
+ (name AST)
+ (modules AST)
+ (wrapped false)
  (libraries ppx_show.runtime)
+ (preprocess
+  (pps
+   ; ppx_show
+   ppx_deriving.show
+   ppx_expect
+   ppx_inline_test)))
+
+(library
+ (name parser1)
+ (modules parser parser1_tests)
+ (libraries AST)
+ (wrapped false)
+ (preprocess
+  (pps
+   ; ppx_show
+   ppx_deriving.show
+   ppx_expect
+   ppx_inline_test)))
+
+(library
+ (name lib_pascal)
+ (modules machine codegen)
+ (libraries AST ppx_show.runtime parser1)
  (inline_tests)
  (wrapped false)
  (preprocess
@@ -16,7 +40,7 @@
  (package pascal)
  (public_name pascal)
  (modules driver)
- (libraries lib_pascal))
+ (libraries lib_pascal parser1))
 
 (cram
  (deps ./driver.exe))
