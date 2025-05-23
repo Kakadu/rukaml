@@ -7,6 +7,14 @@
   (include_dirs ../../vendor/simdparse/include/simdparse)
   (extra_deps ../../vendor/simdparse/include/simdparse/hexadecimal.hpp)
   (flags -O2 -fPIC))
- (libraries AST))
+ (libraries AST)
+ (inline_tests)
+ (preprocess
+  (pps ppx_expect)))
 
 ; (copy_files ../../vendor/simdparse/include/simdparse/format.hpp)
+
+(executable
+ (name demo)
+ (modules demo)
+ (libraries parseSIMD))
