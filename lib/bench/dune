@@ -1,0 +1,4 @@
+(executable
+ (name parser_bench)
+ (modules parser_bench)
+ (libraries benchmark parser1 parseSIMD))
