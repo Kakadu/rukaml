@@ -14,24 +14,31 @@ end
 let mkae_exprs (module Parser : PARSER) () =
   let open Alcotest in
   let make ?(desc = "") str ast =
-    check
-      (of_pp (Format.pp_print_option AST.pp_expr))
-      desc (Some ast)
-      (Parser.parse_expr_string str)
+    let desc = if desc = "" then str else desc in
+    ( desc,
+      `Quick,
+      fun () ->
+        check
+          (of_pp (Format.pp_print_option AST.pp_expr))
+          desc (Some ast)
+          (Parser.parse_expr_string str) )
   in
 
-  make "x" (EVar "x");
-  make "x+1" (EBinop ("+", EVar "x", EConst 1));
-  make "1+2*3" (EBinop ("+", EConst 1, EBinop ("*", EConst 2, EConst 3)));
-  make "2*3+4" (EBinop ("+", EBinop ("*", EConst 2, EConst 3), EConst 4));
-  make "x*3+y" (EBinop ("+", EBinop ("*", EVar "x", EConst 3), EVar "y"));
-  make "x*(3+y)" (EBinop ("*", EVar "x", EBinop ("+", EConst 3, EVar "y")));
-  make "1 + 2 * 3" (EBinop ("+", EConst 1, EBinop ("*", EConst 2, EConst 3)));
-  ()
+  [
+    make "x" (EVar "x");
+    make "xyz" (EVar "xyz");
+    make "a1v2" (EVar "a1v2");
+    make "x+1" (EBinop ("+", EVar "x", EConst 1));
+    make "1+2*3" (EBinop ("+", EConst 1, EBinop ("*", EConst 2, EConst 3)));
+    make "2*3+4" (EBinop ("+", EBinop ("*", EConst 2, EConst 3), EConst 4));
+    make "x*3+y" (EBinop ("+", EBinop ("*", EVar "x", EConst 3), EVar "y"));
+    make "x*(3+y)" (EBinop ("*", EVar "x", EBinop ("+", EConst 3, EVar "y")));
+    make "1 + 2 * 3" (EBinop ("+", EConst 1, EBinop ("*", EConst 2, EConst 3)));
+  ]
 
 let () =
-  Alcotest.run "Parser tests"
+  Alcotest.run "Parser_tests"
     [
-      ("Manual", [ ("exprs", `Quick, mkae_exprs (module Parser)) ]);
-      ("SIMD", [ ("exprs", `Quick, mkae_exprs (module ParseSIMD)) ]);
+      ("Manual", mkae_exprs (module Parser) ());
+      ("SIMD", mkae_exprs (module ParseSIMD) ());
     ]

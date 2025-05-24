@@ -8,4 +8,4 @@ let%expect_test _ =
   | Some ast -> Format.printf "%a" AST.pp_expr ast
   | None -> print_endline "none");
   [%expect "
-    (EVar \"a\")"]
+    (EBinop (\"+\", (EVar \"a\"), (EConst 1)))"]
