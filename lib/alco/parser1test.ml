@@ -35,6 +35,7 @@ let mkae_exprs (module Parser : PARSER) () =
     make "x*3+y" (EBinop ("+", EBinop ("*", EVar "x", EConst 3), EVar "y"));
     make "x*(3+y)" (EBinop ("*", EVar "x", EBinop ("+", EConst 3, EVar "y")));
     make "1 + 2 * 3" (EBinop ("+", EConst 1, EBinop ("*", EConst 2, EConst 3)));
+    make "a mod b" (EBinop ("mod", EVar "a", EVar "b"));
   ]
 
 let () =

@@ -14,6 +14,8 @@
  (name parser1)
  (modules parser parser1_tests)
  (libraries AST)
+ (ocamlopt_flags
+  (:standard -inline 100))
  (inline_tests)
  (wrapped false)
  (preprocess

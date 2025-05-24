@@ -25,8 +25,8 @@ module Rollback : sig
 end = struct
   type t = int
 
-  let make () = !pos
-  let rollback dest = pos := dest
+  let make () = !pos [@@inline]
+  let rollback dest = pos := dest [@@inline]
 end
 
 let is_ws = function '\n' | ' ' -> true | _ -> false
@@ -39,21 +39,25 @@ let ws () =
 let is_alpha ch =
   let code = Char.code ch in
   Char.code 'a' <= code && code <= Char.code 'z'
+[@@inline]
 
 let is_digit ch =
   let code = Char.code ch in
   Char.code '0' <= code && code <= Char.code '9'
+[@@inline]
 
 let is_alpha_digit ch =
   let code = Char.code ch in
   (Char.code 'a' <= code && code <= Char.code 'z')
   || (Char.code '0' <= code && code <= Char.code '9')
+[@@inline]
 
 let char c =
   if !pos < !length && !text.[!pos] = c then (
     incr pos;
     true)
   else false
+[@@inline]
 
 let lookahead_cond cond =
   let curpos = ref !pos in
@@ -88,26 +92,30 @@ let econst () =
     Option.some @@ EConst !acc)
   else None
 
+(** Parses identifiers without keyword check  *)
 let ident_or_keyword () =
   ws ();
   let oldpos = !pos in
   let left = !pos in
   try
-    let right =
+    let right0 =
       if !pos < !length && is_alpha !text.[!pos] then (
         incr pos;
-        ref !pos)
-      else raise Exit
+        !pos)
+      else raise_notrace Exit
     in
 
-    while !pos < !length && is_alpha_digit !text.[!pos] do
-      incr right;
-      incr pos
-    done;
-    if !right > left then
-      let s = StringLabels.sub !text ~pos:left ~len:(!right - left) in
+    let rec loop right =
+      if !pos < !length && is_alpha_digit !text.[!pos] then (
+        incr pos;
+        loop (1 + right))
+      else right
+    in
+    let right = loop right0 in
+    if right > left then
+      let s = StringLabels.sub !text ~pos:left ~len:(right - left) in
       Some s
-    else raise Exit
+    else raise_notrace Exit
   with Exit ->
     pos := oldpos;
     None
@@ -119,12 +127,13 @@ let keyword kw =
   let exception Fail in
   ws ();
   let kwlen = String.length kw in
-  let rec loop i =
+  let rec loop kwlen i =
     if i >= kwlen then ()
-    else if !pos + i < !length && !text.[!pos + i] = kw.[i] then loop (i + 1)
-    else raise Fail
+    else if !pos + i < !length && !text.[!pos + i] = kw.[i] then
+      loop kwlen (i + 1)
+    else raise_notrace Fail
   in
-  match loop 0 with
+  match loop kwlen 0 with
   | exception Fail -> false
   | () ->
       if !pos + kwlen >= !length then (
@@ -141,47 +150,42 @@ let eident () =
   | Some x when not (String_set.mem x keywords) -> Some (EVar x)
   | _ -> None
 
+type oper_t = Char of char | Kw of string
+
+let pp_oper ppf = function
+  | Char c -> Format.fprintf ppf "`Char %c" c
+  | Kw s -> Format.fprintf ppf "`Kw %S" s
+
+let mul_opers =
+  [ (Char '*', "*"); (Char '/', "/"); (Char '>', ">"); (Kw "mod", "mod") ]
+
+let plus_opers = [ ('+', "+"); ('-', "-") ]
+
 let rec expr_plus () =
-  let opers = [ ('+', "+"); ('-', "-") ] in
   match expr_mul () with
   | None -> None
   | Some head ->
       (* log "got a head: %S" ([%show: AST.expr] head); *)
-      (* TODO: Where we eat operand? *)
-      (* if lookahead_paren () then
-         let b1 : bool = char '(' in
-         let rez = expr_plus () in
-         let b2 : bool = char ')' in
-         match rez with Some x when b1 && b2 -> Some x | _ -> None *)
-      if false then None
-      else
-        let acc = ref head in
-        let rec loop = function
-          | [] -> ()
-          | (ch, op) :: tl ->
-              ws ();
-              let rb1 = Rollback.make () in
-              if char ch then (
-                match expr_mul () with
-                | None -> Rollback.rollback rb1
-                | Some v ->
-                    acc := EBinop (op, !acc, v);
-                    loop opers)
-              else loop tl
-        in
-        let () = loop opers in
-        Some !acc
+      let acc = ref head in
+      let rec loop = function
+        | [] -> ()
+        | (ch, op) :: tl ->
+            ws ();
+            let rb1 = Rollback.make () in
+            if char ch then (
+              match expr_mul () with
+              | None -> Rollback.rollback rb1
+              | Some v ->
+                  acc := EBinop (op, !acc, v);
+                  loop plus_opers)
+            else loop tl
+      in
+      let () = loop plus_opers in
+      Some !acc
 
 and expr_mul () =
   (* log "expr_mul on pos = %d" !pos; *)
-  let pp_oper ppf = function
-    | `Char c -> Format.fprintf ppf "`Char %c" c
-    | `Kw s -> Format.fprintf ppf "`Kw %S" s
-  in
-  let opers =
-    [ (`Char '*', "*"); (`Char '/', "/"); (`Kw "mod", "mod"); (`Char '>', ">") ]
-  in
-  match primary () with
+  match primary_non_kw () with
   | None -> None
   | Some head ->
       let acc = ref head in
@@ -190,22 +194,22 @@ and expr_mul () =
         | (text, op) :: tl ->
             (* log "Looping opers on pos %d, oper = %a" !pos pp_oper text; *)
             let rb1 = Rollback.make () in
-            let do_oper () =
-              match text with `Char c -> char c | `Kw kw -> keyword kw
+            let do_oper text =
+              match text with Char c -> char c | Kw kw -> keyword kw
             in
             if
               ws ();
-              do_oper ()
+              do_oper text
             then
               match eident () with
               | Some v ->
                   acc := EBinop (op, !acc, v);
-                  loop opers
+                  loop mul_opers
               | None -> (
                   match econst () with
                   | Some c ->
                       acc := EBinop (op, !acc, c);
-                      loop opers
+                      loop mul_opers
                   | None -> (
                       let b0 = char '(' in
                       let rez = expr_plus () in
@@ -213,13 +217,13 @@ and expr_mul () =
                       match (b0, rez, b2) with
                       | true, Some rez, true ->
                           acc := EBinop (op, !acc, rez);
-                          loop opers
+                          loop mul_opers
                       | _ -> Rollback.rollback rb1))
             else (
               Rollback.rollback rb1;
               loop tl)
       in
-      loop opers;
+      loop mul_opers;
       Some !acc
 
 and primary () =
@@ -232,6 +236,18 @@ and primary () =
   else
     match eident () with
     | Some x -> Some x
+    | None -> ( match econst () with None -> None | Some x -> Some x)
+
+and primary_non_kw () =
+  (* log " %s %d , pos = %d" __FILE__ __LINE__ !pos; *)
+  if lookahead_paren () then
+    let b1 : bool = char '(' in
+    let rez = expr_plus () in
+    let b2 : bool = char ')' in
+    if b1 && b2 then rez else None
+  else
+    match ident_or_keyword () with
+    | Some x -> Some (EVar x)
     | None -> ( match econst () with None -> None | Some x -> Some x)
 
 let expr = expr_plus

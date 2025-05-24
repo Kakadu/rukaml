@@ -49,6 +49,17 @@ inline bool is_alpha(char c) { return ('a' <= c) && (c <= 'z'); }
 inline bool is_digit(char c) { return ('0' <= c) && (c <= '9'); }
 inline bool is_alpha_digit(char c) { return is_alpha(c) || is_digit(c); }
 
+inline bool pstring(char *str) {
+  unsigned len = strlen(str);
+  for (auto i = 0; i < len; ++i)
+    if (pos < length && text[pos] == str[i]) {
+      pos++;
+    } else {
+      return false;
+    }
+  return true;
+}
+
 inline bool pchar(char c) {
   if (pos < length && text[pos] == c) {
     pos++;
@@ -119,6 +130,17 @@ value mk_binop(char op, value _l, value _r) {
   _ans = caml_alloc(3, 2 /*EBinOp*/);
   char str[2] = {'\0', '\0'};
   str[0] = op;
+  Store_field(_ans, 0, caml_copy_string(str));
+  Store_field(_ans, 1, _l);
+  Store_field(_ans, 2, _r);
+
+  CAMLreturn(_ans);
+}
+
+value mk_binop(char *str, value _l, value _r) {
+  CAMLparam2(_l, _r);
+  CAMLlocal1(_ans);
+  _ans = caml_alloc(3, 2 /*EBinOp*/);
   Store_field(_ans, 0, caml_copy_string(str));
   Store_field(_ans, 1, _l);
   Store_field(_ans, 2, _r);
@@ -222,7 +244,7 @@ bool expr_mul(value &_ans) {
     CAMLreturnT(bool, false);
   log("%s %d \n", __func__, __LINE__);
   _acc = _ans;
-  static char opers[2] = {'*', '/'};
+  static char opers[3] = {'*', '/', '>'};
   for (auto i = 0; i < sizeof(opers); ++i) {
     auto rb1 = make_rollback();
     log("%s %d \n", __func__, __LINE__);
@@ -234,6 +256,27 @@ bool expr_mul(value &_ans) {
         _acc = mk_binop(opers[i], _acc, _tmp);
       } else if (pchar('(') && expr_plus(_tmp) && pchar(')')) {
         _acc = mk_binop(opers[i], _acc, _tmp);
+      } else {
+        rollback(rb1);
+        break;
+      }
+    } else {
+      rollback(rb1);
+    }
+  }
+  // now try keywords
+  const unsigned STR_OPS_LEN = 1;
+  static char *keywords[STR_OPS_LEN] = {"mod"};
+  for (auto i = 0; i < STR_OPS_LEN; ++i) {
+    auto rb1 = make_rollback();
+    ws();
+    if (pstring(keywords[i])) {
+      if (eident(_tmp)) {
+        _acc = mk_binop(keywords[i], _acc, _tmp);
+      } else if (econst(_tmp)) {
+        _acc = mk_binop(keywords[i], _acc, _tmp);
+      } else if (pchar('(') && expr_plus(_tmp) && pchar(')')) {
+        _acc = mk_binop(keywords[i], _acc, _tmp);
       } else {
         rollback(rb1);
         break;

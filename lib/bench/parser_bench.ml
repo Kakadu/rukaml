@@ -1,3 +1,5 @@
+let () = Memtrace.trace_if_requested ~context:"alloc" ()
+
 open Benchmark
 
 let str1 =
