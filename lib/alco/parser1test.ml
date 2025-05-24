@@ -27,6 +27,7 @@ let mkae_exprs (module Parser : PARSER) () =
   [
     make "x" (EVar "x");
     make "xyz" (EVar "xyz");
+    make "xyz*asdf" (EBinop ("*", EVar "xyz", EVar "asdf"));
     make "a1v2" (EVar "a1v2");
     make "x+1" (EBinop ("+", EVar "x", EConst 1));
     make "1+2*3" (EBinop ("+", EConst 1, EBinop ("*", EConst 2, EConst 3)));

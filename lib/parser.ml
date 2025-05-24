@@ -77,36 +77,40 @@ let keywords =
 let is_keyword s = String_set.mem s keywords
 
 let econst () =
-  (* ws (); *)
-  let acc = Buffer.create 5 in
-  while !pos < !length && is_digit !text.[!pos] do
-    Buffer.add_char acc !text.[!pos];
-    incr pos
-  done;
-  if Buffer.length acc > 0 then
-    Option.some @@ EConst (int_of_string (Buffer.contents acc))
+  let acc = ref 0 in
+  if !pos < !length && is_digit !text.[!pos] then (
+    acc := Char.code !text.[!pos] - Char.code '0';
+    incr pos;
+    while !pos < !length && is_digit !text.[!pos] do
+      acc := (!acc * 10) + Char.code !text.[!pos] - Char.code '0';
+      incr pos
+    done;
+    Option.some @@ EConst !acc)
   else None
 
 let ident_or_keyword () =
   ws ();
   let oldpos = !pos in
-  let acc = Buffer.create 5 in
-  (* log "eident: pos = %d" !pos; *)
-  if !pos < !length && is_alpha !text.[!pos] then (
-    Buffer.add_char acc !text.[!pos];
-    incr pos);
+  let left = !pos in
+  try
+    let right =
+      if !pos < !length && is_alpha !text.[!pos] then (
+        incr pos;
+        ref !pos)
+      else raise Exit
+    in
 
-  if Buffer.length acc > 0 then
     while !pos < !length && is_alpha_digit !text.[!pos] do
-      Buffer.add_char acc !text.[!pos];
+      incr right;
       incr pos
     done;
-  if Buffer.length acc > 0 then
-    let s = Buffer.contents acc in
-    Some s
-  else (
+    if !right > left then
+      let s = StringLabels.sub !text ~pos:left ~len:(!right - left) in
+      Some s
+    else raise Exit
+  with Exit ->
     pos := oldpos;
-    None)
+    None
 
 let ident () =
   match ident_or_keyword () with Some s when is_keyword s -> None | x -> x
@@ -129,8 +133,7 @@ let keyword kw =
       else if not (is_alpha !text.[!pos + kwlen]) then (
         pos := !pos + kwlen;
         true)
-      else
-        let () = log "parsing keyword %S failed" kw in
+      else (* let () = log "parsing keyword %S failed" kw in *)
         false
 
 let eident () =
@@ -170,7 +173,7 @@ let rec expr_plus () =
         Some !acc
 
 and expr_mul () =
-  log "expr_mul on pos = %d" !pos;
+  (* log "expr_mul on pos = %d" !pos; *)
   let pp_oper ppf = function
     | `Char c -> Format.fprintf ppf "`Char %c" c
     | `Kw s -> Format.fprintf ppf "`Kw %S" s
@@ -185,7 +188,7 @@ and expr_mul () =
       let rec loop = function
         | [] -> ()
         | (text, op) :: tl ->
-            log "Looping opers on pos %d, oper = %a" !pos pp_oper text;
+            (* log "Looping opers on pos %d, oper = %a" !pos pp_oper text; *)
             let rb1 = Rollback.make () in
             let do_oper () =
               match text with `Char c -> char c | `Kw kw -> keyword kw
@@ -258,11 +261,12 @@ let rec statement () =
       ws ();
       expr () >>= fun econd ->
       ws ();
-      log "%s %d. pos = %d" __FILE__ __LINE__ !pos;
+      (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
       if keyword "do" then (
-        log "%s %d. pos = %d" __FILE__ __LINE__ !pos;
-        statements () >>= fun ebody ->
-        log "%s %d. pos = %d" __FILE__ __LINE__ !pos;
+        (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
+        statements ()
+        >>= fun ebody ->
+        (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
         ws ();
         match ident_or_keyword () with
         | None -> rollback ()
@@ -284,7 +288,7 @@ let rec statement () =
         >>= fun ethen ->
         ws ();
         (* log "%s %d. ethen.length = %d" __FILE__ __LINE__ (List.length ethen); *)
-        log "%s %d. pos = %d" __FILE__ __LINE__ !pos;
+        (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
         match ident_or_keyword () with
         | None ->
             (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
