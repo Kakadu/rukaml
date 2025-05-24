@@ -53,6 +53,7 @@ let is_alpha_digit ch =
 [@@inline]
 
 let char c =
+  (* log "trying char '%c' on pos %d" c !pos; *)
   if !pos < !length && !text.[!pos] = c then (
     incr pos;
     true)
@@ -89,6 +90,7 @@ let econst () =
       acc := (!acc * 10) + Char.code !text.[!pos] - Char.code '0';
       incr pos
     done;
+    (* log "const %d parsed. pos = %d" !acc !pos; *)
     Option.some @@ EConst !acc)
   else None
 
@@ -119,6 +121,31 @@ let ident_or_keyword () =
   with Exit ->
     pos := oldpos;
     None
+
+let ident_or_keyword_exn () : string =
+  ws ();
+  let oldpos = !pos in
+  let left = !pos in
+  try
+    let right0 =
+      if !pos < !length && is_alpha !text.[!pos] then (
+        incr pos;
+        !pos)
+      else raise_notrace Exit
+    in
+
+    let rec loop right =
+      if !pos < !length && is_alpha_digit !text.[!pos] then (
+        incr pos;
+        loop (1 + right))
+      else right
+    in
+    let right = loop right0 in
+    if right > left then StringLabels.sub !text ~pos:left ~len:(right - left)
+    else raise_notrace Exit
+  with Exit ->
+    pos := oldpos;
+    raise_notrace Exit
 
 let ident () =
   match ident_or_keyword () with Some s when is_keyword s -> None | x -> x
@@ -163,9 +190,9 @@ let mul_opers =
 
 let plus_opers = [ ('+', "+"); ('-', "-") ]
 
-let rec expr_plus () =
+let rec expr_plus_exn () : AST.expr =
   match expr_mul () with
-  | None -> None
+  | None -> raise_notrace Exit
   | Some head ->
       let rec loop acc = function
         | [] -> acc
@@ -180,7 +207,7 @@ let rec expr_plus () =
               | Some v -> loop (EBinop (op, acc, v)) plus_opers
             else loop acc tl
       in
-      Some (loop head plus_opers)
+      loop head plus_opers
 
 and expr_mul () =
   (* log "expr_mul on pos = %d" !pos; *)
@@ -202,51 +229,51 @@ and expr_mul () =
               match econst () with
               | Some c -> loop (EBinop (op, acc, c)) mul_opers
               | None -> (
-                  let b0 = char '(' in
-                  let rez = expr_plus () in
-                  let b2 = char ')' in
-                  match (b0, rez, b2) with
-                  | true, Some rez, true ->
-                      loop (EBinop (op, acc, rez)) mul_opers
-                  | _ ->
-                      Rollback.rollback rb1;
-                      acc))
+                  try
+                    let b0 = char '(' in
+                    let rez = expr_plus_exn () in
+                    let b1 = char ')' in
+                    if b1 && b0 then loop (EBinop (op, acc, rez)) mul_opers
+                    else raise_notrace Exit
+                  with Exit ->
+                    Rollback.rollback rb1;
+                    acc))
         else (
           Rollback.rollback rb1;
           loop acc tl)
   in
-  match primary_non_kw () with
-  | None -> None
-  | Some head -> Some (loop head mul_opers)
+  match primary_non_kw_exn () with
+  | exception Exit -> None
+  | head -> Some (loop head mul_opers)
 
 and primary () =
   (* log " %s %d , pos = %d" __FILE__ __LINE__ !pos; *)
   if lookahead_paren () then
-    let b1 : bool = char '(' in
-    let rez = expr_plus () in
-    let b2 : bool = char ')' in
-    if b1 && b2 then rez else None
+    match (char '(', expr_plus_exn (), char ')') with
+    | true, rez, true -> Some rez
+    | (exception Exit) | _ -> None
   else
     match eident () with
     | Some x -> Some x
     | None -> ( match econst () with None -> None | Some x -> Some x)
 
-and primary_non_kw () =
+and primary_non_kw_exn () =
   (* log " %s %d , pos = %d" __FILE__ __LINE__ !pos; *)
   if lookahead_paren () then
-    let b1 : bool = char '(' in
-    let rez = expr_plus () in
-    let b2 : bool = char ')' in
-    if b1 && b2 then rez else None
+    match (char '(', expr_plus_exn (), char ')') with
+    | true, rez, true -> rez
+    | (exception Exit) | _ -> raise Exit
+    (* let b1 : bool = char '(' in
+       let rez = expr_plus () in
+       let b2 : bool = char ')' in
+       match (b1 && b2, rez) with true, Some rez -> rez | _ -> raise Exit *)
   else
-    match ident_or_keyword () with
-    | Some x ->
-        (*  *)
-        let y = EVar x in
-        Some y
-    | None -> ( match econst () with None -> None | Some x -> Some x)
+    match ident_or_keyword_exn () with
+    | x -> EVar x
+    | exception Exit -> (
+        match econst () with None -> raise_notrace Exit | Some x -> x)
 
-let expr = expr_plus
+let expr () = match expr_plus_exn () with x -> Some x | exception Exit -> None
 
 let ( ** ) a b () =
   a ();
@@ -332,7 +359,7 @@ and statements () : _ list option =
         (* log "%s %d. pos = %d" __FILE__ __LINE__ !pos; *)
         List.rev acc
     | Some v ->
-        log "Statement eaten: %s\n" (show_stmt v);
+        (* log "Statement eaten: %s\n" (show_stmt v); *)
         loop (v :: acc)
   in
   let stmts = loop [] in
