@@ -9,7 +9,7 @@ extern "C" {
 #include <caml/mlvalues.h>
 }
 #define log(fmt, ...) ;
-#define log(...) printf(__VA_ARGS__);
+// #define log(...) printf(__VA_ARGS__);
 static value Val_some(value v) {
   CAMLparam1(v);
   CAMLlocal1(some);
@@ -192,6 +192,7 @@ bool expr_plus(value &_ans) {
   // TODO: kind of cheating
   _acc = _head;
   for (unsigned i = 0; i < sizeof(opers); ++i) {
+    ws();
     auto rb1 = make_rollback();
     log("%s %d c=%c\n", __func__, __LINE__, opers[i]);
     if (pchar(opers[i])) {
@@ -230,6 +231,8 @@ bool expr_mul(value &_ans) {
       if (eident(_tmp)) {
         _acc = mk_binop(opers[i], _acc, _tmp);
       } else if (econst(_tmp)) {
+        _acc = mk_binop(opers[i], _acc, _tmp);
+      } else if (pchar('(') && expr_plus(_tmp) && pchar(')')) {
         _acc = mk_binop(opers[i], _acc, _tmp);
       } else {
         rollback(rb1);

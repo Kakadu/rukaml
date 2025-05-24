@@ -156,6 +156,7 @@ let rec expr_plus () =
         let rec loop = function
           | [] -> ()
           | (ch, op) :: tl ->
+              ws ();
               let rb1 = Rollback.make () in
               if char ch then (
                 match expr_mul () with
@@ -199,10 +200,18 @@ and expr_mul () =
                   loop opers
               | None -> (
                   match econst () with
-                  | None -> Rollback.rollback rb1
                   | Some c ->
                       acc := EBinop (op, !acc, c);
-                      loop opers)
+                      loop opers
+                  | None -> (
+                      let b0 = char '(' in
+                      let rez = expr_plus () in
+                      let b2 = char ')' in
+                      match (b0, rez, b2) with
+                      | true, Some rez, true ->
+                          acc := EBinop (op, !acc, rez);
+                          loop opers
+                      | _ -> Rollback.rollback rb1))
             else (
               Rollback.rollback rb1;
               loop tl)

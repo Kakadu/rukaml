@@ -16,15 +16,17 @@ let mkae_exprs (module Parser : PARSER) () =
   let make ?(desc = "") str ast =
     check
       (of_pp (Format.pp_print_option AST.pp_expr))
-      desc
+      desc (Some ast)
       (Parser.parse_expr_string str)
-      (Some ast)
   in
+
   make "x" (EVar "x");
   make "x+1" (EBinop ("+", EVar "x", EConst 1));
   make "1+2*3" (EBinop ("+", EConst 1, EBinop ("*", EConst 2, EConst 3)));
   make "2*3+4" (EBinop ("+", EBinop ("*", EConst 2, EConst 3), EConst 4));
   make "x*3+y" (EBinop ("+", EBinop ("*", EVar "x", EConst 3), EVar "y"));
+  make "x*(3+y)" (EBinop ("*", EVar "x", EBinop ("+", EConst 3, EVar "y")));
+  make "1 + 2 * 3" (EBinop ("+", EConst 1, EBinop ("*", EConst 2, EConst 3)));
   ()
 
 let () =
