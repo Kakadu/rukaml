@@ -123,27 +123,29 @@ let ident_or_keyword () =
 let ident () =
   match ident_or_keyword () with Some s when is_keyword s -> None | x -> x
 
-let keyword kw =
+let keyword =
   let exception Fail in
-  ws ();
-  let kwlen = String.length kw in
-  let rec loop kwlen i =
+  let rec loop kw kwlen i =
     if i >= kwlen then ()
-    else if !pos + i < !length && !text.[!pos + i] = kw.[i] then
-      loop kwlen (i + 1)
+    else if !pos + i < !length && String.unsafe_get !text (!pos + i) = kw.[i]
+    then loop kw kwlen (i + 1)
     else raise_notrace Fail
   in
-  match loop kwlen 0 with
-  | exception Fail -> false
-  | () ->
-      if !pos + kwlen >= !length then (
-        pos := !pos + kwlen;
-        true)
-      else if not (is_alpha !text.[!pos + kwlen]) then (
-        pos := !pos + kwlen;
-        true)
-      else (* let () = log "parsing keyword %S failed" kw in *)
-        false
+  fun kw ->
+    ws ();
+    let kwlen = String.length kw in
+
+    match loop kw kwlen 0 with
+    | exception Fail -> false
+    | () ->
+        if !pos + kwlen >= !length then (
+          pos := !pos + kwlen;
+          true)
+        else if not (is_alpha !text.[!pos + kwlen]) then (
+          pos := !pos + kwlen;
+          true)
+        else (* let () = log "parsing keyword %S failed" kw in *)
+          false
 
 let eident () =
   match ident () with
@@ -165,66 +167,57 @@ let rec expr_plus () =
   match expr_mul () with
   | None -> None
   | Some head ->
-      (* log "got a head: %S" ([%show: AST.expr] head); *)
-      let acc = ref head in
-      let rec loop = function
-        | [] -> ()
+      let rec loop acc = function
+        | [] -> acc
         | (ch, op) :: tl ->
             ws ();
             let rb1 = Rollback.make () in
-            if char ch then (
+            if char ch then
               match expr_mul () with
-              | None -> Rollback.rollback rb1
-              | Some v ->
-                  acc := EBinop (op, !acc, v);
-                  loop plus_opers)
-            else loop tl
+              | None ->
+                  Rollback.rollback rb1;
+                  acc
+              | Some v -> loop (EBinop (op, acc, v)) plus_opers
+            else loop acc tl
       in
-      let () = loop plus_opers in
-      Some !acc
+      Some (loop head plus_opers)
 
 and expr_mul () =
   (* log "expr_mul on pos = %d" !pos; *)
+  let rec loop acc = function
+    | [] -> acc
+    | (text, op) :: tl ->
+        (* log "Looping opers on pos %d, oper = %a" !pos pp_oper text; *)
+        let rb1 = Rollback.make () in
+        let do_oper text =
+          match text with Char c -> char c | Kw kw -> keyword kw
+        in
+        if
+          ws ();
+          do_oper text
+        then
+          match eident () with
+          | Some v -> loop (EBinop (op, acc, v)) mul_opers
+          | None -> (
+              match econst () with
+              | Some c -> loop (EBinop (op, acc, c)) mul_opers
+              | None -> (
+                  let b0 = char '(' in
+                  let rez = expr_plus () in
+                  let b2 = char ')' in
+                  match (b0, rez, b2) with
+                  | true, Some rez, true ->
+                      loop (EBinop (op, acc, rez)) mul_opers
+                  | _ ->
+                      Rollback.rollback rb1;
+                      acc))
+        else (
+          Rollback.rollback rb1;
+          loop acc tl)
+  in
   match primary_non_kw () with
   | None -> None
-  | Some head ->
-      let acc = ref head in
-      let rec loop = function
-        | [] -> ()
-        | (text, op) :: tl ->
-            (* log "Looping opers on pos %d, oper = %a" !pos pp_oper text; *)
-            let rb1 = Rollback.make () in
-            let do_oper text =
-              match text with Char c -> char c | Kw kw -> keyword kw
-            in
-            if
-              ws ();
-              do_oper text
-            then
-              match eident () with
-              | Some v ->
-                  acc := EBinop (op, !acc, v);
-                  loop mul_opers
-              | None -> (
-                  match econst () with
-                  | Some c ->
-                      acc := EBinop (op, !acc, c);
-                      loop mul_opers
-                  | None -> (
-                      let b0 = char '(' in
-                      let rez = expr_plus () in
-                      let b2 = char ')' in
-                      match (b0, rez, b2) with
-                      | true, Some rez, true ->
-                          acc := EBinop (op, !acc, rez);
-                          loop mul_opers
-                      | _ -> Rollback.rollback rb1))
-            else (
-              Rollback.rollback rb1;
-              loop tl)
-      in
-      loop mul_opers;
-      Some !acc
+  | Some head -> Some (loop head mul_opers)
 
 and primary () =
   (* log " %s %d , pos = %d" __FILE__ __LINE__ !pos; *)
@@ -247,7 +240,10 @@ and primary_non_kw () =
     if b1 && b2 then rez else None
   else
     match ident_or_keyword () with
-    | Some x -> Some (EVar x)
+    | Some x ->
+        (*  *)
+        let y = EVar x in
+        Some y
     | None -> ( match econst () with None -> None | Some x -> Some x)
 
 let expr = expr_plus
