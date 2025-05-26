@@ -1032,3 +1032,255 @@ let%expect_test "cps fake rec" =
     {|  let main = (fun y -> let rec x = 8 in (fun x -> x) 0) 12
 |}]
 ;;
+
+module CallArity (CoCallGraph : sig
+    type 'a t
+
+    val empty : 'a t
+    val adj_nodes : 'a -> 'a t -> 'a list
+    val has_loop : 'a -> 'a t -> bool
+    val cartesian : 'a list -> 'a list -> 'a t
+    val cartesian_square : 'a list -> 'a t
+    val union : 'a t -> 'a t -> 'a t
+    val extend : 'a list -> 'a t -> 'a t
+    val remove : 'a -> 'a t -> 'a t
+  end) =
+struct
+  type ress =
+    { dead_vars : ISet.t
+    ; call_ars : int IMap.t
+    }
+
+  open CoCallGraph
+
+  let anal (_, _, p) =
+    let ar_union = IMap.union (fun _ x y -> Some (min x y)) in
+    let domain ars = IMap.fold (fun id _ dom -> id :: dom) ars [] in
+    let leave_vars_scope co_calls ars v_id = remove v_id co_calls, IMap.remove v_id ars in
+    let cond_add v_id v_arity cond ress =
+      if cond v_arity
+      then { ress with call_ars = IMap.add v_id v_arity ress.call_ars }
+      else ress
+    in
+    let add_if_incr v_arity t =
+      match t with
+      | Lam (pp, _, { id = res_id; _ }, _) ->
+        cond_add res_id v_arity @@ ( > ) (1 + List.length pp)
+      | _ -> Fun.id
+    in
+    let add_if_pos v_id v_arity = cond_add v_id v_arity @@ ( <> ) 0 in
+    let is_int_triv_rhs int = function
+      | Lam _ -> true
+      | UVar { id; _ } -> ISet.mem id int
+      | TSafeBinop _ | TConst _ | TTuple _ | TUnit -> false
+    in
+    let ignore_fst (_, b, c) = b, c in
+    let ret_with_fv ((_, ars, _) as fst) = fst, domain ars in
+    let ret_with_fv_bad (_, ars, ress) =
+      let rhs_fv = domain ars in
+      (cartesian_square rhs_fv, ars, ress), rhs_fv
+    in
+    let ret_with_fv_cond v_id v_arity b_co_calls =
+      if (not @@ has_loop v_id b_co_calls) || v_arity = 0
+      then ret_with_fv
+      else ret_with_fv_bad
+    in
+    let rec anal_p conts ress inc_ar p int =
+      (* здесь уже предполагается, что у Call перевернуты аргументы. *)
+      let anal_app f a aa =
+        let fst_inc_ar = inc_ar + 1 + List.length aa in
+        anal_tt0 ~fst_inc_ar conts int f (a :: aa)
+      in
+      let anal_tt0_ign a aa ress' = anal_tt0 conts int a aa ress' |> ignore_fst in
+      let anal_triv0_ign t ress = anal_triv conts int 0 t ress |> ignore_fst in
+      let lam_call_anal0_ign lam_b pp_aa ress =
+        lam_call_anal lam_b conts int 0 ress pp_aa |> ignore_fst
+      in
+      let clear_lam_call_anal lam_b c =
+        lam_call_anal lam_b conts int inc_ar @@ add_if_pos c.id inc_ar ress
+      in
+      let clear_lam_ret_anal t =
+        anal_triv conts int inc_ar t @@ add_if_incr inc_ar t ress
+      in
+      match p with
+      | CIf (c, th, el) -> anal_cif c th el conts int ress inc_ar
+      | Call (Lam (pp, p, c, lam_b), aa, a, Cont (CPVar { id; _ }, body)) ->
+        (p, a) :: List.combine pp aa
+        |> fin_lam_call_bnd_anal c lam_b conts int
+           @@ anal_bnd1 id conts body int ress inc_ar
+      | Call (Lam (pp, p, _, lam_b), aa, a, Cont (CPTuple _, body)) ->
+        let rhs_anal = (p, a) :: List.combine pp aa |> lam_call_anal0_ign lam_b in
+        fin_unint_bnd_anal rhs_anal @@ anal_p conts ress inc_ar body int
+      | Call (Lam (pp, p, c, lam_b), aa, a, CVar { id; _ }) ->
+        let pp_aa = (p, a) :: List.combine pp aa in
+        (match IMap.find id conts with
+         | `Int fin_anal -> fin_lam_call_bnd_anal c lam_b conts int (ress, fin_anal) pp_aa
+         | `UnInt (b_co_calls, b_ars) ->
+           fin_unint_bnd_anal (lam_call_anal0_ign lam_b pp_aa) (b_co_calls, b_ars, ress)
+         | exception Not_found -> clear_lam_call_anal lam_b c pp_aa)
+      | Call (Lam (pp, p, c, lam_b), aa, a, HALT) ->
+        (p, a) :: List.combine pp aa |> clear_lam_call_anal lam_b c
+      | Call (f, aa, a, Cont (CPVar { id; _ }, body)) ->
+        fin_bnd_call_anal conts int f (a :: aa) @@ anal_bnd1 id conts body int ress inc_ar
+      | Call (f, aa, a, CVar { id; _ }) ->
+        (match IMap.find id conts with
+         | `Int fin_anal -> fin_bnd_call_anal conts int f (a :: aa) (ress, fin_anal)
+         | `UnInt (b_co_calls, b_ars) ->
+           (b_co_calls, b_ars, ress) |> fin_unint_bnd_anal @@ anal_tt0_ign f (a :: aa)
+         | exception Not_found -> anal_app f a aa ress)
+      | Call (f, aa, a, HALT) -> anal_app f a aa ress
+      | Ret (CVar { id; _ }, t) ->
+        (match IMap.find id conts with
+         | `Int fin_anal -> fin_int_triv_bnd_anal conts int t (ress, fin_anal)
+         | `UnInt (b_co_calls, b_ars) ->
+           fin_unint_bnd_anal (anal_triv0_ign t) (b_co_calls, b_ars, ress)
+         | exception Not_found -> clear_lam_ret_anal t)
+      | Ret (Cont (CPVar { id; _ }, body), t)
+      | Let (NonRecursive, CPVar { id; _ }, t, body)
+        when is_int_triv_rhs int t ->
+        fin_int_triv_bnd_anal conts int t @@ anal_bnd1 id conts body int ress inc_ar
+      | Ret (Cont ((CPTuple _ | CPVar _), body), t)
+      | Let (NonRecursive, (CPVar _ | CPTuple _), t, body) ->
+        fin_unint_bnd_anal (anal_triv0_ign t) @@ anal_p conts ress inc_ar body int
+      | Primop (_, _, t, tt, body) ->
+        fin_unint_bnd_anal (anal_tt0_ign t tt) @@ anal_p conts ress inc_ar body int
+      | Call (f, aa, a, Cont (CPTuple _, body)) ->
+        let aa = a :: aa in
+        fin_unint_bnd_anal (anal_tt0_ign f aa) @@ anal_p conts ress inc_ar body int
+      | Letc ({ id = jv_id; _ }, Cont (CPVar { id; _ }, body), p) ->
+        let jv_specif = Some (jv_id, 1) in
+        let ress2, fin_anal = anal_bnd1 ~jv_specif id conts body int ress inc_ar in
+        let conts2 = IMap.add jv_id (`Int fin_anal) conts in
+        anal_p conts2 ress2 inc_ar p int
+      | Letc ({ id = jp_id; _ }, Cont (CPTuple _, body), p) ->
+        let b_co_calls, b_ars, ress2 = anal_p conts ress inc_ar body int in
+        let conts2 = IMap.add jp_id (`UnInt (b_co_calls, b_ars)) conts in
+        anal_p conts2 ress2 inc_ar p int
+      | Letc ({ id = jp_id1; _ }, CVar { id = jp_id2; _ }, p) ->
+        let open IMap in
+        let upd_ress () =
+          if ISet.mem jp_id2 ress.dead_vars
+          then { ress with dead_vars = ISet.add jp_id1 ress.dead_vars }
+          else ress
+        in
+        let conts2, ress2 =
+          match find jp_id2 conts with
+          | `Int _ as c -> add jp_id1 c conts, upd_ress ()
+          | `UnInt _ as c -> add jp_id1 c conts, ress
+          | exception Not_found -> conts, ress
+        in
+        anal_p conts2 ress2 inc_ar p int
+      | Ret (HALT, t) -> clear_lam_ret_anal t
+      | Letc (_, HALT, p) -> anal_p conts ress inc_ar p int
+      | Let (Recursive, _, _, _) -> failwith "todo"
+    and anal_bnd1 ?(jv_specif = None) id conts body int ress inc_ar =
+      anal_bnd_cont ~jv_specif id @@ anal_p conts ress inc_ar body @@ ISet.add id int
+    and anal_bnd_cont ?(jv_specif = None) v_id (b_co_calls, b_ars, ress) =
+      let dead_id, max_ar = Option.value jv_specif ~default:(v_id, Int.max_int) in
+      match IMap.find v_id b_ars with
+      | exception Not_found ->
+        (* dead var case *)
+        ( { ress with dead_vars = ISet.add dead_id ress.dead_vars }
+        , fun ress2 _ -> b_co_calls, b_ars, ress2 )
+      | v_arity ->
+        let k_co_calls, k_ars = leave_vars_scope b_co_calls b_ars v_id in
+        let neigh = adj_nodes v_id b_co_calls |> List.filter @@ ( <> ) v_id in
+        ( ress
+        , fun _ non_dead_hndl ->
+            let (rhs_co_calls, rhs_ars, ress3), rhs_fv =
+              non_dead_hndl b_co_calls v_id @@ Int.min max_ar v_arity
+            in
+            let p_ars = ar_union k_ars rhs_ars in
+            let p_co_calls =
+              union k_co_calls @@ union rhs_co_calls @@ cartesian rhs_fv neigh
+            in
+            p_co_calls, p_ars, ress3 )
+    and fin_bnd_call_anal conts int f aa (ress, fin_anal) =
+      fin_anal ress
+      @@ fun b_co_calls v_arity v_id ->
+      let fst_inc_ar = List.length aa + if has_loop v_id b_co_calls then 0 else v_arity in
+      anal_tt0 ~fst_inc_ar conts int f aa ress |> ret_with_fv
+    and fin_int_triv_bnd_anal conts int t (ress, fin_anal) =
+      fin_anal ress
+      @@ fun b_co_calls v_id v_arity ->
+      let ress2 = add_if_incr v_arity t ress in
+      anal_triv conts int v_arity t ress2 |> ret_with_fv_cond v_id v_arity b_co_calls
+    and fin_unint_bnd_anal anal_rhs (b_co_calls, b_ars, ress) =
+      let b_fv = domain b_ars in
+      let rhs_ars, ress2 = anal_rhs ress in
+      let rhs_fv = domain rhs_ars in
+      let p_ars = ar_union b_ars rhs_ars in
+      let p_co_calls =
+        union b_co_calls @@ union (cartesian_square rhs_fv) @@ cartesian rhs_fv b_fv
+      in
+      p_co_calls, p_ars, ress2
+    and lam_call_anal lam_b conts int inc_ar ress pp_tt =
+      let int2, int_bnds, unint_tt =
+        List.fold_left
+          (fun (int', int_pt, unint_t) -> function
+            | CPVar { id; _ }, t when is_int_triv_rhs int t ->
+              ISet.add id int', (id, t) :: int_pt, unint_t
+            | _, t -> int', int_pt, t :: unint_t)
+          (int, [], [])
+          pp_tt
+      in
+      int_bnds
+      |> List.fold_left (fun acc (id, t) ->
+           fin_int_triv_bnd_anal conts int t @@ anal_bnd_cont id acc)
+         @@ anal_p conts ress inc_ar lam_b int2
+      |>
+      match unint_tt with
+      | [] -> Fun.id
+      | hd :: tl ->
+        fin_unint_bnd_anal @@ fun ress' -> ignore_fst @@ anal_tt0 conts int hd tl ress'
+    and fin_lam_call_bnd_anal c lam_b conts int (ress, fin_anal) pp_tt =
+      fin_anal ress
+      @@ fun b_co_calls v_arity v_id ->
+      let ress2 = add_if_pos c.id v_arity ress in
+      lam_call_anal lam_b conts int v_arity ress2 pp_tt
+      |> ret_with_fv_cond v_id v_arity b_co_calls
+    and anal_cif c th el conts int ress inc_ar =
+      let c_co_calls, c_ars, ress2 = anal_triv conts int 0 c ress in
+      let th_co_calls, th_ars, ress3 = anal_p conts ress2 inc_ar th int in
+      let el_co_calls, el_ars, ress4 = anal_p conts ress3 inc_ar el int in
+      let p_ars = ar_union c_ars @@ ar_union th_ars el_ars in
+      let p_co_calls =
+        union c_co_calls
+        @@ union th_co_calls
+        @@ union el_co_calls
+        @@ cartesian (domain c_ars)
+        @@ domain th_ars
+        @ domain el_ars
+      in
+      p_co_calls, p_ars, ress4
+    and anal_triv conts int inc_ar t ress =
+      match t, inc_ar with
+      | UVar { id; _ }, _ when ISet.mem id int -> empty, IMap.singleton id inc_ar, ress
+      | (TUnit | TConst _ | UVar _), _ -> empty, IMap.empty, ress
+      | TTuple (t1, t2, tt), _ -> anal_tt0 conts int t1 (t2 :: tt) ress
+      | TSafeBinop (_, t1, t2), _ -> anal_tt0 conts int t1 [ t2 ] ress
+      | Lam (_, _, _, lam_b), 0 ->
+        let _, b_ars, ress2 = anal_p conts ress 0 lam_b int in
+        cartesian_square @@ domain b_ars, b_ars, ress2
+      | Lam (pp, _, _, lam_b), _ ->
+        let inc_ar2 = Int.max 0 (inc_ar - 1 - List.length pp) in
+        anal_p conts ress inc_ar2 lam_b int
+    and anal_tt0 ?(fst_inc_ar = 0) conts int t1 tt ress =
+      let anal_triv_sh = anal_triv conts int 0 in
+      let f ((cc, ars, ress), (fv1, fv_acc)) t =
+        let cc_t, ars_t, ress2 = anal_triv_sh t ress in
+        let fv_acc2 = fv1 @ fv_acc in
+        let fv_t = domain ars_t in
+        let cc2 = union cc @@ union cc_t @@ cartesian fv_acc2 fv_t in
+        (cc2, ar_union ars ars_t, ress2), (fv_t, fv_acc)
+      in
+      let init =
+        let ((_, ars_t, _) as frst) = anal_triv conts int fst_inc_ar t1 ress in
+        frst, ([], domain ars_t)
+      in
+      List.fold_left f init tt |> fst
+    in
+    anal_p IMap.empty { dead_vars = ISet.empty; call_ars = IMap.empty } 0 p ISet.empty
+    |> fun (_, _, ress) -> ress.dead_vars, ress.call_ars
+  ;;
+end
