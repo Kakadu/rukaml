@@ -44,11 +44,8 @@ type pat =
   | CPTuple of pat * pat * pat list
 
 type p =
-  | Call of
-      triv
-      * triv list
-      * triv
-      * cont (* args are in rev. order!!! [e.g. Call (f, [c; b], a, k) ~ (f a b c k)] *)
+  | Call of triv * triv list * triv * cont
+    (* args are in rev. order!!! [e.g. Call (f, [c; b], a, k) ~ (f a b c k)] *)
   | Ret of cont * triv
   | CIf of triv * p * p
   | Let of rec_flag * pat * triv * p
@@ -1096,12 +1093,8 @@ struct
       let lam_call_anal0_ign lam_b pp_aa ress =
         lam_call_anal lam_b conts int 0 ress pp_aa |> ignore_fst
       in
-      let clear_lam_call_anal lam_b c =
-        lam_call_anal lam_b conts int inc_ar @@ add_if_pos c.id inc_ar ress
-      in
-      let clear_lam_ret_anal t =
-        anal_triv conts int inc_ar t @@ add_if_incr inc_ar t ress
-      in
+      let clear_lam_call_anal lam_b = lam_call_anal lam_b conts int inc_ar ress in
+      let clear_triv_ret_anal t = anal_triv conts int inc_ar t ress in
       match p with
       | CIf (c, th, el) -> anal_cif c th el conts int ress inc_ar
       | Call (Lam (pp, p, c, lam_b), aa, a, Cont (CPVar { id; _ }, body)) ->
@@ -1117,9 +1110,9 @@ struct
          | `Int fin_anal -> fin_lam_call_bnd_anal c lam_b conts int (ress, fin_anal) pp_aa
          | `UnInt (b_co_calls, b_ars) ->
            fin_unint_bnd_anal (lam_call_anal0_ign lam_b pp_aa) (b_co_calls, b_ars, ress)
-         | exception Not_found -> clear_lam_call_anal lam_b c pp_aa)
-      | Call (Lam (pp, p, c, lam_b), aa, a, HALT) ->
-        (p, a) :: List.combine pp aa |> clear_lam_call_anal lam_b c
+         | exception Not_found -> clear_lam_call_anal lam_b pp_aa)
+      | Call (Lam (pp, p, _, lam_b), aa, a, HALT) ->
+        (p, a) :: List.combine pp aa |> clear_lam_call_anal lam_b
       | Call (f, aa, a, Cont (CPVar { id; _ }, body)) ->
         fin_bnd_call_anal conts int f (a :: aa) @@ anal_bnd1 id conts body int ress inc_ar
       | Call (f, aa, a, CVar { id; _ }) ->
@@ -1134,7 +1127,7 @@ struct
          | `Int fin_anal -> fin_int_triv_bnd_anal conts int t (ress, fin_anal)
          | `UnInt (b_co_calls, b_ars) ->
            fin_unint_bnd_anal (anal_triv0_ign t) (b_co_calls, b_ars, ress)
-         | exception Not_found -> clear_lam_ret_anal t)
+         | exception Not_found -> clear_triv_ret_anal t)
       | Ret (Cont (CPVar { id; _ }, body), t)
       | Let (NonRecursive, CPVar { id; _ }, t, body)
         when is_int_triv_rhs int t ->
@@ -1170,7 +1163,7 @@ struct
           | exception Not_found -> conts, ress
         in
         anal_p conts2 ress2 inc_ar p int
-      | Ret (HALT, t) -> clear_lam_ret_anal t
+      | Ret (HALT, t) -> clear_triv_ret_anal t
       | Letc (_, HALT, p) -> anal_p conts ress inc_ar p int
       | Let (Recursive, _, _, _) -> failwith "todo"
     and anal_bnd1 ?(jv_specif = None) id conts body int ress inc_ar =
