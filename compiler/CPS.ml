@@ -1083,7 +1083,6 @@ struct
       else ret_with_fv_bad
     in
     let rec anal_p conts ress inc_ar p int =
-      (* здесь уже предполагается, что у Call перевернуты аргументы. *)
       let anal_app f a aa =
         let fst_inc_ar = inc_ar + 1 + List.length aa in
         anal_tt0 ~fst_inc_ar conts int f (a :: aa)
@@ -1107,7 +1106,8 @@ struct
       | Call (Lam (pp, p, c, lam_b), aa, a, CVar { id; _ }) ->
         let pp_aa = (p, a) :: List.combine pp aa in
         (match IMap.find id conts with
-         | `Int fin_anal -> fin_lam_call_bnd_anal c lam_b conts int (ress, fin_anal) pp_aa
+         | `Int fin_anal ->
+           fin_lam_call_bnd_anal ~had_upd:true c lam_b conts int (ress, fin_anal) pp_aa
          | `UnInt (b_co_calls, b_ars) ->
            fin_unint_bnd_anal (lam_call_anal0_ign lam_b pp_aa) (b_co_calls, b_ars, ress)
          | exception Not_found -> clear_lam_call_anal lam_b pp_aa)
@@ -1124,7 +1124,8 @@ struct
       | Call (f, aa, a, HALT) -> anal_app f a aa ress
       | Ret (CVar { id; _ }, t) ->
         (match IMap.find id conts with
-         | `Int fin_anal -> fin_int_triv_bnd_anal conts int t (ress, fin_anal)
+         | `Int fin_anal ->
+           fin_int_triv_bnd_anal ~had_upd:true conts int t (ress, fin_anal)
          | `UnInt (b_co_calls, b_ars) ->
            fin_unint_bnd_anal (anal_triv0_ign t) (b_co_calls, b_ars, ress)
          | exception Not_found -> clear_triv_ret_anal t)
@@ -1141,20 +1142,23 @@ struct
         let aa = a :: aa in
         fin_unint_bnd_anal (anal_tt0_ign f aa) @@ anal_p conts ress inc_ar body int
       | Letc ({ id = jv_id; _ }, Cont (CPVar { id; _ }, body), p) ->
-        let jv_specif = Some (jv_id, 1) in
+        let jv_specif = Some jv_id in
         let ress2, fin_anal = anal_bnd1 ~jv_specif id conts body int ress inc_ar in
         let conts2 = IMap.add jv_id (`Int fin_anal) conts in
-        anal_p conts2 ress2 inc_ar p int
+        anal_p conts2 ress2 0 p int
       | Letc ({ id = jp_id; _ }, Cont (CPTuple _, body), p) ->
         let b_co_calls, b_ars, ress2 = anal_p conts ress inc_ar body int in
         let conts2 = IMap.add jp_id (`UnInt (b_co_calls, b_ars)) conts in
-        anal_p conts2 ress2 inc_ar p int
+        anal_p conts2 ress2 0 p int
       | Letc ({ id = jp_id1; _ }, CVar { id = jp_id2; _ }, p) ->
         let open IMap in
         let upd_ress () =
           if ISet.mem jp_id2 ress.dead_vars
           then { ress with dead_vars = ISet.add jp_id1 ress.dead_vars }
-          else ress
+          else (
+            match find jp_id2 ress.call_ars with
+            | n -> { ress with call_ars = add jp_id1 n ress.call_ars }
+            | exception Not_found -> ress)
         in
         let conts2, ress2 =
           match find jp_id2 conts with
@@ -1169,19 +1173,26 @@ struct
     and anal_bnd1 ?(jv_specif = None) id conts body int ress inc_ar =
       anal_bnd_cont ~jv_specif id @@ anal_p conts ress inc_ar body @@ ISet.add id int
     and anal_bnd_cont ?(jv_specif = None) v_id (b_co_calls, b_ars, ress) =
-      let dead_id, max_ar = Option.value jv_specif ~default:(v_id, Int.max_int) in
       match IMap.find v_id b_ars with
       | exception Not_found ->
         (* dead var case *)
+        let dead_id = Option.value jv_specif ~default:v_id in
         ( { ress with dead_vars = ISet.add dead_id ress.dead_vars }
         , fun ress2 _ -> b_co_calls, b_ars, ress2 )
       | v_arity ->
         let k_co_calls, k_ars = leave_vars_scope b_co_calls b_ars v_id in
         let neigh = adj_nodes v_id b_co_calls |> List.filter @@ ( <> ) v_id in
-        ( ress
+        let ress2 =
+          ress
+          |>
+          match jv_specif with
+          | None -> Fun.id
+          | Some res_id -> add_if_pos res_id v_arity
+        in
+        ( ress2
         , fun _ non_dead_hndl ->
             let (rhs_co_calls, rhs_ars, ress3), rhs_fv =
-              non_dead_hndl b_co_calls v_id @@ Int.min max_ar v_arity
+              non_dead_hndl b_co_calls v_id v_arity
             in
             let p_ars = ar_union k_ars rhs_ars in
             let p_co_calls =
@@ -1193,10 +1204,10 @@ struct
       @@ fun b_co_calls v_arity v_id ->
       let fst_inc_ar = List.length aa + if has_loop v_id b_co_calls then 0 else v_arity in
       anal_tt0 ~fst_inc_ar conts int f aa ress |> ret_with_fv
-    and fin_int_triv_bnd_anal conts int t (ress, fin_anal) =
+    and fin_int_triv_bnd_anal ?(had_upd = false) conts int t (ress, fin_anal) =
       fin_anal ress
       @@ fun b_co_calls v_id v_arity ->
-      let ress2 = add_if_incr v_arity t ress in
+      let ress2 = if had_upd then ress else add_if_incr v_arity t ress in
       anal_triv conts int v_arity t ress2 |> ret_with_fv_cond v_id v_arity b_co_calls
     and fin_unint_bnd_anal anal_rhs (b_co_calls, b_ars, ress) =
       let b_fv = domain b_ars in
@@ -1226,10 +1237,10 @@ struct
       | [] -> Fun.id
       | hd :: tl ->
         fin_unint_bnd_anal @@ fun ress' -> ignore_fst @@ anal_tt0 conts int hd tl ress'
-    and fin_lam_call_bnd_anal c lam_b conts int (ress, fin_anal) pp_tt =
+    and fin_lam_call_bnd_anal ?(had_upd = false) c lam_b conts int (ress, fin_anal) pp_tt =
       fin_anal ress
       @@ fun b_co_calls v_arity v_id ->
-      let ress2 = add_if_pos c.id v_arity ress in
+      let ress2 = if had_upd then ress else add_if_pos c.id v_arity ress in
       lam_call_anal lam_b conts int v_arity ress2 pp_tt
       |> ret_with_fv_cond v_id v_arity b_co_calls
     and anal_cif c th el conts int ress inc_ar =
