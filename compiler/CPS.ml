@@ -1057,6 +1057,8 @@ let%expect_test "cps fake rec" =
 |}]
 ;;
 
+(* todo: adapt for 1-arg lang*)
+
 (* module CallArity (CoCallGraph : sig
     type 'a t
 
@@ -1315,97 +1317,136 @@ struct
     |> fun (_, _, ress) -> ress.dead_vars, ress.call_ars
   ;;
 end
+*)
 
-let fold_k f =
-  let rec helper acc lst k =
+let foldd_k f =
+  let rec helper lst k =
     match lst with
-    | [] -> k acc
-    | hd :: tl -> f acc hd (fun acc' -> helper acc' tl k)
+    | [] -> k
+    | hd :: tl -> f hd (helper tl k)
   in
   helper
 ;;
 
-(* remove dead code found, collect counts for vars *)
-let simpl1 dead_vars (_, _, p) =
+let down_anal (_, _, p) (dead_vars, call_ars) =
   let open IMap in
-  let rec extend counts pat k =
-    match pat with
-    | CPVar { id; _ } -> k (add id 0 counts)
-    | _ -> k counts
-  in
-  let rec helper_c counts c k_dead k_alive =
-    match c with
-    | Cont (CPVar { id; _ }, p) when ISet.mem id dead_vars -> helper_p counts p k_dead
-    | Cont (pat, p) ->
-      extend counts pat (fun counts' ->
-        helper_p counts' p (fun p' -> k_alive (Cont (pat, p'))))
-    | CVar { id; _ } when ISet.mem id dead_vars -> k_dead (Ret (c, TUnit)) counts
-    | HALT | CVar _ -> k_alive c counts
-  and helper_p counts p k =
-    match p with
-    | Call (Lam (pats, pat, i, b), tt, t, c) ->
-      helper_c counts c k (fun c' counts' -> lam_app counts' pat pats t tt i b c' k)
-    | Call (t1, tt, t2, c) ->
-      helper_c counts c k (fun c' counts' ->
-        let k1 t1' t2' tt' = k (Call (t1', tt', t2', c')) in
-        tuple_fold_map_k helper_t t1 t2 tt k1 counts')
-    | Ret (c, t) ->
-      helper_c counts c k (fun c' -> helper_t t (fun t' -> k (Ret (c', t'))))
-    | CIf (t, p1, p2) ->
-      helper_p counts p1 (fun p1' counts' ->
-        helper_p counts' p2 (fun p2' -> helper_t t (fun t' -> k (CIf (t', p1', p2')))))
-    | Let (NonRecursive, CPVar { id; _ }, _, p) when ISet.mem id dead_vars ->
-      helper_p counts p k
-    | Let (NonRecursive, pat, t, p) ->
-      extend counts pat (fun counts' ->
-        helper_p counts' p (fun p' ->
-          helper_t t (fun t' -> k (Let (NonRecursive, pat, t', p')))))
-    | Primop (pat, i, t, tt, p) ->
-      helper_p counts p (fun p' ->
-        let k1 _ t' tt' = k (Primop (pat, i, t', tt', p')) in
-        tuple_fold_map_k helper_t TUnit t tt k1)
-    | Letc (_, _, p) -> helper_p counts p k
-    | Let (Recursive, _, _, _) -> failwith "todo"
-  and helper_t t k counts =
+  let lookup_fin_call_ars t k_none k_found fin_call_ars =
     match t with
-    | TUnit | TConst _ -> k t counts
-    | TTuple (t1, t2, tt) ->
-      let k1 t1' t2' tt' = k (TTuple (t1', t2', tt')) in
-      tuple_fold_map_k helper_t t1 t2 tt k1 counts
-    | TSafeBinop (i, t1, t2) ->
-      counts
-      |> helper_t t1 (fun t1' -> helper_t t2 (fun t2' -> k (TSafeBinop (i, t1', t2'))))
-    | Lam (pats, pat, i, p) ->
-      extend counts pat (fun counts' ->
-        fold_k extend counts' pats (fun counts'' ->
-          helper_p counts'' p (fun p' -> k (Lam (pats, pat, i, p')))))
+    | UVar { id; _ } ->
+      (match find id fin_call_ars with
+       | res -> k_found res fin_call_ars
+       | exception Not_found -> k_none fin_call_ars)
+    | _ -> k_none fin_call_ars
+  in
+  let lookup_call_ars id k_none k_found =
+    match IMap.find id call_ars with
+    | call_ar -> k_found call_ar
+    | exception Not_found -> k_none ()
+  in
+  let rec anal_p p ar k counts =
+    match p with
+    | Call (_, _, Cont (CPVar { id; _ }, b)) when ISet.mem id dead_vars ->
+      anal_p b ar k counts
+    | Call ((Lam (pat, _, _) as t1), t2, Cont (CPTuple _, b)) ->
+      anal_t_bnd pat t2 counts (anal_t t1 (anal_p b ar k))
+    | Call ((Lam (pat, i, lam_b) as t1), t2, Cont (CPVar { id; _ }, b)) ->
+      let counts' = add id 0 counts in
+      anal_t_bnd pat t2 counts' (fun counts'' fin_call_ars' ->
+        let k_none _ = anal_t t1 (anal_p b ar k) counts'' fin_call_ars' in
+        lookup_call_ars i.id k_none (fun call_ar ->
+          let k1 rest_ar counts''' fin_call_ars'' =
+            let fin_call_ars''' = add id (call_ar - rest_ar) fin_call_ars'' in
+            anal_p b ar k counts''' fin_call_ars'''
+          in
+          lam_hndl ~ar:call_ar pat i lam_b k1 counts'' fin_call_ars'))
+    | Call (Lam (pat, i, lam_b), t2, _) ->
+      anal_t_bnd pat t2 counts (lam_hndl ~ar pat i lam_b k)
+    | Call (t1, t2, Cont (CPTuple _, b)) ->
+      foldd_k anal_t [ t1; t2 ] (anal_p b ar k) counts
+    | Call (t1, t2, Cont (CPVar { id; _ }, b)) ->
+      let k1 counts' =
+        let counts'' = add id 0 counts' in
+        let k_none = anal_p b ar k counts'' in
+        lookup_fin_call_ars t1 k_none (fun t_ar fin_call_ars' ->
+          let fin_call_ars'' = add id (Int.min 0 (t_ar - 1)) fin_call_ars' in
+          anal_p b ar k counts'' fin_call_ars'')
+      in
+      foldd_k anal_t [ t1; t2 ] k1 counts
+    | Call (t1, t2, _) ->
+      let k1 counts' =
+        lookup_fin_call_ars t1 (k ar counts') (fun t_ar ->
+          k (ar - Int.min 0 (t_ar - 1)) counts')
+      in
+      foldd_k anal_t [ t1; t2 ] k1 counts
+    | CIf (t, p1, p2) ->
+      let k1 =
+        anal_p p1 ar (fun rest_ar1 ->
+          anal_p p2 ar (fun rest_ar2 -> k (Int.max rest_ar1 rest_ar2)))
+      in
+      anal_t t k1 counts
+    | Let (NonRecursive, pat, t, b) | Ret (Cont (pat, b), t) ->
+      anal_t_bnd pat t counts (anal_p b ar k)
+    | Ret (_, Lam (pat, i, lam_b)) ->
+      lam_hndl ~ar:(Int.min 0 (ar - 1)) pat i lam_b k counts
+    | Ret (_, t) ->
+      let k1 counts' =
+        lookup_fin_call_ars t (k 0 counts') (fun t_ar -> k (ar - t_ar) counts')
+      in
+      anal_t t k1 counts
+    | Primop (CPVar { id; _ }, _, t, tt, b) ->
+      let counts' = add id 0 counts in
+      foldd_k anal_t (t :: tt) (anal_p b ar k) counts'
+    | Primop (CPTuple _, _, t, tt, b) -> foldd_k anal_t (t :: tt) (anal_p b ar k) counts
+    | Letc (i, Cont (CPVar { id; _ }, cont_b), b) ->
+      let jv call_ar =
+        let counts' = add i.id 0 (add id 0 counts) in
+        let k1 rest_ar counts'' fin_call_ars' =
+          anal_p cont_b ar k counts'' (add id (ar - rest_ar) fin_call_ars')
+        in
+        anal_p b call_ar k1 counts'
+      in
+      lookup_call_ars i.id (fun _ -> jv 0) jv
+    | Letc (i, Cont (CPTuple _, cont_b), b) ->
+      let counts' = add i.id 0 counts in
+      anal_p b 0 (fun _ -> anal_p cont_b ar k) counts'
+    | Letc (i, _, b) -> anal_p b ar k (add i.id 0 counts)
+    | Let (Recursive, _, _, _) -> failwith "todo"
+  and anal_t_bnd pat t counts k fin_call_ars =
+    match pat with
+    | CPVar { id; _ } when ISet.mem id dead_vars -> k counts fin_call_ars
+    | CPTuple _ -> anal_t t k counts fin_call_ars
+    | CPVar { id; _ } ->
+      let counts' = add id 0 counts in
+      let k_anal_t _ = anal_t t k counts' fin_call_ars in
+      (match t with
+       | Lam (pat, i, p) ->
+         lookup_call_ars i.id k_anal_t (fun ar ->
+           let k1 rest_ar counts'' fin_call_ars' =
+             let fin_call_ars'' = add id (ar - rest_ar) fin_call_ars' in
+             k counts'' fin_call_ars''
+           in
+           lam_hndl ~ar:(ar - 1) pat i p k1 counts' fin_call_ars)
+       | t ->
+         let k_found t_ar _ =
+           let fin_call_ars' = add id t_ar fin_call_ars in
+           anal_t t k counts fin_call_ars'
+         in
+         lookup_fin_call_ars t (fun _ -> k_anal_t ()) k_found fin_call_ars)
+  and lam_hndl ?(ar = 0) pat i p k counts =
+    let jv counts' = anal_p p ar k (add i.id 0 counts') in
+    match pat with
+    | CPTuple _ -> jv counts
+    | CPVar { id; _ } -> jv (add id 0 counts)
+  and anal_t t k counts =
+    match t with
+    | Lam (pat, i, p) -> lam_hndl pat i p (fun _ -> k) counts
+    | TSafeBinop (_, t1, t2) -> anal_t t1 (anal_t t2 k) counts
     | UVar { id; _ } ->
       let n = find id counts in
       let counts' = add id (n + 1) counts in
-      k t counts'
-  and lam_app counts pat pats t tt i b c' k =
-    let rec hnd_pairs counts pats tt k1 =
-      match pats, tt with
-      | CPVar { id; _ } :: pats, _ :: tt when ISet.mem id dead_vars ->
-        hnd_pairs counts pats tt k1
-      | pat :: pats, t :: tt ->
-        let k2 t' counts' =
-          hnd_pairs counts' pats tt (function
-            | [], [], None -> k1 ([], [], Some (pat, t'))
-            | pats', tt', frst -> k1 (pat :: pats', t' :: tt', frst))
-        in
-        extend counts pat (helper_t t k2)
-      | [], [] -> k1 ([], [], None) counts
-      | [], _ :: _ | _ :: _, [] -> failwith "partial application occured in cps lam_call"
-    in
-    let k_letc counts' = helper_p counts' b (fun b' -> k (Letc (i, c', b'))) in
-    let k_lam_call pat' pats' t' tt' counts' =
-      helper_p counts' b (fun b' -> k (Call (Lam (pats', pat', i, b'), tt', t', c')))
-    in
-    hnd_pairs counts (pat :: pats) (t :: tt) (function
-      | [], [], None -> k_letc
-      | pats', tt', Some (pat', t') -> k_lam_call pat' pats' t' tt'
-      | _, _, None -> failwith "unreachable: non-empty list has no first elem")
+      k counts'
+    | TTuple (t1, t2, tt) -> foldd_k anal_t (t1 :: t2 :: tt) k counts
+    | TUnit | TConst _ -> k counts
   in
-  helper_p empty p (fun cps_prog' counts -> cps_prog', counts)
-;; *)
+  anal_p p 0 (fun _ counts fin_call_ars -> counts, fin_call_ars) empty empty
+;;
