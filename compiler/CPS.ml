@@ -1343,10 +1343,11 @@ let down_anal (_, _, p) (dead_vars, call_ars) =
     | call_ar -> k_found call_ar
     | exception Not_found -> k_none ()
   in
-  let rec anal_p p ar k counts =
+  let rec anal_p ?(dead_jv_mode = false) p ar k counts =
     match p with
     | Call (_, _, Cont (CPVar { id; _ }, b)) when ISet.mem id dead_vars ->
       anal_p b ar k counts
+    | (Call (_, _, CVar _) | Ret (CVar _, _)) when dead_jv_mode -> k ar counts
     | Call ((Lam (pat, _, _) as t1), t2, Cont (CPTuple _, b)) ->
       anal_t_bnd pat t2 counts (anal_t t1 (anal_p b ar k))
     | Call ((Lam (pat, i, lam_b) as t1), t2, Cont (CPVar { id; _ }, b)) ->
@@ -1393,23 +1394,20 @@ let down_anal (_, _, p) (dead_vars, call_ars) =
         lookup_fin_call_ars t (k 0 counts') (fun t_ar -> k (ar - t_ar) counts')
       in
       anal_t t k1 counts
-    | Primop (CPVar { id; _ }, _, t, tt, b) ->
-      let counts' = add id 0 counts in
-      foldd_k anal_t (t :: tt) (anal_p b ar k) counts'
-    | Primop (CPTuple _, _, t, tt, b) -> foldd_k anal_t (t :: tt) (anal_p b ar k) counts
+    | Primop (_, _, t, tt, b) -> foldd_k anal_t (t :: tt) (anal_p b ar k) counts
     | Letc (i, Cont (CPVar { id; _ }, cont_b), b) ->
       let jv call_ar =
-        let counts' = add i.id 0 (add id 0 counts) in
+        let counts' = add id 0 counts in
         let k1 rest_ar counts'' fin_call_ars' =
-          anal_p cont_b ar k counts'' (add id (ar - rest_ar) fin_call_ars')
+          anal_p cont_b ar k counts'' (add id (call_ar - rest_ar) fin_call_ars')
         in
-        anal_p b call_ar k1 counts'
+        anal_p ~dead_jv_mode:(ISet.mem i.id dead_vars) b call_ar k1 counts'
       in
       lookup_call_ars i.id (fun _ -> jv 0) jv
-    | Letc (i, Cont (CPTuple _, cont_b), b) ->
-      let counts' = add i.id 0 counts in
-      anal_p b 0 (fun _ -> anal_p cont_b ar k) counts'
-    | Letc (i, _, b) -> anal_p b ar k (add i.id 0 counts)
+    | Letc (_, Cont (CPTuple _, cont_b), b) ->
+      anal_p b 0 (fun _ -> anal_p cont_b ar k) counts
+    | Letc (i, _, b) ->
+      anal_p ~dead_jv_mode:(ISet.mem i.id dead_vars) b ar k (add i.id 0 counts)
     | Let (Recursive, _, _, _) -> failwith "todo"
   and anal_t_bnd pat t counts k fin_call_ars =
     match pat with
