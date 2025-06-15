@@ -1054,9 +1054,7 @@ let%expect_test "cps fake rec" =
 |}]
 ;;
 
-(* todo: adapt for 1-arg lang*)
-(* NB: implementation commented out was done for rev order args*)
-(* module CallArity (CoCallGraph : sig
+module CallArity (CoCallGraph : sig
     type 'a t
 
     val empty : 'a t
@@ -1075,7 +1073,7 @@ struct
     }
 
   open CoCallGraph
-  
+
   let anal (_, _, p) =
     let ar_union = IMap.union (fun _ x y -> Some (min x y)) in
     let domain ars = IMap.fold (fun id _ dom -> id :: dom) ars [] in
@@ -1087,11 +1085,10 @@ struct
     in
     let add_if_incr v_arity t =
       match t with
-      | Lam (p, { id = res_id; _ }, _) ->
-        cond_add res_id v_arity @@ ( > ) (1 + List.length pp)
+      | Lam (_, { id = res_id; _ }, _) -> cond_add res_id v_arity @@ ( > ) 1
       | _ -> Fun.id
     in
-    let add_if_pos v_id v_arity = cond_add v_id v_arity @@ ( <> ) 0 in
+    let add_if_pos v_id v_arity = cond_add v_id v_arity @@ ( > ) 0 in
     let is_int_triv_rhs int = function
       | Lam _ -> true
       | UVar { id; _ } -> ISet.mem id int
@@ -1109,45 +1106,38 @@ struct
       else ret_with_fv_bad
     in
     let rec anal_p conts ress inc_ar p int =
-      let anal_app f a aa =
-        let fst_inc_ar = inc_ar + 1 + List.length aa in
-        anal_tt0 ~fst_inc_ar conts int f (a :: aa)
-      in
       let anal_tt0_ign a aa ress' = anal_tt0 conts int a aa ress' |> ignore_fst in
       let anal_triv0_ign t ress = anal_triv conts int 0 t ress |> ignore_fst in
-      let lam_call_anal0_ign lam_b pp_aa ress =
-        lam_call_anal lam_b conts int 0 ress pp_aa |> ignore_fst
+      let lam_call_anal0_ign lam_b p a ress =
+        lam_call_anal lam_b conts int 0 ress p a |> ignore_fst
       in
       let clear_lam_call_anal lam_b = lam_call_anal lam_b conts int inc_ar ress in
       let clear_triv_ret_anal t = anal_triv conts int inc_ar t ress in
       match p with
       | CIf (c, th, el) -> anal_cif c th el conts int ress inc_ar
-      | Call (Lam (pp, p, c, lam_b), aa, a, Cont (CPVar { id; _ }, body)) ->
-        (p, a) :: List.combine pp aa
-        |> fin_lam_call_bnd_anal c lam_b conts int
-           @@ anal_bnd1 id conts body int ress inc_ar
-      | Call (Lam (pp, p, _, lam_b), aa, a, Cont (CPTuple _, body)) ->
-        let rhs_anal = (p, a) :: List.combine pp aa |> lam_call_anal0_ign lam_b in
+      | Call (Lam (pat, c, lam_b), a, Cont (CPVar { id; _ }, body)) ->
+        fin_lam_call_bnd_anal c lam_b conts int pat a
+        @@ anal_bnd1 id conts body int ress inc_ar
+      | Call (Lam (pat, _, lam_b), a, Cont (CPTuple _, body)) ->
+        let rhs_anal = lam_call_anal0_ign lam_b pat a in
         fin_unint_bnd_anal rhs_anal @@ anal_p conts ress inc_ar body int
-      | Call (Lam (pp, p, c, lam_b), aa, a, CVar { id; _ }) ->
-        let pp_aa = (p, a) :: List.combine pp aa in
+      | Call (Lam (pat, c, lam_b), a, CVar { id; _ }) ->
         (match IMap.find id conts with
          | `Int fin_anal ->
-           fin_lam_call_bnd_anal ~had_upd:true c lam_b conts int (ress, fin_anal) pp_aa
+           fin_lam_call_bnd_anal ~had_upd:true c lam_b conts int pat a (ress, fin_anal)
          | `UnInt (b_co_calls, b_ars) ->
-           fin_unint_bnd_anal (lam_call_anal0_ign lam_b pp_aa) (b_co_calls, b_ars, ress)
-         | exception Not_found -> clear_lam_call_anal lam_b pp_aa)
-      | Call (Lam (pp, p, _, lam_b), aa, a, HALT) ->
-        (p, a) :: List.combine pp aa |> clear_lam_call_anal lam_b
-      | Call (f, aa, a, Cont (CPVar { id; _ }, body)) ->
-        fin_bnd_call_anal conts int f (a :: aa) @@ anal_bnd1 id conts body int ress inc_ar
-      | Call (f, aa, a, CVar { id; _ }) ->
+           fin_unint_bnd_anal (lam_call_anal0_ign lam_b pat a) (b_co_calls, b_ars, ress)
+         | exception Not_found -> clear_lam_call_anal lam_b pat a)
+      | Call (Lam (pat, _, lam_b), a, HALT) -> clear_lam_call_anal lam_b pat a
+      | Call (f, a, Cont (CPVar { id; _ }, body)) ->
+        fin_bnd_call_anal conts int f a @@ anal_bnd1 id conts body int ress inc_ar
+      | Call (f, a, CVar { id; _ }) ->
         (match IMap.find id conts with
-         | `Int fin_anal -> fin_bnd_call_anal conts int f (a :: aa) (ress, fin_anal)
+         | `Int fin_anal -> fin_bnd_call_anal conts int f a (ress, fin_anal)
          | `UnInt (b_co_calls, b_ars) ->
-           (b_co_calls, b_ars, ress) |> fin_unint_bnd_anal @@ anal_tt0_ign f (a :: aa)
-         | exception Not_found -> anal_app f a aa ress)
-      | Call (f, aa, a, HALT) -> anal_app f a aa ress
+           (b_co_calls, b_ars, ress) |> fin_unint_bnd_anal @@ anal_tt0_ign f [ a ]
+         | exception Not_found -> anal_tt0 ~fst_inc_ar:(inc_ar + 1) conts int f [ a ] ress)
+      | Call (f, a, HALT) -> anal_tt0 ~fst_inc_ar:(inc_ar + 1) conts int f [ a ] ress
       | Ret (CVar { id; _ }, t) ->
         (match IMap.find id conts with
          | `Int fin_anal ->
@@ -1164,9 +1154,8 @@ struct
         fin_unint_bnd_anal (anal_triv0_ign t) @@ anal_p conts ress inc_ar body int
       | Primop (_, _, t, tt, body) ->
         fin_unint_bnd_anal (anal_tt0_ign t tt) @@ anal_p conts ress inc_ar body int
-      | Call (f, aa, a, Cont (CPTuple _, body)) ->
-        let aa = a :: aa in
-        fin_unint_bnd_anal (anal_tt0_ign f aa) @@ anal_p conts ress inc_ar body int
+      | Call (f, a, Cont (CPTuple _, body)) ->
+        fin_unint_bnd_anal (anal_tt0_ign f [ a ]) @@ anal_p conts ress inc_ar body int
       | Letc ({ id = jv_id; _ }, Cont (CPVar { id; _ }, body), p) ->
         let jv_specif = Some jv_id in
         let ress2, fin_anal = anal_bnd1 ~jv_specif id conts body int ress inc_ar in
@@ -1209,11 +1198,9 @@ struct
         let k_co_calls, k_ars = leave_vars_scope b_co_calls b_ars v_id in
         let neigh = adj_nodes v_id b_co_calls |> List.filter @@ ( <> ) v_id in
         let ress2 =
-          ress
-          |>
           match jv_specif with
-          | None -> Fun.id
-          | Some res_id -> add_if_pos res_id v_arity
+          | None -> ress
+          | Some res_id -> add_if_pos res_id v_arity ress
         in
         ( ress2
         , fun _ non_dead_hndl ->
@@ -1225,11 +1212,11 @@ struct
               union k_co_calls @@ union rhs_co_calls @@ cartesian rhs_fv neigh
             in
             p_co_calls, p_ars, ress3 )
-    and fin_bnd_call_anal conts int f aa (ress, fin_anal) =
+    and fin_bnd_call_anal conts int f a (ress, fin_anal) =
       fin_anal ress
       @@ fun b_co_calls v_arity v_id ->
-      let fst_inc_ar = List.length aa + if has_loop v_id b_co_calls then 0 else v_arity in
-      anal_tt0 ~fst_inc_ar conts int f aa ress |> ret_with_fv
+      let fst_inc_ar = 1 + if has_loop v_id b_co_calls then 0 else v_arity in
+      anal_tt0 ~fst_inc_ar conts int f [ a ] ress |> ret_with_fv
     and fin_int_triv_bnd_anal ?(had_upd = false) conts int t (ress, fin_anal) =
       fin_anal ress
       @@ fun b_co_calls v_id v_arity ->
@@ -1244,30 +1231,21 @@ struct
         union b_co_calls @@ union (cartesian_square rhs_fv) @@ cartesian rhs_fv b_fv
       in
       p_co_calls, p_ars, ress2
-    and lam_call_anal lam_b conts int inc_ar ress pp_tt =
-      let int2, int_bnds, unint_tt =
-        List.fold_left
-          (fun (int', int_pt, unint_t) -> function
-            | CPVar { id; _ }, t when is_int_triv_rhs int t ->
-              ISet.add id int', (id, t) :: int_pt, unint_t
-            | _, t -> int', int_pt, t :: unint_t)
-          (int, [], [])
-          pp_tt
-      in
-      int_bnds
-      |> List.fold_left (fun acc (id, t) ->
-           fin_int_triv_bnd_anal conts int t @@ anal_bnd_cont id acc)
-         @@ anal_p conts ress inc_ar lam_b int2
-      |>
-      match unint_tt with
-      | [] -> Fun.id
-      | hd :: tl ->
-        fin_unint_bnd_anal @@ fun ress' -> ignore_fst @@ anal_tt0 conts int hd tl ress'
-    and fin_lam_call_bnd_anal ?(had_upd = false) c lam_b conts int (ress, fin_anal) pp_tt =
+    and lam_call_anal lam_b conts int inc_ar ress pat t =
+      match pat, t with
+      | CPVar { id; _ }, t when is_int_triv_rhs int t ->
+        fin_int_triv_bnd_anal conts int t
+        @@ anal_bnd_cont id
+        @@ anal_p conts ress inc_ar lam_b
+        @@ ISet.add id int
+      | _, t ->
+        fin_unint_bnd_anal (fun ress' -> anal_triv conts int inc_ar t ress' |> ignore_fst)
+        @@ anal_p conts ress inc_ar lam_b int
+    and fin_lam_call_bnd_anal ?(had_upd = false) c lam_b conts int pat t (ress, fin_anal) =
       fin_anal ress
       @@ fun b_co_calls v_arity v_id ->
       let ress2 = if had_upd then ress else add_if_pos c.id v_arity ress in
-      lam_call_anal lam_b conts int v_arity ress2 pp_tt
+      lam_call_anal lam_b conts int v_arity ress2 pat t
       |> ret_with_fv_cond v_id v_arity b_co_calls
     and anal_cif c th el conts int ress inc_ar =
       let c_co_calls, c_ars, ress2 = anal_triv conts int 0 c ress in
@@ -1289,11 +1267,11 @@ struct
       | (TUnit | TConst _ | UVar _), _ -> empty, IMap.empty, ress
       | TTuple (t1, t2, tt), _ -> anal_tt0 conts int t1 (t2 :: tt) ress
       | TSafeBinop (_, t1, t2), _ -> anal_tt0 conts int t1 [ t2 ] ress
-      | Lam (_, _, _, lam_b), 0 ->
+      | Lam (_, _, lam_b), 0 ->
         let _, b_ars, ress2 = anal_p conts ress 0 lam_b int in
         cartesian_square @@ domain b_ars, b_ars, ress2
-      | Lam (pp, _, _, lam_b), _ ->
-        let inc_ar2 = Int.max 0 (inc_ar - 1 - List.length pp) in
+      | Lam (_, _, lam_b), _ ->
+        let inc_ar2 = Int.max 0 (inc_ar - 1) in
         anal_p conts ress inc_ar2 lam_b int
     and anal_tt0 ?(fst_inc_ar = 0) conts int t1 tt ress =
       let anal_triv_sh = anal_triv conts int 0 in
@@ -1314,7 +1292,6 @@ struct
     |> fun (_, _, ress) -> ress.dead_vars, ress.call_ars
   ;;
 end
-*)
 
 let foldd_k f =
   let rec helper lst k =
@@ -1353,7 +1330,7 @@ let down_anal (_, _, p) (dead_vars, call_ars) =
       anal_t_bnd pat t2 counts (anal_t t1 (anal_p b ar k))
     | Call ((Lam (pat, i, lam_b) as t1), t2, Cont (CPVar { id; _ }, b)) ->
       let counts' = add id 0 counts in
-      anal_t_bnd pat t2 counts' (fun counts'' (barriers' : ISet.t) fin_call_ars' ->
+      anal_t_bnd pat t2 counts' (fun counts'' barriers' fin_call_ars' ->
         let k_none _ = anal_t t1 (anal_p b ar k) counts'' barriers' fin_call_ars' in
         lookup_call_ars i.id k_none (fun call_ar ->
           let k1 rest_ar _ counts''' barriers'' fin_call_ars'' =
