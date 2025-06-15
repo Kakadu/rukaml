@@ -1055,16 +1055,16 @@ let%expect_test "cps fake rec" =
 ;;
 
 module CallArity (CoCallGraph : sig
-    type 'a t
+    type t
 
-    val empty : 'a t
-    val adj_nodes : 'a -> 'a t -> 'a list
-    val has_loop : 'a -> 'a t -> bool
-    val cartesian : 'a list -> 'a list -> 'a t
-    val cartesian_square : 'a list -> 'a t
-    val union : 'a t -> 'a t -> 'a t
-    val extend : 'a list -> 'a t -> 'a t
-    val remove : 'a -> 'a t -> 'a t
+    val empty : t
+    val adj_nodes : int -> t -> unit IMap.t
+    val has_loop : int -> t -> bool
+    val cartesian : unit IMap.t -> unit IMap.t -> t
+    val cartesian_square : unit IMap.t -> t
+    val union : t -> t -> t
+    val extend : int -> t -> t
+    val remove : int -> t -> t
   end) =
 struct
   type ress =
@@ -1075,8 +1075,9 @@ struct
   open CoCallGraph
 
   let anal (_, _, p) =
+    let ( @@@ ) = IMap.union (fun _ () () -> Some ()) in
     let ar_union = IMap.union (fun _ x y -> Some (min x y)) in
-    let domain ars = IMap.fold (fun id _ dom -> id :: dom) ars [] in
+    let domain = IMap.map ignore in
     let leave_vars_scope co_calls ars v_id = remove v_id co_calls, IMap.remove v_id ars in
     let cond_add v_id v_arity cond ress =
       if cond v_arity
@@ -1196,7 +1197,7 @@ struct
         , fun ress2 _ -> b_co_calls, b_ars, ress2 )
       | v_arity ->
         let k_co_calls, k_ars = leave_vars_scope b_co_calls b_ars v_id in
-        let neigh = adj_nodes v_id b_co_calls |> List.filter @@ ( <> ) v_id in
+        let neigh = adj_nodes v_id b_co_calls |> IMap.remove v_id in
         let ress2 =
           match jv_specif with
           | None -> ress
@@ -1258,7 +1259,7 @@ struct
         @@ union el_co_calls
         @@ cartesian (domain c_ars)
         @@ domain th_ars
-        @ domain el_ars
+        @@@ domain el_ars
       in
       p_co_calls, p_ars, ress4
     and anal_triv conts int inc_ar t ress =
@@ -1277,14 +1278,14 @@ struct
       let anal_triv_sh = anal_triv conts int 0 in
       let f ((cc, ars, ress), (fv1, fv_acc)) t =
         let cc_t, ars_t, ress2 = anal_triv_sh t ress in
-        let fv_acc2 = fv1 @ fv_acc in
+        let fv_acc2 = fv1 @@@ fv_acc in
         let fv_t = domain ars_t in
         let cc2 = union cc @@ union cc_t @@ cartesian fv_acc2 fv_t in
         (cc2, ar_union ars ars_t, ress2), (fv_t, fv_acc)
       in
       let init =
         let ((_, ars_t, _) as frst) = anal_triv conts int fst_inc_ar t1 ress in
-        frst, ([], domain ars_t)
+        frst, (IMap.empty, domain ars_t)
       in
       List.fold_left f init tt |> fst
     in
