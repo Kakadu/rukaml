@@ -84,6 +84,8 @@ struct
     | TTuple of triv tuple
     | TUnit
 
+  type cps_vb = rec_flag * pat * p
+
   let cps_vb_to_parsetree_vb (rec_flag, pat, p) =
     let rec helper_pat pat k' =
       match pat with
@@ -283,11 +285,13 @@ struct
   and maybe_pars ppf = pp_triv ~ps:true ppf
 end
 
-open CPS_LANG (struct
+module OneACPS = CPS_LANG (struct
     type 'a t = 'a
 
     let to_cons a = a, []
   end)
+
+open OneACPS
 
 (* Abstract args *)
 type a =
@@ -1054,7 +1058,14 @@ let%expect_test "cps fake rec" =
 |}]
 ;;
 
-module CallArity (CoCallGraph : sig
+(* multi-arg CPS language *)
+module MACPS = CPS_LANG (struct
+    type 'a t = 'a * 'a list
+
+    let to_cons (a, aa) = a, aa
+  end)
+
+module CallArityAnal (CoCallGraph : sig
     type t
 
     val empty : t
@@ -1063,10 +1074,10 @@ module CallArity (CoCallGraph : sig
     val cartesian : unit IMap.t -> unit IMap.t -> t
     val cartesian_square : unit IMap.t -> t
     val union : t -> t -> t
-    val extend : int -> t -> t
     val remove : int -> t -> t
-  end) =
-struct
+  end) : sig
+  val call_arity_anal : cps_vb -> MACPS.cps_vb
+end = struct
   type ress =
     { dead_vars : ISet.t
     ; call_ars : int IMap.t
@@ -1292,524 +1303,578 @@ struct
     anal_p IMap.empty { dead_vars = ISet.empty; call_ars = IMap.empty } 0 p ISet.empty
     |> fun (_, _, ress) -> ress.dead_vars, ress.call_ars
   ;;
-end
 
-let foldd_k f =
-  let rec helper lst k =
-    match lst with
-    | [] -> k
-    | hd :: tl -> f hd (helper tl k)
-  in
-  helper
-;;
-
-type fork_pos =
-  | Right_After
-  | Other
-
-let down_anal (_, _, p) (dead_vars, call_ars) =
-  let open IMap in
-  let lookup_fin_call_ars t k_none k_found fin_call_ars =
-    match t with
-    | UVar { id; _ } ->
-      (match find id fin_call_ars with
-       | res -> k_found res fin_call_ars
-       | exception Not_found -> k_none fin_call_ars)
-    | _ -> k_none fin_call_ars
-  in
-  let lookup_call_ars id k_none k_found =
-    match IMap.find id call_ars with
-    | call_ar -> k_found call_ar
-    | exception Not_found -> k_none ()
-  in
-  let rec anal_p ?(dead_jv_mode = false) p ar k counts =
-    match p with
-    | Call (_, _, Cont (CPVar { id; _ }, b)) when ISet.mem id dead_vars ->
-      anal_p b ar k counts
-    | (Call (_, _, CVar _) | Ret (CVar _, _)) when dead_jv_mode -> k ar Other counts
-    | Call ((Lam (pat, _, _) as t1), t2, Cont (CPTuple _, b)) ->
-      anal_t_bnd pat t2 counts (anal_t t1 (anal_p b ar k))
-    | Call ((Lam (pat, i, lam_b) as t1), t2, Cont (CPVar { id; _ }, b)) ->
-      let counts' = add id 0 counts in
-      anal_t_bnd pat t2 counts' (fun counts'' barriers' fin_call_ars' ->
-        let k_none _ = anal_t t1 (anal_p b ar k) counts'' barriers' fin_call_ars' in
-        lookup_call_ars i.id k_none (fun call_ar ->
-          let k1 rest_ar _ counts''' barriers'' fin_call_ars'' =
-            let fin_call_ars''' = add id (call_ar - rest_ar) fin_call_ars'' in
-            anal_p b ar k counts''' barriers'' fin_call_ars'''
-          in
-          lam_hndl ~ar:call_ar pat i lam_b k1 counts'' barriers' fin_call_ars'))
-    | Call (Lam (pat, i, lam_b), t2, _) ->
-      anal_t_bnd pat t2 counts (lam_hndl ~ar pat i lam_b k)
-    | Call (t1, t2, Cont (CPTuple _, b)) ->
-      foldd_k anal_t [ t1; t2 ] (anal_p b ar k) counts
-    | Call (t1, t2, Cont (CPVar { id; _ }, b)) ->
-      let k1 counts' barriers' =
-        let counts'' = add id 0 counts' in
-        let k_none = anal_p b ar k counts'' barriers' in
-        lookup_fin_call_ars t1 k_none (fun t_ar fin_call_ars' ->
-          let fin_call_ars'' = add id (Int.min 0 (t_ar - 1)) fin_call_ars' in
-          anal_p b ar k counts'' barriers' fin_call_ars'')
-      in
-      foldd_k anal_t [ t1; t2 ] k1 counts
-    | Call (t1, t2, _) ->
-      let k1 counts' barriers' =
-        lookup_fin_call_ars t1 (k ar Other counts' barriers') (fun t_ar ->
-          k (ar - Int.min 0 (t_ar - 1)) Other counts' barriers')
-      in
-      foldd_k anal_t [ t1; t2 ] k1 counts
-    | CIf (t, p1, p2) ->
-      let k1 =
-        anal_p p1 ar (fun rest_ar1 _ ->
-          anal_p p2 ar (fun rest_ar2 _ -> k (Int.max rest_ar1 rest_ar2) Right_After))
-      in
-      anal_t t k1 counts
-    | Let (NonRecursive, pat, t, b) | Ret (Cont (pat, b), t) ->
-      anal_t_bnd pat t counts (anal_p b ar k)
-    | Ret (_, Lam (pat, i, lam_b)) ->
-      lam_hndl ~ar:(Int.min 0 (ar - 1)) pat i lam_b k counts
-    | Ret (_, t) ->
-      let k1 counts' barriers' =
-        lookup_fin_call_ars t (k 0 Other counts' barriers') (fun t_ar ->
-          k (ar - t_ar) Other counts' barriers')
-      in
-      anal_t t k1 counts
-    | Primop (_, _, t, tt, b) -> foldd_k anal_t (t :: tt) (anal_p b ar k) counts
-    | Letc (i, Cont (CPVar { id; _ }, cont_b), b) ->
-      let jv call_ar =
-        let counts' = add id 0 counts in
-        let k1 rest_ar _ counts'' barriers' fin_call_ars' =
-          anal_p cont_b ar k counts'' barriers' (add id (call_ar - rest_ar) fin_call_ars')
-        in
-        anal_p ~dead_jv_mode:(ISet.mem i.id dead_vars) b call_ar k1 counts'
-      in
-      lookup_call_ars i.id (fun _ -> jv 0) jv
-    | Letc (_, Cont (CPTuple _, cont_b), b) ->
-      anal_p b 0 (fun _ _ -> anal_p cont_b ar k) counts
-    | Letc (i, _, b) ->
-      anal_p ~dead_jv_mode:(ISet.mem i.id dead_vars) b ar k (add i.id 0 counts)
-    | Let (Recursive, _, _, _) -> failwith "todo"
-  and anal_t_bnd pat t counts k barriers fin_call_ars =
-    match pat with
-    | CPVar { id; _ } when ISet.mem id dead_vars -> k counts barriers fin_call_ars
-    | CPTuple _ -> anal_t t k counts barriers fin_call_ars
-    | CPVar { id; _ } ->
-      let counts' = add id 0 counts in
-      let k_anal_t _ = anal_t t k counts' barriers fin_call_ars in
-      (match t with
-       | Lam (pat, i, p) ->
-         lookup_call_ars i.id k_anal_t (fun ar ->
-           let k1 rest_ar _ counts'' barriers' fin_call_ars' =
-             let fin_call_ars'' = add id (ar - rest_ar) fin_call_ars' in
-             k counts'' barriers' fin_call_ars''
-           in
-           lam_hndl ~ar:(ar - 1) pat i p k1 counts' barriers fin_call_ars)
-       | t ->
-         let k_found t_ar _ =
-           let fin_call_ars' = add id t_ar fin_call_ars in
-           anal_t t k counts barriers fin_call_ars'
-         in
-         lookup_fin_call_ars t (fun _ -> k_anal_t ()) k_found fin_call_ars)
-  and lam_hndl ?(ar = 0) pat i p k counts =
-    let k1 rest_ar fork_pos counts' barriers' fin_call_ars' =
-      let barriers'' =
-        match fork_pos with
-        | Right_After -> ISet.add i.id barriers'
-        | Other -> barriers'
-      in
-      k rest_ar Other counts' barriers'' fin_call_ars'
-    in
-    let jv counts' = anal_p p ar k1 (add i.id 0 counts') in
-    match pat with
-    | CPTuple _ -> jv counts
-    | CPVar { id; _ } -> jv (add id 0 counts)
-  and anal_t t k counts =
-    match t with
-    | Lam (pat, i, p) -> lam_hndl pat i p (fun _ _ -> k) counts
-    | TSafeBinop (_, t1, t2) -> anal_t t1 (anal_t t2 k) counts
-    | UVar { id; _ } ->
-      let n = find id counts in
-      let counts' = add id (n + 1) counts in
-      k counts'
-    | TTuple (t1, t2, tt) -> foldd_k anal_t (t1 :: t2 :: tt) k counts
-    | TUnit | TConst _ -> k counts
-  in
-  let k _ _ _ counts barriers fin_call_ars = counts, fin_call_ars, barriers in
-  anal_p p 0 k empty ISet.empty empty
-;;
-
-(* multi-arg CPS language *)
-module MACPS = CPS_LANG (struct
-    type 'a t = 'a * 'a list
-
-    let to_cons (a, aa) = a, aa
-  end)
-
-type ex_light_triv =
-  [ `LightT of triv (* unit size triv*)
-  | `Var of var * triv
-  ]
-
-type ex_triv =
-  [ ex_light_triv
-  | `HeavyT of triv
-  ]
-
-type light =
-  [ ex_light_triv
-  | `ExLightCall of light * ex_light_triv
-  ]
-
-type env_elem =
-  [ ex_triv
-  | `ExLightCall of light * ex_light_triv
-  | `ExLamCall of (pat * var * p) * MACPS.triv
-  | `ExHeavyCall of env_elem * ex_triv
-  ]
-
-type ex_call =
-  [ `ExLightCall of light * ex_light_triv
-  | `ExLamCall of (pat * var * p) * MACPS.triv
-  | `ExHeavyCall of env_elem * ex_triv
-  ]
-
-type etas =
-  | Present of ex_triv list
-    (* we've add eta-params and we're gonna add due eta-args (or ones substitutions) *)
-  | Future of int
-(* jv_case, we're gonna eta expand returned by jv expressions with that number of params and args *)
-
-type cont_hndl =
-  | Def
-  | DeadJV
-  | Sub of cont * cont_hndl
-
-let simpl dead_vars counts barriers fin_call_ars (rec_flag, pat, p) =
-  let open IMap in
-  let find_with_default k m default =
-    match find k m with
-    | el -> el
-    | exception Not_found -> default
-  in
-  let prep_t_for_env env t =
-    match t with
-    | UVar i -> find_with_default i.id env (`Var (i, t))
-    | Lam _ | TSafeBinop _ | TTuple _ -> `HeavyT t
-    | TConst _ | TUnit -> `LightT t
-  in
-  let gen_eta arg_constr () =
-    let eta = gensym ~prefix:"e" () |> of_string in
-    arg_constr eta, MACPS.CPVar eta
-  in
-  let gen_macps_eta = gen_eta @@ fun i -> MACPS.UVar i in
-  let gen_many_etas arg_constr =
-    let rec helper args_acc pats_acc n =
-      if n < 1
-      then args_acc, pats_acc
-      else (
-        let arg, pat = gen_eta arg_constr () in
-        helper (arg :: args_acc) (pat :: pats_acc) (n - 1))
-    in
-    helper [] []
-  in
-  let gen_many_etas_with_k arg_constr =
-    let rec helper args_acc pats_and_k_acc n =
-      if n < 1
-      then args_acc, pats_and_k_acc
-      else (
-        let arg, pat = gen_eta arg_constr () in
-        let k = gensym ~prefix:"k" () |> of_string in
-        helper (arg :: args_acc) ((pat, k) :: pats_and_k_acc) (n - 1))
-    in
-    helper [] []
-  in
-  let gen_many_macps_etas = gen_many_etas @@ fun i -> MACPS.UVar i in
-  let v_ar = function
-    | CPTuple _ -> 0
-    | CPVar { id; _ } -> find_with_default id fin_call_ars 0
-  in
-  let env_var i = `Var (i, UVar i) in
-  let rec translate_pat = function
-    | CPVar i -> MACPS.CPVar i
-    | CPTuple (pat1, pat2, pats) ->
-      let self = translate_pat in
-      MACPS.CPTuple (self pat1, self pat2, List.map self pats)
-  in
-  let rec simpl_p ?(cont_hndl = Def) etas p (env : env_elem IMap.t) =
-    let simpl_t_sh = simpl_t env in
-    let simpl_p_sh = simpl_p ~cont_hndl etas in
-    let get_triv_sh = get_triv env in
-    let expand_lam pat i b etas_count =
-      let eta_args, eta_pats = gen_many_etas env_var etas_count in
-      let pat' = translate_pat pat in
-      let b' = simpl_p (Present eta_args) b env in
-      MACPS.Lam ((pat', eta_pats), i, b')
-    in
-    let expand_ex_call v_ar ec =
-      if v_ar < 0
-      then failwith "unreachable: v_ar should be positive for expansion"
-      else (
-        let eta_arg, eta_pat = gen_eta env_var () in
-        let eta_args, eta_pats = gen_many_etas env_var (v_ar - 1) in
-        let i' = gensym ~prefix:"k" () |> of_string in
-        let lam_b' = ex_call (MACPS.CVar i') env (eta_arg :: eta_args) ec in
-        MACPS.Lam ((eta_pat, eta_pats), i', lam_b'))
-    in
-    let expand_triv v_ar = function
-      | `HeavyT (Lam (lam_pat, i, lam_b)) when v_ar > 1 ->
-        expand_lam lam_pat i lam_b (v_ar - 1)
-      | #ex_call as ec -> expand_ex_call v_ar ec
-      | #ex_triv as et -> get_triv_sh et
-    in
-    let triv_bnd ?(v_ar = 0) id_opt prep_t k_inl k_def =
-      match id_opt, prep_t with
-      | Some id, _ when find id counts <= 1 -> k_inl @@ add id prep_t env
-      | Some id, #light -> k_inl @@ add id prep_t env
-      | _ ->
-        let t' = expand_triv v_ar prep_t in
-        k_def t'
-    in
-    let let_or_ret_bnd pat b t fin_constr =
-      let v_ar, id_opt =
-        match pat with
-        | CPVar { id; _ } -> find_with_default id fin_call_ars 0, Some id
-        | CPTuple _ -> 0, None
-      in
-      let prep_t = prep_t_for_env env t in
-      triv_bnd ~v_ar id_opt prep_t (simpl_p_sh b)
-      @@ fun t' ->
-      let pat' = translate_pat pat in
-      let b' = simpl_p_sh b env in
-      fin_constr pat' b' t'
-    in
-    let ret_or_prep_call call_ar prep_t c get_c' =
-      let default ~c ~get_c' = function
-        | (#ex_triv as eta) :: etas, `HeavyT (Lam ((CPVar { id; _ } as pat), i, b)) ->
-          let k_inl = simpl_p ~cont_hndl:(Sub (c, cont_hndl)) (Present etas) b in
-          triv_bnd (Some id) eta k_inl
-          @@ fun t2' -> ex_lam_call pat i b t2' etas (get_c' ()) env
-        | (#ex_triv as eta) :: etas, (#ex_triv as prep_t) ->
-          let t1', t2', tt' = translate_prep_t_tuple env prep_t eta etas in
-          MACPS.Call (t1', (t2', tt'), get_c' ())
-        | [], (#ex_triv as prep_t) -> Ret (get_c' (), get_triv_sh prep_t)
-        | etas, (#ex_call as prep_t) -> ex_call (get_c' ()) env etas prep_t
-      in
-      let stepped etas diff =
-        let new_etas, pats_and_k = gen_many_etas_with_k env_var diff in
-        let rec helper = function
-          | [] -> failwith "unreachable: diff couldn't be less then 1"
-          | (pat', k) :: [] ->
-            let b' =
-              default
-                ~c:(CVar k)
-                ~get_c':(fun () -> MACPS.CVar k)
-                (etas @ new_etas, prep_t)
-            in
-            MACPS.Lam ((pat', []), k, b')
-          | (pat', k) :: tl -> MACPS.Lam ((pat', []), k, Ret (CVar k, helper tl))
-        in
-        helper pats_and_k
-      in
-      match etas with
-      | Present pr_etas when call_ar <= List.length pr_etas ->
-        default ~c ~get_c' (pr_etas, prep_t)
-      | Present pr_etas ->
-        MACPS.Ret (get_c' (), stepped pr_etas (call_ar - List.length pr_etas))
-      | Future n when n <= 0 -> MACPS.Ret (get_c' (), stepped [] call_ar)
-      | Future n ->
-        let diff = call_ar - n in
-        if diff <= 0
-        then Ret (get_c' (), expand_triv n prep_t)
-        else (
-          let eta_arg, eta_pat = gen_eta env_var () in
-          let eta_args, eta_pats = gen_many_etas env_var (n - 1) in
-          let k = gensym ~prefix:"k" () |> of_string in
-          let b' = MACPS.Ret (CVar k, stepped (eta_arg :: eta_args) diff) in
-          MACPS.Ret (get_c' (), Lam ((eta_pat, eta_pats), k, b')))
-    in
-    let ret ?(call_ar = None) t =
-      let call_ar =
-        match call_ar, t with
-        | Some n, _ -> n
-        | None, UVar i -> find_with_default i.id fin_call_ars 0
-        | _ -> 0
-      in
-      let prep_t = prep_t_for_env env t in
-      ret_or_prep_call call_ar prep_t
-    in
-    let lam_call pat b c t2_prep =
-      let v_ar, id_opt =
-        match pat with
-        | CPVar { id; _ } -> find_with_default id fin_call_ars 0, Some id
-        | CPTuple _ -> 0, None
-      in
-      let k_inl = simpl_p ~cont_hndl:(Sub (c, cont_hndl)) etas b in
-      triv_bnd ~v_ar id_opt t2_prep k_inl
-    in
-    let call t1 t2 c get_c' =
-      let prep_t1, prep_t2 = prep_t_for_env env t1, prep_t_for_env env t2 in
-      let call_ar () =
-        match t1 with
-        | UVar i -> find_with_default i.id fin_call_ars 0 - 1
-        | _ -> 0
-      in
-      match prep_t1, prep_t2 with
-      | `HeavyT (Lam (lam_pat, i, lam_b)), _ ->
-        lam_call lam_pat lam_b c prep_t2
-        @@ fun t2' ->
-        ret_or_prep_call (call_ar ()) (`ExLamCall ((lam_pat, i, lam_b), t2')) c get_c'
-      | (#light as prep_t1), (#ex_light_triv as prep_t2) ->
-        ret_or_prep_call (call_ar ()) (`ExLightCall (prep_t1, prep_t2)) c get_c'
-      | prep_t1, (#ex_triv as prep_t2) ->
-        ret_or_prep_call (call_ar ()) (`ExHeavyCall (prep_t1, prep_t2)) c get_c'
-      | _, #ex_call ->
-        failwith "unreachable: call shouldn't be inlined if its call arity is 0"
-    in
-    match cont_hndl, p with
-    | ( _
-      , ( Call (_, _, Cont (CPVar { id; _ }, b))
-        | Let (NonRecursive, CPVar { id; _ }, _, b)
-        | Ret (Cont (CPVar { id; _ }, b), _) ) )
-      when ISet.mem id dead_vars -> simpl_p_sh b env
-    | DeadJV, (Ret (CVar i, _) | Call (_, _, CVar i)) -> MACPS.Ret (CVar i, TUnit)
-    | Sub (c, cont_hndl), Ret (_, t) -> simpl_p ~cont_hndl etas (Ret (c, t)) env
-    | Sub (c, cont_hndl), Call (t1, t2, _) ->
-      simpl_p ~cont_hndl etas (Call (t1, t2, c)) env
-    | _, Call (t1, t2, (Cont (pat, b) as c)) ->
-      let v_ar = v_ar pat in
-      let t1_prep, t2_prep = prep_t_for_env env t1, prep_t_for_env env t2 in
-      let not_inl_ex_call t2' get_ec =
-        if v_ar > 0
-        then (
-          let t' = expand_ex_call v_ar @@ get_ec () in
-          let b' = simpl_p_sh b env in
-          let pat' = translate_pat pat in
-          MACPS.Ret (Cont (pat', b'), t'))
-        else (
-          let t1' = simpl_t_sh t1 in
-          let pat' = translate_pat pat in
-          let b' = simpl_p_sh b env in
-          MACPS.Call (t1', (t2', []), Cont (pat', b')))
-      in
-      (match pat, t1_prep, t2_prep with
-       | CPVar { id; _ }, (#light as t1_prep), (#ex_light_triv as t2_prep) when v_ar > 0
-         -> simpl_p_sh b @@ add id (`ExLightCall (t1_prep, t2_prep)) env
-       | _, `HeavyT (Lam (lam_pat, i, lam_b)), _ ->
-         lam_call lam_pat lam_b c t2_prep
-         @@ fun t2' ->
-         (match pat with
-          | CPVar { id; _ } when v_ar > 0 && find id counts <= 1 ->
-            simpl_p_sh b @@ add id (`ExLamCall ((lam_pat, i, lam_b), t2')) env
-          | _ -> not_inl_ex_call t2' @@ fun () -> `ExLamCall ((lam_pat, i, lam_b), t2'))
-       | CPVar { id; _ }, _, (#ex_triv as t2_prep) when find id counts <= 1 && v_ar > 0 ->
-         simpl_p_sh b @@ add id (`ExHeavyCall (t1_prep, t2_prep)) env
-       | _, (#ex_triv as t1_prep), (#ex_triv as t2_prep) ->
-         let pat' = translate_pat pat in
-         let b' = simpl_p_sh b env in
-         let t1', t2' = get_triv_sh t1_prep, get_triv_sh t2_prep in
-         if v_ar < 1
-         then MACPS.Call (t1', (t2', []), Cont (pat', b'))
-         else (
-           let eta_arg, eta_pat = gen_macps_eta () in
-           let eta_args, eta_pats = gen_many_macps_etas (v_ar - 1) in
-           let i = gensym ~prefix:"k" () |> of_string in
-           MACPS.Ret
-             ( Cont (pat', b')
-             , Lam ((eta_pat, eta_pats), i, Call (t1', (t2', eta_arg :: eta_args), CVar i))
-             ))
-       | _, (#ex_call as ec), (#ex_triv as et) ->
-         not_inl_ex_call (get_triv_sh et) @@ fun () -> `ExHeavyCall (ec, et)
-       | _, _, #ex_call ->
-         failwith "unreachable: call shouldn't be inlined if its call arity is 0")
-    | _, Ret (Cont (pat, b), t) ->
-      let_or_ret_bnd pat b t @@ fun pat' b' t' -> MACPS.Ret (Cont (pat', b'), t')
-    | _, Let (NonRecursive, pat, t, b) ->
-      let_or_ret_bnd pat b t @@ fun pat' b' t' -> MACPS.Let (NonRecursive, pat', t', b')
-    | _, CIf (t, p1, p2) ->
-      let t' = simpl_t_sh t in
-      let p1', p2' = simpl_p_sh p1 env, simpl_p_sh p2 env in
-      CIf (t', p1', p2')
-    | _, Primop (pat, i, t1, tt, p) ->
-      let pat' = translate_pat pat in
-      let t1' = simpl_t_sh t1 in
-      let tt' = List.map simpl_t_sh tt in
-      let p' = simpl_p_sh p env in
-      Primop (pat', i, t1', tt', p')
-    | _, Letc (i, Cont (pat, b1), b2) ->
-      let pat' = translate_pat pat in
-      let b1' = simpl_p_sh b1 env in
-      let cont_hndl, etas2 =
-        if ISet.mem i.id dead_vars
-        then DeadJV, Future 0
-        else Def, Future (find_with_default i.id fin_call_ars 0)
-      in
-      let b2' = simpl_p ~cont_hndl etas2 b2 env in
-      Letc (i, Cont (pat', b1'), b2')
-    | _, Letc (_, c, b) -> simpl_p ~cont_hndl:(Sub (c, cont_hndl)) etas b env
-    | Def, Ret ((CVar i as c), t) -> ret t c @@ fun () -> MACPS.CVar i
-    | Def, Ret ((HALT as c), t) -> ret t c @@ fun () -> MACPS.HALT
-    | Def, Call (t1, t2, (CVar i as c)) -> call t1 t2 c @@ fun () -> MACPS.CVar i
-    | Def, Call (t1, t2, (HALT as c)) -> call t1 t2 c @@ fun () -> MACPS.HALT
-    | DeadJV, (Ret (HALT, _) | Call (_, _, HALT)) ->
-      failwith " unreachable: HALT isn't a join value"
-    | _, Let (Recursive, _, _, _) -> failwith "todo"
-  and ex_call c env =
-    let rec helper args = function
-      | `ExHeavyCall ((#ex_call as ec), prep_t) -> helper (prep_t :: args) ec
-      | `ExLightCall ((`ExLightCall _ as ec), (#ex_light_triv as prep_t)) ->
-        helper (prep_t :: args) ec
-      | `ExLamCall ((pat, i, b), t') -> ex_lam_call pat i b t' args c env
-      | `ExLightCall ((#ex_light_triv as prep_t1), (#ex_light_triv as prep_t2))
-      | `ExHeavyCall ((#ex_triv as prep_t1), (#ex_triv as prep_t2)) ->
-        let t1', t2', tt' = translate_prep_t_tuple env prep_t1 prep_t2 args in
-        MACPS.Call (t1', (t2', tt'), c)
+  let foldd_k f =
+    let rec helper lst k =
+      match lst with
+      | [] -> k
+      | hd :: tl -> f hd (helper tl k)
     in
     helper
-  and translate_prep_t_tuple env prep_t1 prep_t2 prep_tt =
-    get_triv env |> fun f -> f prep_t1, f prep_t2, List.map f prep_tt
-  and ex_lam_call pat i b t' args c env =
-    let pat' = translate_pat pat in
-    let (pats', tt'), args' =
-      if not @@ ISet.mem i.id barriers
-      then ([], []), args
-      else (
-        let rev_pats_tt_pairs, args' =
-          List.fold_left_map
-            (fun acc -> function
-              | #ex_light_triv as lt -> acc, lt
-              | `HeavyT tn ->
-                let eta_arg, eta_pat = gen_eta env_var () in
-                let tn' = simpl_t env tn in
-                (eta_pat, tn') :: acc, eta_arg)
-            []
-            args
-        in
-        let rev_unzip =
-          List.fold_left (fun (pats, tt) (pat, t) -> pat :: pats, t :: tt) ([], [])
-        in
-        rev_unzip rev_pats_tt_pairs, args')
+  ;;
+
+  type fork_pos =
+    | Right_After
+    | Other
+
+  let down_anal (_, _, p) (dead_vars, call_ars) =
+    let open IMap in
+    let lookup_fin_call_ars t k_none k_found fin_call_ars =
+      match t with
+      | UVar { id; _ } ->
+        (match find id fin_call_ars with
+         | res -> k_found res fin_call_ars
+         | exception Not_found -> k_none fin_call_ars)
+      | _ -> k_none fin_call_ars
     in
-    let b' = simpl_p (Present args') b env in
-    MACPS.Call (Lam ((pat', pats'), i, b'), (t', tt'), c)
-  and simpl_t ?(ignore_ids = false) env = function
-    | UVar i ->
-      if ignore_ids
-      then MACPS.UVar i
-      else (
-        match find i.id env with
-        | #ex_triv as et -> get_triv env et
-        | #ex_call ->
-          failwith "unreachable: call shouldn't be inlined if its call arity is 0 ")
-    | TSafeBinop (i, t1, t2) -> MACPS.TSafeBinop (i, simpl_t env t1, simpl_t env t2)
-    | TConst c -> MACPS.TConst c
-    | TUnit -> MACPS.TUnit
-    | TTuple (t1, t2, tt) ->
-      let smp_sh = simpl_t env in
-      MACPS.TTuple (smp_sh t1, smp_sh t2, List.map smp_sh tt)
-    | Lam (pat, i, b) -> MACPS.Lam ((translate_pat pat, []), i, simpl_p (Present []) b env)
-  and get_triv env ex_triv =
-    match (ex_triv : ex_triv) with
-    | `Var (_, t) | `LightT t | `HeavyT t -> simpl_t ~ignore_ids:true env t
-  in
-  rec_flag, translate_pat pat, simpl_p (Present []) p empty
-;;
+    let lookup_call_ars id k_none k_found =
+      match IMap.find id call_ars with
+      | call_ar -> k_found call_ar
+      | exception Not_found -> k_none ()
+    in
+    let rec anal_p ?(dead_jv_mode = false) p ar k counts =
+      match p with
+      | Call (_, _, Cont (CPVar { id; _ }, b)) when ISet.mem id dead_vars ->
+        anal_p b ar k counts
+      | (Call (_, _, CVar _) | Ret (CVar _, _)) when dead_jv_mode -> k ar Other counts
+      | Call ((Lam (pat, _, _) as t1), t2, Cont (CPTuple _, b)) ->
+        anal_t_bnd pat t2 counts (anal_t t1 (anal_p b ar k))
+      | Call ((Lam (pat, i, lam_b) as t1), t2, Cont (CPVar { id; _ }, b)) ->
+        let counts' = add id 0 counts in
+        anal_t_bnd pat t2 counts' (fun counts'' barriers' fin_call_ars' ->
+          let k_none _ = anal_t t1 (anal_p b ar k) counts'' barriers' fin_call_ars' in
+          lookup_call_ars i.id k_none (fun call_ar ->
+            let k1 rest_ar _ counts''' barriers'' fin_call_ars'' =
+              let fin_call_ars''' = add id (call_ar - rest_ar) fin_call_ars'' in
+              anal_p b ar k counts''' barriers'' fin_call_ars'''
+            in
+            lam_hndl ~ar:call_ar pat i lam_b k1 counts'' barriers' fin_call_ars'))
+      | Call (Lam (pat, i, lam_b), t2, _) ->
+        anal_t_bnd pat t2 counts (lam_hndl ~ar pat i lam_b k)
+      | Call (t1, t2, Cont (CPTuple _, b)) ->
+        foldd_k anal_t [ t1; t2 ] (anal_p b ar k) counts
+      | Call (t1, t2, Cont (CPVar { id; _ }, b)) ->
+        let k1 counts' barriers' =
+          let counts'' = add id 0 counts' in
+          let k_none = anal_p b ar k counts'' barriers' in
+          lookup_fin_call_ars t1 k_none (fun t_ar fin_call_ars' ->
+            let fin_call_ars'' = add id (Int.min 0 (t_ar - 1)) fin_call_ars' in
+            anal_p b ar k counts'' barriers' fin_call_ars'')
+        in
+        foldd_k anal_t [ t1; t2 ] k1 counts
+      | Call (t1, t2, _) ->
+        let k1 counts' barriers' =
+          lookup_fin_call_ars t1 (k ar Other counts' barriers') (fun t_ar ->
+            k (ar - Int.min 0 (t_ar - 1)) Other counts' barriers')
+        in
+        foldd_k anal_t [ t1; t2 ] k1 counts
+      | CIf (t, p1, p2) ->
+        let k1 =
+          anal_p p1 ar (fun rest_ar1 _ ->
+            anal_p p2 ar (fun rest_ar2 _ -> k (Int.max rest_ar1 rest_ar2) Right_After))
+        in
+        anal_t t k1 counts
+      | Let (NonRecursive, pat, t, b) | Ret (Cont (pat, b), t) ->
+        anal_t_bnd pat t counts (anal_p b ar k)
+      | Ret (_, Lam (pat, i, lam_b)) ->
+        lam_hndl ~ar:(Int.min 0 (ar - 1)) pat i lam_b k counts
+      | Ret (_, t) ->
+        let k1 counts' barriers' =
+          lookup_fin_call_ars t (k 0 Other counts' barriers') (fun t_ar ->
+            k (ar - t_ar) Other counts' barriers')
+        in
+        anal_t t k1 counts
+      | Primop (_, _, t, tt, b) -> foldd_k anal_t (t :: tt) (anal_p b ar k) counts
+      | Letc (i, Cont (CPVar { id; _ }, cont_b), b) ->
+        let jv call_ar =
+          let counts' = add id 0 counts in
+          let k1 rest_ar _ counts'' barriers' fin_call_ars' =
+            let fin_call_ars'' = add id (call_ar - rest_ar) fin_call_ars' in
+            anal_p cont_b ar k counts'' barriers' fin_call_ars''
+          in
+          anal_p ~dead_jv_mode:(ISet.mem i.id dead_vars) b call_ar k1 counts'
+        in
+        lookup_call_ars i.id (fun _ -> jv 0) jv
+      | Letc (_, Cont (CPTuple _, cont_b), b) ->
+        anal_p b 0 (fun _ _ -> anal_p cont_b ar k) counts
+      | Letc (i, _, b) ->
+        anal_p ~dead_jv_mode:(ISet.mem i.id dead_vars) b ar k (add i.id 0 counts)
+      | Let (Recursive, _, _, _) -> failwith "todo"
+    and anal_t_bnd pat t counts k barriers fin_call_ars =
+      match pat with
+      | CPVar { id; _ } when ISet.mem id dead_vars -> k counts barriers fin_call_ars
+      | CPTuple _ -> anal_t t k counts barriers fin_call_ars
+      | CPVar { id; _ } ->
+        let counts' = add id 0 counts in
+        let k_anal_t _ = anal_t t k counts' barriers fin_call_ars in
+        (match t with
+         | Lam (pat, i, p) ->
+           lookup_call_ars i.id k_anal_t (fun ar ->
+             let k1 rest_ar _ counts'' barriers' fin_call_ars' =
+               let fin_call_ars'' = add id (ar - rest_ar) fin_call_ars' in
+               k counts'' barriers' fin_call_ars''
+             in
+             lam_hndl ~ar:(ar - 1) pat i p k1 counts' barriers fin_call_ars)
+         | t ->
+           let k_found t_ar _ =
+             let fin_call_ars' = add id t_ar fin_call_ars in
+             anal_t t k counts barriers fin_call_ars'
+           in
+           lookup_fin_call_ars t (fun _ -> k_anal_t ()) k_found fin_call_ars)
+    and lam_hndl ?(ar = 0) pat i p k counts =
+      let k1 rest_ar fork_pos counts' barriers' fin_call_ars' =
+        let barriers'' =
+          match fork_pos with
+          | Right_After -> ISet.add i.id barriers'
+          | Other -> barriers'
+        in
+        k rest_ar Other counts' barriers'' fin_call_ars'
+      in
+      let jv counts' = anal_p p ar k1 (add i.id 0 counts') in
+      match pat with
+      | CPTuple _ -> jv counts
+      | CPVar { id; _ } -> jv (add id 0 counts)
+    and anal_t t k counts =
+      match t with
+      | Lam (pat, i, p) -> lam_hndl pat i p (fun _ _ -> k) counts
+      | TSafeBinop (_, t1, t2) -> anal_t t1 (anal_t t2 k) counts
+      | UVar { id; _ } ->
+        let n = find id counts in
+        let counts' = add id (n + 1) counts in
+        k counts'
+      | TTuple (t1, t2, tt) -> foldd_k anal_t (t1 :: t2 :: tt) k counts
+      | TUnit | TConst _ -> k counts
+    in
+    let k _ _ counts barriers fin_call_ars = dead_vars, counts, barriers, fin_call_ars in
+    anal_p p 0 k empty ISet.empty empty
+  ;;
+
+  type ex_light_triv =
+    [ `LightT of triv (* unit size triv*)
+    | `Var of var * triv
+    ]
+
+  type ex_triv =
+    [ ex_light_triv
+    | `HeavyT of triv
+    ]
+
+  type light =
+    [ ex_light_triv
+    | `ExLightCall of light * ex_light_triv
+    ]
+
+  type env_elem =
+    [ ex_triv
+    | `ExLightCall of light * ex_light_triv
+    | `ExLamCall of (pat * var * p) * MACPS.triv
+    | `ExHeavyCall of env_elem * ex_triv
+    ]
+
+  type ex_call =
+    [ `ExLightCall of light * ex_light_triv
+    | `ExLamCall of (pat * var * p) * MACPS.triv
+    | `ExHeavyCall of env_elem * ex_triv
+    ]
+
+  type etas =
+    | Present of ex_triv list
+      (* we've add eta-params and we're gonna add due eta-args (or ones substitutions) *)
+    | Future of int
+  (* jv_case, we're gonna eta expand returned by jv expressions with that number of params and args *)
+
+  type cont_hndl =
+    | Def
+    | DeadJV
+    | Sub of cont * cont_hndl
+
+  let simpl (rec_flag, pat, p) (dead_vars, counts, barriers, fin_call_ars) =
+    let open IMap in
+    let find_with_default k m default =
+      match find k m with
+      | el -> el
+      | exception Not_found -> default
+    in
+    let prep_t_for_env env t =
+      match t with
+      | UVar i -> find_with_default i.id env (`Var (i, t))
+      | Lam _ | TSafeBinop _ | TTuple _ -> `HeavyT t
+      | TConst _ | TUnit -> `LightT t
+    in
+    let gen_eta arg_constr () =
+      let eta = gensym ~prefix:"e" () |> of_string in
+      arg_constr eta, MACPS.CPVar eta
+    in
+    let gen_macps_eta = gen_eta @@ fun i -> MACPS.UVar i in
+    let gen_many_etas arg_constr =
+      let rec helper args_acc pats_acc n =
+        if n < 1
+        then args_acc, pats_acc
+        else (
+          let arg, pat = gen_eta arg_constr () in
+          helper (arg :: args_acc) (pat :: pats_acc) (n - 1))
+      in
+      helper [] []
+    in
+    let gen_many_etas_with_k arg_constr =
+      let rec helper args_acc pats_and_k_acc n =
+        if n < 1
+        then args_acc, pats_and_k_acc
+        else (
+          let arg, pat = gen_eta arg_constr () in
+          let k = gensym ~prefix:"k" () |> of_string in
+          helper (arg :: args_acc) ((pat, k) :: pats_and_k_acc) (n - 1))
+      in
+      helper [] []
+    in
+    let gen_many_macps_etas = gen_many_etas @@ fun i -> MACPS.UVar i in
+    let v_ar = function
+      | CPTuple _ -> 0
+      | CPVar { id; _ } -> find_with_default id fin_call_ars 0
+    in
+    let env_var i = `Var (i, UVar i) in
+    let rec translate_pat = function
+      | CPVar i -> MACPS.CPVar i
+      | CPTuple (pat1, pat2, pats) ->
+        let self = translate_pat in
+        MACPS.CPTuple (self pat1, self pat2, List.map self pats)
+    in
+    let rec simpl_p ?(cont_hndl = Def) etas p (env : env_elem IMap.t) =
+      let simpl_t_sh = simpl_t env in
+      let simpl_p_sh = simpl_p ~cont_hndl etas in
+      let get_triv_sh = get_triv env in
+      let expand_lam pat i b etas_count =
+        let eta_args, eta_pats = gen_many_etas env_var etas_count in
+        let pat' = translate_pat pat in
+        let b' = simpl_p (Present eta_args) b env in
+        MACPS.Lam ((pat', eta_pats), i, b')
+      in
+      let expand_ex_call v_ar ec =
+        if v_ar < 0
+        then failwith "unreachable: v_ar should be positive for expansion"
+        else (
+          let eta_arg, eta_pat = gen_eta env_var () in
+          let eta_args, eta_pats = gen_many_etas env_var (v_ar - 1) in
+          let i' = gensym ~prefix:"k" () |> of_string in
+          let lam_b' = ex_call (MACPS.CVar i') env (eta_arg :: eta_args) ec in
+          MACPS.Lam ((eta_pat, eta_pats), i', lam_b'))
+      in
+      let expand_triv v_ar = function
+        | `HeavyT (Lam (lam_pat, i, lam_b)) when v_ar > 1 ->
+          expand_lam lam_pat i lam_b (v_ar - 1)
+        | #ex_call as ec -> expand_ex_call v_ar ec
+        | #ex_triv as et -> get_triv_sh et
+      in
+      let triv_bnd ?(v_ar = 0) id_opt prep_t k_inl k_def =
+        match id_opt, prep_t with
+        | Some id, _ when find id counts <= 1 -> k_inl @@ add id prep_t env
+        | Some id, #light -> k_inl @@ add id prep_t env
+        | _ ->
+          let t' = expand_triv v_ar prep_t in
+          k_def t'
+      in
+      let let_or_ret_bnd pat b t fin_constr =
+        let v_ar, id_opt =
+          match pat with
+          | CPVar { id; _ } -> find_with_default id fin_call_ars 0, Some id
+          | CPTuple _ -> 0, None
+        in
+        let prep_t = prep_t_for_env env t in
+        triv_bnd ~v_ar id_opt prep_t (simpl_p_sh b)
+        @@ fun t' ->
+        let pat' = translate_pat pat in
+        let b' = simpl_p_sh b env in
+        fin_constr pat' b' t'
+      in
+      let ret_or_prep_call call_ar prep_t c get_c' =
+        let default ~c ~get_c' = function
+          | (#ex_triv as eta) :: etas, `HeavyT (Lam ((CPVar { id; _ } as pat), i, b)) ->
+            let k_inl = simpl_p ~cont_hndl:(Sub (c, cont_hndl)) (Present etas) b in
+            triv_bnd (Some id) eta k_inl
+            @@ fun t2' -> ex_lam_call pat i b t2' etas (get_c' ()) env
+          | (#ex_triv as eta) :: etas, (#ex_triv as prep_t) ->
+            let t1', t2', tt' = translate_prep_t_tuple env prep_t eta etas in
+            MACPS.Call (t1', (t2', tt'), get_c' ())
+          | [], (#ex_triv as prep_t) -> Ret (get_c' (), get_triv_sh prep_t)
+          | etas, (#ex_call as prep_t) -> ex_call (get_c' ()) env etas prep_t
+        in
+        let stepped etas diff =
+          let new_etas, pats_and_k = gen_many_etas_with_k env_var diff in
+          let rec helper = function
+            | [] -> failwith "unreachable: diff couldn't be less then 1"
+            | (pat', k) :: [] ->
+              let b' =
+                default
+                  ~c:(CVar k)
+                  ~get_c':(fun () -> MACPS.CVar k)
+                  (etas @ new_etas, prep_t)
+              in
+              MACPS.Lam ((pat', []), k, b')
+            | (pat', k) :: tl -> MACPS.Lam ((pat', []), k, Ret (CVar k, helper tl))
+          in
+          helper pats_and_k
+        in
+        match etas with
+        | Present pr_etas when call_ar <= List.length pr_etas ->
+          default ~c ~get_c' (pr_etas, prep_t)
+        | Present pr_etas ->
+          MACPS.Ret (get_c' (), stepped pr_etas (call_ar - List.length pr_etas))
+        | Future n when n <= 0 -> MACPS.Ret (get_c' (), stepped [] call_ar)
+        | Future n ->
+          let diff = call_ar - n in
+          if diff <= 0
+          then Ret (get_c' (), expand_triv n prep_t)
+          else (
+            let eta_arg, eta_pat = gen_eta env_var () in
+            let eta_args, eta_pats = gen_many_etas env_var (n - 1) in
+            let k = gensym ~prefix:"k" () |> of_string in
+            let b' = MACPS.Ret (CVar k, stepped (eta_arg :: eta_args) diff) in
+            MACPS.Ret (get_c' (), Lam ((eta_pat, eta_pats), k, b')))
+      in
+      let ret ?(call_ar = None) t =
+        let call_ar =
+          match call_ar, t with
+          | Some n, _ -> n
+          | None, UVar i -> find_with_default i.id fin_call_ars 0
+          | _ -> 0
+        in
+        let prep_t = prep_t_for_env env t in
+        ret_or_prep_call call_ar prep_t
+      in
+      let lam_call pat b c t2_prep =
+        let v_ar, id_opt =
+          match pat with
+          | CPVar { id; _ } -> find_with_default id fin_call_ars 0, Some id
+          | CPTuple _ -> 0, None
+        in
+        let k_inl = simpl_p ~cont_hndl:(Sub (c, cont_hndl)) etas b in
+        triv_bnd ~v_ar id_opt t2_prep k_inl
+      in
+      let call t1 t2 c get_c' =
+        let prep_t1, prep_t2 = prep_t_for_env env t1, prep_t_for_env env t2 in
+        let call_ar () =
+          match t1 with
+          | UVar i -> find_with_default i.id fin_call_ars 0 - 1
+          | _ -> 0
+        in
+        match prep_t1, prep_t2 with
+        | `HeavyT (Lam (lam_pat, i, lam_b)), _ ->
+          lam_call lam_pat lam_b c prep_t2
+          @@ fun t2' ->
+          ret_or_prep_call (call_ar ()) (`ExLamCall ((lam_pat, i, lam_b), t2')) c get_c'
+        | (#light as prep_t1), (#ex_light_triv as prep_t2) ->
+          ret_or_prep_call (call_ar ()) (`ExLightCall (prep_t1, prep_t2)) c get_c'
+        | prep_t1, (#ex_triv as prep_t2) ->
+          ret_or_prep_call (call_ar ()) (`ExHeavyCall (prep_t1, prep_t2)) c get_c'
+        | _, #ex_call ->
+          failwith "unreachable: call shouldn't be inlined if its call arity is 0"
+      in
+      match cont_hndl, p with
+      | ( _
+        , ( Call (_, _, Cont (CPVar { id; _ }, b))
+          | Let (NonRecursive, CPVar { id; _ }, _, b)
+          | Ret (Cont (CPVar { id; _ }, b), _) ) )
+        when ISet.mem id dead_vars -> simpl_p_sh b env
+      | DeadJV, (Ret (CVar i, _) | Call (_, _, CVar i)) -> MACPS.Ret (CVar i, TUnit)
+      | Sub (c, cont_hndl), Ret (_, t) -> simpl_p ~cont_hndl etas (Ret (c, t)) env
+      | Sub (c, cont_hndl), Call (t1, t2, _) ->
+        simpl_p ~cont_hndl etas (Call (t1, t2, c)) env
+      | _, Call (t1, t2, (Cont (pat, b) as c)) ->
+        let v_ar = v_ar pat in
+        let t1_prep, t2_prep = prep_t_for_env env t1, prep_t_for_env env t2 in
+        let not_inl_ex_call t2' get_ec =
+          if v_ar > 0
+          then (
+            let t' = expand_ex_call v_ar @@ get_ec () in
+            let b' = simpl_p_sh b env in
+            let pat' = translate_pat pat in
+            MACPS.Ret (Cont (pat', b'), t'))
+          else (
+            let t1' = simpl_t_sh t1 in
+            let pat' = translate_pat pat in
+            let b' = simpl_p_sh b env in
+            MACPS.Call (t1', (t2', []), Cont (pat', b')))
+        in
+        (match pat, t1_prep, t2_prep with
+         | CPVar { id; _ }, (#light as t1_prep), (#ex_light_triv as t2_prep) when v_ar > 0
+           -> simpl_p_sh b @@ add id (`ExLightCall (t1_prep, t2_prep)) env
+         | _, `HeavyT (Lam (lam_pat, i, lam_b)), _ ->
+           lam_call lam_pat lam_b c t2_prep
+           @@ fun t2' ->
+           (match pat with
+            | CPVar { id; _ } when v_ar > 0 && find id counts <= 1 ->
+              simpl_p_sh b @@ add id (`ExLamCall ((lam_pat, i, lam_b), t2')) env
+            | _ -> not_inl_ex_call t2' @@ fun () -> `ExLamCall ((lam_pat, i, lam_b), t2'))
+         | CPVar { id; _ }, _, (#ex_triv as t2_prep) when find id counts <= 1 && v_ar > 0
+           -> simpl_p_sh b @@ add id (`ExHeavyCall (t1_prep, t2_prep)) env
+         | _, (#ex_triv as t1_prep), (#ex_triv as t2_prep) ->
+           let pat' = translate_pat pat in
+           let b' = simpl_p_sh b env in
+           let t1', t2' = get_triv_sh t1_prep, get_triv_sh t2_prep in
+           if v_ar < 1
+           then MACPS.Call (t1', (t2', []), Cont (pat', b'))
+           else (
+             let eta_arg, eta_pat = gen_macps_eta () in
+             let eta_args, eta_pats = gen_many_macps_etas (v_ar - 1) in
+             let i = gensym ~prefix:"k" () |> of_string in
+             MACPS.Ret
+               ( Cont (pat', b')
+               , Lam
+                   ((eta_pat, eta_pats), i, Call (t1', (t2', eta_arg :: eta_args), CVar i))
+               ))
+         | _, (#ex_call as ec), (#ex_triv as et) ->
+           not_inl_ex_call (get_triv_sh et) @@ fun () -> `ExHeavyCall (ec, et)
+         | _, _, #ex_call ->
+           failwith "unreachable: call shouldn't be inlined if its call arity is 0")
+      | _, Ret (Cont (pat, b), t) ->
+        let_or_ret_bnd pat b t @@ fun pat' b' t' -> MACPS.Ret (Cont (pat', b'), t')
+      | _, Let (NonRecursive, pat, t, b) ->
+        let_or_ret_bnd pat b t @@ fun pat' b' t' -> MACPS.Let (NonRecursive, pat', t', b')
+      | _, CIf (t, p1, p2) ->
+        let t' = simpl_t_sh t in
+        let p1', p2' = simpl_p_sh p1 env, simpl_p_sh p2 env in
+        CIf (t', p1', p2')
+      | _, Primop (pat, i, t1, tt, p) ->
+        let pat' = translate_pat pat in
+        let t1' = simpl_t_sh t1 in
+        let tt' = List.map simpl_t_sh tt in
+        let p' = simpl_p_sh p env in
+        Primop (pat', i, t1', tt', p')
+      | _, Letc (i, Cont (pat, b1), b2) ->
+        let pat' = translate_pat pat in
+        let b1' = simpl_p_sh b1 env in
+        let cont_hndl, etas2 =
+          if ISet.mem i.id dead_vars
+          then DeadJV, Future 0
+          else Def, Future (find_with_default i.id fin_call_ars 0)
+        in
+        let b2' = simpl_p ~cont_hndl etas2 b2 env in
+        Letc (i, Cont (pat', b1'), b2')
+      | _, Letc (_, c, b) -> simpl_p ~cont_hndl:(Sub (c, cont_hndl)) etas b env
+      | Def, Ret ((CVar i as c), t) -> ret t c @@ fun () -> MACPS.CVar i
+      | Def, Ret ((HALT as c), t) -> ret t c @@ fun () -> MACPS.HALT
+      | Def, Call (t1, t2, (CVar i as c)) -> call t1 t2 c @@ fun () -> MACPS.CVar i
+      | Def, Call (t1, t2, (HALT as c)) -> call t1 t2 c @@ fun () -> MACPS.HALT
+      | DeadJV, (Ret (HALT, _) | Call (_, _, HALT)) ->
+        failwith " unreachable: HALT isn't a join value"
+      | _, Let (Recursive, _, _, _) -> failwith "todo"
+    and ex_call c env =
+      let rec helper args = function
+        | `ExHeavyCall ((#ex_call as ec), prep_t) -> helper (prep_t :: args) ec
+        | `ExLightCall ((`ExLightCall _ as ec), (#ex_light_triv as prep_t)) ->
+          helper (prep_t :: args) ec
+        | `ExLamCall ((pat, i, b), t') -> ex_lam_call pat i b t' args c env
+        | `ExLightCall ((#ex_light_triv as prep_t1), (#ex_light_triv as prep_t2))
+        | `ExHeavyCall ((#ex_triv as prep_t1), (#ex_triv as prep_t2)) ->
+          let t1', t2', tt' = translate_prep_t_tuple env prep_t1 prep_t2 args in
+          MACPS.Call (t1', (t2', tt'), c)
+      in
+      helper
+    and translate_prep_t_tuple env prep_t1 prep_t2 prep_tt =
+      get_triv env |> fun f -> f prep_t1, f prep_t2, List.map f prep_tt
+    and ex_lam_call pat i b t' args c env =
+      let pat' = translate_pat pat in
+      let (pats', tt'), args' =
+        if not @@ ISet.mem i.id barriers
+        then ([], []), args
+        else (
+          let rev_pats_tt_pairs, args' =
+            List.fold_left_map
+              (fun acc -> function
+                | #ex_light_triv as lt -> acc, lt
+                | `HeavyT tn ->
+                  let eta_arg, eta_pat = gen_eta env_var () in
+                  let tn' = simpl_t env tn in
+                  (eta_pat, tn') :: acc, eta_arg)
+              []
+              args
+          in
+          let rev_unzip =
+            List.fold_left (fun (pats, tt) (pat, t) -> pat :: pats, t :: tt) ([], [])
+          in
+          rev_unzip rev_pats_tt_pairs, args')
+      in
+      let b' = simpl_p (Present args') b env in
+      MACPS.Call (Lam ((pat', pats'), i, b'), (t', tt'), c)
+    and simpl_t ?(ignore_ids = false) env = function
+      | UVar i ->
+        if ignore_ids
+        then MACPS.UVar i
+        else (
+          match find i.id env with
+          | #ex_triv as et -> get_triv env et
+          | #ex_call ->
+            failwith "unreachable: call shouldn't be inlined if its call arity is 0 ")
+      | TSafeBinop (i, t1, t2) -> MACPS.TSafeBinop (i, simpl_t env t1, simpl_t env t2)
+      | TConst c -> MACPS.TConst c
+      | TUnit -> MACPS.TUnit
+      | TTuple (t1, t2, tt) ->
+        let smp_sh = simpl_t env in
+        MACPS.TTuple (smp_sh t1, smp_sh t2, List.map smp_sh tt)
+      | Lam (pat, i, b) ->
+        MACPS.Lam ((translate_pat pat, []), i, simpl_p (Present []) b env)
+    and get_triv env ex_triv =
+      match (ex_triv : ex_triv) with
+      | `Var (_, t) | `LightT t | `HeavyT t -> simpl_t ~ignore_ids:true env t
+    in
+    rec_flag, translate_pat pat, simpl_p (Present []) p empty
+  ;;
+
+  let call_arity_anal cps_prog = anal cps_prog |> down_anal cps_prog |> simpl cps_prog
+end
+
+open Graph
+
+module VeryNaiveCoCallGraph : sig
+  type t
+
+  val empty : t
+  val adj_nodes : int -> t -> unit IMap.t
+  val has_loop : int -> t -> bool
+  val cartesian : unit IMap.t -> unit IMap.t -> t
+  val cartesian_square : unit IMap.t -> t
+  val union : t -> t -> t
+  val adj_nodes : int -> t -> unit IMap.t
+  val remove : int -> t -> t
+end = struct
+  module G = Persistent.Graph.Concrete (struct
+      type t = int
+
+      let compare = Stdlib.compare
+      let hash = Hashtbl.hash
+      let equal = ( = )
+      let default = 0
+    end)
+
+  type t = G.t
+
+  let empty = G.empty
+  let has_loop a g = G.mem_edge g a a
+  let remove = Fun.flip G.remove_vertex
+  let has_loop v g = G.mem_edge g v v
+
+  let cartesian m1 m2 =
+    IMap.fold
+      (fun el () (g : t) -> IMap.fold (fun el2 () g -> G.add_edge g el el2) m2 g)
+      m1
+      G.empty
+  ;;
+
+  let cartesian_square m = cartesian m m
+
+  open Oper.P (G)
+
+  let union = union
+
+  open Oper.Neighbourhood (G)
+
+  let adj_nodes v g =
+    Base.List.fold ~f:(fun m v -> IMap.add v () m) ~init:IMap.empty
+    @@
+    match list_from_vertex g v with
+    | l -> l
+    | exception Invalid_argument _ -> []
+  ;;
+end
+
+open CallArityAnal (VeryNaiveCoCallGraph)
