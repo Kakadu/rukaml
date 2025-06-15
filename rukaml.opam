@@ -21,6 +21,7 @@ depends: [
   "llvm" {>= "16.0.0"}
   "ctypes-foreign"
   "ppx_blob"
+  "ocamlgraph" {>= "2.1.0"}
   "odoc" {with-doc}
   "ocamlformat" {= "0.27.0" & with-dev}
   "base"
