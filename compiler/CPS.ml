@@ -52,7 +52,7 @@ let tuple_fold_map_k f el1 el2 els k =
 module CPS_LANG (Args : sig
     type 'b t
 
-    val to_cons : 'b t -> 'b list * 'b (* invarint: rev. order *)
+    val to_cons : 'b t -> 'b * 'b list
   end) =
 struct
   type var = ident
@@ -65,7 +65,6 @@ struct
 
   type p =
     | Call of triv * triv Args.t * cont
-      (* args are in rev. order!!! [e.g. Call (f, [c; b], a, k) ~ (f a b c k)] *)
     | Ret of cont * triv
     | CIf of triv * p * p
     | Let of rec_flag * pat * triv * p
@@ -79,7 +78,6 @@ struct
 
   and triv =
     | Lam of pat Args.t * var * p
-      (* pats are in rev. order!!! [e.g. Lam ([c; b], a, k, Ret (k, a)) ~ (fun a b c k -> k a)] *)
     | TSafeBinop of triv safe_binop
     | UVar of var
     | TConst of const
@@ -103,7 +101,7 @@ struct
       | UVar i -> k' (EVar i.hum_name)
       | TConst d -> k' (EConst d)
       | Lam (pats, c, p) ->
-        let pats, pat = to_cons pats in
+        let pat, pats = to_cons pats in
         multiparam_lam pat pats c p k'
       | TSafeBinop (op, t1, t2) ->
         helper_triv t1 (fun e1 ->
@@ -121,8 +119,8 @@ struct
       let open Args in
       match p with
       | Call (t1, tt, c) ->
-        let tt, t2 = to_cons tt in
-        multiarg_app tt t2 t1 c k
+        let t2, tt = to_cons tt in
+        multiarg_app t1 t2 tt c k
       | Ret (HALT, t) -> helper_triv t k
       | Ret (c, t) ->
         helper_cont c (fun e1 -> helper_triv t (fun e2 -> k (EApp (e1, e2))))
@@ -145,26 +143,29 @@ struct
               let body = eapp (EVar f.hum_name) ee in
               k (ELet (rec_flag, ptrn, body, e2)))))
         |> helper_pat pat
-    and multiarg_app tt t2 t1 c k' =
-      let rec helper args k'' =
-        match args with
-        | [] -> helper [ t2; t1 ] k''
-        | t :: tt -> helper_triv t (fun e2 -> helper tt (fun e1 -> k'' (EApp (e1, e2))))
+    and multiarg_app t1 t2 tt c k' =
+      let rec helper e1 k' = function
+        | [] -> helper_cont c (fun e2 -> k' (EApp (e1, e2)))
+        | t :: tt -> helper_triv t (fun e2 -> helper (EApp (e1, e2)) k' tt)
       in
-      helper_cont c (fun e2 -> helper tt (fun e1 -> k' (EApp (e1, e2))))
+      helper_triv t1 (fun e1 -> helper e1 k' (t2 :: tt))
     and multiparam_lam pat pats i p k' =
-      let rec helper b pats k'' =
+      let rec helper pats k'' =
         match pats with
-        | [] -> helper_pat pat (fun ptrn -> k'' (ELam (ptrn, b)))
-        | pat :: pats -> helper_pat pat (fun ptrn -> helper (ELam (ptrn, b)) pats k'')
+        | [] ->
+          let ptrn = PVar i.hum_name in
+          helper_p p (fun b -> k'' (ELam (ptrn, b)))
+        | pat :: pats ->
+          helper_pat pat (fun ptrn -> helper pats (fun b -> k'' (ELam (ptrn, b))))
       in
-      let ptrn = PVar i.hum_name in
-      helper_p p (fun b -> helper (ELam (ptrn, b)) pats k')
+      helper (pat :: pats) k'
     in
     helper_pat pat (fun ptrn -> helper_p p (fun e -> rec_flag, ptrn, e))
   ;;
 
   open Format
+
+  let cons_uncurry (hd, tl) = hd :: tl
 
   let rec pp_pat ppf = function
     | CPVar v -> Miniml.Ident.pp ppf v
@@ -186,9 +187,8 @@ struct
     let open Args in
     function
     | Lam (pats, k, b) ->
-      let pats, pat = to_cons pats in
-      let ro_pats = pat :: List.rev pats in
-      fprintf ppf "@[(fun %a %a ->@[ %a@])" pp_pats ro_pats Ident.pp k pp_p b
+      let pats = cons_uncurry @@ to_cons pats in
+      fprintf ppf "@[(fun %a %a ->@[ %a@])" pp_pats pats Ident.pp k pp_p b
     | TSafeBinop (op, l, r) when ANF.is_infix_binop op.hum_name ->
       pp_binop ppf (ps, op, l, r)
     | UVar v -> Ident.pp ppf v
@@ -209,10 +209,9 @@ struct
     let open Args in
     function
     | Call (f, aa, k) ->
-      let aa, a = to_cons aa in
-      let ro_args = a :: List.rev aa in
+      let aa = cons_uncurry @@ to_cons aa in
       let args = pp_list maybe_pars in
-      fprintf ppf "@[<hv>%a %a %a@]" maybe_pars f args ro_args pp_cont k
+      fprintf ppf "@[<hv>%a %a %a@]" maybe_pars f args aa pp_cont k
     | Ret (k, a) -> fprintf ppf "@[<hv>%a %a@]" pp_cont k maybe_pars a
     | CIf (c, th, el) ->
       fprintf ppf "@[<hov>@[if %a@ @]@[then %a@ @]@[else %a@]@]" no_pars c pp_p th pp_p el
@@ -222,10 +221,9 @@ struct
         | Recursive -> "rec "
         | _ -> ""
       in
-      let pats', pat' = Args.to_cons pats' in
-      let ro_pats = pat' :: List.rev pats' in
+      let pats' = cons_uncurry @@ to_cons pats' in
       let open Ident in
-      fprintf ppf "@[<v>@[<hv>@[let %s%a %a %a =@] " rec_ pp_pat pat pp_pats ro_pats pp k;
+      fprintf ppf "@[<v>@[<hv>@[let %s%a %a %a =@] " rec_ pp_pat pat pp_pats pats' pp k;
       fprintf ppf "@[<2>%a @]@[in @]@]" pp_p b;
       fprintf ppf "@[%a@]@]" pp_p wh
     | Let (rec_flag, pat, b, wh) ->
@@ -275,9 +273,8 @@ struct
     in
     match p with
     | Ret (HALT, Lam (pats', k, b)) ->
-      let pats', pat' = to_cons pats' in
-      let ro_pats = pat' :: List.rev pats' in
-      fprintf ppf "%a@ %a@ =@ @]@[%a@]@] " pp_pats ro_pats Miniml.Ident.pp k pp_p b
+      let pats' = cons_uncurry @@ to_cons pats' in
+      fprintf ppf "%a@ %a@ =@ @]@[%a@]@] " pp_pats pats' Miniml.Ident.pp k pp_p b
     | Ret (HALT, t) -> fprintf ppf "=@ @]@[%a@]@]" no_pars t
     | _ -> fprintf ppf "=@ @]@[%a@]@]" pp_p p
 
@@ -289,7 +286,7 @@ end
 open CPS_LANG (struct
     type 'a t = 'a
 
-    let to_cons a = [], a
+    let to_cons a = a, []
   end)
 
 (* Abstract args *)
@@ -1058,7 +1055,7 @@ let%expect_test "cps fake rec" =
 ;;
 
 (* todo: adapt for 1-arg lang*)
-
+(* NB: implementation commented out was done for rev order args*)
 (* module CallArity (CoCallGraph : sig
     type 'a t
 
@@ -1448,3 +1445,10 @@ let down_anal (_, _, p) (dead_vars, call_ars) =
   in
   anal_p p 0 (fun _ counts fin_call_ars -> counts, fin_call_ars) empty empty
 ;;
+
+(* multi-arg CPS language *)
+module MACPS = CPS_LANG (struct
+    type 'a t = 'a * 'a list
+
+    let to_cons (a, aa) = a, aa
+  end)
