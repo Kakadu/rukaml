@@ -1077,11 +1077,14 @@ module CallArityAnal (CoCallGraph : sig
     val remove : int -> t -> t
   end) : sig
   val call_arity_anal : cps_vb -> MACPS.cps_vb
+  val call_arity_anal_debug : cps_vb -> MACPS.cps_vb
 end = struct
   type ress =
     { dead_vars : ISet.t
     ; call_ars : int IMap.t
     }
+
+  let debug_flag = true
 
   open CoCallGraph
 
@@ -1097,10 +1100,10 @@ end = struct
     in
     let add_if_incr v_arity t =
       match t with
-      | Lam (_, { id = res_id; _ }, _) -> cond_add res_id v_arity @@ ( > ) 1
+      | Lam (_, { id = res_id; _ }, _) -> cond_add res_id v_arity @@ ( < ) 1
       | _ -> Fun.id
     in
-    let add_if_pos v_id v_arity = cond_add v_id v_arity @@ ( > ) 0 in
+    let add_if_pos v_id v_arity = cond_add v_id v_arity @@ ( < ) 0 in
     let is_int_triv_rhs int = function
       | Lam _ -> true
       | UVar { id; _ } -> ISet.mem id int
@@ -1226,7 +1229,7 @@ end = struct
             p_co_calls, p_ars, ress3 )
     and fin_bnd_call_anal conts int f a (ress, fin_anal) =
       fin_anal ress
-      @@ fun b_co_calls v_arity v_id ->
+      @@ fun b_co_calls v_id v_arity ->
       let fst_inc_ar = 1 + if has_loop v_id b_co_calls then 0 else v_arity in
       anal_tt0 ~fst_inc_ar conts int f [ a ] ress |> ret_with_fv
     and fin_int_triv_bnd_anal ?(had_upd = false) conts int t (ress, fin_anal) =
@@ -1358,14 +1361,14 @@ end = struct
           let counts'' = add id 0 counts' in
           let k_none = anal_p b ar k counts'' barriers' in
           lookup_fin_call_ars t1 k_none (fun t_ar fin_call_ars' ->
-            let fin_call_ars'' = add id (Int.min 0 (t_ar - 1)) fin_call_ars' in
+            let fin_call_ars'' = add id (Int.max 0 (t_ar - 1)) fin_call_ars' in
             anal_p b ar k counts'' barriers' fin_call_ars'')
         in
         foldd_k anal_t [ t1; t2 ] k1 counts
       | Call (t1, t2, _) ->
         let k1 counts' barriers' =
           lookup_fin_call_ars t1 (k ar Other counts' barriers') (fun t_ar ->
-            k (ar - Int.min 0 (t_ar - 1)) Other counts' barriers')
+            k (ar - Int.max 0 (t_ar - 1)) Other counts' barriers')
         in
         foldd_k anal_t [ t1; t2 ] k1 counts
       | CIf (t, p1, p2) ->
@@ -1377,7 +1380,7 @@ end = struct
       | Let (NonRecursive, pat, t, b) | Ret (Cont (pat, b), t) ->
         anal_t_bnd pat t counts (anal_p b ar k)
       | Ret (_, Lam (pat, i, lam_b)) ->
-        lam_hndl ~ar:(Int.min 0 (ar - 1)) pat i lam_b k counts
+        lam_hndl ~ar:(Int.max 0 (ar - 1)) pat i lam_b k counts
       | Ret (_, t) ->
         let k1 counts' barriers' =
           lookup_fin_call_ars t (k 0 Other counts' barriers') (fun t_ar ->
@@ -1414,7 +1417,7 @@ end = struct
                let fin_call_ars'' = add id (ar - rest_ar) fin_call_ars' in
                k counts'' barriers' fin_call_ars''
              in
-             lam_hndl ~ar:(ar - 1) pat i p k1 counts' barriers fin_call_ars)
+             lam_hndl ~ar:(Int.max 0 (ar - 1)) pat i p k1 counts' barriers fin_call_ars)
          | t ->
            let k_found t_ar _ =
              let fin_call_ars' = add id t_ar fin_call_ars in
@@ -1430,7 +1433,7 @@ end = struct
         in
         k rest_ar Other counts' barriers'' fin_call_ars'
       in
-      let jv counts' = anal_p p ar k1 (add i.id 0 counts') in
+      let jv = anal_p p ar k1 in
       match pat with
       | CPTuple _ -> jv counts
       | CPVar { id; _ } -> jv (add id 0 counts)
@@ -1550,7 +1553,7 @@ end = struct
         MACPS.Lam ((pat', eta_pats), i, b')
       in
       let expand_ex_call v_ar ec =
-        if v_ar < 0
+        if v_ar <= 0
         then failwith "unreachable: v_ar should be positive for expansion"
         else (
           let eta_arg, eta_pat = gen_eta env_var () in
@@ -1675,25 +1678,19 @@ end = struct
           | Let (NonRecursive, CPVar { id; _ }, _, b)
           | Ret (Cont (CPVar { id; _ }, b), _) ) )
         when ISet.mem id dead_vars -> simpl_p_sh b env
-      | DeadJV, (Ret (CVar i, _) | Call (_, _, CVar i)) -> MACPS.Ret (CVar i, TUnit)
-      | Sub (c, cont_hndl), Ret (_, t) -> simpl_p ~cont_hndl etas (Ret (c, t)) env
-      | Sub (c, cont_hndl), Call (t1, t2, _) ->
-        simpl_p ~cont_hndl etas (Call (t1, t2, c)) env
       | _, Call (t1, t2, (Cont (pat, b) as c)) ->
         let v_ar = v_ar pat in
         let t1_prep, t2_prep = prep_t_for_env env t1, prep_t_for_env env t2 in
-        let not_inl_ex_call t2' get_ec =
+        let not_inl_ex_call ec =
           if v_ar > 0
           then (
-            let t' = expand_ex_call v_ar @@ get_ec () in
+            let t' = expand_ex_call v_ar ec in
             let b' = simpl_p_sh b env in
             let pat' = translate_pat pat in
             MACPS.Ret (Cont (pat', b'), t'))
           else (
-            let t1' = simpl_t_sh t1 in
-            let pat' = translate_pat pat in
-            let b' = simpl_p_sh b env in
-            MACPS.Call (t1', (t2', []), Cont (pat', b')))
+            let c' = MACPS.Cont (translate_pat pat, simpl_p_sh b env) in
+            ex_call c' env [] ec)
         in
         (match pat, t1_prep, t2_prep with
          | CPVar { id; _ }, (#light as t1_prep), (#ex_light_triv as t2_prep) when v_ar > 0
@@ -1704,7 +1701,7 @@ end = struct
            (match pat with
             | CPVar { id; _ } when v_ar > 0 && find id counts <= 1 ->
               simpl_p_sh b @@ add id (`ExLamCall ((lam_pat, i, lam_b), t2')) env
-            | _ -> not_inl_ex_call t2' @@ fun () -> `ExLamCall ((lam_pat, i, lam_b), t2'))
+            | _ -> not_inl_ex_call @@ `ExLamCall ((lam_pat, i, lam_b), t2'))
          | CPVar { id; _ }, _, (#ex_triv as t2_prep) when find id counts <= 1 && v_ar > 0
            -> simpl_p_sh b @@ add id (`ExHeavyCall (t1_prep, t2_prep)) env
          | _, (#ex_triv as t1_prep), (#ex_triv as t2_prep) ->
@@ -1723,7 +1720,7 @@ end = struct
                    ((eta_pat, eta_pats), i, Call (t1', (t2', eta_arg :: eta_args), CVar i))
                ))
          | _, (#ex_call as ec), (#ex_triv as et) ->
-           not_inl_ex_call (get_triv_sh et) @@ fun () -> `ExHeavyCall (ec, et)
+           not_inl_ex_call @@ `ExHeavyCall (ec, et)
          | _, _, #ex_call ->
            failwith "unreachable: call shouldn't be inlined if its call arity is 0")
       | _, Ret (Cont (pat, b), t) ->
@@ -1751,8 +1748,12 @@ end = struct
         let b2' = simpl_p ~cont_hndl etas2 b2 env in
         Letc (i, Cont (pat', b1'), b2')
       | _, Letc (_, c, b) -> simpl_p ~cont_hndl:(Sub (c, cont_hndl)) etas b env
+      | DeadJV, (Ret (CVar i, _) | Call (_, _, CVar i)) -> MACPS.Ret (CVar i, TUnit)
+      | Sub (c, cont_hndl), Ret (_, t) -> simpl_p ~cont_hndl etas (Ret (c, t)) env
       | Def, Ret ((CVar i as c), t) -> ret t c @@ fun () -> MACPS.CVar i
       | Def, Ret ((HALT as c), t) -> ret t c @@ fun () -> MACPS.HALT
+      | Sub (c, cont_hndl), Call (t1, t2, _) ->
+        simpl_p ~cont_hndl etas (Call (t1, t2, c)) env
       | Def, Call (t1, t2, (CVar i as c)) -> call t1 t2 c @@ fun () -> MACPS.CVar i
       | Def, Call (t1, t2, (HALT as c)) -> call t1 t2 c @@ fun () -> MACPS.HALT
       | DeadJV, (Ret (HALT, _) | Call (_, _, HALT)) ->
@@ -1804,7 +1805,8 @@ end = struct
           match find i.id env with
           | #ex_triv as et -> get_triv env et
           | #ex_call ->
-            failwith "unreachable: call shouldn't be inlined if its call arity is 0 ")
+            failwith "unreachable: call shouldn't be inlined if its call arity is 0 "
+          | exception Not_found -> MACPS.UVar i)
       | TSafeBinop (i, t1, t2) -> MACPS.TSafeBinop (i, simpl_t env t1, simpl_t env t2)
       | TConst c -> MACPS.TConst c
       | TUnit -> MACPS.TUnit
@@ -1821,6 +1823,24 @@ end = struct
   ;;
 
   let call_arity_anal cps_prog = anal cps_prog |> down_anal cps_prog |> simpl cps_prog
+
+  let call_arity_anal_debug cps_prog =
+    let ((_, upw_call_ars) as upw_res) = anal cps_prog in
+    Printf.printf "call_ars(after upward anal):\n";
+    IMap.iter (Printf.printf "%d: %d\n") upw_call_ars;
+    let ((dead_vars, counts, barriers, fin_call_ars) as inter_res) =
+      down_anal cps_prog upw_res
+    in
+    Printf.printf "dead_vars:\n";
+    ISet.iter (Printf.printf "%d\n") dead_vars;
+    Printf.printf "counts:\n";
+    IMap.iter (Printf.printf "%d: %d\n") counts;
+    Printf.printf "barriers:\n";
+    ISet.iter (Printf.printf "%d\n") barriers;
+    Printf.printf "fin_call_ars:\n";
+    IMap.iter (Printf.printf "%d: %d\n") fin_call_ars;
+    simpl cps_prog inter_res
+  ;;
 end
 
 open Graph
@@ -1878,3 +1898,559 @@ end = struct
 end
 
 open CallArityAnal (VeryNaiveCoCallGraph)
+
+let test_call_ar_anal cps_prog =
+  Format.printf "before:\n%a\n" pp_vb cps_prog;
+  call_arity_anal cps_prog |> Format.printf "after:\n%a\n" MACPS.pp_vb
+;;
+
+let test_call_ar_anal_debug cps_prog =
+  Format.printf "before:\n%a\n" pp_vb cps_prog;
+  call_arity_anal_debug cps_prog |> Format.printf "after:\n%a\n" MACPS.pp_vb
+;;
+
+let v name = name |> of_string
+let prog b = NonRecursive, CPVar (v "main"), b
+let var_f, var_g, var_x, var_k1 = v "f", v "g", v "x", v "k1"
+let var_y, var_k2, var_h, var_t = v "y", v "k2", v "h", v "t"
+let var_a, var_k3, var_b = v "a", v "k3", v "b"
+let var_l, var_q, var_r = v "l", v "q", v "r"
+let var_z, var_s, var_d = v "z", v "s", v "d"
+let var_k4 = v "k4"
+let one = TConst (PConst_int 1)
+let two = TConst (PConst_int 2)
+let tr = TConst (PConst_bool true)
+let sum t1 t2 = TSafeBinop ("+" |> of_string, t1, t2)
+
+let%expect_test "expand call" =
+  let th = Call (UVar var_f, one, Cont (CPVar var_g, Call (UVar var_g, one, HALT))) in
+  let el = Call (UVar var_f, two, Cont (CPVar var_t, Call (UVar var_t, one, HALT))) in
+  let rhs =
+    let sum = sum (UVar var_x) (UVar var_y) in
+    Lam
+      ( CPVar var_x
+      , var_k1
+      , Ret (CVar var_k1, Lam (CPVar var_y, var_k2, Ret (CVar var_k2, sum))) )
+  in
+  test_call_ar_anal @@ prog (Let (NonRecursive, CPVar var_f, rhs, CIf (tr, th, el)));
+  [%expect
+    {|
+    before:
+    let main = let f x k1 = k1 (fun y k2 -> k2 (x + y)) in if true
+                                                                   then f 1
+                                                                        (fun g ->
+
+                                                                        g 1
+                                                                        (fun x -> x))
+                                                                        else
+                                                                        f 2
+                                                                        (fun t ->
+
+                                                                        t 1
+                                                                        (fun x -> x))
+    after:
+
+                       let main = let f x e1 k1 = k1 (x + e1) in if true
+                                                                 then f 1 1
+                                                                      (fun x -> x)
+                                                                 else f 2 1
+                                                                      (fun x -> x) |}]
+;;
+
+let%expect_test "not expand call (one of entries has init arity )" =
+  let h_let b =
+    Let
+      ( NonRecursive
+      , CPVar var_h
+      , Lam (CPVar var_a, var_k3, Call (UVar var_a, one, CVar var_k3))
+      , b )
+  in
+  let th = Call (UVar var_f, one, Cont (CPVar var_g, Call (UVar var_g, one, HALT))) in
+  let el =
+    Call (UVar var_f, one, Cont (CPVar var_t, Call (UVar var_h, UVar var_t, HALT)))
+  in
+  let rhs =
+    let sum = TSafeBinop ("+" |> of_string, UVar var_x, UVar var_y) in
+    Lam
+      ( CPVar var_x
+      , var_k1
+      , Ret (CVar var_k1, Lam (CPVar var_y, var_k2, Ret (CVar var_k2, sum))) )
+  in
+  let ite = CIf (tr, th, el) in
+  test_call_ar_anal @@ prog (Let (NonRecursive, CPVar var_f, rhs, h_let ite));
+  [%expect{|
+    before:
+    let main = let f x k1 = k1 (fun y k2 -> k2 (x + y)) in let h a k3 =
+                                                                   a 1 k3
+                                                                   in if true
+                                                                      then
+                                                                      f 1
+                                                                      (fun g ->
+                                                                       g 1
+                                                                       (fun x -> x))
+                                                                      else
+                                                                      f 1
+                                                                      (fun t ->
+                                                                       h t
+                                                                       (fun x -> x))
+    after:
+
+                       let main = let f x k1 = k1 (fun y k2 -> k2 (x + y)) in
+                                  if true then f 1 (fun g -> g 1 (fun x -> x))
+                                          else f 1 (fun t -> t 1 (fun x -> x)) |}]
+;;
+
+let%expect_test "expaned but not fully inlined call (argument is big) " =
+  let b =
+    let th = Call (UVar var_g, one, Cont (CPVar var_t, Call (UVar var_t, one, HALT))) in
+    let el = Call (UVar var_g, one, Cont (CPVar var_b, Call (UVar var_b, one, HALT))) in
+    let ite = CIf (tr, th, el) in
+    Call (UVar var_f, TTuple (one, one, [ one ]), Cont (CPVar var_g, ite))
+  in
+  let rhs =
+    let tuple = TTuple (UVar var_x, UVar var_x, [ sum (UVar var_y) (UVar var_a) ]) in
+    let b =
+      Ret
+        ( CVar var_k1
+        , Lam
+            ( CPVar var_y
+            , var_k2
+            , Ret (CVar var_k2, Lam (CPVar var_a, var_k3, Ret (CVar var_k3, tuple))) ) )
+    in
+    Lam (CPVar var_x, var_k1, b)
+  in
+  test_call_ar_anal @@ prog (Let (NonRecursive, CPVar var_f, rhs, b));
+  [%expect
+    {|
+    before:
+    let main = let f x k1 = k1 (fun y k2 -> k2 (fun a k3 -> k3 (x, x, y + a)))
+                                    in f (1, 1, 1) (fun g -> if true then
+                                                                     g 1
+                                                                     (fun t ->
+                                                                      t 1
+                                                                      (fun x -> x))
+                                                                     else
+                                                                     g 1
+                                                                     (fun b ->
+                                                                      b 1
+                                                                      (fun x -> x)))
+    after:
+
+                                      let main = (fun g -> if true then g 1 1
+                                                                        (fun x -> x)
+                                                                   else g 1 1
+                                                                        (fun x -> x))
+                                                 (fun e2 e3 k4 -> (fun x k1 ->
+                                                                   k1 (x, x, e2 + e3))
+                                                                  (1, 1, 1) k4) |}]
+;;
+
+let%expect_test "not expand call (because of sharing loses)" =
+  let th =
+    let cont2 = Cont (CPVar var_q, Ret (HALT, sum (UVar var_q) (UVar var_t))) in
+    let cont1 = Cont (CPVar var_t, Call (UVar var_g, one, cont2)) in
+    Call (UVar var_f, one, Cont (CPVar var_g, Call (UVar var_g, one, cont1)))
+  in
+  let el =
+    let cont2 = Cont (CPVar var_z, Ret (HALT, sum (UVar var_z) (UVar var_s))) in
+    let cont1 = Cont (CPVar var_s, Call (UVar var_g, one, cont2)) in
+    Call (UVar var_f, one, Cont (CPVar var_g, Call (UVar var_g, one, cont1)))
+  in
+  let big_def b =
+    Let
+      ( NonRecursive
+      , CPVar var_h
+      , Lam (CPVar var_b, var_k3, Ret (CVar var_k3, sum (UVar var_b) (UVar var_b)))
+      , b )
+  in
+  let rhs =
+    let sum = sum (UVar var_l) (UVar var_r) in
+    let ret =
+      Ret
+        ( CVar var_k1
+        , Lam
+            ( CPVar var_y
+            , var_k2
+            , Call (UVar var_h, UVar var_y, Cont (CPVar var_r, Ret (CVar var_k3, sum))) )
+        )
+    in
+    let b = big_def (Call (UVar var_h, UVar var_x, Cont (CPVar var_l, ret))) in
+    Lam (CPVar var_x, var_k1, b)
+  in
+  test_call_ar_anal @@ prog (Let (NonRecursive, CPVar var_f, rhs, CIf (tr, th, el)));
+  [%expect
+    {|
+    before:
+    let main = let f x k1 = let h b k3 = k3 (b + b) in h x (fun l ->
+                                                                    k1 (fun y k2 ->
+                                                                        h y
+                                                                        (fun r ->
+
+                                                                        k3 (l + r))))
+                                                               in if true
+                                                                  then f 1
+                                                                       (fun g ->
+                                                                        g 1
+                                                                        (fun t ->
+
+                                                                        g 1
+                                                                        (fun q ->
+
+                                                                        (fun x -> x) (q + t))))
+                                                                       else
+                                                                       f 1
+                                                                       (fun g ->
+                                                                        g 1
+                                                                        (fun s ->
+
+                                                                        g 1
+                                                                        (fun z ->
+
+                                                                        (fun x -> x) (z + s))))
+    after:
+
+                                                                  let main =
+                                                                    let f x k1 =
+                                                                    let h b k3 =
+                                                                    k3 (b + b)
+                                                                    in h x
+                                                                       (fun l ->
+                                                                        k1
+                                                                        (fun y k2 ->
+
+                                                                        h y
+                                                                        (fun r ->
+
+                                                                        k3 (l + r))))
+                                                                       in
+                                                                    if true
+                                                                    then
+                                                                    f 1 (fun g ->
+
+                                                                        g 1
+                                                                        (fun t ->
+
+                                                                        g 1
+                                                                        (fun q ->
+
+                                                                        (fun x -> x) (q + t))))
+                                                                        else
+                                                                        f 1
+                                                                        (fun g ->
+
+                                                                        g 1
+                                                                        (fun s ->
+
+                                                                        g 1
+                                                                        (fun z ->
+
+                                                                        (fun x -> x) (z + s)))) |}]
+;;
+
+let%expect_test "expand call (no sharing loses since the variables are dead)" =
+  let th =
+    let cont2 = Cont (CPVar var_q, Ret (HALT, sum (UVar var_t) (UVar var_t))) in
+    let cont1 = Cont (CPVar var_t, Call (UVar var_g, one, cont2)) in
+    Call (UVar var_f, one, Cont (CPVar var_g, Call (UVar var_g, one, cont1)))
+  in
+  let el =
+    let cont2 = Cont (CPVar var_z, Ret (HALT, sum (UVar var_s) (UVar var_s))) in
+    let cont1 = Cont (CPVar var_s, Call (UVar var_g, one, cont2)) in
+    Call (UVar var_f, one, Cont (CPVar var_g, Call (UVar var_g, one, cont1)))
+  in
+  let big_def b =
+    Let
+      ( NonRecursive
+      , CPVar var_h
+      , Lam (CPVar var_b, var_k3, Ret (CVar var_k3, sum (UVar var_b) (UVar var_b)))
+      , b )
+  in
+  let rhs =
+    let sum = sum (UVar var_l) (UVar var_r) in
+    let ret =
+      Ret
+        ( CVar var_k1
+        , Lam
+            ( CPVar var_y
+            , var_k2
+            , Call (UVar var_h, UVar var_y, Cont (CPVar var_r, Ret (CVar var_k3, sum))) )
+        )
+    in
+    let b = big_def (Call (UVar var_h, UVar var_x, Cont (CPVar var_l, ret))) in
+    Lam (CPVar var_x, var_k1, b)
+  in
+  test_call_ar_anal @@ prog (Let (NonRecursive, CPVar var_f, rhs, CIf (tr, th, el)));
+  [%expect
+    {|
+    before:
+    let main = let f x k1 = let h b k3 = k3 (b + b) in h x (fun l ->
+                                                                    k1 (fun y k2 ->
+                                                                        h y
+                                                                        (fun r ->
+
+                                                                        k3 (l + r))))
+                                                               in if true
+                                                                  then f 1
+                                                                       (fun g ->
+                                                                        g 1
+                                                                        (fun t ->
+
+                                                                        g 1
+                                                                        (fun q ->
+
+                                                                        (fun x -> x) (t + t))))
+                                                                       else
+                                                                       f 1
+                                                                       (fun g ->
+                                                                        g 1
+                                                                        (fun s ->
+
+                                                                        g 1
+                                                                        (fun z ->
+
+                                                                        (fun x -> x) (s + s))))
+    after:
+
+                                                                  let main =
+                                                                    let f x e5 k1 =
+                                                                    let h b k3 =
+                                                                    k3 (b + b)
+                                                                    in h x
+                                                                       (fun l ->
+                                                                        h e5
+                                                                        (fun r ->
+
+                                                                        k1 (l + r)))
+                                                                    in if true
+                                                                       then
+                                                                       f 1 1
+                                                                       (fun t ->
+                                                                        (fun x -> x) (t + t))
+                                                                       else
+                                                                       f 1 1
+                                                                       (fun s ->
+                                                                        (fun x -> x) (s + s)) |}]
+;;
+
+let%expect_test "not expand call because of (CURRENT) unaccuracy of shared\n\
+                 computations detection  "
+  =
+  let rhs =
+    let sum var2 = sum (UVar var_x) (UVar var2) in
+    let th = Ret (CVar var_k1, Lam (CPVar var_y, var_k2, Ret (CVar var_k2, sum var_y))) in
+    let el = Ret (CVar var_k1, Lam (CPVar var_a, var_k3, Ret (CVar var_k3, sum var_a))) in
+    Lam (CPVar var_x, var_k1, CIf (tr, th, el))
+  in
+  let th =
+    let cont2 = Cont (CPVar var_q, Ret (HALT, sum (UVar var_t) (UVar var_q))) in
+    let cont1 = Cont (CPVar var_t, Call (UVar var_g, one, cont2)) in
+    Call (UVar var_f, one, Cont (CPVar var_g, Call (UVar var_g, one, cont1)))
+  in
+  let el =
+    let cont2 = Cont (CPVar var_z, Ret (HALT, sum (UVar var_s) (UVar var_z))) in
+    let cont1 = Cont (CPVar var_s, Call (UVar var_g, one, cont2)) in
+    Call (UVar var_f, one, Cont (CPVar var_g, Call (UVar var_g, one, cont1)))
+  in
+  test_call_ar_anal @@ prog (Let (NonRecursive, CPVar var_f, rhs, CIf (tr, th, el)));
+  [%expect
+    {|
+    before:
+    let main = let f x k1 = if true then k1 (fun y k2 -> k2 (x + y))
+                                            else k1 (fun a k3 -> k3 (x + a))
+                                    in if true then f 1 (fun g -> g 1 (fun t ->
+                                                                       g 1
+                                                                       (fun q ->
+                                                                        (fun x -> x) (t + q))))
+                                                                 else f 1
+                                                                      (fun g ->
+                                                                       g 1
+                                                                       (fun s ->
+                                                                        g 1
+                                                                        (fun z ->
+
+                                                                        (fun x -> x) (s + z))))
+    after:
+
+                                               let main = let f x k1 = if true
+                                                                       then
+                                                                       k1
+                                                                       (fun y k2 ->
+                                                                        k2 (x + y))
+                                                                       else
+                                                                       k1
+                                                                       (fun a k3 ->
+                                                                        k3 (x + a))
+                                                                       in
+                                                                        if true
+                                                                        then
+                                                                        f 1
+                                                                        (fun g ->
+
+                                                                        g 1
+                                                                        (fun t ->
+
+                                                                        g 1
+                                                                        (fun q ->
+
+                                                                        (fun x -> x) (t + q))))
+                                                                        else
+                                                                        f 1
+                                                                        (fun g ->
+
+                                                                        g 1
+                                                                        (fun s ->
+
+                                                                        g 1
+                                                                        (fun z ->
+
+                                                                        (fun x -> x) (s + z)))) |}]
+;;
+
+let%expect_test "expand lam call argument" =
+  let rhs =
+    let b =
+      Ret
+        ( CVar var_k1
+        , Lam (CPVar var_y, var_k2, Ret (CVar var_k2, TTuple (UVar var_x, UVar var_y, [])))
+        )
+    in
+    Lam (CPVar var_x, var_k1, b)
+  in
+  let f =
+    Lam
+      ( CPVar var_h
+      , var_k3
+      , Call (UVar var_h, one, Cont (CPVar var_s, Call (UVar var_s, one, CVar var_k3))) )
+  in
+  let th =
+    Call
+      ( f
+      , Lam
+          ( CPVar var_t
+          , var_k4
+          , Call (UVar var_f, TTuple (one, UVar var_t, []), CVar var_k4) )
+      , HALT )
+  in
+  let el =
+    Call
+      (UVar var_f, TTuple (one, one, []), Cont (CPVar var_g, Call (UVar var_g, one, HALT)))
+  in
+  test_call_ar_anal @@ prog (Let (NonRecursive, CPVar var_f, rhs, CIf (tr, th, el)));
+  [%expect
+    {|
+    before:
+    let main = let f x k1 = k1 (fun y k2 -> k2 (x, y)) in if true
+                                                                  then (fun h k3 ->
+                                                                        h 1
+                                                                        (fun s ->
+
+                                                                        s 1 k3))
+                                                                       (fun t k4 ->
+                                                                        f
+                                                                        (1, t) k4)
+                                                                       (fun x -> x)
+                                                                       else
+                                                                       f
+                                                                       (1, 1)
+                                                                       (fun g ->
+                                                                        g 1
+                                                                        (fun x -> x))
+    after:
+
+                                                                  let main =
+                                                                    let f x e6 k1 =
+                                                                    k1 (x, e6)
+                                                                    in if true
+                                                                       then
+                                                                       f
+                                                                       (1, 1) 1
+                                                                       (fun x -> x)
+                                                                       else
+                                                                       f
+                                                                       (1, 1) 1
+                                                                       (fun x -> x) |}]
+;;
+
+let%expect_test "expand but not inl lam call argument" =
+  let rhs =
+    let b =
+      Ret
+        ( CVar var_k1
+        , Lam (CPVar var_y, var_k2, Ret (CVar var_k2, TTuple (UVar var_x, UVar var_y, [])))
+        )
+    in
+    Lam (CPVar var_x, var_k1, b)
+  in
+  let f =
+    let th =
+      Call (UVar var_h, one, Cont (CPVar var_s, Call (UVar var_s, one, CVar var_k3)))
+    in
+    let el =
+      Call (UVar var_h, one, Cont (CPVar var_q, Call (UVar var_q, one, CVar var_k3)))
+    in
+    Lam (CPVar var_h, var_k3, CIf (tr, th, el))
+  in
+  let th =
+    Call
+      ( f
+      , Lam
+          ( CPVar var_t
+          , var_k4
+          , Call (UVar var_f, TTuple (one, UVar var_t, []), CVar var_k4) )
+      , HALT )
+  in
+  let el =
+    Call
+      (UVar var_f, TTuple (one, one, []), Cont (CPVar var_g, Call (UVar var_g, one, HALT)))
+  in
+  test_call_ar_anal @@ prog (Let (NonRecursive, CPVar var_f, rhs, CIf (tr, th, el)));
+  [%expect
+    {|
+    before:
+    let main = let f x k1 = k1 (fun y k2 -> k2 (x, y)) in if true
+                                                                  then (fun h k3 ->
+                                                                        if true
+                                                                        then
+                                                                        h 1
+                                                                        (fun s ->
+
+                                                                        s 1 k3)
+                                                                        else
+                                                                        h 1
+                                                                        (fun q ->
+
+                                                                        q 1 k3))
+                                                                        (fun t k4 ->
+
+                                                                        f
+                                                                        (1, t) k4)
+                                                                        (fun x -> x)
+                                                                        else
+                                                                        f
+                                                                        (1, 1)
+                                                                        (fun g ->
+
+                                                                        g 1
+                                                                        (fun x -> x))
+    after:
+
+                                                                  let main =
+                                                                    let f x e7 k1 =
+                                                                    k1 (x, e7)
+                                                                    in if true
+                                                                       then
+                                                                       (fun h k3 ->
+                                                                        if true
+                                                                        then
+                                                                        h 1 1 k3
+                                                                        else
+                                                                        h 1 1 k3)
+                                                                       (fun t e8 k4 ->
+                                                                        f
+                                                                        (1, t) e8 k4)
+                                                                       (fun x -> x)
+                                                                       else
+                                                                       f
+                                                                       (1, 1) 1
+                                                                       (fun x -> x) |}]
+;;
