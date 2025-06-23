@@ -1400,8 +1400,7 @@ end = struct
         lookup_call_ars i.id (fun _ -> jv 0) jv
       | Letc (_, Cont (CPTuple _, cont_b), b) ->
         anal_p b 0 (fun _ _ -> anal_p cont_b ar k) counts
-      | Letc (i, _, b) ->
-        anal_p ~dead_jv_mode:(ISet.mem i.id dead_vars) b ar k (add i.id 0 counts)
+      | Letc (i, _, b) -> anal_p ~dead_jv_mode:(ISet.mem i.id dead_vars) b ar k counts
       | Let (Recursive, _, _, _) -> failwith "todo"
     and anal_t_bnd pat t counts k barriers fin_call_ars =
       match pat with
@@ -1741,9 +1740,7 @@ end = struct
         let pat' = translate_pat pat in
         let b1' = simpl_p_sh b1 env in
         let cont_hndl, etas2 =
-          if ISet.mem i.id dead_vars
-          then DeadJV, Future 0
-          else Def, Future (find_with_default i.id fin_call_ars 0)
+          if ISet.mem i.id dead_vars then DeadJV, Future 0 else Def, Future (v_ar pat)
         in
         let b2' = simpl_p ~cont_hndl etas2 b2 env in
         Letc (i, Cont (pat', b1'), b2')
@@ -1916,7 +1913,7 @@ let var_y, var_k2, var_h, var_t = v "y", v "k2", v "h", v "t"
 let var_a, var_k3, var_b = v "a", v "k3", v "b"
 let var_l, var_q, var_r = v "l", v "q", v "r"
 let var_z, var_s, var_d = v "z", v "s", v "d"
-let var_k4 = v "k4"
+let var_k4, var_jv1 = v "k4", v "jv1"
 let one = TConst (PConst_int 1)
 let two = TConst (PConst_int 2)
 let tr = TConst (PConst_bool true)
@@ -1978,7 +1975,8 @@ let%expect_test "not expand call (one of entries has init arity )" =
   in
   let ite = CIf (tr, th, el) in
   test_call_ar_anal @@ prog (Let (NonRecursive, CPVar var_f, rhs, h_let ite));
-  [%expect{|
+  [%expect
+    {|
     before:
     let main = let f x k1 = k1 (fun y k2 -> k2 (x + y)) in let h a k3 =
                                                                    a 1 k3
@@ -2453,4 +2451,116 @@ let%expect_test "expand but not inl lam call argument" =
                                                                        f
                                                                        (1, 1) 1
                                                                        (fun x -> x) |}]
+;;
+
+let%expect_test "expand jv" =
+  let sum1 = sum (UVar var_x) (UVar var_y) in
+  let sum2 = sum (UVar var_l) (UVar var_r) in
+  let th =
+    Ret
+      ( CVar var_jv1
+      , Lam
+          ( CPVar var_x
+          , var_k1
+          , Ret (CVar var_k1, Lam (CPVar var_y, var_k2, Ret (CVar var_k2, sum1))) ) )
+  in
+  let el =
+    Ret
+      ( CVar var_jv1
+      , Lam
+          ( CPVar var_l
+          , var_k3
+          , Ret (CVar var_k1, Lam (CPVar var_r, var_k4, Ret (CVar var_k2, sum2))) ) )
+  in
+  let cont =
+    Cont
+      ( CPVar var_f
+      , Call (UVar var_f, one, Cont (CPVar var_g, Call (UVar var_g, one, HALT))) )
+  in
+  test_call_ar_anal @@ prog (Letc (var_jv1, cont, CIf (tr, th, el)));
+  [%expect
+    {|
+    before:
+    let main = let jv1 f = f 1 (fun g -> g 1 (fun x -> x)) in if true
+                                                                      then
+                                                                      jv1
+                                                                      (fun x k1 ->
+                                                                       k1
+                                                                       (fun y k2 ->
+                                                                        k2 (x + y)))
+                                                                      else
+                                                                      jv1
+                                                                      (fun l k3 ->
+                                                                       k1
+                                                                       (fun r k4 ->
+                                                                        k2 (l + r)))
+    after:
+
+                                                                      let main =
+                                                                        let jv1 f =
+                                                                        f 1 1
+                                                                        (fun x -> x)
+                                                                        in
+                                                                        if true
+                                                                        then
+                                                                        jv1
+                                                                        (fun x e10 k1 ->
+
+                                                                        k1 (x + e10))
+                                                                        else
+                                                                        jv1
+                                                                        (fun l e9 k3 ->
+
+                                                                        k1 (l + e9)) |}]
+;;
+
+let%expect_test "dead jv param" =
+  let sum1 = sum (UVar var_x) (UVar var_y) in
+  let sum2 = sum (UVar var_l) (UVar var_r) in
+  let th =
+    Ret
+      ( CVar var_jv1
+      , Lam
+          ( CPVar var_x
+          , var_k1
+          , Ret (CVar var_k1, Lam (CPVar var_y, var_k2, Ret (CVar var_k2, sum1))) ) )
+  in
+  let el =
+    Ret
+      ( CVar var_jv1
+      , Lam
+          ( CPVar var_l
+          , var_k3
+          , Ret (CVar var_k1, Lam (CPVar var_r, var_k4, Ret (CVar var_k2, sum2))) ) )
+  in
+  let cont = Cont (CPVar var_f, Ret (HALT, sum one one)) in
+  test_call_ar_anal @@ prog (Letc (var_jv1, cont, CIf (tr, th, el)));
+  [%expect
+    {|
+    before:
+    let main = let jv1 f = (fun x -> x) (1 + 1) in if true then jv1
+                                                                        (fun x k1 ->
+
+                                                                        k1
+                                                                        (fun y k2 ->
+
+                                                                        k2 (x + y)))
+                                                                        else
+                                                                        jv1
+                                                                        (fun l k3 ->
+
+                                                                        k1
+                                                                        (fun r k4 ->
+
+                                                                        k2 (l + r)))
+    after:
+
+                                                           let main = let jv1 f =
+                                                                      (fun x -> x) (1 + 1)
+                                                                      in
+                                                                      if true
+                                                                      then
+                                                                      jv1 ()
+                                                                      else
+                                                                      jv1 () |}]
 ;;
