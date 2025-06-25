@@ -1113,10 +1113,13 @@ end = struct
       let rhs_fv = domain ars in
       (cartesian_square rhs_fv, ars, ress), rhs_fv
     in
-    let ret_with_fv_cond v_id v_arity b_co_calls =
-      if (not @@ has_loop v_id b_co_calls) || v_arity = 0
-      then ret_with_fv
-      else ret_with_fv_bad
+    let ret_with_fv_cond ?(loop_info = None) v_id v_arity b_co_calls =
+      let has_loop =
+        match loop_info with
+        | Some i -> i
+        | None -> has_loop v_id b_co_calls
+      in
+      if (not has_loop) || v_arity = 0 then ret_with_fv else ret_with_fv_bad
     in
     let rec anal_p conts ress inc_ar p int =
       let anal_tt0_ign a aa ress' = anal_tt0 conts int a aa ress' |> ignore_fst in
@@ -1163,7 +1166,8 @@ end = struct
         when is_int_triv_rhs int t ->
         fin_int_triv_bnd_anal conts int t @@ anal_bnd1 id conts body int ress inc_ar
       | Ret (Cont ((CPTuple _ | CPVar _), body), t)
-      | Let (NonRecursive, (CPVar _ | CPTuple _), t, body) ->
+      | Let (NonRecursive, CPVar _, t, body)
+      | Let (_, CPTuple _, t, body) ->
         fin_unint_bnd_anal (anal_triv0_ign t) @@ anal_p conts ress inc_ar body int
       | Primop (_, _, t, tt, body) ->
         fin_unint_bnd_anal (anal_tt0_ign t tt) @@ anal_p conts ress inc_ar body int
@@ -1197,7 +1201,9 @@ end = struct
         anal_p conts2 ress2 inc_ar p int
       | Ret (HALT, t) -> clear_triv_ret_anal t
       | Letc (_, HALT, p) -> anal_p conts ress inc_ar p int
-      | Let (Recursive, _, _, _) -> failwith "todo"
+      | Let (Recursive, CPVar { id; _ }, t, body) ->
+        let int2 = ISet.add id int in
+        anal_rec_bnd id conts int2 t @@ anal_p conts ress inc_ar body int2
     and anal_bnd1 ?(jv_specif = None) id conts body int ress inc_ar =
       anal_bnd_cont ~jv_specif id @@ anal_p conts ress inc_ar body @@ ISet.add id int
     and anal_bnd_cont ?(jv_specif = None) v_id (b_co_calls, b_ars, ress) =
@@ -1225,6 +1231,35 @@ end = struct
               union k_co_calls @@ union rhs_co_calls @@ cartesian rhs_fv neigh
             in
             p_co_calls, p_ars, ress3 )
+    and anal_rec_bnd v_id conts int t (b_co_calls, b_ars, ress) =
+      match IMap.find v_id b_ars with
+      | exception Not_found ->
+        (* dead var case *)
+        b_co_calls, b_ars, { ress with dead_vars = ISet.add v_id ress.dead_vars }
+      | v_arity ->
+        let rec fixpointing v_ar has_loop_v =
+          let (rhs_co_calls, rhs_ars, ress2), rhs_fv =
+            anal_triv conts int v_ar t ress
+            |> ret_with_fv_cond ~loop_info:(Some has_loop_v) v_id v_ar b_co_calls
+          in
+          let p_co_calls =
+            union b_co_calls
+            @@ union rhs_co_calls
+            @@ cartesian rhs_fv
+            @@ adj_nodes v_id
+            @@ union b_co_calls rhs_co_calls
+          in
+          let new_v_ar =
+            match IMap.find v_id rhs_ars with
+            | n when n <= v_ar -> n
+            | (exception Not_found) | _ -> v_ar
+          in
+          let new_has_loop_v = has_loop v_id p_co_calls in
+          if new_v_ar <> v_ar || new_has_loop_v <> has_loop_v
+          then fixpointing new_v_ar new_has_loop_v
+          else p_co_calls, ar_union b_ars rhs_ars, add_if_incr v_ar t ress2
+        in
+        fixpointing v_arity @@ has_loop v_id b_co_calls
     and fin_bnd_call_anal conts int f a (ress, fin_anal) =
       fin_anal ress
       @@ fun b_co_calls v_id v_arity ->
@@ -1375,8 +1410,8 @@ end = struct
             anal_p p2 ar (fun rest_ar2 _ -> k (Int.max rest_ar1 rest_ar2) Right_After))
         in
         anal_t t k1 counts
-      | Let (NonRecursive, pat, t, b) | Ret (Cont (pat, b), t) ->
-        anal_t_bnd pat t counts (anal_p b ar k)
+      | Let (rec_flag, pat, t, b) -> anal_t_bnd ~rec_flag pat t counts (anal_p b ar k)
+      | Ret (Cont (pat, b), t) -> anal_t_bnd pat t counts (anal_p b ar k)
       | Ret (_, Lam (pat, i, lam_b)) ->
         lam_hndl ~ar:(Int.max 0 (ar - 1)) pat i lam_b k counts
       | Ret (_, t) ->
@@ -1399,8 +1434,7 @@ end = struct
       | Letc (_, Cont (CPTuple _, cont_b), b) ->
         anal_p b 0 (fun _ _ -> anal_p cont_b ar k) counts
       | Letc (i, _, b) -> anal_p ~dead_jv_mode:(ISet.mem i.id dead_vars) b ar k counts
-      | Let (Recursive, _, _, _) -> failwith "todo"
-    and anal_t_bnd pat t counts k barriers fin_call_ars =
+    and anal_t_bnd ?(rec_flag = NonRecursive) pat t counts k barriers fin_call_ars =
       match pat with
       | CPVar { id; _ } when ISet.mem id dead_vars -> k counts barriers fin_call_ars
       | CPTuple _ -> anal_t t k counts barriers fin_call_ars
@@ -1409,12 +1443,22 @@ end = struct
         let k_anal_t _ = anal_t t k counts' barriers fin_call_ars in
         (match t with
          | Lam (pat, i, p) ->
-           lookup_call_ars i.id k_anal_t (fun ar ->
-             let k1 rest_ar _ counts'' barriers' fin_call_ars' =
-               let fin_call_ars'' = add id (ar - rest_ar) fin_call_ars' in
-               k counts'' barriers' fin_call_ars''
+           let rec anal_lam ar k1 =
+             let fin_call_ars' =
+               match rec_flag with
+               | Recursive -> add id ar fin_call_ars
+               | NonRecursive -> fin_call_ars
              in
-             lam_hndl ~ar:(Int.max 0 (ar - 1)) pat i p k1 counts' barriers fin_call_ars)
+             let k2 rest_ar _ counts'' barriers' fin_call_ars'' =
+               if rec_flag = Recursive && rest_ar <> 0
+               then anal_lam (ar - rest_ar) k1
+               else (
+                 let fin_call_ars''' = add id (ar - rest_ar) fin_call_ars'' in
+                 k1 counts'' barriers' fin_call_ars''')
+             in
+             lam_hndl ~ar:(Int.max 0 (ar - 1)) pat i p k2 counts' barriers fin_call_ars'
+           in
+           lookup_call_ars i.id k_anal_t (fun ar -> anal_lam ar k)
          | t ->
            let k_found t_ar _ =
              let fin_call_ars' = add id t_ar fin_call_ars in
@@ -1707,7 +1751,7 @@ end = struct
       match cont_hndl, p with
       | ( _
         , ( Call (_, _, Cont (CPVar { id; _ }, b))
-          | Let (NonRecursive, CPVar { id; _ }, _, b)
+          | Let (_, CPVar { id; _ }, _, b)
           | Ret (Cont (CPVar { id; _ }, b), _) ) )
         when ISet.mem id dead_vars -> simpl_p_sh b env
       | _, Call (t1, t2, (Cont (pat, b) as c)) ->
@@ -1767,6 +1811,10 @@ end = struct
         let_or_ret_bnd pat b t @@ fun pat' b' t' -> MACPS.Ret (Cont (pat', b'), t')
       | _, Let (NonRecursive, pat, t, b) ->
         let_or_ret_bnd pat b t @@ fun pat' b' t' -> MACPS.Let (NonRecursive, pat', t', b')
+      | _, Let (Recursive, pat, t, b) ->
+        let t' = expand_triv (v_ar pat) @@ prep_t_for_env env t in
+        let b' = simpl_p_sh b env in
+        MACPS.Let (Recursive, translate_pat pat, t', b')
       | _, CIf (t, p1, p2) ->
         let t' = simpl_t_sh t in
         let p1', p2' = simpl_p_sh p1 env, simpl_p_sh p2 env in
@@ -1799,7 +1847,6 @@ end = struct
       | Def, Call (t1, t2, (HALT as c)) -> call t1 t2 c @@ fun () -> MACPS.HALT
       | DeadJV, (Ret (HALT, _) | Call (_, _, HALT)) ->
         failwith " unreachable: HALT isn't a join value"
-      | _, Let (Recursive, _, _, _) -> failwith "todo"
     and ex_call c env =
       let rec helper args = function
         | `ExHeavyCall ((#ex_call as ec), prep_t) -> helper (prep_t :: args) ec
@@ -1892,7 +1939,6 @@ module VeryNaiveCoCallGraph : sig
   val cartesian : unit IMap.t -> unit IMap.t -> t
   val cartesian_square : unit IMap.t -> t
   val union : t -> t -> t
-  val adj_nodes : int -> t -> unit IMap.t
   val remove : int -> t -> t
 end = struct
   module G = Persistent.Graph.Concrete (struct
@@ -1955,7 +2001,8 @@ let var_a, var_k3, var_b = v "a", v "k3", v "b"
 let var_l, var_q, var_r = v "l", v "q", v "r"
 let var_z, var_s, var_d = v "z", v "s", v "d"
 let var_k4, var_jv1, var_k5 = v "k4", v "jv1", v "k5"
-let var_k6 = v "k6"
+let var_fack, var_fibk, var_n = v "fack", v "fibk", v "n"
+let var_k6, var_k = v "k6", v "k"
 let one = TConst (PConst_int 1)
 let two = TConst (PConst_int 2)
 let tr = TConst (PConst_bool true)
@@ -2654,4 +2701,131 @@ let%expect_test "barriers in action: only unit-size arguments are inlined when e
                                                                        h e12 2 k2
                                                                   else h e12 2 k2) (2 <= 1)
                                                  (1, 2) (fun x -> x) |}]
+;;
+
+let%expect_test "fack" =
+  let le_sign, min_sign = "<=" |> of_string, "-" |> of_string in
+  let th =
+    Ret (CVar var_k1, Lam (CPVar var_k, var_k2, Call (UVar var_k, one, CVar var_k2)))
+  in
+  let mult = TSafeBinop ("*" |> of_string, UVar var_t, UVar var_n) in
+  let el =
+    let cont2 = Cont (CPVar var_t, Call (UVar var_k, mult, CVar var_k3)) in
+    let cont =
+      Cont
+        ( CPVar var_h
+        , Ret
+            (CVar var_k1, Lam (CPVar var_k, var_k3, Call (UVar var_h, UVar var_k, cont2)))
+        )
+    in
+    Call (UVar var_fack, TSafeBinop (min_sign, UVar var_n, one), cont)
+  in
+  let rhs =
+    Lam (CPVar var_n, var_k1, CIf (TSafeBinop (le_sign, UVar var_n, one), th, el))
+  in
+  let id = Lam (CPVar var_x, var_k4, Ret (CVar var_k4, UVar var_x)) in
+  let sec_arg_app = Call (UVar var_g, id, HALT) in
+  test_call_ar_anal
+  @@ prog
+  @@ Let
+       ( Recursive
+       , CPVar var_fack
+       , rhs
+       , Call (UVar var_fack, one, Cont (CPVar var_g, sec_arg_app)) );
+  [%expect
+    {|
+    before:
+    let main = let rec fack n k1 = if n <= 1 then k1 (fun k k2 -> k 1 k2)
+                                                     else fack (n - 1) (fun h ->
+                                                                        k1
+                                                                        (fun k k3 ->
+
+                                                                        h k
+                                                                        (fun t ->
+
+                                                                        k (t * n) k3)))
+                                                     in fack 1 (fun g ->
+                                                                        g
+                                                                        (fun x k4 ->
+
+                                                                        k4 x)
+                                                                        (fun x -> x))
+    after:
+
+                                           let main = let rec fack n e13 k1 =
+                                                      if n <= 1 then e13 1 k1
+                                                      else fack (n - 1) e13
+                                                           (fun t -> e13 (t * n) k1)
+                                                        in fack 1 (fun x k4 ->
+                                                                   k4 x)
+                                                                  (fun x -> x) |}]
+;;
+
+(* not inlined yet due to (CURRENT) unaccuracy of shared computations detection*)
+let%expect_test "fibk" =
+  let le_sign, min_sign = "<=" |> of_string, "-" |> of_string in
+  let n_min x = TSafeBinop (min_sign, UVar var_n, x) in
+  let th =
+    Ret (CVar var_k1, Lam (CPVar var_k, var_k2, Call (UVar var_k, one, CVar var_k2)))
+  in
+  let el =
+    let cont2 =
+      Cont (CPVar var_r, Call (UVar var_k, sum (UVar var_l) (UVar var_r), CVar var_k3))
+    in
+    let call = Call (UVar var_fibk, n_min two, cont2) in
+    let cont = Cont (CPVar var_l, Ret (CVar var_k1, Lam (CPVar var_k, var_k3, call))) in
+    Call (UVar var_fibk, n_min one, cont)
+  in
+  let rhs =
+    Lam (CPVar var_n, var_k1, CIf (TSafeBinop (le_sign, UVar var_n, one), th, el))
+  in
+  let id = Lam (CPVar var_x, var_k4, Ret (CVar var_k4, UVar var_x)) in
+  let sec_arg_app = Call (UVar var_g, id, HALT) in
+  test_call_ar_anal
+  @@ prog
+  @@ Let
+       ( Recursive
+       , CPVar var_fibk
+       , rhs
+       , Call (UVar var_fibk, one, Cont (CPVar var_g, sec_arg_app)) );
+  [%expect
+    {|
+    before:
+    let main = let rec fibk n k1 = if n <= 1 then k1 (fun k k2 -> k 1 k2)
+                                                     else fibk (n - 1) (fun l ->
+                                                                        k1
+                                                                        (fun k k3 ->
+
+                                                                        fibk (n - 2)
+                                                                        (fun r ->
+
+                                                                        k (l + r) k3)))
+                                                     in fibk 1 (fun g ->
+                                                                        g
+                                                                        (fun x k4 ->
+
+                                                                        k4 x)
+                                                                        (fun x -> x))
+    after:
+
+                                           let main = let rec fibk n k1 =
+                                                      if n <= 1 then k1 (fun k k2 ->
+
+                                                                        k 1 k2)
+                                                                     else
+                                                                     fibk (n - 1)
+                                                                     (fun l ->
+                                                                      k1
+                                                                      (fun k k3 ->
+                                                                       fibk (n - 2)
+                                                                       (fun r ->
+                                                                        k (l + r) k3)))
+                                                                     in fibk 1
+                                                                        (fun g ->
+
+                                                                        g
+                                                                        (fun x k4 ->
+
+                                                                        k4 x)
+                                                                        (fun x -> x)) |}]
 ;;
