@@ -1086,6 +1086,12 @@ end = struct
 
   open CoCallGraph
 
+  let find_with_default key m default =
+    match IMap.find key m with
+    | el -> el
+    | exception Not_found -> default
+  ;;
+
   let anal (_, _, p) =
     let ( @@@ ) = IMap.union (fun _ () () -> Some ()) in
     let ar_union = IMap.union (fun _ x y -> Some (min x y)) in
@@ -1121,69 +1127,114 @@ end = struct
       in
       if (not has_loop) || v_arity = 0 then ret_with_fv else ret_with_fv_bad
     in
-    let rec anal_p conts ress inc_ar p int =
-      let anal_tt0_ign a aa ress' = anal_tt0 conts int a aa ress' |> ignore_fst in
-      let anal_triv0_ign t ress = anal_triv conts int 0 t ress |> ignore_fst in
-      let lam_call_anal0_ign lam_b p a ress =
-        lam_call_anal lam_b conts int 0 ress p a |> ignore_fst
+    let rec anal_p conts ress inc_ar p safe_ars int =
+      let open IMap in
+      let calc_safe_ar_t =
+        let rec helper acc = function
+          | UVar { id; _ } -> acc + find_with_default id safe_ars 0
+          | Lam (_, _, b) ->
+            let acc2 = acc + 1 in
+            let rec lam_b_helper = function
+              | Ret ((HALT | CVar _), t) -> helper acc2 t
+              | CIf (_, th, el) -> min (lam_b_helper th) @@ lam_b_helper el
+              | _ -> acc2
+            in
+            lam_b_helper b
+          | _ -> acc
+        in
+        helper 0
       in
-      let clear_lam_call_anal lam_b = lam_call_anal lam_b conts int inc_ar ress in
-      let clear_triv_ret_anal t = anal_triv conts int inc_ar t ress in
+      let upd_safe_ars_if_ge_2 ?(subtr = 0) id t =
+        match calc_safe_ar_t t - subtr with
+        | n when n >= 2 -> add id n safe_ars
+        | _ -> safe_ars
+      in
+      let call_bnd_safe_ars_hndl ?(ignore_safe_ars = false) id f =
+        match calc_safe_ar_t f with
+        | n when n >= 3 && not ignore_safe_ars -> `Safe, add id n safe_ars
+        | n when n >= 2 -> `Safe, safe_ars
+        | _ -> `UnSafe, safe_ars
+      in
+      let anal_tt0_ign a aa ress2 =
+        anal_tt0 conts safe_ars int a aa ress2 |> ignore_fst
+      in
+      let anal_triv0_ign t ress = anal_triv conts safe_ars int 0 t ress |> ignore_fst in
+      let lam_call_anal0_ign lam_b p a ress =
+        lam_call_anal lam_b conts safe_ars int 0 ress p a |> ignore_fst
+      in
+      let clear_lam_call_anal lam_b =
+        lam_call_anal lam_b conts safe_ars int inc_ar ress
+      in
+      let clear_triv_ret_anal t = anal_triv conts safe_ars int inc_ar t ress in
       match p with
-      | CIf (c, th, el) -> anal_cif c th el conts int ress inc_ar
-      | Call (Lam (pat, c, lam_b), a, Cont (CPVar { id; _ }, body)) ->
-        fin_lam_call_bnd_anal c lam_b conts int pat a
+      | CIf (c, th, el) -> anal_cif c th el conts safe_ars int ress inc_ar
+      | Call ((Lam (pat, c, lam_b) as t), a, Cont (CPVar { id; _ }, body)) ->
+        fin_lam_call_bnd_anal c lam_b conts safe_ars int pat a
         @@ anal_bnd1 id conts body int ress inc_ar
+        @@ upd_safe_ars_if_ge_2 id t ~subtr:1
       | Call (Lam (pat, _, lam_b), a, Cont (CPTuple _, body)) ->
         let rhs_anal = lam_call_anal0_ign lam_b pat a in
-        fin_unint_bnd_anal rhs_anal @@ anal_p conts ress inc_ar body int
+        fin_unint_bnd_anal rhs_anal @@ anal_p conts ress inc_ar body safe_ars int
       | Call (Lam (pat, c, lam_b), a, CVar { id; _ }) ->
-        (match IMap.find id conts with
+        (match find id conts with
          | `Int fin_anal ->
-           fin_lam_call_bnd_anal ~had_upd:true c lam_b conts int pat a (ress, fin_anal)
+           (ress, fin_anal)
+           |> fin_lam_call_bnd_anal ~had_upd:true c lam_b conts safe_ars int pat a
          | `UnInt (b_co_calls, b_ars) ->
            fin_unint_bnd_anal (lam_call_anal0_ign lam_b pat a) (b_co_calls, b_ars, ress)
          | exception Not_found -> clear_lam_call_anal lam_b pat a)
       | Call (Lam (pat, _, lam_b), a, HALT) -> clear_lam_call_anal lam_b pat a
       | Call (f, a, Cont (CPVar { id; _ }, body)) ->
-        fin_bnd_call_anal conts int f a @@ anal_bnd1 id conts body int ress inc_ar
+        let is_safe, safe_ars2 = call_bnd_safe_ars_hndl id f in
+        fin_bnd_call_anal ~is_safe conts safe_ars int f a
+        @@ anal_bnd1 id conts body int ress inc_ar safe_ars2
       | Call (f, a, CVar { id; _ }) ->
-        (match IMap.find id conts with
-         | `Int fin_anal -> fin_bnd_call_anal conts int f a (ress, fin_anal)
+        (match find id conts with
+         | `Int fin_anal ->
+           let is_safe, _ = call_bnd_safe_ars_hndl ~ignore_safe_ars:true id f in
+           fin_bnd_call_anal ~is_safe conts safe_ars int f a (ress, fin_anal)
          | `UnInt (b_co_calls, b_ars) ->
            (b_co_calls, b_ars, ress) |> fin_unint_bnd_anal @@ anal_tt0_ign f [ a ]
-         | exception Not_found -> anal_tt0 ~fst_inc_ar:(inc_ar + 1) conts int f [ a ] ress)
-      | Call (f, a, HALT) -> anal_tt0 ~fst_inc_ar:(inc_ar + 1) conts int f [ a ] ress
+         | exception Not_found ->
+           anal_tt0 ~fst_inc_ar:(inc_ar + 1) conts safe_ars int f [ a ] ress)
+      | Call (f, a, HALT) ->
+        anal_tt0 ~fst_inc_ar:(inc_ar + 1) conts safe_ars int f [ a ] ress
       | Ret (CVar { id; _ }, t) ->
-        (match IMap.find id conts with
+        (match find id conts with
          | `Int fin_anal ->
-           fin_int_triv_bnd_anal ~had_upd:true conts int t (ress, fin_anal)
+           fin_int_triv_bnd_anal ~had_upd:true conts safe_ars int t (ress, fin_anal)
          | `UnInt (b_co_calls, b_ars) ->
            fin_unint_bnd_anal (anal_triv0_ign t) (b_co_calls, b_ars, ress)
          | exception Not_found -> clear_triv_ret_anal t)
       | Ret (Cont (CPVar { id; _ }, body), t)
       | Let (NonRecursive, CPVar { id; _ }, t, body)
         when is_int_triv_rhs int t ->
-        fin_int_triv_bnd_anal conts int t @@ anal_bnd1 id conts body int ress inc_ar
+        fin_int_triv_bnd_anal conts safe_ars int t
+        @@ anal_bnd1 id conts body int ress inc_ar
+        @@ upd_safe_ars_if_ge_2 id t
       | Ret (Cont ((CPTuple _ | CPVar _), body), t)
       | Let (NonRecursive, CPVar _, t, body)
       | Let (_, CPTuple _, t, body) ->
-        fin_unint_bnd_anal (anal_triv0_ign t) @@ anal_p conts ress inc_ar body int
+        fin_unint_bnd_anal (anal_triv0_ign t)
+        @@ anal_p conts ress inc_ar body safe_ars int
       | Primop (_, _, t, tt, body) ->
-        fin_unint_bnd_anal (anal_tt0_ign t tt) @@ anal_p conts ress inc_ar body int
+        fin_unint_bnd_anal (anal_tt0_ign t tt)
+        @@ anal_p conts ress inc_ar body safe_ars int
       | Call (f, a, Cont (CPTuple _, body)) ->
-        fin_unint_bnd_anal (anal_tt0_ign f [ a ]) @@ anal_p conts ress inc_ar body int
+        fin_unint_bnd_anal (anal_tt0_ign f [ a ])
+        @@ anal_p conts ress inc_ar body safe_ars int
       | Letc ({ id = jv_id; _ }, Cont (CPVar { id; _ }, body), p) ->
         let jv_specif = Some jv_id in
-        let ress2, fin_anal = anal_bnd1 ~jv_specif id conts body int ress inc_ar in
-        let conts2 = IMap.add jv_id (`Int fin_anal) conts in
-        anal_p conts2 ress2 0 p int
+        let ress2, fin_anal =
+          anal_bnd1 ~jv_specif id conts body int ress inc_ar safe_ars
+        in
+        let conts2 = add jv_id (`Int fin_anal) conts in
+        anal_p conts2 ress2 0 p safe_ars int
       | Letc ({ id = jp_id; _ }, Cont (CPTuple _, body), p) ->
-        let b_co_calls, b_ars, ress2 = anal_p conts ress inc_ar body int in
-        let conts2 = IMap.add jp_id (`UnInt (b_co_calls, b_ars)) conts in
-        anal_p conts2 ress2 0 p int
+        let b_co_calls, b_ars, ress2 = anal_p conts ress inc_ar body safe_ars int in
+        let conts2 = add jp_id (`UnInt (b_co_calls, b_ars)) conts in
+        anal_p conts2 ress2 0 p safe_ars int
       | Letc ({ id = jp_id1; _ }, CVar { id = jp_id2; _ }, p) ->
-        let open IMap in
         let upd_ress () =
           if ISet.mem jp_id2 ress.dead_vars
           then { ress with dead_vars = ISet.add jp_id1 ress.dead_vars }
@@ -1198,14 +1249,18 @@ end = struct
           | `UnInt _ as c -> add jp_id1 c conts, ress
           | exception Not_found -> conts, ress
         in
-        anal_p conts2 ress2 inc_ar p int
+        anal_p conts2 ress2 inc_ar p safe_ars int
       | Ret (HALT, t) -> clear_triv_ret_anal t
-      | Letc (_, HALT, p) -> anal_p conts ress inc_ar p int
+      | Letc (_, HALT, p) -> anal_p conts ress inc_ar p safe_ars int
       | Let (Recursive, CPVar { id; _ }, t, body) ->
+        let safe_ars2 = upd_safe_ars_if_ge_2 id t in
         let int2 = ISet.add id int in
-        anal_rec_bnd id conts int2 t @@ anal_p conts ress inc_ar body int2
-    and anal_bnd1 ?(jv_specif = None) id conts body int ress inc_ar =
-      anal_bnd_cont ~jv_specif id @@ anal_p conts ress inc_ar body @@ ISet.add id int
+        anal_rec_bnd id conts safe_ars2 int2 t
+        @@ anal_p conts ress inc_ar body safe_ars2 int2
+    and anal_bnd1 ?(jv_specif = None) id conts body int ress inc_ar safe_ars =
+      anal_bnd_cont ~jv_specif id
+      @@ anal_p conts ress inc_ar body safe_ars
+      @@ ISet.add id int
     and anal_bnd_cont ?(jv_specif = None) v_id (b_co_calls, b_ars, ress) =
       match IMap.find v_id b_ars with
       | exception Not_found ->
@@ -1231,7 +1286,7 @@ end = struct
               union k_co_calls @@ union rhs_co_calls @@ cartesian rhs_fv neigh
             in
             p_co_calls, p_ars, ress3 )
-    and anal_rec_bnd v_id conts int t (b_co_calls, b_ars, ress) =
+    and anal_rec_bnd v_id conts safe_ars int t (b_co_calls, b_ars, ress) =
       match IMap.find v_id b_ars with
       | exception Not_found ->
         (* dead var case *)
@@ -1239,7 +1294,7 @@ end = struct
       | v_arity ->
         let rec fixpointing v_ar has_loop_v =
           let (rhs_co_calls, rhs_ars, ress2), rhs_fv =
-            anal_triv conts int v_ar t ress
+            anal_triv conts safe_ars int v_ar t ress
             |> ret_with_fv_cond ~loop_info:(Some has_loop_v) v_id v_ar b_co_calls
           in
           let p_co_calls =
@@ -1260,16 +1315,19 @@ end = struct
           else p_co_calls, ar_union b_ars rhs_ars, add_if_incr v_ar t ress2
         in
         fixpointing v_arity @@ has_loop v_id b_co_calls
-    and fin_bnd_call_anal conts int f a (ress, fin_anal) =
+    and fin_bnd_call_anal ?(is_safe = `UnSafe) conts safe_ars int f a (ress, fin_anal) =
       fin_anal ress
       @@ fun b_co_calls v_id v_arity ->
-      let fst_inc_ar = 1 + if has_loop v_id b_co_calls then 0 else v_arity in
-      anal_tt0 ~fst_inc_ar conts int f [ a ] ress |> ret_with_fv
-    and fin_int_triv_bnd_anal ?(had_upd = false) conts int t (ress, fin_anal) =
+      let fst_inc_ar =
+        1 + if has_loop v_id b_co_calls && is_safe = `UnSafe then 0 else v_arity
+      in
+      anal_tt0 ~fst_inc_ar conts safe_ars int f [ a ] ress |> ret_with_fv
+    and fin_int_triv_bnd_anal ?(had_upd = false) conts safe_ars int t (ress, fin_anal) =
       fin_anal ress
       @@ fun b_co_calls v_id v_arity ->
       let ress2 = if had_upd then ress else add_if_incr v_arity t ress in
-      anal_triv conts int v_arity t ress2 |> ret_with_fv_cond v_id v_arity b_co_calls
+      anal_triv conts safe_ars int v_arity t ress2
+      |> ret_with_fv_cond v_id v_arity b_co_calls
     and fin_unint_bnd_anal anal_rhs (b_co_calls, b_ars, ress) =
       let b_fv = domain b_ars in
       let rhs_ars, ress2 = anal_rhs ress in
@@ -1279,26 +1337,28 @@ end = struct
         union b_co_calls @@ union (cartesian_square rhs_fv) @@ cartesian rhs_fv b_fv
       in
       p_co_calls, p_ars, ress2
-    and lam_call_anal lam_b conts int inc_ar ress pat t =
+    and lam_call_anal lam_b conts safe_ars int inc_ar ress pat t =
       match pat, t with
       | CPVar { id; _ }, t when is_int_triv_rhs int t ->
-        fin_int_triv_bnd_anal conts int t
+        fin_int_triv_bnd_anal conts safe_ars int t
         @@ anal_bnd_cont id
-        @@ anal_p conts ress inc_ar lam_b
+        @@ anal_p conts ress inc_ar lam_b safe_ars
         @@ ISet.add id int
       | _, t ->
-        fin_unint_bnd_anal (fun ress' -> anal_triv conts int inc_ar t ress' |> ignore_fst)
-        @@ anal_p conts ress inc_ar lam_b int
-    and fin_lam_call_bnd_anal ?(had_upd = false) c lam_b conts int pat t (ress, fin_anal) =
+        fin_unint_bnd_anal (fun ress' ->
+          anal_triv conts safe_ars int inc_ar t ress' |> ignore_fst)
+        @@ anal_p conts ress inc_ar lam_b safe_ars int
+    and fin_lam_call_bnd_anal ?(had_upd = false) c lam_b conts safe_ars int pat t rf =
+      let ress, fin_anal = rf in
       fin_anal ress
       @@ fun b_co_calls v_arity v_id ->
       let ress2 = if had_upd then ress else add_if_pos c.id v_arity ress in
-      lam_call_anal lam_b conts int v_arity ress2 pat t
+      lam_call_anal lam_b conts safe_ars int v_arity ress2 pat t
       |> ret_with_fv_cond v_id v_arity b_co_calls
-    and anal_cif c th el conts int ress inc_ar =
-      let c_co_calls, c_ars, ress2 = anal_triv conts int 0 c ress in
-      let th_co_calls, th_ars, ress3 = anal_p conts ress2 inc_ar th int in
-      let el_co_calls, el_ars, ress4 = anal_p conts ress3 inc_ar el int in
+    and anal_cif c th el conts safe_ars int ress inc_ar =
+      let c_co_calls, c_ars, ress2 = anal_triv conts safe_ars int 0 c ress in
+      let th_co_calls, th_ars, ress3 = anal_p conts ress2 inc_ar th safe_ars int in
+      let el_co_calls, el_ars, ress4 = anal_p conts ress3 inc_ar el safe_ars int in
       let p_ars = ar_union c_ars @@ ar_union th_ars el_ars in
       let p_co_calls =
         union c_co_calls
@@ -1309,20 +1369,20 @@ end = struct
         @@@ domain el_ars
       in
       p_co_calls, p_ars, ress4
-    and anal_triv conts int inc_ar t ress =
+    and anal_triv conts safe_ars int inc_ar t ress =
       match t, inc_ar with
       | UVar { id; _ }, _ when ISet.mem id int -> empty, IMap.singleton id inc_ar, ress
       | (TUnit | TConst _ | UVar _), _ -> empty, IMap.empty, ress
-      | TTuple (t1, t2, tt), _ -> anal_tt0 conts int t1 (t2 :: tt) ress
-      | TSafeBinop (_, t1, t2), _ -> anal_tt0 conts int t1 [ t2 ] ress
+      | TTuple (t1, t2, tt), _ -> anal_tt0 conts safe_ars int t1 (t2 :: tt) ress
+      | TSafeBinop (_, t1, t2), _ -> anal_tt0 conts safe_ars int t1 [ t2 ] ress
       | Lam (_, _, lam_b), 0 ->
-        let _, b_ars, ress2 = anal_p conts ress 0 lam_b int in
+        let _, b_ars, ress2 = anal_p conts ress 0 lam_b safe_ars int in
         cartesian_square @@ domain b_ars, b_ars, ress2
       | Lam (_, _, lam_b), _ ->
         let inc_ar2 = Int.max 0 (inc_ar - 1) in
-        anal_p conts ress inc_ar2 lam_b int
-    and anal_tt0 ?(fst_inc_ar = 0) conts int t1 tt ress =
-      let anal_triv_sh = anal_triv conts int 0 in
+        anal_p conts ress inc_ar2 lam_b safe_ars int
+    and anal_tt0 ?(fst_inc_ar = 0) conts safe_ars int t1 tt ress =
+      let anal_triv_sh = anal_triv conts safe_ars int 0 in
       let f ((cc, ars, ress), (fv1, fv_acc)) t =
         let cc_t, ars_t, ress2 = anal_triv_sh t ress in
         let fv_acc2 = fv1 @@@ fv_acc in
@@ -1331,12 +1391,13 @@ end = struct
         (cc2, ar_union ars ars_t, ress2), (fv_t, fv_acc)
       in
       let init =
-        let ((_, ars_t, _) as frst) = anal_triv conts int fst_inc_ar t1 ress in
+        let ((_, ars_t, _) as frst) = anal_triv conts safe_ars int fst_inc_ar t1 ress in
         frst, (IMap.empty, domain ars_t)
       in
       List.fold_left f init tt |> fst
     in
-    anal_p IMap.empty { dead_vars = ISet.empty; call_ars = IMap.empty } 0 p ISet.empty
+    let open IMap in
+    anal_p empty { dead_vars = ISet.empty; call_ars = empty } 0 p empty ISet.empty
     |> fun (_, _, ress) -> ress.dead_vars, ress.call_ars
   ;;
 
@@ -1534,11 +1595,6 @@ end = struct
 
   let simpl (rec_flag, pat, p) (dead_vars, counts, barriers, fin_call_ars) =
     let open IMap in
-    let find_with_default k m default =
-      match find k m with
-      | el -> el
-      | exception Not_found -> default
-    in
     let prep_t_for_env env t =
       match t with
       | UVar i -> find_with_default i.id env (`Var (i, t))
@@ -2320,9 +2376,7 @@ let%expect_test "expand call (no sharing loses since the variables are dead)" =
                                                                         (fun x -> x) (s + s)) |}]
 ;;
 
-let%expect_test "not expand call because of (CURRENT) unaccuracy of shared\n\
-                 computations detection  "
-  =
+let%expect_test " expand call thanks to fake shared comput. and cheap exprs detcion " =
   let rhs =
     let sum var2 = sum (UVar var_x) (UVar var2) in
     let th = Ret (CVar var_k1, Lam (CPVar var_y, var_k2, Ret (CVar var_k2, sum var_y))) in
@@ -2359,39 +2413,21 @@ let%expect_test "not expand call because of (CURRENT) unaccuracy of shared\n\
                                                                         (fun x -> x) (s + z))))
     after:
 
-                                               let main = let f x k1 = if true
-                                                                       then
-                                                                       k1
-                                                                       (fun y k2 ->
-                                                                        k2 (x + y))
-                                                                       else
-                                                                       k1
-                                                                       (fun a k3 ->
-                                                                        k3 (x + a))
-                                                                       in
-                                                                        if true
-                                                                        then
-                                                                        f 1
-                                                                        (fun g ->
-
-                                                                        g 1
-                                                                        (fun t ->
-
-                                                                        g 1
-                                                                        (fun q ->
-
-                                                                        (fun x -> x) (t + q))))
-                                                                        else
-                                                                        f 1
-                                                                        (fun g ->
-
-                                                                        g 1
-                                                                        (fun s ->
-
-                                                                        g 1
-                                                                        (fun z ->
-
-                                                                        (fun x -> x) (s + z)))) |}]
+                                               let main = let f x e6 k1 =
+                                                          if true then k1 (x + e6)
+                                                                  else k1 (x + e6)
+                                                          in if true then
+                                                                     f 1 1
+                                                                     (fun t ->
+                                                                      f 1 1
+                                                                      (fun q ->
+                                                                       (fun x -> x) (t + q)))
+                                                                     else
+                                                                     f 1 1
+                                                                     (fun s ->
+                                                                      f 1 1
+                                                                      (fun z ->
+                                                                       (fun x -> x) (s + z))) |}]
 ;;
 
 let%expect_test "expand lam call argument" =
@@ -2446,8 +2482,8 @@ let%expect_test "expand lam call argument" =
     after:
 
                                                                   let main =
-                                                                    let f x e6 k1 =
-                                                                    k1 (x, e6)
+                                                                    let f x e7 k1 =
+                                                                    k1 (x, e7)
                                                                     in if true
                                                                        then
                                                                        f
@@ -2523,8 +2559,8 @@ let%expect_test "expand but not inl lam call argument" =
     after:
 
                                                                   let main =
-                                                                    let f x e7 k1 =
-                                                                    k1 (x, e7)
+                                                                    let f x e8 k1 =
+                                                                    k1 (x, e8)
                                                                     in if true
                                                                        then
                                                                        (fun h k3 ->
@@ -2533,9 +2569,9 @@ let%expect_test "expand but not inl lam call argument" =
                                                                         h 1 1 k3
                                                                         else
                                                                         h 1 1 k3)
-                                                                       (fun t e8 k4 ->
+                                                                       (fun t e9 k4 ->
                                                                         f
-                                                                        (1, t) e8 k4)
+                                                                        (1, t) e9 k4)
                                                                        (fun x -> x)
                                                                        else
                                                                        f
@@ -2594,14 +2630,14 @@ let%expect_test "expand jv" =
                                                                         if true
                                                                         then
                                                                         jv1
-                                                                        (fun x e10 k1 ->
+                                                                        (fun x e11 k1 ->
 
-                                                                        k1 (x + e10))
+                                                                        k1 (x + e11))
                                                                         else
                                                                         jv1
-                                                                        (fun l e9 k3 ->
+                                                                        (fun l e10 k3 ->
 
-                                                                        k1 (l + e9)) |}]
+                                                                        k1 (l + e10)) |}]
 ;;
 
 let%expect_test "dead jv param" =
@@ -2696,10 +2732,10 @@ let%expect_test "barriers in action: only unit-size arguments are inlined when e
                                                                    t 2 (fun x -> x))))
     after:
 
-                                      let main = let h a e11 k3 = k3 (a, e11) in
-                                                 (fun y e12 k2 -> if y then
-                                                                       h e12 2 k2
-                                                                  else h e12 2 k2) (2 <= 1)
+                                      let main = let h a e12 k3 = k3 (a, e12) in
+                                                 (fun y e13 k2 -> if y then
+                                                                       h e13 2 k2
+                                                                  else h e13 2 k2) (2 <= 1)
                                                  (1, 2) (fun x -> x) |}]
 ;;
 
@@ -2752,16 +2788,16 @@ let%expect_test "fack" =
                                                                         (fun x -> x))
     after:
 
-                                           let main = let rec fack n e13 k1 =
-                                                      if n <= 1 then e13 1 k1
-                                                      else fack (n - 1) e13
-                                                           (fun t -> e13 (t * n) k1)
+                                           let main = let rec fack n e14 k1 =
+                                                      if n <= 1 then e14 1 k1
+                                                      else fack (n - 1) e14
+                                                           (fun t -> e14 (t * n) k1)
                                                         in fack 1 (fun x k4 ->
                                                                    k4 x)
                                                                   (fun x -> x) |}]
 ;;
 
-(* not inlined yet due to (CURRENT) unaccuracy of shared computations detection*)
+(* why???*)
 let%expect_test "fibk" =
   let le_sign, min_sign = "<=" |> of_string, "-" |> of_string in
   let n_min x = TSafeBinop (min_sign, UVar var_n, x) in
