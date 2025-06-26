@@ -2869,71 +2869,55 @@ let%expect_test "fack" =
                                                                   (fun x -> x) |}]
 ;;
 
-(* why???*)
 let%expect_test "fibk" =
-  let le_sign, min_sign = "<=" |> of_string, "-" |> of_string in
-  let n_min x = TSafeBinop (min_sign, UVar var_n, x) in
-  let th =
-    Ret (CVar var_k1, Lam (CPVar var_k, var_k2, Call (UVar var_k, one, CVar var_k2)))
-  in
-  let el =
-    let cont2 =
-      Cont (CPVar var_r, Call (UVar var_k, sum (UVar var_l) (UVar var_r), CVar var_k3))
-    in
-    let call = Call (UVar var_fibk, n_min two, cont2) in
-    let cont = Cont (CPVar var_l, Ret (CVar var_k1, Lam (CPVar var_k, var_k3, call))) in
-    Call (UVar var_fibk, n_min one, cont)
-  in
-  let rhs =
-    Lam (CPVar var_n, var_k1, CIf (TSafeBinop (le_sign, UVar var_n, one), th, el))
-  in
-  let id = Lam (CPVar var_x, var_k4, Ret (CVar var_k4, UVar var_x)) in
-  let sec_arg_app = Call (UVar var_g, id, HALT) in
   test_call_ar_anal
-  @@ prog
-  @@ Let
-       ( Recursive
-       , CPVar var_fibk
-       , rhs
-       , Call (UVar var_fibk, one, Cont (CPVar var_g, sec_arg_app)) );
+  @@ Result.get_ok
+  @@ cps_conv_program
+  @@ Result.get_ok
+  @@ Miniml.Parsing.parse_structure
+       "let main  = let rec fibk n = if n <=1 then fun k -> k 1 else let h = fibk (n-1) \
+        in fun k -> h (fun l -> fibk (n-2) (fun r -> k (l + r)) ) in fibk 1 (fun x -> x)";
   [%expect
     {|
     before:
     let main = let rec fibk n k1 = if n <= 1 then k1 (fun k k2 -> k 1 k2)
-                                                     else fibk (n - 1) (fun l ->
+                                                     else fibk (n - 1) (fun t3 ->
                                                                         k1
-                                                                        (fun k k3 ->
+                                                                        (fun k k4 ->
+
+                                                                        t3
+                                                                        (fun l k5 ->
 
                                                                         fibk (n - 2)
-                                                                        (fun r ->
+                                                                        (fun t6 ->
 
-                                                                        k (l + r) k3)))
-                                                     in fibk 1 (fun g ->
-                                                                        g
-                                                                        (fun x k4 ->
+                                                                        t6
+                                                                        (fun r k7 ->
 
-                                                                        k4 x)
-                                                                        (fun x -> x))
+                                                                        k (l + r) k7) k5)) k4))
+                                                                       in
+                                                          fibk 1 (fun t8 ->
+                                                                  t8 (fun x k9 ->
+                                                                      k9 x)
+                                                                     (fun t10 ->
+                                                                      (fun x -> x) t10))
     after:
 
-                                           let main = let rec fibk n k1 =
-                                                      if n <= 1 then k1 (fun k k2 ->
-
-                                                                        k 1 k2)
+                                                          let main = let rec fibk n e11 k1 =
+                                                                     if n <= 1
+                                                                     then
+                                                                     e11 1 k1
                                                                      else
                                                                      fibk (n - 1)
-                                                                     (fun l ->
-                                                                      k1
-                                                                      (fun k k3 ->
-                                                                       fibk (n - 2)
-                                                                       (fun r ->
-                                                                        k (l + r) k3)))
+                                                                     (fun l k5 ->
+                                                                      fibk (n - 2)
+                                                                      (fun r k7 ->
+                                                                       e11 (l + r) k7) k5) k1
                                                                      in fibk 1
-                                                                        (fun g ->
+                                                                        (fun x k9 ->
 
-                                                                        g
-                                                                        (fun x k4 ->
+                                                                        k9 x)
+                                                                        (fun t10 ->
 
-                                                                        k4 x)
-                                                                        (fun x -> x)) |}]
+                                                                        (fun x -> x) t10) |}]
 ;;
