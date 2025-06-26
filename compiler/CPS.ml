@@ -1168,31 +1168,33 @@ end = struct
       let clear_triv_ret_anal t = anal_triv conts safe_ars int inc_ar t ress in
       match p with
       | CIf (c, th, el) -> anal_cif c th el conts safe_ars int ress inc_ar
-      | Call ((Lam (pat, c, lam_b) as t), a, Cont (CPVar { id; _ }, body)) ->
-        fin_lam_call_bnd_anal c lam_b conts safe_ars int pat a
-        @@ anal_bnd1 id conts body int ress inc_ar
-        @@ upd_safe_ars_if_ge_2 id t ~subtr:1
+      | Call ((Lam (pat, c, lam_b) as f), a, Cont (CPVar { id; _ }, body)) ->
+        let had_upd, (is_safe, safe_ars2) = false, call_bnd_safe_ars_hndl id f in
+        fin_lam_call_bnd_anal ~had_upd c lam_b conts safe_ars2 int pat a is_safe
+        @@ anal_bnd1 id conts body int ress inc_ar safe_ars2
       | Call (Lam (pat, _, lam_b), a, Cont (CPTuple _, body)) ->
         let rhs_anal = lam_call_anal0_ign lam_b pat a in
         fin_unint_bnd_anal rhs_anal @@ anal_p conts ress inc_ar body safe_ars int
-      | Call (Lam (pat, c, lam_b), a, CVar { id; _ }) ->
+      | Call ((Lam (pat, c, lam_b) as f), a, CVar { id; _ }) ->
         (match find id conts with
          | `Int fin_anal ->
+           let had_upd = true in
+           let is_safe, _ = call_bnd_safe_ars_hndl ~ignore_safe_ars:true id f in
            (ress, fin_anal)
-           |> fin_lam_call_bnd_anal ~had_upd:true c lam_b conts safe_ars int pat a
+           |> fin_lam_call_bnd_anal ~had_upd c lam_b conts safe_ars int pat a is_safe
          | `UnInt (b_co_calls, b_ars) ->
            fin_unint_bnd_anal (lam_call_anal0_ign lam_b pat a) (b_co_calls, b_ars, ress)
          | exception Not_found -> clear_lam_call_anal lam_b pat a)
       | Call (Lam (pat, _, lam_b), a, HALT) -> clear_lam_call_anal lam_b pat a
       | Call (f, a, Cont (CPVar { id; _ }, body)) ->
         let is_safe, safe_ars2 = call_bnd_safe_ars_hndl id f in
-        fin_bnd_call_anal ~is_safe conts safe_ars int f a
+        fin_bnd_call_anal is_safe conts safe_ars int f a
         @@ anal_bnd1 id conts body int ress inc_ar safe_ars2
       | Call (f, a, CVar { id; _ }) ->
         (match find id conts with
          | `Int fin_anal ->
            let is_safe, _ = call_bnd_safe_ars_hndl ~ignore_safe_ars:true id f in
-           fin_bnd_call_anal ~is_safe conts safe_ars int f a (ress, fin_anal)
+           fin_bnd_call_anal is_safe conts safe_ars int f a (ress, fin_anal)
          | `UnInt (b_co_calls, b_ars) ->
            (b_co_calls, b_ars, ress) |> fin_unint_bnd_anal @@ anal_tt0_ign f [ a ]
          | exception Not_found ->
@@ -1315,7 +1317,7 @@ end = struct
           else p_co_calls, ar_union b_ars rhs_ars, add_if_incr v_ar t ress2
         in
         fixpointing v_arity @@ has_loop v_id b_co_calls
-    and fin_bnd_call_anal ?(is_safe = `UnSafe) conts safe_ars int f a (ress, fin_anal) =
+    and fin_bnd_call_anal is_safe conts safe_ars int f a (ress, fin_anal) =
       fin_anal ress
       @@ fun b_co_calls v_id v_arity ->
       let fst_inc_ar =
@@ -1348,12 +1350,13 @@ end = struct
         fin_unint_bnd_anal (fun ress' ->
           anal_triv conts safe_ars int inc_ar t ress' |> ignore_fst)
         @@ anal_p conts ress inc_ar lam_b safe_ars int
-    and fin_lam_call_bnd_anal ?(had_upd = false) c lam_b conts safe_ars int pat t rf =
+    and fin_lam_call_bnd_anal ~had_upd c lam_b conts safe_ars int pat t is_safe rf =
       let ress, fin_anal = rf in
       fin_anal ress
-      @@ fun b_co_calls v_arity v_id ->
-      let ress2 = if had_upd then ress else add_if_pos c.id v_arity ress in
-      lam_call_anal lam_b conts safe_ars int v_arity ress2 pat t
+      @@ fun b_co_calls v_id v_arity ->
+      let inc_ar = if has_loop v_id b_co_calls && is_safe = `UnSafe then 0 else v_arity in
+      let ress2 = if had_upd then ress else add_if_pos c.id inc_ar ress in
+      lam_call_anal lam_b conts safe_ars int inc_ar ress2 pat t
       |> ret_with_fv_cond v_id v_arity b_co_calls
     and anal_cif c th el conts safe_ars int ress inc_ar =
       let c_co_calls, c_ars, ress2 = anal_triv conts safe_ars int 0 c ress in
@@ -2376,6 +2379,73 @@ let%expect_test "expand call (no sharing loses since the variables are dead)" =
                                                                        f 1 1
                                                                        (fun s ->
                                                                         (fun x -> x) (s + s)) |}]
+;;
+
+let%expect_test "not expand call (because of sharing loses). LamCall version" =
+  let b f =
+    let cont2 = Cont (CPVar var_q, Ret (HALT, sum (UVar var_q) (UVar var_t))) in
+    let cont1 = Cont (CPVar var_t, Call (UVar var_g, one, cont2)) in
+    Call (f, sum one one, Cont (CPVar var_g, Call (UVar var_g, one, cont1)))
+  in
+  let big_def b =
+    Let
+      ( NonRecursive
+      , CPVar var_h
+      , Lam (CPVar var_b, var_k3, Ret (CVar var_k3, TTuple (UVar var_x, UVar var_b, [])))
+      , b )
+  in
+  let lam =
+    let tuple = TTuple (UVar var_l, UVar var_r, []) in
+    let ret =
+      Ret
+        ( CVar var_k1
+        , Lam
+            ( CPVar var_y
+            , var_k2
+            , Call (UVar var_h, UVar var_y, Cont (CPVar var_r, Ret (CVar var_k2, tuple)))
+            ) )
+    in
+    let b = big_def (Call (UVar var_h, UVar var_x, Cont (CPVar var_l, ret))) in
+    Lam (CPVar var_x, var_k1, b)
+  in
+  test_call_ar_anal @@ prog @@ b lam;
+  [%expect
+    {|
+    before:
+    let main = (fun x k1 -> let h b k3 = k3 (x, b) in h x (fun l ->
+                                                                   k1 (fun y k2 ->
+                                                                       h y
+                                                                       (fun r ->
+                                                                        k2 (l, r))))) (1 + 1)
+                                                              (fun g -> g 1
+                                                                        (fun t ->
+
+                                                                        g 1
+                                                                        (fun q ->
+
+                                                                        (fun x -> x) (q + t))))
+    after:
+
+                                                              let main =
+                                                                (fun x k1 ->
+                                                                 let h b k3 =
+                                                                 k3 (x, b)
+                                                                 in h x (fun l ->
+
+                                                                        k1
+                                                                        (fun y k2 ->
+
+                                                                        h y
+                                                                        (fun r ->
+
+                                                                        k2
+                                                                        (l, r))))) (1 + 1)
+                                                                    (fun g ->
+                                                                     g 1
+                                                                     (fun t ->
+                                                                      g 1
+                                                                      (fun q ->
+                                                                       (fun x -> x) (q + t)))) |}]
 ;;
 
 let%expect_test " expand call thanks to fake shared comput. and cheap exprs detcion " =
