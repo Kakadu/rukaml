@@ -2041,12 +2041,14 @@ open CallArityAnal (VeryNaiveCoCallGraph)
 
 let test_call_ar_anal cps_prog =
   Format.printf "before:\n%a\n" pp_vb cps_prog;
-  call_arity_anal cps_prog |> Format.printf "after:\n%a\n" MACPS.pp_vb
+  call_arity_anal cps_prog |> Format.printf "after:\n%a\n" MACPS.pp_vb;
+  ANF.reset_gensym ()
 ;;
 
 let test_call_ar_anal_debug cps_prog =
   Format.printf "before:\n%a\n" pp_vb cps_prog;
-  call_arity_anal_debug cps_prog |> Format.printf "after:\n%a\n" MACPS.pp_vb
+  call_arity_anal_debug cps_prog |> Format.printf "after:\n%a\n" MACPS.pp_vb;
+  ANF.reset_gensym ()
 ;;
 
 let v name = name |> of_string
@@ -2184,9 +2186,9 @@ let%expect_test "expaned but not fully inlined call (argument is big) " =
                                                                         (fun x -> x)
                                                                    else g 1 1
                                                                         (fun x -> x))
-                                                 (fun e2 e3 k4 -> (fun x k1 ->
-                                                                   k1 (x, x, e2 + e3))
-                                                                  (1, 1, 1) k4) |}]
+                                                 (fun e1 e2 k3 -> (fun x k1 ->
+                                                                   k1 (x, x, e1 + e2))
+                                                                  (1, 1, 1) k3) |}]
 ;;
 
 let%expect_test "not expand call (because of sharing loses)" =
@@ -2215,7 +2217,7 @@ let%expect_test "not expand call (because of sharing loses)" =
         , Lam
             ( CPVar var_y
             , var_k2
-            , Call (UVar var_h, UVar var_y, Cont (CPVar var_r, Ret (CVar var_k3, sum))) )
+            , Call (UVar var_h, UVar var_y, Cont (CPVar var_r, Ret (CVar var_k2, sum))) )
         )
     in
     let b = big_def (Call (UVar var_h, UVar var_x, Cont (CPVar var_l, ret))) in
@@ -2230,7 +2232,7 @@ let%expect_test "not expand call (because of sharing loses)" =
                                                                         h y
                                                                         (fun r ->
 
-                                                                        k3 (l + r))))
+                                                                        k2 (l + r))))
                                                                in if true
                                                                   then f 1
                                                                        (fun g ->
@@ -2265,7 +2267,7 @@ let%expect_test "not expand call (because of sharing loses)" =
                                                                         h y
                                                                         (fun r ->
 
-                                                                        k3 (l + r))))
+                                                                        k2 (l + r))))
                                                                        in
                                                                     if true
                                                                     then
@@ -2317,7 +2319,7 @@ let%expect_test "expand call (no sharing loses since the variables are dead)" =
         , Lam
             ( CPVar var_y
             , var_k2
-            , Call (UVar var_h, UVar var_y, Cont (CPVar var_r, Ret (CVar var_k3, sum))) )
+            , Call (UVar var_h, UVar var_y, Cont (CPVar var_r, Ret (CVar var_k2, sum))) )
         )
     in
     let b = big_def (Call (UVar var_h, UVar var_x, Cont (CPVar var_l, ret))) in
@@ -2332,7 +2334,7 @@ let%expect_test "expand call (no sharing loses since the variables are dead)" =
                                                                         h y
                                                                         (fun r ->
 
-                                                                        k3 (l + r))))
+                                                                        k2 (l + r))))
                                                                in if true
                                                                   then f 1
                                                                        (fun g ->
@@ -2356,12 +2358,12 @@ let%expect_test "expand call (no sharing loses since the variables are dead)" =
     after:
 
                                                                   let main =
-                                                                    let f x e5 k1 =
+                                                                    let f x e1 k1 =
                                                                     let h b k3 =
                                                                     k3 (b + b)
                                                                     in h x
                                                                        (fun l ->
-                                                                        h e5
+                                                                        h e1
                                                                         (fun r ->
 
                                                                         k1 (l + r)))
@@ -2413,9 +2415,9 @@ let%expect_test " expand call thanks to fake shared comput. and cheap exprs detc
                                                                         (fun x -> x) (s + z))))
     after:
 
-                                               let main = let f x e6 k1 =
-                                                          if true then k1 (x + e6)
-                                                                  else k1 (x + e6)
+                                               let main = let f x e1 k1 =
+                                                          if true then k1 (x + e1)
+                                                                  else k1 (x + e1)
                                                           in if true then
                                                                      f 1 1
                                                                      (fun t ->
@@ -2482,8 +2484,8 @@ let%expect_test "expand lam call argument" =
     after:
 
                                                                   let main =
-                                                                    let f x e7 k1 =
-                                                                    k1 (x, e7)
+                                                                    let f x e1 k1 =
+                                                                    k1 (x, e1)
                                                                     in if true
                                                                        then
                                                                        f
@@ -2559,8 +2561,8 @@ let%expect_test "expand but not inl lam call argument" =
     after:
 
                                                                   let main =
-                                                                    let f x e8 k1 =
-                                                                    k1 (x, e8)
+                                                                    let f x e1 k1 =
+                                                                    k1 (x, e1)
                                                                     in if true
                                                                        then
                                                                        (fun h k3 ->
@@ -2569,9 +2571,9 @@ let%expect_test "expand but not inl lam call argument" =
                                                                         h 1 1 k3
                                                                         else
                                                                         h 1 1 k3)
-                                                                       (fun t e9 k4 ->
+                                                                       (fun t e2 k4 ->
                                                                         f
-                                                                        (1, t) e9 k4)
+                                                                        (1, t) e2 k4)
                                                                        (fun x -> x)
                                                                        else
                                                                        f
@@ -2630,14 +2632,14 @@ let%expect_test "expand jv" =
                                                                         if true
                                                                         then
                                                                         jv1
-                                                                        (fun x e11 k1 ->
+                                                                        (fun x e2 k1 ->
 
-                                                                        k1 (x + e11))
+                                                                        k1 (x + e2))
                                                                         else
                                                                         jv1
-                                                                        (fun l e10 k3 ->
+                                                                        (fun l e1 k3 ->
 
-                                                                        k1 (l + e10)) |}]
+                                                                        k1 (l + e1)) |}]
 ;;
 
 let%expect_test "dead jv param" =
@@ -2732,10 +2734,10 @@ let%expect_test "barriers in action: only unit-size arguments are inlined when e
                                                                    t 2 (fun x -> x))))
     after:
 
-                                      let main = let h a e12 k3 = k3 (a, e12) in
-                                                 (fun y e13 k2 -> if y then
-                                                                       h e13 2 k2
-                                                                  else h e13 2 k2) (2 <= 1)
+                                      let main = let h a e1 k3 = k3 (a, e1) in
+                                                 (fun y e2 k2 -> if y then
+                                                                      h e2 2 k2
+                                                                 else h e2 2 k2) (2 <= 1)
                                                  (1, 2) (fun x -> x) |}]
 ;;
 
@@ -2788,10 +2790,10 @@ let%expect_test "fack" =
                                                                         (fun x -> x))
     after:
 
-                                           let main = let rec fack n e14 k1 =
-                                                      if n <= 1 then e14 1 k1
-                                                      else fack (n - 1) e14
-                                                           (fun t -> e14 (t * n) k1)
+                                           let main = let rec fack n e1 k1 =
+                                                      if n <= 1 then e1 1 k1
+                                                      else fack (n - 1) e1
+                                                           (fun t -> e1 (t * n) k1)
                                                         in fack 1 (fun x k4 ->
                                                                    k4 x)
                                                                   (fun x -> x) |}]
