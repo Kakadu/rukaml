@@ -1569,20 +1569,20 @@ end = struct
 
   type light =
     [ ex_light_triv
-    | `ExLightCall of light * ex_light_triv
+    | `ExLightCall of light * ex_light_triv * ex_light_triv list
     ]
 
   type env_elem =
     [ ex_triv
-    | `ExLightCall of light * ex_light_triv
-    | `ExLamCall of (MACPS.pat * MACPS.pat list * var * p) * MACPS.triv * MACPS.triv list
-    | `ExHeavyCall of env_elem * ex_triv
+    | `ExLightCall of light * ex_light_triv * ex_light_triv list
+    | `ExLamCall of (pat * var * p) * env_elem * ex_triv list
+    | `ExHeavyCall of env_elem * ex_triv * ex_triv list
     ]
 
   type ex_call =
-    [ `ExLightCall of light * ex_light_triv
-    | `ExLamCall of (MACPS.pat * MACPS.pat list * var * p) * MACPS.triv * MACPS.triv list
-    | `ExHeavyCall of env_elem * ex_triv
+    [ `ExLightCall of light * ex_light_triv * ex_light_triv list
+    | `ExLamCall of (pat * var * p) * env_elem * ex_triv list
+    | `ExHeavyCall of env_elem * ex_triv * ex_triv list
     ]
 
   type etas =
@@ -1594,7 +1594,7 @@ end = struct
   type cont_hndl =
     | Def
     | DeadJV
-    | Sub of cont * cont_hndl
+    | Sub of cont * cont_hndl * ex_triv list
 
   let simpl (rec_flag, pat, p) (dead_vars, counts, barriers, fin_call_ars) =
     let open IMap in
@@ -1604,78 +1604,59 @@ end = struct
       | Lam _ | TSafeBinop _ | TTuple _ -> `HeavyT t
       | TConst _ | TUnit -> `LightT t
     in
-    let gen_eta arg_constr () =
+    let env_var i = `Var (i, UVar i) in
+    let gen_eta () =
       let eta = gensym ~prefix:"e" () |> of_string in
-      arg_constr eta, MACPS.CPVar eta
+      env_var eta, MACPS.CPVar eta
     in
-    let gen_macps_eta = gen_eta @@ fun i -> MACPS.UVar i in
-    let gen_many_etas arg_constr =
+    let gen_many_etas =
       let rec helper args_acc pats_acc n =
         if n < 1
         then args_acc, pats_acc
         else (
-          let arg, pat = gen_eta arg_constr () in
+          let arg, pat = gen_eta () in
           helper (arg :: args_acc) (pat :: pats_acc) (n - 1))
       in
       helper [] []
     in
-    let gen_many_etas_with_k arg_constr =
+    let gen_many_etas_with_k =
       let rec helper args_acc pats_and_k_acc n =
         if n < 1
         then args_acc, pats_and_k_acc
         else (
-          let arg, pat = gen_eta arg_constr () in
+          let arg, pat = gen_eta () in
           let k = gensym ~prefix:"k" () |> of_string in
           helper (arg :: args_acc) ((pat, k) :: pats_and_k_acc) (n - 1))
       in
       helper [] []
     in
-    let gen_many_macps_etas = gen_many_etas @@ fun i -> MACPS.UVar i in
     let v_ar = function
       | CPTuple _ -> 0
       | CPVar { id; _ } -> find_with_default id fin_call_ars 0
     in
-    let env_var i = `Var (i, UVar i) in
     let rec translate_pat = function
       | CPVar i -> MACPS.CPVar i
       | CPTuple (pat1, pat2, pats) ->
         let self = translate_pat in
         MACPS.CPTuple (self pat1, self pat2, List.map self pats)
     in
+    let triv_bnd env id_opt prep_t k_inl k_def =
+      match id_opt, prep_t with
+      | Some id, _ when find id counts <= 1 -> k_inl @@ add id prep_t env
+      | Some id, #light -> k_inl @@ add id prep_t env
+      | _ -> k_def ()
+    in
+    let rec to_light_ex_tt = function
+      | [] -> Some []
+      | hd :: tl ->
+        (match hd, to_light_ex_tt tl with
+         | (#ex_light_triv as hd), Some tl -> Some (hd :: tl)
+         | _, _ -> None)
+    in
     let rec simpl_p ?(cont_hndl = Def) etas p (env : env_elem IMap.t) =
       let simpl_t_sh = simpl_t env in
       let simpl_p_sh = simpl_p ~cont_hndl etas in
       let get_triv_sh = get_triv env in
-      let expand_lam pat i b etas_count =
-        let eta_args, eta_pats = gen_many_etas env_var etas_count in
-        let pat' = translate_pat pat in
-        let b' = simpl_p (Present eta_args) b env in
-        MACPS.Lam ((pat', eta_pats), i, b')
-      in
-      let expand_ex_call v_ar ec =
-        if v_ar <= 0
-        then failwith "unreachable: v_ar should be positive for expansion"
-        else (
-          let eta_arg, eta_pat = gen_eta env_var () in
-          let eta_args, eta_pats = gen_many_etas env_var (v_ar - 1) in
-          let i' = gensym ~prefix:"k" () |> of_string in
-          let lam_b' = ex_call (MACPS.CVar i') env (eta_arg :: eta_args) ec in
-          MACPS.Lam ((eta_pat, eta_pats), i', lam_b'))
-      in
-      let expand_triv v_ar = function
-        | `HeavyT (Lam (lam_pat, i, lam_b)) when v_ar > 1 ->
-          expand_lam lam_pat i lam_b (v_ar - 1)
-        | #ex_call as ec -> expand_ex_call v_ar ec
-        | #ex_triv as et -> get_triv_sh et
-      in
-      let triv_bnd ?(v_ar = 0) id_opt prep_t k_inl k_def =
-        match id_opt, prep_t with
-        | Some id, _ when find id counts <= 1 -> k_inl @@ add id prep_t env
-        | Some id, #light -> k_inl @@ add id prep_t env
-        | _ ->
-          let t' = expand_triv v_ar prep_t in
-          k_def t'
-      in
       let let_or_ret_bnd pat b t fin_constr =
         let v_ar, id_opt =
           match pat with
@@ -1683,42 +1664,25 @@ end = struct
           | CPTuple _ -> 0, None
         in
         let prep_t = prep_t_for_env env t in
-        triv_bnd ~v_ar id_opt prep_t (simpl_p_sh b)
-        @@ fun t' ->
+        triv_bnd env id_opt prep_t (simpl_p_sh b)
+        @@ fun _ ->
         let pat' = translate_pat pat in
+        let t' = expand_triv env v_ar prep_t in
         let b' = simpl_p_sh b env in
         fin_constr pat' b' t'
       in
       let ret_or_prep_call ?(etas = etas) call_ar prep_t c get_c' =
         let default ~c ~get_c' = function
-          | (#ex_triv as eta) :: etas, `HeavyT (Lam ((CPVar { id; _ } as pat), i, b)) ->
-            let k_not_inl t2' =
-              let pat' = translate_pat pat in
-              ex_lam_call pat' i b t2' etas (get_c' ()) env
-            in
-            let v_ar () = find_with_default id fin_call_ars 0 in
-            let k_inl env' =
-              let k_fully_inl () =
-                simpl_p ~cont_hndl:(Sub (c, cont_hndl)) (Present etas) b env'
-              in
-              match c, ISet.mem i.id barriers with
-              | Cont _, true -> k_not_inl @@ expand_triv (v_ar ()) eta
-              | _, true ->
-                (match arg_filter env etas with
-                 | (pat' :: pats', t' :: tt'), args' ->
-                   ex_lam_call pat' ~pats' i b t' ~tt' args' (get_c' ()) env'
-                 | _ -> k_fully_inl ())
-              | _ -> k_fully_inl ()
-            in
-            triv_bnd ~v_ar:(v_ar ()) (Some id) eta k_inl k_not_inl
+          | (#ex_triv as eta) :: etas, `HeavyT (Lam (pat, i, b)) ->
+            ex_lam_call pat i b eta etas c get_c' env
           | (#ex_triv as eta) :: etas, (#ex_triv as prep_t) ->
             let t1', t2', tt' = translate_prep_t_tuple env prep_t eta etas in
             MACPS.Call (t1', (t2', tt'), get_c' ())
           | [], (#ex_triv as prep_t) -> Ret (get_c' (), get_triv_sh prep_t)
-          | etas, (#ex_call as prep_t) -> ex_call (get_c' ()) env etas prep_t
+          | etas, (#ex_call as prep_t) -> ex_call c get_c' env etas prep_t
         in
         let stepped etas diff =
-          let new_etas, pats_and_k = gen_many_etas_with_k env_var diff in
+          let new_etas, pats_and_k = gen_many_etas_with_k diff in
           let rec helper = function
             | [] -> failwith "unreachable: diff couldn't be less then 1"
             | (pat', k) :: [] ->
@@ -1742,10 +1706,10 @@ end = struct
         | Future n ->
           let diff = call_ar - n in
           if diff <= 0
-          then Ret (get_c' (), expand_triv n prep_t)
+          then Ret (get_c' (), expand_triv env n prep_t)
           else (
-            let eta_arg, eta_pat = gen_eta env_var () in
-            let eta_args, eta_pats = gen_many_etas env_var (n - 1) in
+            let eta_arg, eta_pat = gen_eta () in
+            let eta_args, eta_pats = gen_many_etas (n - 1) in
             let k = gensym ~prefix:"k" () |> of_string in
             let b' = MACPS.Ret (CVar k, stepped (eta_arg :: eta_args) diff) in
             MACPS.Ret (get_c' (), Lam ((eta_pat, eta_pats), k, b')))
@@ -1760,51 +1724,55 @@ end = struct
         let prep_t = prep_t_for_env env t in
         ret_or_prep_call call_ar prep_t
       in
-      let lam_call ?(custom_k_inl = None) pat b c t2_prep =
-        let v_ar, id_opt =
-          match pat with
-          | CPVar { id; _ } -> find_with_default id fin_call_ars 0, Some id
-          | CPTuple _ -> 0, None
-        in
-        let k_inl =
-          simpl_p ~cont_hndl:(Sub (c, cont_hndl)) etas b
-          |> Option.value custom_k_inl ~default:Fun.id
-        in
-        triv_bnd ~v_ar id_opt t2_prep k_inl
-      in
       let call t1 t2 c get_c' =
         let prep_t1, prep_t2 = prep_t_for_env env t1, prep_t_for_env env t2 in
-        let call_ar () =
+        let call_ar =
           match t1 with
           | UVar i -> find_with_default i.id fin_call_ars 0 - 1
           | _ -> 0
         in
         match prep_t1, prep_t2 with
         | `HeavyT (Lam (lam_pat, i, lam_b)), _ ->
-          let k_not_inl t2' =
-            let lam_pat' = translate_pat lam_pat in
-            let elc = `ExLamCall ((lam_pat', [], i, lam_b), t2', []) in
-            ret_or_prep_call (call_ar ()) elc c get_c'
-          in
-          let custom_k_inl =
-            Option.some
-            @@ fun default env' ->
-            match c, ISet.mem i.id barriers, etas with
-            | Cont _, true, _ -> k_not_inl @@ expand_triv (v_ar lam_pat) prep_t2
-            | _, true, Present (_ :: _ as pr_etas) ->
-              (match arg_filter env' pr_etas with
-               | (pat' :: pats', t' :: tt'), args' ->
-                 let elc = `ExLamCall ((pat', pats', i, lam_b), t', tt') in
-                 ret_or_prep_call ~etas:(Present args') (call_ar ()) elc c get_c'
-               | _ -> default env')
-            | _ -> default env'
-          in
-          lam_call ~custom_k_inl lam_pat lam_b c prep_t2 k_not_inl
+          let elc = `ExLamCall ((lam_pat, i, lam_b), prep_t2, []) in
+          ret_or_prep_call call_ar elc c get_c'
         | (#light as prep_t1), (#ex_light_triv as prep_t2) ->
-          ret_or_prep_call (call_ar ()) (`ExLightCall (prep_t1, prep_t2)) c get_c'
+          ret_or_prep_call call_ar (`ExLightCall (prep_t1, prep_t2, [])) c get_c'
         | prep_t1, (#ex_triv as prep_t2) ->
-          ret_or_prep_call (call_ar ()) (`ExHeavyCall (prep_t1, prep_t2)) c get_c'
+          ret_or_prep_call call_ar (`ExHeavyCall (prep_t1, prep_t2, [])) c get_c'
         | _, #ex_call ->
+          failwith "unreachable: call shouldn't be inlined if its call arity is 0"
+      in
+      let call_bnd ?(cont_hndl = cont_hndl) ?(extra_args = []) t1 t2 pat b c =
+        let v_arity = v_ar pat in
+        let t1_prep, t2_prep = prep_t_for_env env t1, prep_t_for_env env t2 in
+        let not_inl_ex_call ec =
+          let get_c' () = MACPS.Cont (translate_pat pat, simpl_p_sh b env) in
+          if v_arity > 0
+          then (
+            let t' = expand_ex_call env v_arity ec in
+            MACPS.Ret (get_c' (), t'))
+          else ex_call c get_c' ~cont_stuff:(etas, cont_hndl) env [] ec
+        in
+        match pat, t1_prep, t2_prep, to_light_ex_tt extra_args with
+        | CPVar { id; _ }, (#light as t1_prep), (#ex_light_triv as t2_prep), Some light_ea
+          when v_arity > 0 ->
+          simpl_p_sh b @@ add id (`ExLightCall (t1_prep, t2_prep, light_ea)) env
+        | CPVar { id; _ }, _, (#ex_triv as t2_prep), _
+          when find id counts <= 1 && v_arity > 0 ->
+          let ec =
+            match t1_prep with
+            | `HeavyT (Lam (lam_pat, i, lam_b)) ->
+              `ExLamCall ((lam_pat, i, lam_b), t2_prep, extra_args)
+            | _ -> `ExHeavyCall (t1_prep, t2_prep, extra_args)
+          in
+          simpl_p_sh b @@ add id ec env
+        | _, `HeavyT (Lam (lam_pat, i, lam_b)), _, _ ->
+          not_inl_ex_call @@ `ExLamCall ((lam_pat, i, lam_b), t2_prep, extra_args)
+        | _, (#ex_triv as t1_prep), (#ex_triv as t2_prep), _ ->
+          not_inl_ex_call @@ `ExHeavyCall (t1_prep, t2_prep, extra_args)
+        | _, (#ex_call as ec), (#ex_triv as et), _ ->
+          not_inl_ex_call @@ `ExHeavyCall (ec, et, extra_args)
+        | _, _, #ex_call, _ ->
           failwith "unreachable: call shouldn't be inlined if its call arity is 0"
       in
       match cont_hndl, p with
@@ -1813,65 +1781,15 @@ end = struct
           | Let (_, CPVar { id; _ }, _, b)
           | Ret (Cont (CPVar { id; _ }, b), _) ) )
         when ISet.mem id dead_vars -> simpl_p_sh b env
-      | _, Call (t1, t2, (Cont (pat, b) as c)) ->
-        let v_arity = v_ar pat in
-        let t1_prep, t2_prep = prep_t_for_env env t1, prep_t_for_env env t2 in
-        let not_inl_ex_call ec =
-          if v_arity > 0
-          then (
-            let t' = expand_ex_call v_arity ec in
-            let b' = simpl_p_sh b env in
-            let pat' = translate_pat pat in
-            MACPS.Ret (Cont (pat', b'), t'))
-          else (
-            let c' = MACPS.Cont (translate_pat pat, simpl_p_sh b env) in
-            ex_call c' env [] ec)
-        in
-        (match pat, t1_prep, t2_prep with
-         | CPVar { id; _ }, (#light as t1_prep), (#ex_light_triv as t2_prep)
-           when v_arity > 0 ->
-           simpl_p_sh b @@ add id (`ExLightCall (t1_prep, t2_prep)) env
-         | _, `HeavyT (Lam (lam_pat, i, lam_b)), _ ->
-           let k_not_inl t2' =
-             match pat with
-             | CPVar { id; _ } when v_arity > 0 && find id counts <= 1 ->
-               simpl_p_sh b
-               @@ add id (`ExLamCall ((translate_pat lam_pat, [], i, lam_b), t2', [])) env
-             | _ ->
-               not_inl_ex_call
-               @@ `ExLamCall ((translate_pat lam_pat, [], i, lam_b), t2', [])
-           in
-           if ISet.mem i.id barriers
-           then k_not_inl @@ expand_triv (v_ar lam_pat) t2_prep
-           else lam_call lam_pat lam_b c t2_prep k_not_inl
-         | CPVar { id; _ }, _, (#ex_triv as t2_prep)
-           when find id counts <= 1 && v_arity > 0 ->
-           simpl_p_sh b @@ add id (`ExHeavyCall (t1_prep, t2_prep)) env
-         | _, (#ex_triv as t1_prep), (#ex_triv as t2_prep) ->
-           let pat' = translate_pat pat in
-           let b' = simpl_p_sh b env in
-           let t1', t2' = get_triv_sh t1_prep, get_triv_sh t2_prep in
-           if v_arity < 1
-           then MACPS.Call (t1', (t2', []), Cont (pat', b'))
-           else (
-             let eta_arg, eta_pat = gen_macps_eta () in
-             let eta_args, eta_pats = gen_many_macps_etas (v_arity - 1) in
-             let i = gensym ~prefix:"k" () |> of_string in
-             MACPS.Ret
-               ( Cont (pat', b')
-               , Lam
-                   ((eta_pat, eta_pats), i, Call (t1', (t2', eta_arg :: eta_args), CVar i))
-               ))
-         | _, (#ex_call as ec), (#ex_triv as et) ->
-           not_inl_ex_call @@ `ExHeavyCall (ec, et)
-         | _, _, #ex_call ->
-           failwith "unreachable: call shouldn't be inlined if its call arity is 0")
+      | _, Call (t1, t2, (Cont (pat, b) as c)) -> call_bnd t1 t2 pat b c
+      | Sub ((Cont (pat, b) as c), cont_hndl, extra_args), Call (t1, t2, _) ->
+        call_bnd ~cont_hndl ~extra_args t1 t2 pat b c
       | _, Ret (Cont (pat, b), t) ->
         let_or_ret_bnd pat b t @@ fun pat' b' t' -> MACPS.Ret (Cont (pat', b'), t')
       | _, Let (NonRecursive, pat, t, b) ->
         let_or_ret_bnd pat b t @@ fun pat' b' t' -> MACPS.Let (NonRecursive, pat', t', b')
       | _, Let (Recursive, pat, t, b) ->
-        let t' = expand_triv (v_ar pat) @@ prep_t_for_env env t in
+        let t' = expand_triv env (v_ar pat) @@ prep_t_for_env env t in
         let b' = simpl_p_sh b env in
         MACPS.Let (Recursive, translate_pat pat, t', b')
       | _, CIf (t, p1, p2) ->
@@ -1885,7 +1803,7 @@ end = struct
         let p' = simpl_p_sh p env in
         Primop (pat', i, t1', tt', p')
       | cont_hndl, Letc (i, Cont (pat, b1), b2)
-      | Sub (Cont (pat, b1), cont_hndl), Letc (i, _, b2) ->
+      | Sub (Cont (pat, b1), cont_hndl, _), Letc (i, _, b2) ->
         let pat' = translate_pat pat in
         let b1' = simpl_p ~cont_hndl etas b1 env in
         let cont_hndl, etas2 =
@@ -1894,53 +1812,131 @@ end = struct
         let b2' = simpl_p ~cont_hndl etas2 b2 env in
         Letc (i, Cont (pat', b1'), b2')
       | DeadJV, Letc (_, _, b) -> simpl_p ~cont_hndl etas b env
-      | (Def | Sub ((CVar _ | HALT), _)), Letc (_, c, b) ->
-        simpl_p ~cont_hndl:(Sub (c, cont_hndl)) etas b env
+      | (Def | Sub ((CVar _ | HALT), _, _)), Letc (_, c, b) ->
+        simpl_p ~cont_hndl:(Sub (c, cont_hndl, [])) etas b env
       | DeadJV, (Ret (CVar i, _) | Call (_, _, CVar i)) -> MACPS.Ret (CVar i, TUnit)
-      | Sub (c, cont_hndl), Ret (_, t) -> simpl_p ~cont_hndl etas (Ret (c, t)) env
+      | Sub ((Cont (pat, b) as c), cont_hndl, e_arg :: e_args), Ret (_, t) ->
+        let cont_stuff = etas, cont_hndl in
+        let get_c' () = MACPS.Cont (translate_pat pat, simpl_p_sh b env) in
+        let ec =
+          match prep_t_for_env env t, e_arg, to_light_ex_tt e_args with
+          | `HeavyT (Lam (lam_pat, i, lam_b)), _, _ ->
+            `ExLamCall ((lam_pat, i, lam_b), (e_arg :> env_elem), [])
+          | (#light as prep_t1), (#ex_light_triv as prep_t2), Some light_tt ->
+            `ExLightCall (prep_t1, prep_t2, light_tt)
+          | prep_t1, _, _ -> `ExHeavyCall (prep_t1, e_arg, e_args)
+        in
+        ex_call ~cont_stuff c get_c' env e_args ec
+      | Sub (c, cont_hndl, _), Ret (_, t) -> simpl_p ~cont_hndl etas (Ret (c, t)) env
       | Def, Ret ((CVar i as c), t) -> ret t c @@ fun () -> MACPS.CVar i
       | Def, Ret ((HALT as c), t) -> ret t c @@ fun () -> MACPS.HALT
-      | Sub (c, cont_hndl), Call (t1, t2, _) ->
+      | Sub (((CVar _ | HALT) as c), cont_hndl, _), Call (t1, t2, _) ->
         simpl_p ~cont_hndl etas (Call (t1, t2, c)) env
       | Def, Call (t1, t2, (CVar i as c)) -> call t1 t2 c @@ fun () -> MACPS.CVar i
       | Def, Call (t1, t2, (HALT as c)) -> call t1 t2 c @@ fun () -> MACPS.HALT
       | DeadJV, (Ret (HALT, _) | Call (_, _, HALT)) ->
         failwith " unreachable: HALT isn't a join value"
-    and ex_call c env =
-      let rec helper args = function
-        | `ExHeavyCall ((#ex_call as ec), prep_t) -> helper (prep_t :: args) ec
-        | `ExLightCall ((`ExLightCall _ as ec), (#ex_light_triv as prep_t)) ->
-          helper (prep_t :: args) ec
-        | `ExLamCall ((pat', pats', i, b), t', tt') ->
-          ex_lam_call pat' ~pats' i b t' ~tt' args c env
-        | `ExLightCall ((#ex_light_triv as prep_t1), (#ex_light_triv as prep_t2))
-        | `ExHeavyCall ((#ex_triv as prep_t1), (#ex_triv as prep_t2)) ->
-          let t1', t2', tt' = translate_prep_t_tuple env prep_t1 prep_t2 args in
-          MACPS.Call (t1', (t2', tt'), c)
+    and ex_call ?(cont_stuff = Present [], Def) c get_c' env =
+      let rec helper args =
+        let triv_triv_call prep_t1 prep_t2 prep_tt =
+          let t1', t2', tt' =
+            translate_prep_t_tuple env prep_t1 prep_t2 @@ List.append prep_tt args
+          in
+          MACPS.Call (t1', (t2', tt'), get_c' ())
+        in
+        function
+        | `ExHeavyCall ((#ex_call as ec), prep_t, prep_tt) ->
+          helper (List.cons prep_t @@ prep_tt @ args) ec
+        | `ExLightCall ((`ExLightCall _ as ec), prep_t, prep_tt) ->
+          helper (List.cons (prep_t :> ex_triv) @@ (prep_tt :> ex_triv list) @ args) ec
+        | `ExLamCall ((pat, i, b), prep_t, prep_tt) ->
+          ex_lam_call pat i b prep_t (prep_tt @ args) c get_c' env ~cont_stuff
+        | `ExLightCall ((#ex_light_triv as prep_t1), prep_t2, prep_tt) ->
+          triv_triv_call prep_t1 (prep_t2 :> ex_triv) (prep_tt :> ex_triv list)
+        | `ExHeavyCall ((#ex_triv as prep_t1), prep_t2, prep_tt) ->
+          triv_triv_call prep_t1 prep_t2 prep_tt
       in
       helper
     and translate_prep_t_tuple env prep_t1 prep_t2 prep_tt =
       get_triv env |> fun f -> f prep_t1, f prep_t2, List.map f prep_tt
-    and check_barrier env args i =
-      if not @@ ISet.mem i.id barriers then ([], []), args else arg_filter env args
-    and arg_filter env args =
+    and ex_lam_call ?(cont_stuff = Present [], Def) pat i b ex_triv args c get_c' env =
+      let is_barrier = ISet.mem i.id barriers in
       let rev_unzip =
         List.fold_left (fun (pats, tt) (pat, t) -> pat :: pats, t :: tt) ([], [])
       in
-      List.fold_left_map
-        (fun acc -> function
-          | #ex_light_triv as lt -> acc, lt
-          | `HeavyT tn ->
-            let eta_arg, eta_pat = gen_eta env_var () in
-            let tn' = simpl_t env tn in
-            (eta_pat, tn') :: acc, eta_arg)
-        []
-        args
-      |> fun (r, args') -> rev_unzip r, args'
-    and ex_lam_call ?(pats' = []) ?(tt' = []) pat' i b t' args c env =
-      let (addl_pats', addl_tt'), args' = check_barrier env args i in
-      let b' = simpl_p (Present args') b env in
-      MACPS.Call (Lam ((pat', pats' @ addl_pats'), i, b'), (t', tt' @ addl_tt'), c)
+      let pat' () = translate_pat pat in
+      let t' () =
+        match pat with
+        | CPVar { id; _ } when ISet.mem id dead_vars -> MACPS.TUnit
+        | _ -> expand_triv env (v_ar pat) ex_triv
+      in
+      let addl_rev_pats_tt', args' =
+        if not @@ is_barrier
+        then [], args
+        else
+          List.fold_left_map
+            (fun acc -> function
+              | #ex_light_triv as lt -> acc, lt
+              | `HeavyT tn ->
+                let eta_arg, eta_pat = gen_eta () in
+                let tn' = simpl_t env tn in
+                (eta_pat, tn') :: acc, eta_arg)
+            []
+            args
+      in
+      let pats', tt' = rev_unzip @@ addl_rev_pats_tt' in
+      let id_opt =
+        match pat with
+        | CPVar { id; _ } -> Some id
+        | CPTuple _ -> None
+      in
+      let k_not_fully_inl () =
+        let lam' = MACPS.Lam ((pat' (), pats'), i, simpl_p (Present args') b env) in
+        MACPS.Call (lam', (t' (), tt'), get_c' ())
+      in
+      let try_inl k_inl = triv_bnd env id_opt ex_triv k_inl k_not_fully_inl in
+      match (pats', tt'), c with
+      | ([], []), Cont _ when is_barrier -> k_not_fully_inl ()
+      | (pat' :: pats', t' :: tt'), _ ->
+        try_inl
+        @@ fun env' ->
+        let lam' = MACPS.Lam ((pat', pats'), i, simpl_p (Present args') b env') in
+        MACPS.Call (lam', (t', tt'), get_c' ())
+      | _ ->
+        let k_inl =
+          let cont_hndl, etas =
+            match cont_stuff, c with
+            | (etas, cont_hndl), Cont _ -> Sub (c, cont_hndl, args'), etas
+            | (_, Sub ((CVar _ | HALT), cont_hndl, eas)), (CVar _ | HALT) ->
+              Sub (c, cont_hndl, eas), Present args'
+            | (_, cont_hndl), _ -> Sub (c, cont_hndl, []), Present args'
+          in
+          simpl_p ~cont_hndl etas b
+        in
+        triv_bnd env id_opt ex_triv k_inl k_not_fully_inl
+    and expand_triv env v_ar =
+      let expand_lam pat i b etas_count =
+        let eta_args, eta_pats = gen_many_etas etas_count in
+        let pat' = translate_pat pat in
+        let b' = simpl_p (Present eta_args) b env in
+        MACPS.Lam ((pat', eta_pats), i, b')
+      in
+      function
+      | `HeavyT (Lam (lam_pat, i, lam_b)) when v_ar > 1 ->
+        expand_lam lam_pat i lam_b (v_ar - 1)
+      | #ex_call as ec -> expand_ex_call env v_ar ec
+      | #ex_triv as et -> get_triv env et
+    and expand_ex_call env v_ar ec =
+      if v_ar <= 0
+      then failwith "unreachable: v_ar should be positive for expansion"
+      else (
+        let eta_arg, eta_pat = gen_eta () in
+        let eta_args, eta_pats = gen_many_etas (v_ar - 1) in
+        let i' = gensym ~prefix:"k" () |> of_string in
+        let lam_b' =
+          ex_call (CVar i') (fun () -> MACPS.CVar i') env (eta_arg :: eta_args) ec
+        in
+        MACPS.Lam ((eta_pat, eta_pats), i', lam_b'))
     and simpl_t ?(ignore_ids = false) env = function
       | UVar i ->
         if ignore_ids
@@ -2805,9 +2801,9 @@ let%expect_test "barriers in action: only unit-size arguments are inlined when e
     after:
 
                                       let main = let h a e1 k3 = k3 (a, e1) in
-                                                 (fun y e2 k2 -> if y then
-                                                                      h e2 2 k2
-                                                                 else h e2 2 k2) (2 <= 1)
+                                                 (fun e2 k2 -> if 2 <= 1
+                                                               then h e2 2 k2
+                                                               else h e2 2 k2)
                                                  (1, 2) (fun x -> x) |}]
 ;;
 
@@ -2920,4 +2916,34 @@ let%expect_test "fibk" =
                                                                         (fun t10 ->
 
                                                                         (fun x -> x) t10) |}]
+;;
+
+let%expect_test "dead lam_call_bnd lam par. near the barrier" =
+  let lam =
+    Lam (CPVar var_x, var_k1, CIf (tr, Ret (CVar var_k1, one), Ret (CVar var_k1, two)))
+  in
+  let arg_lam =
+    let lam2 =
+      Lam (CPVar var_b, var_k4, Ret (CVar var_k4, TTuple (UVar var_a, UVar var_b, [])))
+    in
+    Lam (CPVar var_a, var_k3, Ret (CVar var_k3, lam2))
+  in
+  let call =
+    Call
+      (lam, arg_lam, Cont (CPVar var_y, Ret (HALT, TTuple (UVar var_y, UVar var_y, []))))
+  in
+  test_call_ar_anal @@ prog call;
+  [%expect
+    {|
+    before:
+    let main = (fun x k1 -> if true then k1 1 else k1 2) (fun a k3 ->
+                                                                  k3 (fun b k4 ->
+                                                                      k4 (a, b)))
+                                                                 (fun y ->
+                                                                  (fun x -> x)
+                                                                  (y, y))
+    after:
+
+                       let main = (fun x k1 -> if true then k1 1 else k1 2) ()
+                                  (fun y -> (fun x -> x) (y, y)) |}]
 ;;
