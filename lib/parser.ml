@@ -81,7 +81,7 @@ let keywords =
 
 let is_keyword s = String_set.mem s keywords
 
-let econst () =
+let econst_exn () =
   let acc = ref 0 in
   if !pos < !length && is_digit !text.[!pos] then (
     acc := Char.code !text.[!pos] - Char.code '0';
@@ -91,8 +91,10 @@ let econst () =
       incr pos
     done;
     (* log "const %d parsed. pos = %d" !acc !pos; *)
-    Option.some @@ EConst !acc)
-  else None
+    EConst !acc)
+  else raise Exit
+
+let econst () = match econst_exn () with exception Exit -> None | x -> Some x
 
 (** Parses identifiers without keyword check  *)
 let ident_or_keyword () =
@@ -191,23 +193,22 @@ let mul_opers =
 let plus_opers = [ ('+', "+"); ('-', "-") ]
 
 let rec expr_plus_exn () : AST.expr =
+  let rec loop acc = function
+    | [] -> acc
+    | (ch, op) :: tl ->
+        ws ();
+        let rb1 = Rollback.make () in
+        if char ch then
+          match expr_mul () with
+          | None ->
+              Rollback.rollback rb1;
+              acc
+          | Some v -> loop (EBinop (op, acc, v)) plus_opers
+        else loop acc tl
+  in
   match expr_mul () with
   | None -> raise_notrace Exit
-  | Some head ->
-      let rec loop acc = function
-        | [] -> acc
-        | (ch, op) :: tl ->
-            ws ();
-            let rb1 = Rollback.make () in
-            if char ch then
-              match expr_mul () with
-              | None ->
-                  Rollback.rollback rb1;
-                  acc
-              | Some v -> loop (EBinop (op, acc, v)) plus_opers
-            else loop acc tl
-      in
-      loop head plus_opers
+  | Some head -> loop head plus_opers
 
 and expr_mul () =
   (* log "expr_mul on pos = %d" !pos; *)
@@ -226,9 +227,9 @@ and expr_mul () =
           match eident () with
           | Some v -> loop (EBinop (op, acc, v)) mul_opers
           | None -> (
-              match econst () with
-              | Some c -> loop (EBinop (op, acc, c)) mul_opers
-              | None -> (
+              match econst_exn () with
+              | c -> loop (EBinop (op, acc, c)) mul_opers
+              | exception Exit -> (
                   try
                     let b0 = char '(' in
                     let rez = expr_plus_exn () in
@@ -260,9 +261,13 @@ and primary () =
 and primary_non_kw_exn () =
   (* log " %s %d , pos = %d" __FILE__ __LINE__ !pos; *)
   if lookahead_paren () then
-    match (char '(', expr_plus_exn (), char ')') with
-    | true, rez, true -> rez
-    | (exception Exit) | _ -> raise Exit
+    let () = if not (char '(') then raise Exit in
+    let ans = expr_plus_exn () in
+    let () = if not (char ')') then raise Exit in
+    ans
+    (* match (char '(', expr_plus_exn (), char ')') with
+       | true, rez, true -> rez
+       | (exception Exit) | _ -> raise Exit *)
     (* let b1 : bool = char '(' in
        let rez = expr_plus () in
        let b2 : bool = char ')' in

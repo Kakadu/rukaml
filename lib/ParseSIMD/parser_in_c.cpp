@@ -8,8 +8,10 @@ extern "C" {
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
 }
+
 #define log(fmt, ...) ;
 // #define log(...) printf(__VA_ARGS__);
+
 static value Val_some(value v) {
   CAMLparam1(v);
   CAMLlocal1(some);
@@ -40,10 +42,12 @@ bool is_ws(char c) {
   }
   return false;
 }
+
 void ws() {
   while (pos < length && is_ws(text[pos]))
     pos++;
 }
+
 inline bool is_alpha(char c) { return ('a' <= c) && (c <= 'z'); }
 
 inline bool is_digit(char c) { return ('0' <= c) && (c <= '9'); }
@@ -110,43 +114,10 @@ bool ident(unsigned &left, unsigned &right) {
   return ident_or_keyword(left, right);
 }
 
-void mk_evar(value &_ans, char *str) {
-  CAMLparam1(_ans);
-  _ans = caml_alloc(1, 0 /*EVar*/);
-  Store_field(_ans, 0, caml_copy_string(str));
-  CAMLreturn0;
-}
-
-void mk_econst(value &_ans, int n) {
-  CAMLparam1(_ans);
-  _ans = caml_alloc(1, 1 /*EConst*/);
-  Store_field(_ans, 0, Val_int(n));
-  CAMLreturn0;
-}
-
-value mk_binop(char op, value _l, value _r) {
-  CAMLparam2(_l, _r);
-  CAMLlocal1(_ans);
-  _ans = caml_alloc(3, 2 /*EBinOp*/);
-  char str[2] = {'\0', '\0'};
-  str[0] = op;
-  Store_field(_ans, 0, caml_copy_string(str));
-  Store_field(_ans, 1, _l);
-  Store_field(_ans, 2, _r);
-
-  CAMLreturn(_ans);
-}
-
-value mk_binop(char *str, value _l, value _r) {
-  CAMLparam2(_l, _r);
-  CAMLlocal1(_ans);
-  _ans = caml_alloc(3, 2 /*EBinOp*/);
-  Store_field(_ans, 0, caml_copy_string(str));
-  Store_field(_ans, 1, _l);
-  Store_field(_ans, 2, _r);
-
-  CAMLreturn(_ans);
-}
+void mk_evar(value &_ans, char *str);
+void mk_econst(value &_ans, int n);
+extern value mk_binop(char *str, value _l, value _r);
+extern value mk_binop(char c, value _l, value _r);
 
 bool econst(value &_ans) {
   ws();

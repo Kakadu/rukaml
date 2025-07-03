@@ -19,11 +19,11 @@
  (inline_tests)
  (wrapped false)
  (preprocess
-  (pps
-   ; ppx_show
-   ppx_deriving.show
-   ppx_expect
-   ppx_inline_test)))
+  (per_module
+   ((pps ppx_deriving.show ppx_expect ppx_inline_test)
+    parser1_tests)
+   ((pps ppx_deriving.show)
+    parser))))
 
 (library
  (name lib_pascal)

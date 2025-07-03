@@ -2,14 +2,12 @@
  (name lib_miniml)
  (modules AST parser)
  (libraries ppx_show.runtime)
- (inline_tests)
+ ;  (inline_tests)
  (wrapped false)
  (preprocess
-  (pps
-   ; ppx_show
-   ppx_deriving.show
-   ppx_expect
-   ppx_inline_test)))
+  (per_module
+   ((pps ppx_deriving.show)
+    AST))))
 
 (executable
  (name driver)
