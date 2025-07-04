@@ -1557,32 +1557,25 @@ end = struct
     anal_p p 0 k empty ISet.empty empty
   ;;
 
-  type ex_light_triv =
+  type light_t =
     [ `LightT of triv (* unit size triv*)
     | `Var of var * triv
     ]
 
   type ex_triv =
-    [ ex_light_triv
+    [ light_t
     | `HeavyT of triv
-    ]
-
-  type light =
-    [ ex_light_triv
-    | `ExLightCall of light * ex_light_triv * ex_light_triv list
     ]
 
   type env_elem =
     [ ex_triv
-    | `ExLightCall of light * ex_light_triv * ex_light_triv list
     | `ExLamCall of (pat * var * p) * env_elem * ex_triv list
-    | `ExHeavyCall of env_elem * ex_triv * ex_triv list
+    | `ExTTCall of env_elem * ex_triv * ex_triv list
     ]
 
   type ex_call =
-    [ `ExLightCall of light * ex_light_triv * ex_light_triv list
-    | `ExLamCall of (pat * var * p) * env_elem * ex_triv list
-    | `ExHeavyCall of env_elem * ex_triv * ex_triv list
+    [ `ExLamCall of (pat * var * p) * env_elem * ex_triv list
+    | `ExTTCall of env_elem * ex_triv * ex_triv list
     ]
 
   type etas =
@@ -1643,15 +1636,8 @@ end = struct
     let triv_bnd env id_opt prep_t k_inl k_def =
       match id_opt, prep_t with
       | Some id, _ when find id counts <= 1 -> k_inl @@ add id prep_t env
-      | Some id, #light -> k_inl @@ add id prep_t env
+      | Some id, #light_t -> k_inl @@ add id prep_t env
       | _ -> k_def ()
-    in
-    let rec to_light_ex_tt = function
-      | [] -> Some []
-      | hd :: tl ->
-        (match hd, to_light_ex_tt tl with
-         | (#ex_light_triv as hd), Some tl -> Some (hd :: tl)
-         | _, _ -> None)
     in
     let rec simpl_p ?(cont_hndl = Def) etas p (env : env_elem IMap.t) =
       let simpl_t_sh = simpl_t env in
@@ -1735,10 +1721,8 @@ end = struct
         | `HeavyT (Lam (lam_pat, i, lam_b)), _ ->
           let elc = `ExLamCall ((lam_pat, i, lam_b), prep_t2, []) in
           ret_or_prep_call call_ar elc c get_c'
-        | (#light as prep_t1), (#ex_light_triv as prep_t2) ->
-          ret_or_prep_call call_ar (`ExLightCall (prep_t1, prep_t2, [])) c get_c'
         | prep_t1, (#ex_triv as prep_t2) ->
-          ret_or_prep_call call_ar (`ExHeavyCall (prep_t1, prep_t2, [])) c get_c'
+          ret_or_prep_call call_ar (`ExTTCall (prep_t1, prep_t2, [])) c get_c'
         | _, #ex_call ->
           failwith "unreachable: call shouldn't be inlined if its call arity is 0"
       in
@@ -1753,26 +1737,21 @@ end = struct
             MACPS.Ret (get_c' (), t'))
           else ex_call c get_c' ~cont_stuff:(etas, cont_hndl) env [] ec
         in
-        match pat, t1_prep, t2_prep, to_light_ex_tt extra_args with
-        | CPVar { id; _ }, (#light as t1_prep), (#ex_light_triv as t2_prep), Some light_ea
-          when v_arity > 0 ->
-          simpl_p_sh b @@ add id (`ExLightCall (t1_prep, t2_prep, light_ea)) env
-        | CPVar { id; _ }, _, (#ex_triv as t2_prep), _
+        match pat, t1_prep, t2_prep with
+        | CPVar { id; _ }, _, (#ex_triv as t2_prep)
           when find id counts <= 1 && v_arity > 0 ->
           let ec =
             match t1_prep with
             | `HeavyT (Lam (lam_pat, i, lam_b)) ->
               `ExLamCall ((lam_pat, i, lam_b), t2_prep, extra_args)
-            | _ -> `ExHeavyCall (t1_prep, t2_prep, extra_args)
+            | _ -> `ExTTCall (t1_prep, t2_prep, extra_args)
           in
           simpl_p_sh b @@ add id ec env
-        | _, `HeavyT (Lam (lam_pat, i, lam_b)), _, _ ->
+        | _, `HeavyT (Lam (lam_pat, i, lam_b)), _ ->
           not_inl_ex_call @@ `ExLamCall ((lam_pat, i, lam_b), t2_prep, extra_args)
-        | _, (#ex_triv as t1_prep), (#ex_triv as t2_prep), _ ->
-          not_inl_ex_call @@ `ExHeavyCall (t1_prep, t2_prep, extra_args)
-        | _, (#ex_call as ec), (#ex_triv as et), _ ->
-          not_inl_ex_call @@ `ExHeavyCall (ec, et, extra_args)
-        | _, _, #ex_call, _ ->
+        | _, _, (#ex_triv as t2_prep) ->
+          not_inl_ex_call @@ `ExTTCall (t1_prep, t2_prep, extra_args)
+        | _, _, #ex_call ->
           failwith "unreachable: call shouldn't be inlined if its call arity is 0"
       in
       match cont_hndl, p with
@@ -1819,12 +1798,10 @@ end = struct
         let cont_stuff = etas, cont_hndl in
         let get_c' () = MACPS.Cont (translate_pat pat, simpl_p_sh b env) in
         let ec =
-          match prep_t_for_env env t, e_arg, to_light_ex_tt e_args with
-          | `HeavyT (Lam (lam_pat, i, lam_b)), _, _ ->
+          match prep_t_for_env env t, e_arg with
+          | `HeavyT (Lam (lam_pat, i, lam_b)), _ ->
             `ExLamCall ((lam_pat, i, lam_b), (e_arg :> env_elem), [])
-          | (#light as prep_t1), (#ex_light_triv as prep_t2), Some light_tt ->
-            `ExLightCall (prep_t1, prep_t2, light_tt)
-          | prep_t1, _, _ -> `ExHeavyCall (prep_t1, e_arg, e_args)
+          | prep_t1, _ -> `ExTTCall (prep_t1, e_arg, e_args)
         in
         ex_call ~cont_stuff c get_c' env e_args ec
       | Sub (c, cont_hndl, _), Ret (_, t) -> simpl_p ~cont_hndl etas (Ret (c, t)) env
@@ -1845,15 +1822,11 @@ end = struct
           MACPS.Call (t1', (t2', tt'), get_c' ())
         in
         function
-        | `ExHeavyCall ((#ex_call as ec), prep_t, prep_tt) ->
+        | `ExTTCall ((#ex_call as ec), prep_t, prep_tt) ->
           helper (List.cons prep_t @@ prep_tt @ args) ec
-        | `ExLightCall ((`ExLightCall _ as ec), prep_t, prep_tt) ->
-          helper (List.cons (prep_t :> ex_triv) @@ (prep_tt :> ex_triv list) @ args) ec
         | `ExLamCall ((pat, i, b), prep_t, prep_tt) ->
           ex_lam_call pat i b prep_t (prep_tt @ args) c get_c' env ~cont_stuff
-        | `ExLightCall ((#ex_light_triv as prep_t1), prep_t2, prep_tt) ->
-          triv_triv_call prep_t1 (prep_t2 :> ex_triv) (prep_tt :> ex_triv list)
-        | `ExHeavyCall ((#ex_triv as prep_t1), prep_t2, prep_tt) ->
+        | `ExTTCall ((#ex_triv as prep_t1), prep_t2, prep_tt) ->
           triv_triv_call prep_t1 prep_t2 prep_tt
       in
       helper
@@ -1876,7 +1849,7 @@ end = struct
         else
           List.fold_left_map
             (fun acc -> function
-              | #ex_light_triv as lt -> acc, lt
+              | #light_t as lt -> acc, lt
               | `HeavyT tn ->
                 let eta_arg, eta_pat = gen_eta () in
                 let tn' = simpl_t env tn in
@@ -2445,7 +2418,7 @@ let%expect_test "not expand call (because of sharing loses). LamCall version" =
                                                                        (fun x -> x) (q + t)))) |}]
 ;;
 
-let%expect_test " expand call thanks to fake shared comput. and cheap exprs detcion " =
+let%expect_test " expand call thanks to fake shared comput. and cheap exprs detection " =
   let rhs =
     let sum var2 = sum (UVar var_x) (UVar var2) in
     let th = Ret (CVar var_k1, Lam (CPVar var_y, var_k2, Ret (CVar var_k2, sum var_y))) in
@@ -2486,17 +2459,24 @@ let%expect_test " expand call thanks to fake shared comput. and cheap exprs detc
                                                           if true then k1 (x + e1)
                                                                   else k1 (x + e1)
                                                           in if true then
-                                                                     f 1 1
-                                                                     (fun t ->
-                                                                      f 1 1
-                                                                      (fun q ->
-                                                                       (fun x -> x) (t + q)))
-                                                                     else
-                                                                     f 1 1
-                                                                     (fun s ->
-                                                                      f 1 1
-                                                                      (fun z ->
-                                                                       (fun x -> x) (s + z))) |}]
+                                                                     (fun g ->
+                                                                      g 1
+                                                                      (fun t ->
+                                                                       g 1
+                                                                       (fun q ->
+                                                                        (fun x -> x) (t + q))))
+                                                                      (fun e4 k5 ->
+                                                                       f 1 e4 k5)
+                                                                      else
+                                                                      (fun g ->
+                                                                       g 1
+                                                                       (fun s ->
+                                                                        g 1
+                                                                        (fun z ->
+
+                                                                        (fun x -> x) (s + z))))
+                                                                       (fun e2 k3 ->
+                                                                        f 1 e2 k3) |}]
 ;;
 
 let%expect_test "expand lam call argument" =
