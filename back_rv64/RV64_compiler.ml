@@ -20,8 +20,10 @@ let frontend cfg =
     then Ok stru
     else
       let open Compile_lib in
-      let+ cps_vb = CPS.cps_conv_program stru |> promote_error in
-      [ CPS.cps_vb_to_parsetree_vb cps_vb ]
+      let open CPS in
+      let+ cps_vb = cps_conv_program stru |> promote_error in
+      if not cfg.call_arity then [ cps1_vb_to_parsetree_vb cps_vb ]
+      else [ call_arity_anal cps_vb |> cpsm_vb_to_parsetree_vb ]
   in
   let stru =
     let init = CConv.standart_globals, [] in
@@ -63,6 +65,7 @@ let cfg =
   ; dump_anf = false
   ; dsource = false
   ; cps_on = false
+  ; call_arity = false
   }
 ;;
 
@@ -94,6 +97,9 @@ let () =
       , Arg.Unit (fun () -> RV64_impl.set_verbose true)
       , " verbose output of RV64 backend" )
     ; "-cps", Arg.Unit (fun () -> cfg.cps_on <- true), " include cps conversion"
+    ; "-call_arity",
+        Arg.Unit (fun () -> cfg.call_arity <- true),
+        " include call arity analysis"
     ]
     (fun s -> cfg.input_file <- Some s)
     "help";

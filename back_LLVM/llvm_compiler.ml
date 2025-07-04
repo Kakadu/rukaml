@@ -2,7 +2,9 @@ type cfg =
   { mutable out_file : string
   ; mutable input_file : string option (* mutable dump_ir : bool; *)
   ; mutable cps_on : bool
+  ;  mutable call_arity : bool
   }
+
 
 open Frontend
 
@@ -26,8 +28,10 @@ module ToLLVM = struct
       then Ok stru
       else
         let open Compile_lib in
-        let+ cps_vb = CPS.cps_conv_program stru |> promote_error in
-        [ CPS.cps_vb_to_parsetree_vb cps_vb ]
+        let open CPS in
+        let+ cps_vb = cps_conv_program stru |> promote_error in
+        if not cfg.call_arity then [ cps1_vb_to_parsetree_vb cps_vb ]
+        else [ call_arity_anal cps_vb |> cpsm_vb_to_parsetree_vb ]
     in
     let stru =
       let init = CConv.standart_globals, [] in
@@ -60,8 +64,13 @@ module ToLLVM = struct
 end
 
 let cfg =
-  { out_file = "aaa.ll"; input_file = None (* dump_ir = false  *); cps_on = false }
-;;
+  {
+    out_file = "aaa.ll";
+    input_file = None (* dump_ir = false  *);
+    cps_on = false;
+    call_arity = false;
+  }
+
 
 let print_errors = function
   | #Parsing.error as e -> Format.printf "%a\n%!" Parsing.pp_error e
@@ -77,6 +86,9 @@ let () =
       , Arg.Unit (fun () -> LLVM_impl.set_verbose true)
       , " verbose output of LLVM backend" )
     ; "-cps", Arg.Unit (fun () -> cfg.cps_on <- true), " include cps conversion"
+    ;  "-call_arity",
+        Arg.Unit (fun () -> cfg.call_arity <- true),
+        " include call arity analysis"
     ]
     (fun s -> cfg.input_file <- Some s)
     "help";
