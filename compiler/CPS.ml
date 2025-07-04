@@ -170,7 +170,7 @@ struct
   let cons_uncurry (hd, tl) = hd :: tl
 
   let rec pp_pat ppf = function
-    | CPVar v -> Miniml.Ident.pp ppf v
+    | CPVar v -> Frontend.Ident.pp ppf v
     | CPTuple (pat1, pat2, pats) ->
       fprintf ppf "@[(%a" pp_pat pat1;
       List.iter (fprintf ppf ", %a" pp_pat) (pat2 :: pats);
@@ -1985,6 +1985,7 @@ end
 
 open Graph
 
+(* should be changed to custom graph representartion like https://gitlab.haskell.org/ghc/ghc/-/blob/master/compiler/GHC/Data/Graph/UnVar.hs (?) *)
 module VeryNaiveCoCallGraph : sig
   type t
 
@@ -2947,3 +2948,14 @@ let%expect_test "dead lam_call_bnd lam par. near the barrier" =
                        let main = (fun x k1 -> if true then k1 1 else k1 2) ()
                                   (fun y -> (fun x -> x) (y, y)) |}]
 ;;
+
+type cps1_vb = OneACPS.cps_vb
+
+let cps1_vb_to_parsetree_vb = OneACPS.cps_vb_to_parsetree_vb
+let pp_cps1_vb = OneACPS.pp_vb
+
+type cpsm_vb = MACPS.cps_vb
+
+let cpsm_vb_to_parsetree_vb = MACPS.cps_vb_to_parsetree_vb
+let pp_cpsm_vb = MACPS.pp_vb
+let call_arity_anal = call_arity_anal

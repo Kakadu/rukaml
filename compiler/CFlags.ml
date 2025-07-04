@@ -10,4 +10,5 @@ type cfg =
   ; mutable stop_after : stop_after_t
   ; mutable wrap_main_into_start : bool
   ; mutable cps_on : bool
+  ; mutable call_arity : bool
   }
