@@ -1,7 +1,7 @@
 (library
  (name compile_lib)
- (public_name MiniML.compile)
- (libraries stdio miniml cconv ppxlib.stdppx ocamlgraph)
+ (public_name rukaml.compile)
+ (libraries stdio Frontend cconv ppxlib.stdppx ocamlgraph)
  (modules ANF CPS CFlags compile_tests)
  (preprocess
   (pps

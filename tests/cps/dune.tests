@@ -35,6 +35,23 @@
     %{src}))))
 
 (rule
+ (targets anon1_callaron.s)
+ (deps
+  (:src ../rv64/anon1.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    -call_arity
+    --no-start
+    %{src}))))
+
+(rule
  (targets anon1_cpsoff.exe)
  (deps
   %{project_root}/back_rv64/RV64_compiler.exe
@@ -72,6 +89,25 @@
     -o
     %{targets}))))
 
+(rule
+ (targets anon1_callaron.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src anon1_callaron.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o anon1_callaron.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    anon1_callaron.o
+    -o
+    %{targets}))))
+
 (cram
  (applies_to anon1)
  (deps
@@ -79,6 +115,7 @@
   ../rv64/anon1.ml
   anon1_cpsoff.exe
   anon1_cpson.exe
+  anon1_callaron.exe
   ;
   ))
   
@@ -113,6 +150,23 @@
     -o
     %{targets}
     -cps
+    --no-start
+    %{src}))))
+
+(rule
+ (targets empty_callaron.s)
+ (deps
+  (:src ../rv64/empty.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    -call_arity
     --no-start
     %{src}))))
 
@@ -154,6 +208,25 @@
     -o
     %{targets}))))
 
+(rule
+ (targets empty_callaron.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src empty_callaron.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o empty_callaron.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    empty_callaron.o
+    -o
+    %{targets}))))
+
 (cram
  (applies_to empty)
  (deps
@@ -161,6 +234,7 @@
   ../rv64/empty.ml
   empty_cpsoff.exe
   empty_cpson.exe
+  empty_callaron.exe
   ;
   ))
   
@@ -195,6 +269,23 @@
     -o
     %{targets}
     -cps
+    --no-start
+    %{src}))))
+
+(rule
+ (targets fac_callaron.s)
+ (deps
+  (:src ../rv64/fac.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    -call_arity
     --no-start
     %{src}))))
 
@@ -236,6 +327,25 @@
     -o
     %{targets}))))
 
+(rule
+ (targets fac_callaron.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src fac_callaron.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o fac_callaron.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    fac_callaron.o
+    -o
+    %{targets}))))
+
 (cram
  (applies_to fac)
  (deps
@@ -243,6 +353,7 @@
   ../rv64/fac.ml
   fac_cpsoff.exe
   fac_cpson.exe
+  fac_callaron.exe
   ;
   ))
   
@@ -277,6 +388,23 @@
     -o
     %{targets}
     -cps
+    --no-start
+    %{src}))))
+
+(rule
+ (targets fac_acc_callaron.s)
+ (deps
+  (:src ../rv64/fac_acc.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    -call_arity
     --no-start
     %{src}))))
 
@@ -318,6 +446,25 @@
     -o
     %{targets}))))
 
+(rule
+ (targets fac_acc_callaron.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src fac_acc_callaron.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o fac_acc_callaron.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    fac_acc_callaron.o
+    -o
+    %{targets}))))
+
 (cram
  (applies_to fac_acc)
  (deps
@@ -325,6 +472,7 @@
   ../rv64/fac_acc.ml
   fac_acc_cpsoff.exe
   fac_acc_cpson.exe
+  fac_acc_callaron.exe
   ;
   ))
   
@@ -359,6 +507,23 @@
     -o
     %{targets}
     -cps
+    --no-start
+    %{src}))))
+
+(rule
+ (targets fac_cps_callaron.s)
+ (deps
+  (:src ../rv64/fac_cps.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    -call_arity
     --no-start
     %{src}))))
 
@@ -400,6 +565,25 @@
     -o
     %{targets}))))
 
+(rule
+ (targets fac_cps_callaron.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src fac_cps_callaron.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o fac_cps_callaron.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    fac_cps_callaron.o
+    -o
+    %{targets}))))
+
 (cram
  (applies_to fac_cps)
  (deps
@@ -407,6 +591,7 @@
   ../rv64/fac_cps.ml
   fac_cps_cpsoff.exe
   fac_cps_cpson.exe
+  fac_cps_callaron.exe
   ;
   ))
   
@@ -441,6 +626,23 @@
     -o
     %{targets}
     -cps
+    --no-start
+    %{src}))))
+
+(rule
+ (targets fib_cps_callaron.s)
+ (deps
+  (:src ../rv64/fib_cps.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    -call_arity
     --no-start
     %{src}))))
 
@@ -482,6 +684,25 @@
     -o
     %{targets}))))
 
+(rule
+ (targets fib_cps_callaron.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src fib_cps_callaron.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o fib_cps_callaron.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    fib_cps_callaron.o
+    -o
+    %{targets}))))
+
 (cram
  (applies_to fib_cps)
  (deps
@@ -489,6 +710,7 @@
   ../rv64/fib_cps.ml
   fib_cps_cpsoff.exe
   fib_cps_cpson.exe
+  fib_cps_callaron.exe
   ;
   ))
   
@@ -523,6 +745,23 @@
     -o
     %{targets}
     -cps
+    --no-start
+    %{src}))))
+
+(rule
+ (targets fib_callaron.s)
+ (deps
+  (:src ../rv64/fib.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    -call_arity
     --no-start
     %{src}))))
 
@@ -564,6 +803,25 @@
     -o
     %{targets}))))
 
+(rule
+ (targets fib_callaron.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src fib_callaron.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o fib_callaron.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    fib_callaron.o
+    -o
+    %{targets}))))
+
 (cram
  (applies_to fib)
  (deps
@@ -571,6 +829,7 @@
   ../rv64/fib.ml
   fib_cpsoff.exe
   fib_cpson.exe
+  fib_callaron.exe
   ;
   ))
   
@@ -605,6 +864,23 @@
     -o
     %{targets}
     -cps
+    --no-start
+    %{src}))))
+
+(rule
+ (targets fib_acc_callaron.s)
+ (deps
+  (:src ../rv64/fib_acc.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    -call_arity
     --no-start
     %{src}))))
 
@@ -646,6 +922,25 @@
     -o
     %{targets}))))
 
+(rule
+ (targets fib_acc_callaron.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src fib_acc_callaron.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o fib_acc_callaron.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    fib_acc_callaron.o
+    -o
+    %{targets}))))
+
 (cram
  (applies_to fib_acc)
  (deps
@@ -653,6 +948,7 @@
   ../rv64/fib_acc.ml
   fib_acc_cpsoff.exe
   fib_acc_cpson.exe
+  fib_acc_callaron.exe
   ;
   ))
   
@@ -687,6 +983,23 @@
     -o
     %{targets}
     -cps
+    --no-start
+    %{src}))))
+
+(rule
+ (targets nikita2_callaron.s)
+ (deps
+  (:src ../rv64/nikita2.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    -call_arity
     --no-start
     %{src}))))
 
@@ -728,6 +1041,25 @@
     -o
     %{targets}))))
 
+(rule
+ (targets nikita2_callaron.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src nikita2_callaron.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o nikita2_callaron.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    nikita2_callaron.o
+    -o
+    %{targets}))))
+
 (cram
  (applies_to nikita2)
  (deps
@@ -735,6 +1067,7 @@
   ../rv64/nikita2.ml
   nikita2_cpsoff.exe
   nikita2_cpson.exe
+  nikita2_callaron.exe
   ;
   ))
   
@@ -769,6 +1102,23 @@
     -o
     %{targets}
     -cps
+    --no-start
+    %{src}))))
+
+(rule
+ (targets nikita3_callaron.s)
+ (deps
+  (:src ../rv64/nikita3.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    -call_arity
     --no-start
     %{src}))))
 
@@ -810,6 +1160,25 @@
     -o
     %{targets}))))
 
+(rule
+ (targets nikita3_callaron.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src nikita3_callaron.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o nikita3_callaron.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    nikita3_callaron.o
+    -o
+    %{targets}))))
+
 (cram
  (applies_to nikita3)
  (deps
@@ -817,6 +1186,7 @@
   ../rv64/nikita3.ml
   nikita3_cpsoff.exe
   nikita3_cpson.exe
+  nikita3_callaron.exe
   ;
   ))
   
@@ -851,6 +1221,23 @@
     -o
     %{targets}
     -cps
+    --no-start
+    %{src}))))
+
+(rule
+ (targets order1_callaron.s)
+ (deps
+  (:src ../rv64/order1.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    -call_arity
     --no-start
     %{src}))))
 
@@ -892,6 +1279,25 @@
     -o
     %{targets}))))
 
+(rule
+ (targets order1_callaron.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src order1_callaron.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o order1_callaron.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    order1_callaron.o
+    -o
+    %{targets}))))
+
 (cram
  (applies_to order1)
  (deps
@@ -899,6 +1305,7 @@
   ../rv64/order1.ml
   order1_cpsoff.exe
   order1_cpson.exe
+  order1_callaron.exe
   ;
   ))
   
@@ -933,6 +1340,23 @@
     -o
     %{targets}
     -cps
+    --no-start
+    %{src}))))
+
+(rule
+ (targets pass_print_callaron.s)
+ (deps
+  (:src ../rv64/pass_print.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    -call_arity
     --no-start
     %{src}))))
 
@@ -974,6 +1398,25 @@
     -o
     %{targets}))))
 
+(rule
+ (targets pass_print_callaron.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src pass_print_callaron.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o pass_print_callaron.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    pass_print_callaron.o
+    -o
+    %{targets}))))
+
 (cram
  (applies_to pass_print)
  (deps
@@ -981,6 +1424,7 @@
   ../rv64/pass_print.ml
   pass_print_cpsoff.exe
   pass_print_cpson.exe
+  pass_print_callaron.exe
   ;
   ))
   
