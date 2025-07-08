@@ -15,7 +15,6 @@
     %{project_root}/back_rv64/RV64_compiler.exe
     -o
     %{targets}
-    -cps
     --no-start
     %{src}))))
 
@@ -98,7 +97,6 @@
     %{project_root}/back_rv64/RV64_compiler.exe
     -o
     %{targets}
-    -cps
     --no-start
     %{src}))))
 
@@ -181,7 +179,6 @@
     %{project_root}/back_rv64/RV64_compiler.exe
     -o
     %{targets}
-    -cps
     --no-start
     %{src}))))
 
@@ -264,7 +261,6 @@
     %{project_root}/back_rv64/RV64_compiler.exe
     -o
     %{targets}
-    -cps
     --no-start
     %{src}))))
 
@@ -347,7 +343,6 @@
     %{project_root}/back_rv64/RV64_compiler.exe
     -o
     %{targets}
-    -cps
     --no-start
     %{src}))))
 
@@ -430,7 +425,6 @@
     %{project_root}/back_rv64/RV64_compiler.exe
     -o
     %{targets}
-    -cps
     --no-start
     %{src}))))
 
@@ -513,7 +507,6 @@
     %{project_root}/back_rv64/RV64_compiler.exe
     -o
     %{targets}
-    -cps
     --no-start
     %{src}))))
 
@@ -596,7 +589,6 @@
     %{project_root}/back_rv64/RV64_compiler.exe
     -o
     %{targets}
-    -cps
     --no-start
     %{src}))))
 
@@ -679,7 +671,6 @@
     %{project_root}/back_rv64/RV64_compiler.exe
     -o
     %{targets}
-    -cps
     --no-start
     %{src}))))
 
@@ -762,7 +753,6 @@
     %{project_root}/back_rv64/RV64_compiler.exe
     -o
     %{targets}
-    -cps
     --no-start
     %{src}))))
 
@@ -845,7 +835,6 @@
     %{project_root}/back_rv64/RV64_compiler.exe
     -o
     %{targets}
-    -cps
     --no-start
     %{src}))))
 
@@ -928,7 +917,6 @@
     %{project_root}/back_rv64/RV64_compiler.exe
     -o
     %{targets}
-    -cps
     --no-start
     %{src}))))
 
