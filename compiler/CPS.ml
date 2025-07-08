@@ -182,10 +182,10 @@ struct
   let rec pp_cont ppf = function
     | HALT -> fprintf ppf "@[%s@]" "(fun x -> x)"
     | Cont (pat, p) -> fprintf ppf "@[(fun %a ->@[ %a@])" pp_pat pat pp_p p
-    | CVar v -> Miniml.Ident.pp ppf v
+    | CVar v -> Frontend.Ident.pp ppf v
 
   and pp_triv ?(ps = true) ppf =
-    let open Miniml in
+    let open Frontend in
     let open Args in
     function
     | Lam (pats, k, b) ->
@@ -207,7 +207,7 @@ struct
     | TSafeBinop _ -> failwith "not a binop in TSafeBinop"
 
   and pp_p ppf =
-    let open Miniml in
+    let open Frontend in
     let open Args in
     function
     | Call (f, aa, k) ->
@@ -261,8 +261,8 @@ struct
 
   and pp_binop ppf (ps, op, l, r) =
     if ps
-    then fprintf ppf "(%a %a %a)" maybe_pars l Miniml.Ident.pp op maybe_pars r
-    else fprintf ppf "%a %a %a" maybe_pars l Miniml.Ident.pp op maybe_pars r
+    then fprintf ppf "(%a %a %a)" maybe_pars l Frontend.Ident.pp op maybe_pars r
+    else fprintf ppf "%a %a %a" maybe_pars l Frontend.Ident.pp op maybe_pars r
 
   and pp_vb ppf (rec_flag, pat, p) =
     let open Args in
@@ -276,7 +276,7 @@ struct
     match p with
     | Ret (HALT, Lam (pats', k, b)) ->
       let pats' = cons_uncurry @@ to_cons pats' in
-      fprintf ppf "%a@ %a@ =@ @]@[%a@]@] " pp_pats pats' Miniml.Ident.pp k pp_p b
+      fprintf ppf "%a@ %a@ =@ @]@[%a@]@] " pp_pats pats' Frontend.Ident.pp k pp_p b
     | Ret (HALT, t) -> fprintf ppf "=@ @]@[%a@]@]" no_pars t
     | _ -> fprintf ppf "=@ @]@[%a@]@]" pp_p p
 
@@ -1849,11 +1849,11 @@ end = struct
         else
           List.fold_left_map
             (fun acc -> function
-              | #light_t as lt -> acc, lt
-              | `HeavyT tn ->
-                let eta_arg, eta_pat = gen_eta () in
-                let tn' = simpl_t env tn in
-                (eta_pat, tn') :: acc, eta_arg)
+               | #light_t as lt -> acc, lt
+               | `HeavyT tn ->
+                 let eta_arg, eta_pat = gen_eta () in
+                 let tn' = simpl_t env tn in
+                 (eta_pat, tn') :: acc, eta_arg)
             []
             args
       in
@@ -2419,8 +2419,8 @@ let%expect_test "not expand call (because of sharing loses). LamCall version" =
                                                                        (fun x -> x) (q + t)))) |}]
 ;;
 
-let%expect_test "expand call (no sharing loses since the variables are dead). LamCall \
-                 version"
+let%expect_test
+    "expand call (no sharing loses since the variables are dead). LamCall version"
   =
   let b f =
     let cont2 = Cont (CPVar var_q, Ret (HALT, sum (UVar var_q) (UVar var_q))) in
@@ -2803,8 +2803,9 @@ let%expect_test "dead jv param" =
                                                                       jv1 () |}]
 ;;
 
-let%expect_test "barriers in action: only unit-size arguments are inlined when eta-param \
-                 entry count > 1"
+let%expect_test
+    "barriers in action: only unit-size arguments are inlined when eta-param entry count \
+     > 1"
   =
   let big_def b =
     let lam_b =
@@ -2914,7 +2915,7 @@ let%expect_test "fibk" =
   @@ Result.get_ok
   @@ cps_conv_program
   @@ Result.get_ok
-  @@ Miniml.Parsing.parse_structure
+  @@ Frontend.Parsing.parse_structure
        "let main  = let rec fibk n = if n <=1 then fun k -> k 1 else let h = fibk (n-1) \
         in fun k -> h (fun l -> fibk (n-2) (fun r -> k (l + r)) ) in fibk 1 (fun x -> x)";
   [%expect
