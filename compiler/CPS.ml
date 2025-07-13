@@ -1686,9 +1686,9 @@ end = struct
         match etas with
         | Present pr_etas when call_ar <= List.length pr_etas ->
           default ~c ~get_c' (pr_etas, prep_t)
+        | Future n when n <= 0 -> default ~c ~get_c' ([], prep_t)
         | Present pr_etas ->
           MACPS.Ret (get_c' (), stepped pr_etas (call_ar - List.length pr_etas))
-        | Future n when n <= 0 -> MACPS.Ret (get_c' (), stepped [] call_ar)
         | Future n ->
           let diff = call_ar - n in
           if diff <= 0
