@@ -1428,3 +1428,359 @@
   ;
   ))
   
+;;; dead_print
+
+
+(rule
+ (targets dead_print_cpsoff.s)
+ (deps
+  (:src dead_print.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    --no-start
+    %{src}))))
+
+(rule
+ (targets dead_print_cpson.s)
+ (deps
+  (:src dead_print.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    --no-start
+    %{src}))))
+
+(rule
+ (targets dead_print_callaron.s)
+ (deps
+  (:src dead_print.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    -call_arity
+    --no-start
+    %{src}))))
+
+(rule
+ (targets dead_print_cpsoff.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src dead_print_cpsoff.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o dead_print_cpsoff.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    dead_print_cpsoff.o
+    -o
+    %{targets}))))
+
+(rule
+ (targets dead_print_cpson.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src dead_print_cpson.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o dead_print_cpson.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    dead_print_cpson.o
+    -o
+    %{targets}))))
+
+(rule
+ (targets dead_print_callaron.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src dead_print_callaron.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o dead_print_callaron.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    dead_print_callaron.o
+    -o
+    %{targets}))))
+
+(cram
+ (applies_to dead_print)
+ (deps
+  %{project_root}/back_rv64/rukaml_stdlib.o
+  dead_print.ml
+  dead_print_cpsoff.exe
+  dead_print_cpson.exe
+  dead_print_callaron.exe
+  ;
+  ))
+  
+;;; caa_print_order
+
+
+(rule
+ (targets caa_print_order_cpsoff.s)
+ (deps
+  (:src caa_print_order.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    --no-start
+    %{src}))))
+
+(rule
+ (targets caa_print_order_cpson.s)
+ (deps
+  (:src caa_print_order.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    --no-start
+    %{src}))))
+
+(rule
+ (targets caa_print_order_callaron.s)
+ (deps
+  (:src caa_print_order.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    -call_arity
+    --no-start
+    %{src}))))
+
+(rule
+ (targets caa_print_order_cpsoff.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src caa_print_order_cpsoff.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o caa_print_order_cpsoff.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    caa_print_order_cpsoff.o
+    -o
+    %{targets}))))
+
+(rule
+ (targets caa_print_order_cpson.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src caa_print_order_cpson.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o caa_print_order_cpson.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    caa_print_order_cpson.o
+    -o
+    %{targets}))))
+
+(rule
+ (targets caa_print_order_callaron.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src caa_print_order_callaron.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o caa_print_order_callaron.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    caa_print_order_callaron.o
+    -o
+    %{targets}))))
+
+(cram
+ (applies_to caa_print_order)
+ (deps
+  %{project_root}/back_rv64/rukaml_stdlib.o
+  caa_print_order.ml
+  caa_print_order_cpsoff.exe
+  caa_print_order_cpson.exe
+  caa_print_order_callaron.exe
+  ;
+  ))
+  
+;;; caa_print_order_rec
+
+
+(rule
+ (targets caa_print_order_rec_cpsoff.s)
+ (deps
+  (:src caa_print_order_rec.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    --no-start
+    %{src}))))
+
+(rule
+ (targets caa_print_order_rec_cpson.s)
+ (deps
+  (:src caa_print_order_rec.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    --no-start
+    %{src}))))
+
+(rule
+ (targets caa_print_order_rec_callaron.s)
+ (deps
+  (:src caa_print_order_rec.ml))
+ ;  (mode
+ ;   (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/back_rv64/RV64_compiler.exe
+    -o
+    %{targets}
+    -cps
+    -call_arity
+    --no-start
+    %{src}))))
+
+(rule
+ (targets caa_print_order_rec_cpsoff.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src caa_print_order_rec_cpsoff.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o caa_print_order_rec_cpsoff.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    caa_print_order_rec_cpsoff.o
+    -o
+    %{targets}))))
+
+(rule
+ (targets caa_print_order_rec_cpson.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src caa_print_order_rec_cpson.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o caa_print_order_rec_cpson.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    caa_print_order_rec_cpson.o
+    -o
+    %{targets}))))
+
+(rule
+ (targets caa_print_order_rec_callaron.exe)
+ (deps
+  %{project_root}/back_rv64/RV64_compiler.exe
+  (:src caa_print_order_rec_callaron.s)
+  %{project_root}/back_rv64/rukaml_stdlib.o)
+ ;(mode
+ ; (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o caa_print_order_rec_callaron.o)
+   (run
+    riscv64-linux-gnu-gcc-13
+    -g
+    %{project_root}/back_rv64/rukaml_stdlib.o
+    caa_print_order_rec_callaron.o
+    -o
+    %{targets}))))
+
+(cram
+ (applies_to caa_print_order_rec)
+ (deps
+  %{project_root}/back_rv64/rukaml_stdlib.o
+  caa_print_order_rec.ml
+  caa_print_order_rec_cpsoff.exe
+  caa_print_order_rec_cpson.exe
+  caa_print_order_rec_callaron.exe
+  ;
+  ))

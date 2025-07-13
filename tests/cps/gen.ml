@@ -11,6 +11,9 @@ let tests =
   ; "nikita3", "../rv64/nikita3"
   ; "order1", "../rv64/order1"
   ; "pass_print", "../rv64/pass_print"
+  ; "dead_print", "dead_print"
+  ; "caa_print_order", "caa_print_order"
+  ; "caa_print_order_rec", "caa_print_order_rec"
   ]
 ;;
 
