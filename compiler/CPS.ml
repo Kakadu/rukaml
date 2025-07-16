@@ -1144,8 +1144,8 @@ end = struct
         in
         helper 0
       in
-      let upd_safe_ars_if_ge_2 ?(subtr = 0) id t =
-        match calc_safe_ar_t t - subtr with
+      let upd_safe_ars_if_ge_2 id t =
+        match calc_safe_ar_t t with
         | n when n >= 2 -> add id n safe_ars
         | _ -> safe_ars
       in
