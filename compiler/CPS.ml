@@ -1144,7 +1144,7 @@ end = struct
         in
         helper 0
       in
-      let upd_safe_ars_if_ge_2 id t =
+      let upd_safe_ars_if_ge_2 ?(safe_ars = safe_ars) id t =
         match calc_safe_ar_t t with
         | n when n >= 2 -> add id n safe_ars
         | _ -> safe_ars
@@ -1155,22 +1155,29 @@ end = struct
         | n when n >= 2 -> `Safe, safe_ars
         | _ -> `UnSafe, safe_ars
       in
+      let lam_call_safe_ars_upd ?(safe_ars = safe_ars) t = function
+        | CPVar { id; _ } -> upd_safe_ars_if_ge_2 id t ~safe_ars
+        | CPTuple _ -> safe_ars
+      in
       let anal_tt0_ign a aa ress2 =
         anal_tt0 conts safe_ars int a aa ress2 |> ignore_fst
       in
       let anal_triv0_ign t ress = anal_triv conts safe_ars int 0 t ress |> ignore_fst in
-      let lam_call_anal0_ign lam_b p a ress =
-        lam_call_anal lam_b conts safe_ars int 0 ress p a |> ignore_fst
+      let lam_call_anal0_ign lam_b pat a ress =
+        ignore_fst
+        @@ lam_call_anal lam_b conts int 0 ress pat a
+        @@ lam_call_safe_ars_upd a pat
       in
-      let clear_lam_call_anal lam_b =
-        lam_call_anal lam_b conts safe_ars int inc_ar ress
+      let clear_lam_call_anal lam_b pat a =
+        lam_call_anal lam_b conts int inc_ar ress pat a @@ lam_call_safe_ars_upd a pat
       in
       let clear_triv_ret_anal t = anal_triv conts safe_ars int inc_ar t ress in
       match p with
       | CIf (c, th, el) -> anal_cif c th el conts safe_ars int ress inc_ar
       | Call ((Lam (pat, c, lam_b) as f), a, Cont (CPVar { id; _ }, body)) ->
         let had_upd, (is_safe, safe_ars2) = false, call_bnd_safe_ars_hndl id f in
-        fin_lam_call_bnd_anal ~had_upd c lam_b conts safe_ars2 int pat a is_safe
+        let safe_ars3 = lam_call_safe_ars_upd a pat ~safe_ars:safe_ars2 in
+        fin_lam_call_bnd_anal ~had_upd c lam_b conts safe_ars3 int pat a is_safe
         @@ anal_bnd1 id conts body int ress inc_ar safe_ars2
       | Call (Lam (pat, _, lam_b), a, Cont (CPTuple _, body)) ->
         let rhs_anal = lam_call_anal0_ign lam_b pat a in
@@ -1180,8 +1187,9 @@ end = struct
          | `Int fin_anal ->
            let had_upd = true in
            let is_safe, _ = call_bnd_safe_ars_hndl ~ignore_safe_ars:true id f in
+           let safe_ars2 = lam_call_safe_ars_upd a pat in
            (ress, fin_anal)
-           |> fin_lam_call_bnd_anal ~had_upd c lam_b conts safe_ars int pat a is_safe
+           |> fin_lam_call_bnd_anal ~had_upd c lam_b conts safe_ars2 int pat a is_safe
          | `UnInt (b_co_calls, b_ars) ->
            fin_unint_bnd_anal (lam_call_anal0_ign lam_b pat a) (b_co_calls, b_ars, ress)
          | exception Not_found -> clear_lam_call_anal lam_b pat a)
@@ -1339,7 +1347,7 @@ end = struct
         union b_co_calls @@ union (cartesian_square rhs_fv) @@ cartesian rhs_fv b_fv
       in
       p_co_calls, p_ars, ress2
-    and lam_call_anal lam_b conts safe_ars int inc_ar ress pat t =
+    and lam_call_anal lam_b conts int inc_ar ress pat t safe_ars =
       match pat, t with
       | CPVar { id; _ }, t when is_int_triv_rhs int t ->
         fin_int_triv_bnd_anal conts safe_ars int t
@@ -1356,7 +1364,7 @@ end = struct
       @@ fun b_co_calls v_id v_arity ->
       let inc_ar = if has_loop v_id b_co_calls && is_safe = `UnSafe then 0 else v_arity in
       let ress2 = if had_upd then ress else add_if_pos c.id inc_ar ress in
-      lam_call_anal lam_b conts safe_ars int inc_ar ress2 pat t
+      lam_call_anal lam_b conts int inc_ar ress2 pat t safe_ars
       |> ret_with_fv_cond v_id v_arity b_co_calls
     and anal_cif c th el conts safe_ars int ress inc_ar =
       let c_co_calls, c_ars, ress2 = anal_triv conts safe_ars int 0 c ress in
@@ -2540,6 +2548,89 @@ let%expect_test " expand call thanks to fake shared comput. and cheap exprs dete
                                                                         (fun x -> x) (s + z))))
                                                                        (fun e2 k3 ->
                                                                         f 1 e2 k3) |}]
+;;
+
+let%expect_test
+    " expand call thanks to fake shared comput. and cheap exprs detection. LamCall \
+     version"
+  =
+  let rhs =
+    let sum var2 = sum (UVar var_x) (UVar var2) in
+    let th = Ret (CVar var_k1, Lam (CPVar var_y, var_k2, Ret (CVar var_k2, sum var_y))) in
+    let el = Ret (CVar var_k1, Lam (CPVar var_a, var_k3, Ret (CVar var_k3, sum var_a))) in
+    Lam (CPVar var_x, var_k1, CIf (tr, th, el))
+  in
+  let th =
+    let cont2 = Cont (CPVar var_q, Ret (CVar var_k4, sum (UVar var_t) (UVar var_q))) in
+    let cont1 = Cont (CPVar var_t, Call (UVar var_g, one, cont2)) in
+    Call (UVar var_f, one, Cont (CPVar var_g, Call (UVar var_g, one, cont1)))
+  in
+  let el =
+    let cont2 = Cont (CPVar var_z, Ret (CVar var_k4, sum (UVar var_s) (UVar var_z))) in
+    let cont1 = Cont (CPVar var_s, Call (UVar var_g, one, cont2)) in
+    Call (UVar var_f, one, Cont (CPVar var_g, Call (UVar var_g, one, cont1)))
+  in
+  test_call_ar_anal
+  @@ prog
+  @@ Call (Lam (CPVar var_f, var_k4, CIf (tr, th, el)), rhs, HALT);
+  [%expect
+    {|
+    before:
+    let main = (fun f k4 -> if true then f 1 (fun g -> g 1 (fun t ->
+                                                                    g 1 (fun q ->
+
+                                                                        k4 (t + q))))
+                                                              else f 1 (fun g ->
+                                                                        g 1
+                                                                        (fun s ->
+
+                                                                        g 1
+                                                                        (fun z ->
+
+                                                                        k4 (s + z)))))
+                                                              (fun x k1 ->
+                                                               if true then
+                                                                       k1
+                                                                       (fun y k2 ->
+                                                                        k2 (x + y))
+                                                                       else
+                                                                       k1
+                                                                       (fun a k3 ->
+                                                                        k3 (x + a)))
+                                                               (fun x -> x)
+    after:
+
+                                                              let main =
+                                                                (fun f k4 ->
+                                                                 if true
+                                                                 then (fun g ->
+                                                                       g 1
+                                                                       (fun t ->
+                                                                        g 1
+                                                                        (fun q ->
+
+                                                                        k4 (t + q))))
+                                                                       (fun e3 k4 ->
+                                                                        f 1 e3 k4)
+                                                                       else
+                                                                       (fun g ->
+                                                                        g 1
+                                                                        (fun s ->
+
+                                                                        g 1
+                                                                        (fun z ->
+
+                                                                        k4 (s + z))))
+                                                                        (fun e1 k2 ->
+
+                                                                        f 1 e1 k2))
+                                                                       (fun x e5 k1 ->
+                                                                        if true
+                                                                        then
+                                                                        k1 (x + e5)
+                                                                        else
+                                                                        k1 (x + e5))
+                                                                       (fun x -> x) |}]
 ;;
 
 let%expect_test "expand lam call argument" =
