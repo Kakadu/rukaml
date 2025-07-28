@@ -1092,7 +1092,13 @@ end = struct
     | exception Not_found -> default
   ;;
 
-  let anal (_, _, p) =
+  type bnd_unsafety =
+    (*`SideEffUnsafe < Unsafe *)
+    | Unsafe
+    | SideEffUnsafe
+  [@@deriving show { with_path = false }]
+
+  let anal (_, _, p) bnd_unsafities =
     let ( @@@ ) = IMap.union (fun _ () () -> Some ()) in
     let ar_union = IMap.union (fun _ x y -> Some (min x y)) in
     let domain = IMap.map ignore in
@@ -1127,123 +1133,84 @@ end = struct
       in
       if (not has_loop) || v_arity = 0 then ret_with_fv else ret_with_fv_bad
     in
-    let rec anal_p conts ress inc_ar p safe_ars int =
+    let take_safety_into_acc unsafety v_id b_co_calls v_arity =
+      match unsafety with
+      | Some SideEffUnsafe -> 0
+      | Some Unsafe when has_loop v_id b_co_calls -> 0
+      | _ -> v_arity
+    in
+    let rec anal_p conts ress inc_ar p int =
       let open IMap in
-      let calc_safe_ar_t =
-        let rec helper acc = function
-          | UVar { id; _ } -> acc + find_with_default id safe_ars 0
-          | Lam (_, _, b) ->
-            let acc2 = acc + 1 in
-            let rec lam_b_helper = function
-              | Ret ((HALT | CVar _), t) -> helper acc2 t
-              | CIf (_, th, el) -> min (lam_b_helper th) @@ lam_b_helper el
-              | _ -> acc2
-            in
-            lam_b_helper b
-          | _ -> acc
-        in
-        helper 0
-      in
-      let upd_safe_ars_if_ge_2 ?(safe_ars = safe_ars) id t =
-        match calc_safe_ar_t t with
-        | n when n >= 2 -> add id n safe_ars
-        | _ -> safe_ars
-      in
-      let call_bnd_safe_ars_hndl ?(ignore_safe_ars = false) id f =
-        match calc_safe_ar_t f with
-        | n when n >= 3 && not ignore_safe_ars -> `Safe, add id n safe_ars
-        | n when n >= 2 -> `Safe, safe_ars
-        | _ -> `UnSafe, safe_ars
-      in
-      let lam_call_safe_ars_upd ?(safe_ars = safe_ars) t = function
-        | CPVar { id; _ } -> upd_safe_ars_if_ge_2 id t ~safe_ars
-        | CPTuple _ -> safe_ars
-      in
-      let anal_tt0_ign a aa ress2 =
-        anal_tt0 conts safe_ars int a aa ress2 |> ignore_fst
-      in
-      let anal_triv0_ign t ress = anal_triv conts safe_ars int 0 t ress |> ignore_fst in
+      let anal_tt0_ign a aa ress2 = anal_tt0 conts int a aa ress2 |> ignore_fst in
+      let anal_triv0_ign t ress = anal_triv conts int 0 t ress |> ignore_fst in
       let lam_call_anal0_ign lam_b pat a ress =
-        ignore_fst
-        @@ lam_call_anal lam_b conts int 0 ress pat a
-        @@ lam_call_safe_ars_upd a pat
+        ignore_fst @@ lam_call_anal lam_b conts int 0 ress pat a
       in
       let clear_lam_call_anal lam_b pat a =
-        lam_call_anal lam_b conts int inc_ar ress pat a @@ lam_call_safe_ars_upd a pat
+        lam_call_anal lam_b conts int inc_ar ress pat a
       in
-      let clear_triv_ret_anal t = anal_triv conts safe_ars int inc_ar t ress in
+      let clear_triv_ret_anal t = anal_triv conts int inc_ar t ress in
       match p with
-      | CIf (c, th, el) -> anal_cif c th el conts safe_ars int ress inc_ar
-      | Call ((Lam (pat, c, lam_b) as f), a, Cont (CPVar { id; _ }, body)) ->
-        let had_upd, (is_safe, safe_ars2) = false, call_bnd_safe_ars_hndl id f in
-        let safe_ars3 = lam_call_safe_ars_upd a pat ~safe_ars:safe_ars2 in
-        fin_lam_call_bnd_anal ~had_upd c lam_b conts safe_ars3 int pat a is_safe
-        @@ anal_bnd1 id conts body int ress inc_ar safe_ars2
+      | CIf (c, th, el) -> anal_cif c th el conts int ress inc_ar
+      | Call (Lam (pat, c, lam_b), a, Cont (CPVar { id; _ }, body)) ->
+        let had_upd, unsafety = false, find_opt id bnd_unsafities in
+        fin_lam_call_bnd_anal ~had_upd c lam_b conts int pat a unsafety
+        @@ anal_bnd1 id conts body int ress inc_ar
       | Call (Lam (pat, _, lam_b), a, Cont (CPTuple _, body)) ->
         let rhs_anal = lam_call_anal0_ign lam_b pat a in
-        fin_unint_bnd_anal rhs_anal @@ anal_p conts ress inc_ar body safe_ars int
-      | Call ((Lam (pat, c, lam_b) as f), a, CVar { id; _ }) ->
+        fin_unint_bnd_anal rhs_anal @@ anal_p conts ress inc_ar body int
+      | Call (Lam (pat, c, lam_b), a, CVar { id; _ }) ->
         (match find id conts with
          | `Int fin_anal ->
            let had_upd = true in
-           let is_safe, _ = call_bnd_safe_ars_hndl ~ignore_safe_ars:true id f in
-           let safe_ars2 = lam_call_safe_ars_upd a pat in
+           let unsafety = find_opt id bnd_unsafities in
            (ress, fin_anal)
-           |> fin_lam_call_bnd_anal ~had_upd c lam_b conts safe_ars2 int pat a is_safe
+           |> fin_lam_call_bnd_anal ~had_upd c lam_b conts int pat a unsafety
          | `UnInt (b_co_calls, b_ars) ->
            fin_unint_bnd_anal (lam_call_anal0_ign lam_b pat a) (b_co_calls, b_ars, ress)
          | exception Not_found -> clear_lam_call_anal lam_b pat a)
       | Call (Lam (pat, _, lam_b), a, HALT) -> clear_lam_call_anal lam_b pat a
       | Call (f, a, Cont (CPVar { id; _ }, body)) ->
-        let is_safe, safe_ars2 = call_bnd_safe_ars_hndl id f in
-        fin_bnd_call_anal is_safe conts safe_ars int f a
-        @@ anal_bnd1 id conts body int ress inc_ar safe_ars2
+        let unsafety = find_opt id bnd_unsafities in
+        fin_bnd_call_anal unsafety conts int f a
+        @@ anal_bnd1 id conts body int ress inc_ar
       | Call (f, a, CVar { id; _ }) ->
         (match find id conts with
          | `Int fin_anal ->
-           let is_safe, _ = call_bnd_safe_ars_hndl ~ignore_safe_ars:true id f in
-           fin_bnd_call_anal is_safe conts safe_ars int f a (ress, fin_anal)
+           let unsafety = find_opt id bnd_unsafities in
+           fin_bnd_call_anal unsafety conts int f a (ress, fin_anal)
          | `UnInt (b_co_calls, b_ars) ->
            (b_co_calls, b_ars, ress) |> fin_unint_bnd_anal @@ anal_tt0_ign f [ a ]
-         | exception Not_found ->
-           anal_tt0 ~fst_inc_ar:(inc_ar + 1) conts safe_ars int f [ a ] ress)
-      | Call (f, a, HALT) ->
-        anal_tt0 ~fst_inc_ar:(inc_ar + 1) conts safe_ars int f [ a ] ress
+         | exception Not_found -> anal_tt0 ~fst_inc_ar:(inc_ar + 1) conts int f [ a ] ress)
+      | Call (f, a, HALT) -> anal_tt0 ~fst_inc_ar:(inc_ar + 1) conts int f [ a ] ress
       | Ret (CVar { id; _ }, t) ->
         (match find id conts with
          | `Int fin_anal ->
-           fin_int_triv_bnd_anal ~had_upd:true conts safe_ars int t (ress, fin_anal)
+           fin_int_triv_bnd_anal ~had_upd:true conts int t (ress, fin_anal)
          | `UnInt (b_co_calls, b_ars) ->
            fin_unint_bnd_anal (anal_triv0_ign t) (b_co_calls, b_ars, ress)
          | exception Not_found -> clear_triv_ret_anal t)
       | Ret (Cont (CPVar { id; _ }, body), t)
       | Let (NonRecursive, CPVar { id; _ }, t, body)
         when is_int_triv_rhs int t ->
-        fin_int_triv_bnd_anal conts safe_ars int t
-        @@ anal_bnd1 id conts body int ress inc_ar
-        @@ upd_safe_ars_if_ge_2 id t
+        fin_int_triv_bnd_anal conts int t @@ anal_bnd1 id conts body int ress inc_ar
       | Ret (Cont ((CPTuple _ | CPVar _), body), t)
       | Let (NonRecursive, CPVar _, t, body)
       | Let (_, CPTuple _, t, body) ->
-        fin_unint_bnd_anal (anal_triv0_ign t)
-        @@ anal_p conts ress inc_ar body safe_ars int
+        fin_unint_bnd_anal (anal_triv0_ign t) @@ anal_p conts ress inc_ar body int
       | Primop (_, _, t, tt, body) ->
-        fin_unint_bnd_anal (anal_tt0_ign t tt)
-        @@ anal_p conts ress inc_ar body safe_ars int
+        fin_unint_bnd_anal (anal_tt0_ign t tt) @@ anal_p conts ress inc_ar body int
       | Call (f, a, Cont (CPTuple _, body)) ->
-        fin_unint_bnd_anal (anal_tt0_ign f [ a ])
-        @@ anal_p conts ress inc_ar body safe_ars int
+        fin_unint_bnd_anal (anal_tt0_ign f [ a ]) @@ anal_p conts ress inc_ar body int
       | Letc ({ id = jv_id; _ }, Cont (CPVar { id; _ }, body), p) ->
         let jv_specif = Some jv_id in
-        let ress2, fin_anal =
-          anal_bnd1 ~jv_specif id conts body int ress inc_ar safe_ars
-        in
+        let ress2, fin_anal = anal_bnd1 ~jv_specif id conts body int ress inc_ar in
         let conts2 = add jv_id (`Int fin_anal) conts in
-        anal_p conts2 ress2 0 p safe_ars int
+        anal_p conts2 ress2 0 p int
       | Letc ({ id = jp_id; _ }, Cont (CPTuple _, body), p) ->
-        let b_co_calls, b_ars, ress2 = anal_p conts ress inc_ar body safe_ars int in
+        let b_co_calls, b_ars, ress2 = anal_p conts ress inc_ar body int in
         let conts2 = add jp_id (`UnInt (b_co_calls, b_ars)) conts in
-        anal_p conts2 ress2 0 p safe_ars int
+        anal_p conts2 ress2 0 p int
       | Letc ({ id = jp_id1; _ }, CVar { id = jp_id2; _ }, p) ->
         let upd_ress () =
           if ISet.mem jp_id2 ress.dead_vars
@@ -1259,26 +1226,16 @@ end = struct
           | `UnInt _ as c -> add jp_id1 c conts, ress
           | exception Not_found -> conts, ress
         in
-        anal_p conts2 ress2 inc_ar p safe_ars int
+        anal_p conts2 ress2 inc_ar p int
       | Ret (HALT, t) -> clear_triv_ret_anal t
-      | Letc (_, HALT, p) -> anal_p conts ress inc_ar p safe_ars int
+      | Letc (_, HALT, p) -> anal_p conts ress inc_ar p int
       | Let (Recursive, CPVar { id; _ }, t, body) ->
-        let safe_ars2 = upd_safe_ars_if_ge_2 id t in
         let int2 = ISet.add id int in
-        anal_rec_bnd id conts safe_ars2 int2 t
-        @@ anal_p conts ress inc_ar body safe_ars2 int2
-    and anal_bnd1 ?(jv_specif = None) id conts body int ress inc_ar safe_ars =
-      anal_bnd_cont ~jv_specif id
-      @@ anal_p conts ress inc_ar body safe_ars
-      @@ ISet.add id int
+        anal_rec_bnd id conts int2 t @@ anal_p conts ress inc_ar body int2
+    and anal_bnd1 ?(jv_specif = None) id conts body int ress inc_ar =
+      anal_bnd_cont ~jv_specif id @@ anal_p conts ress inc_ar body @@ ISet.add id int
     and anal_bnd_cont ?(jv_specif = None) v_id (b_co_calls, b_ars, ress) =
-      match IMap.find v_id b_ars with
-      | exception Not_found ->
-        (* dead var case *)
-        let dead_id = Option.value jv_specif ~default:v_id in
-        ( { ress with dead_vars = ISet.add dead_id ress.dead_vars }
-        , fun ress2 _ -> b_co_calls, b_ars, ress2 )
-      | v_arity ->
+      let default v_arity =
         let k_co_calls, k_ars = leave_vars_scope b_co_calls b_ars v_id in
         let neigh = adj_nodes v_id b_co_calls |> IMap.remove v_id in
         let ress2 =
@@ -1296,15 +1253,22 @@ end = struct
               union k_co_calls @@ union rhs_co_calls @@ cartesian rhs_fv neigh
             in
             p_co_calls, p_ars, ress3 )
-    and anal_rec_bnd v_id conts safe_ars int t (b_co_calls, b_ars, ress) =
+      in
       match IMap.find v_id b_ars with
       | exception Not_found ->
         (* dead var case *)
-        b_co_calls, b_ars, { ress with dead_vars = ISet.add v_id ress.dead_vars }
-      | v_arity ->
+        (match IMap.find v_id bnd_unsafities with
+         | SideEffUnsafe -> default 0
+         | (exception Not_found) | Unsafe ->
+           let dead_id = Option.value jv_specif ~default:v_id in
+           ( { ress with dead_vars = ISet.add dead_id ress.dead_vars }
+           , fun ress2 _ -> b_co_calls, b_ars, ress2 ))
+      | v_arity -> default v_arity
+    and anal_rec_bnd v_id conts int t (b_co_calls, b_ars, ress) =
+      let default v_arity =
         let rec fixpointing v_ar has_loop_v =
           let (rhs_co_calls, rhs_ars, ress2), rhs_fv =
-            anal_triv conts safe_ars int v_ar t ress
+            anal_triv conts int v_ar t ress
             |> ret_with_fv_cond ~loop_info:(Some has_loop_v) v_id v_ar b_co_calls
           in
           let p_co_calls =
@@ -1325,19 +1289,25 @@ end = struct
           else p_co_calls, ar_union b_ars rhs_ars, add_if_incr v_ar t ress2
         in
         fixpointing v_arity @@ has_loop v_id b_co_calls
-    and fin_bnd_call_anal is_safe conts safe_ars int f a (ress, fin_anal) =
+      in
+      match IMap.find v_id b_ars with
+      | exception Not_found ->
+        (* dead var case *)
+        (match IMap.find v_id bnd_unsafities with
+         | SideEffUnsafe -> default 0
+         | (exception Not_found) | Unsafe ->
+           b_co_calls, b_ars, { ress with dead_vars = ISet.add v_id ress.dead_vars })
+      | v_arity -> default v_arity
+    and fin_bnd_call_anal unsafety conts int f a (ress, fin_anal) =
       fin_anal ress
       @@ fun b_co_calls v_id v_arity ->
-      let fst_inc_ar =
-        1 + if has_loop v_id b_co_calls && is_safe = `UnSafe then 0 else v_arity
-      in
-      anal_tt0 ~fst_inc_ar conts safe_ars int f [ a ] ress |> ret_with_fv
-    and fin_int_triv_bnd_anal ?(had_upd = false) conts safe_ars int t (ress, fin_anal) =
+      let fst_inc_ar = ( + ) 1 @@ take_safety_into_acc unsafety v_id b_co_calls v_arity in
+      anal_tt0 ~fst_inc_ar conts int f [ a ] ress |> ret_with_fv
+    and fin_int_triv_bnd_anal ?(had_upd = false) conts int t (ress, fin_anal) =
       fin_anal ress
       @@ fun b_co_calls v_id v_arity ->
       let ress2 = if had_upd then ress else add_if_incr v_arity t ress in
-      anal_triv conts safe_ars int v_arity t ress2
-      |> ret_with_fv_cond v_id v_arity b_co_calls
+      anal_triv conts int v_arity t ress2 |> ret_with_fv_cond v_id v_arity b_co_calls
     and fin_unint_bnd_anal anal_rhs (b_co_calls, b_ars, ress) =
       let b_fv = domain b_ars in
       let rhs_ars, ress2 = anal_rhs ress in
@@ -1347,29 +1317,28 @@ end = struct
         union b_co_calls @@ union (cartesian_square rhs_fv) @@ cartesian rhs_fv b_fv
       in
       p_co_calls, p_ars, ress2
-    and lam_call_anal lam_b conts int inc_ar ress pat t safe_ars =
+    and lam_call_anal lam_b conts int inc_ar ress pat t =
       match pat, t with
       | CPVar { id; _ }, t when is_int_triv_rhs int t ->
-        fin_int_triv_bnd_anal conts safe_ars int t
+        fin_int_triv_bnd_anal conts int t
         @@ anal_bnd_cont id
-        @@ anal_p conts ress inc_ar lam_b safe_ars
+        @@ anal_p conts ress inc_ar lam_b
         @@ ISet.add id int
       | _, t ->
-        fin_unint_bnd_anal (fun ress' ->
-          anal_triv conts safe_ars int inc_ar t ress' |> ignore_fst)
-        @@ anal_p conts ress inc_ar lam_b safe_ars int
-    and fin_lam_call_bnd_anal ~had_upd c lam_b conts safe_ars int pat t is_safe rf =
+        fin_unint_bnd_anal (fun ress' -> anal_triv conts int inc_ar t ress' |> ignore_fst)
+        @@ anal_p conts ress inc_ar lam_b int
+    and fin_lam_call_bnd_anal ~had_upd c lam_b conts int pat t unsafety rf =
       let ress, fin_anal = rf in
       fin_anal ress
       @@ fun b_co_calls v_id v_arity ->
-      let inc_ar = if has_loop v_id b_co_calls && is_safe = `UnSafe then 0 else v_arity in
+      let inc_ar = take_safety_into_acc unsafety v_id b_co_calls v_arity in
       let ress2 = if had_upd then ress else add_if_pos c.id inc_ar ress in
-      lam_call_anal lam_b conts int inc_ar ress2 pat t safe_ars
+      lam_call_anal lam_b conts int inc_ar ress2 pat t
       |> ret_with_fv_cond v_id v_arity b_co_calls
-    and anal_cif c th el conts safe_ars int ress inc_ar =
-      let c_co_calls, c_ars, ress2 = anal_triv conts safe_ars int 0 c ress in
-      let th_co_calls, th_ars, ress3 = anal_p conts ress2 inc_ar th safe_ars int in
-      let el_co_calls, el_ars, ress4 = anal_p conts ress3 inc_ar el safe_ars int in
+    and anal_cif c th el conts int ress inc_ar =
+      let c_co_calls, c_ars, ress2 = anal_triv conts int 0 c ress in
+      let th_co_calls, th_ars, ress3 = anal_p conts ress2 inc_ar th int in
+      let el_co_calls, el_ars, ress4 = anal_p conts ress3 inc_ar el int in
       let p_ars = ar_union c_ars @@ ar_union th_ars el_ars in
       let p_co_calls =
         union c_co_calls
@@ -1380,20 +1349,20 @@ end = struct
         @@@ domain el_ars
       in
       p_co_calls, p_ars, ress4
-    and anal_triv conts safe_ars int inc_ar t ress =
+    and anal_triv conts int inc_ar t ress =
       match t, inc_ar with
       | UVar { id; _ }, _ when ISet.mem id int -> empty, IMap.singleton id inc_ar, ress
       | (TUnit | TConst _ | UVar _), _ -> empty, IMap.empty, ress
-      | TTuple (t1, t2, tt), _ -> anal_tt0 conts safe_ars int t1 (t2 :: tt) ress
-      | TSafeBinop (_, t1, t2), _ -> anal_tt0 conts safe_ars int t1 [ t2 ] ress
+      | TTuple (t1, t2, tt), _ -> anal_tt0 conts int t1 (t2 :: tt) ress
+      | TSafeBinop (_, t1, t2), _ -> anal_tt0 conts int t1 [ t2 ] ress
       | Lam (_, _, lam_b), 0 ->
-        let _, b_ars, ress2 = anal_p conts ress 0 lam_b safe_ars int in
+        let _, b_ars, ress2 = anal_p conts ress 0 lam_b int in
         cartesian_square @@ domain b_ars, b_ars, ress2
       | Lam (_, _, lam_b), _ ->
         let inc_ar2 = Int.max 0 (inc_ar - 1) in
-        anal_p conts ress inc_ar2 lam_b safe_ars int
-    and anal_tt0 ?(fst_inc_ar = 0) conts safe_ars int t1 tt ress =
-      let anal_triv_sh = anal_triv conts safe_ars int 0 in
+        anal_p conts ress inc_ar2 lam_b int
+    and anal_tt0 ?(fst_inc_ar = 0) conts int t1 tt ress =
+      let anal_triv_sh = anal_triv conts int 0 in
       let f ((cc, ars, ress), (fv1, fv_acc)) t =
         let cc_t, ars_t, ress2 = anal_triv_sh t ress in
         let fv_acc2 = fv1 @@@ fv_acc in
@@ -1402,13 +1371,13 @@ end = struct
         (cc2, ar_union ars ars_t, ress2), (fv_t, fv_acc)
       in
       let init =
-        let ((_, ars_t, _) as frst) = anal_triv conts safe_ars int fst_inc_ar t1 ress in
+        let ((_, ars_t, _) as frst) = anal_triv conts int fst_inc_ar t1 ress in
         frst, (IMap.empty, domain ars_t)
       in
       List.fold_left f init tt |> fst
     in
     let open IMap in
-    anal_p empty { dead_vars = ISet.empty; call_ars = empty } 0 p empty ISet.empty
+    anal_p empty { dead_vars = ISet.empty; call_ars = empty } 0 p ISet.empty
     |> fun (_, _, ress) -> ress.dead_vars, ress.call_ars
   ;;
 
@@ -1563,6 +1532,240 @@ end = struct
     in
     let k _ _ counts barriers fin_call_ars = dead_vars, counts, barriers, fin_call_ars in
     anal_p p 0 k empty ISet.empty empty
+  ;;
+
+  module IIOPair = struct
+    let pair a b = a, b
+
+    let ( @@? ) f = function
+      | None, b2 -> b2
+      | (Some _ as b1), None -> b1
+      | Some b1, Some b2 -> Option.some @@ f b1 b2
+    ;;
+
+    let map2 f (a1, b1) (a2, b2) = f a1 a2, f @@? (b1, b2)
+
+    let ( +.+ ) (a, b) c =
+      let b' =
+        match b with
+        | None -> None
+        | Some b -> Some (b + c)
+      in
+      a + c, b'
+    ;;
+
+    let min = map2 min
+  end
+
+  (* s_ars elemet is a pair: max safe arity in terms of comp sharing and min unsafe arity in terms of side eff (None means no side effects) *)
+  type safe_ars_elem = int * int option
+
+  type min_prev_res =
+    { rhs_res : safe_ars_elem
+    ; b_res : safe_ars_elem
+    }
+
+  type conts_elem =
+    | CPTupleContJV of safe_ars_elem
+    | CPVarContJV of int * p * min_prev_res option
+
+  let calc_safe_ars (_, _, p) =
+    let open Option in
+    let open Monads.Store in
+    let open IMap in
+    let open Base.Fn in
+    let drop_conts ((fst, _), snd) = fst, snd in
+    let u_return x () = return x in
+    let upd_bnd_unsafities f =
+      let* bnd_unsafeties, conts = get in
+      let bnd_unsafeties', res = f bnd_unsafeties in
+      put (bnd_unsafeties', conts) >>= u_return res
+    in
+    let add_cont id cont =
+      let* bnd_unsafeties, conts = get in
+      put (bnd_unsafeties, add id cont conts)
+    in
+    let inc n = n + 1 in
+    let upd pat m el =
+      match pat with
+      | CPTuple _ -> m
+      | CPVar { id; _ } -> add id el m
+    in
+    let sub ?(substr = 1) x_opt =
+      match x_opt with
+      | None -> None
+      | Some x -> Option.some @@ Int.max 0 (x - substr)
+    in
+    let bnd_return n (_, se_s_ar) = return (n, se_s_ar) in
+    let open IIOPair in
+    let open IMap in
+    let emp_run2 m bnd_unsafeties = run m (bnd_unsafeties, empty) in
+    let rec check_p s_ars p n =
+      match p with
+      | CIf (_, th, el) ->
+        let* th_res = check_p s_ars th n in
+        let* el_res = check_p s_ars el n in
+        min th_res el_res |> return
+      | Let (Recursive, (CPVar { id; _ } as pat), rhs, b) ->
+        run_check_t (add id (0, None) s_ars) n rhs
+        >>= (function
+         | (_, None) as rhs_res -> check_p (add id rhs_res s_ars) b n
+         | rhs_res ->
+           let* s_ars' = t_bnd (add id rhs_res s_ars) pat rhs in
+           check_p s_ars' b n)
+        >>= bnd_return n
+      | Let (_, pat, rhs, b) | Ret (Cont (pat, b), rhs) ->
+        let* s_ars' = t_bnd s_ars pat rhs in
+        check_p s_ars' b n >>= bnd_return n
+      | Primop (_, _, _, _, b) ->
+        let* _ = check_p s_ars b n in
+        return (n, Some n)
+      | Letc (_, HALT, b) -> check_p s_ars b n
+      | Letc ({ id = id'; _ }, CVar { id; _ }, b) ->
+        let* bnd_unsafeties, conts = get in
+        let conts' =
+          match find id conts with
+          | cont -> add id' cont conts
+          | exception Not_found -> conts
+        in
+        put (bnd_unsafeties, conts') >>= fun () -> check_p s_ars b n
+      | Letc ({ id = jv_id; _ }, Cont (CPVar { id; _ }, cont_b), b) ->
+        add_cont jv_id (CPVarContJV (id, cont_b, none)) >>= fun () -> check_p s_ars b n
+      | Letc ({ id; _ }, Cont (CPTuple _, cont_b), b) ->
+        let* cont_b_res = check_p s_ars cont_b 0 in
+        add_cont id (CPTupleContJV cont_b_res) >>= fun () -> check_p s_ars b n
+      | Ret (HALT, t) -> run_check_t s_ars n t
+      | Ret (CVar { id = cvar_id; _ }, t) ->
+        let* rhs_res = run_check_t s_ars n t in
+        let* _, conts = get in
+        (match find cvar_id conts with
+         | CPTupleContJV res -> res +.+ n |> bnd_return n
+         | exception Not_found -> return rhs_res
+         | CPVarContJV (id, b, prev_min) ->
+           let fully_new_min =
+             let* b_res = check_p (add id rhs_res s_ars) b n in
+             add_cont cvar_id (CPVarContJV (id, b, Some { rhs_res; b_res }))
+             >>= fun () -> bnd_return n b_res
+           in
+           (match prev_min with
+            | None -> fully_new_min
+            | Some prev_min ->
+              let new_min = min rhs_res prev_min.rhs_res in
+              if new_min = rhs_res
+              then fully_new_min
+              else if new_min = prev_min.rhs_res
+              then bnd_return n prev_min.b_res
+              else
+                let* min_b_res = check_p (add id new_min s_ars) b n in
+                let* () =
+                  add_cont
+                    cvar_id
+                    (CPVarContJV (id, b, Some { rhs_res = new_min; b_res = min_b_res }))
+                in
+                check_p (add id rhs_res s_ars) b n >>= bnd_return n))
+      | Call (f, a, c) ->
+        let f_a_hndl =
+          let* s_ars' =
+            match f with
+            | Lam (pat, _, _) -> t_bnd s_ars pat a
+            | _ -> run_check_t s_ars n a >>= fun _ -> return s_ars
+          in
+          let* f_s_ar, f_se_s_ar = run_check_t s_ars' 0 f in
+          return (f_s_ar - 1, sub f_se_s_ar)
+        in
+        let rid_off_neg_s_ar (s_ar, se_s_ar) = return (Int.max 0 s_ar, se_s_ar) in
+        let last_call =
+          let* rhs_res = f_a_hndl >>= rid_off_neg_s_ar in
+          rhs_res +.+ n |> bnd_return n
+        in
+        let has_side_eff res = snd res = Some 0 in
+        let fin_tuple_bnd b_res =
+          f_a_hndl
+          >>= compose
+                (function
+                  | true -> return (n, some n)
+                  | false -> return (n, b_res +.+ n |> snd))
+                has_side_eff
+        in
+        let b_hndl id b rhs_res =
+          let* rhs_res' = rid_off_neg_s_ar rhs_res in
+          let* b_res = check_p (add id rhs_res' s_ars) b n in
+          return (rhs_res, b_res)
+        in
+        let fin_var_bnd ?(not_upd = false) id (rhs_res, b_res) =
+          let upd =
+            if has_side_eff rhs_res && not not_upd
+            then
+              upd_bnd_unsafities
+              @@ fun bnd_unsafeties ->
+              ( add
+                  id
+                  (match b_res with
+                   | _, Some se_s_ar when se_s_ar <= n -> SideEffUnsafe
+                   | _ -> Unsafe)
+                  bnd_unsafeties
+              , () )
+            else if fst rhs_res <= 0 && not not_upd
+            then
+              upd_bnd_unsafities (fun bnd_unsafeties -> add id Unsafe bnd_unsafeties, ())
+            else return ()
+          in
+          let calc_res () =
+            return @@ if has_side_eff rhs_res then n, some n else n, snd b_res
+          in
+          upd >>= calc_res
+        in
+        (match c with
+         | HALT -> last_call
+         | Cont (CPVar { id; _ }, b) -> f_a_hndl >>= b_hndl id b >>= fin_var_bnd id
+         | Cont (CPTuple _, b) -> check_p s_ars b 0 >>= fin_tuple_bnd
+         | CVar { id = cvar_id; _ } ->
+           let* _, conts = get in
+           (match find cvar_id conts with
+            | CPTupleContJV res -> fin_tuple_bnd res
+            | exception Not_found -> last_call
+            | CPVarContJV (id, b, prev_min) ->
+              let* rhs_res = f_a_hndl in
+              let fully_new_min =
+                let* ((rhs_res, b_res) as ress) = b_hndl id b rhs_res in
+                add_cont cvar_id (CPVarContJV (id, b, Some { rhs_res; b_res }))
+                >>= fun () -> fin_var_bnd id ress
+              in
+              (match prev_min with
+               | None -> fully_new_min
+               | Some prev_min ->
+                 let new_min = min rhs_res prev_min.rhs_res in
+                 if new_min = rhs_res
+                 then fully_new_min
+                 else if new_min = prev_min.rhs_res
+                 then fin_var_bnd ~not_upd:true id (rhs_res, prev_min.b_res)
+                 else
+                   let* new_min' = rid_off_neg_s_ar new_min in
+                   let* min_b_res = check_p (add id new_min' s_ars) b n in
+                   let* () =
+                     add_cont
+                       cvar_id
+                       (CPVarContJV (id, b, Some { rhs_res = new_min; b_res = min_b_res }))
+                   in
+                   b_hndl id b rhs_res >>= fin_var_bnd ~not_upd:true id)))
+    and check_t s_ars n = function
+      | UVar { id; _ } -> return (find_with_default id s_ars (0, Some 0) +.+ n)
+      | Lam (_, _, b) ->
+        let* bnd_unsafeties = get in
+        let bnd_unsafeties', b_res =
+          bnd_unsafeties |> compose drop_conts @@ emp_run2 @@ check_p s_ars b @@ inc n
+        in
+        let* () = put bnd_unsafeties' in
+        return b_res
+      | _ -> return (n, none)
+    and run_check_t s_ars n t = upd_bnd_unsafities @@ run @@ check_t s_ars n t
+    and t_bnd s_ars pat rhs =
+      upd_bnd_unsafities
+      @@ run
+      @@ let* rhs_res = check_t s_ars 0 rhs in
+         upd pat s_ars rhs_res |> return
+    in
+    fst @@ fst @@ emp_run2 (check_p empty p 0) empty
   ;;
 
   type light_t =
@@ -1943,10 +2146,17 @@ end = struct
     rec_flag, translate_pat pat, simpl_p (Present []) p empty
   ;;
 
-  let call_arity_anal cps_prog = anal cps_prog |> down_anal cps_prog |> simpl cps_prog
+  let call_arity_anal cps_prog =
+    calc_safe_ars cps_prog |> anal cps_prog |> down_anal cps_prog |> simpl cps_prog
+  ;;
 
   let call_arity_anal_debug cps_prog =
-    let ((_, upw_call_ars) as upw_res) = anal cps_prog in
+    let bnd_unsafeties = calc_safe_ars cps_prog in
+    Printf.printf "bnd_unsafeties:\n";
+    IMap.iter
+      (fun id uns -> Printf.printf "%d: %s\n" id @@ show_bnd_unsafety uns)
+      bnd_unsafeties;
+    let ((_, upw_call_ars) as upw_res) = anal cps_prog bnd_unsafeties in
     Printf.printf "call_ars(after upward anal):\n";
     IMap.iter (Printf.printf "%d: %d\n") upw_call_ars;
     let ((dead_vars, counts, barriers, fin_call_ars) as inter_res) =

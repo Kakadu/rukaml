@@ -6,6 +6,7 @@
  (preprocess
   (pps
    ; ppx_blob
+   ppx_deriving.show
    ppx_expect
    bisect_ppx
    ;
