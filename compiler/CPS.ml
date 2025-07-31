@@ -1524,8 +1524,11 @@ end = struct
       | Lam (pat, i, p) -> lam_hndl pat i p (fun _ _ -> k) counts
       | TSafeBinop (_, t1, t2) -> anal_t t1 (anal_t t2 k) counts
       | UVar { id; _ } ->
-        let n = find id counts in
-        let counts' = add id (n + 1) counts in
+        let counts' =
+          match find id counts with
+          | n -> add id (n + 1) counts
+          | exception Not_found -> counts
+        in
         k counts'
       | TTuple (t1, t2, tt) -> foldd_k anal_t (t1 :: t2 :: tt) k counts
       | TUnit | TConst _ -> k counts
