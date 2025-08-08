@@ -62,6 +62,9 @@ struct gc_data
 
 static struct gc_data GC = {.ebp = 0, .allocated_words = 0, .stats = {.gs_allocated_words = 0}};
 
+uint64_t allocated_closures = 0;
+
+
 void rukaml_initialize(uint64_t ebp)
 {
   setbuf(stdout, NULL);
@@ -201,6 +204,12 @@ void rukaml_gc_print_stats(void)
   fflush(stdout);
 }
 
+void rukaml_print_alloc_closure_count (void)
+{
+  printf("Total closure allocations: %ld\n", allocated_closures);
+  fflush(stdout);
+}
+
 void rukaml_print_int(int a0, int a1, int a2, int a3, int a4, int a5, int x)
 {
   // putchar(0x30 + x);
@@ -310,6 +319,7 @@ void *rukaml_alloc_closure(void *func, int32_t argsc)
   //  { .code = func, .argsc = argsc }
   ans->code = func;
   // ans->code = &myadd;
+  allocated_closures += 1;
 #ifdef DEBUG
   printf("store code ptr = %" PRIx64 "\n", (uint64_t)(ans->code));
 #endif

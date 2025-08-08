@@ -475,6 +475,7 @@ let generate_body is_toplevel ppf body =
       else failwith "Arity mismatch: over application"
     | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), []) ->
       assert (Option.is_none (is_toplevel f));
+      let arg = match arg with  | AVar id when id.Frontend.Ident.hum_name = "closure_count" -> ANF.AConst (PConst_int 0) | _ -> arg in
       let arg1 = Ident.of_string "arg1" in
       let temp_padding = Ident.of_string "temp_padding" in
       Addr_of_local.extend temp_padding;
@@ -504,6 +505,10 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov rdi, 0";
       printfn ppf "  mov rsi, 0";
       printfn ppf "  call rukaml_gc_print_stats"
+    | CApp (AVar id, AUnit, []) when id.Frontend.Ident.hum_name = "closure_count" ->
+      printfn ppf "  mov rdi, 0";
+      printfn ppf "  mov rsi, 0";
+      printfn ppf "  call rukaml_print_alloc_closure_count"
     | CAtom atom -> helper_a dest atom
     | CApp _ as anf ->
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_c anf;
@@ -641,6 +646,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
       ; "rukaml_initialize"
       ; "rukaml_gc_compact"
       ; "rukaml_gc_print_stats"
+      ; "rukaml_print_alloc_closure_count"
       ];
     printfn ppf "";
     if use_custom_main
