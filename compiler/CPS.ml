@@ -340,18 +340,21 @@ let start_glob_envs =
     SMap.add ident.hum_name ident.id
   in
   let printi = Frontend.Ident.of_string "print" in
-  ( IMap.add printi.id (AVar printi) IMap.empty
-  , SMap.empty
-    |> extend "<"
-    |> extend ">"
-    |> extend "<="
-    |> extend ">="
-    |> extend "="
-    |> extend "+"
-    |> extend "-"
-    |> extend "*"
-    |> extend "/"
-    |> SMap.add printi.hum_name printi.id )
+  let closure_count = Frontend.Ident.of_string "closure_count" in
+  ( IMap.(add printi.id (AVar printi) (add closure_count.id (AVar closure_count) empty))
+  , SMap.(
+      empty
+      |> extend "<"
+      |> extend ">"
+      |> extend "<="
+      |> extend ">="
+      |> extend "="
+      |> extend "+"
+      |> extend "-"
+      |> extend "*"
+      |> extend "/"
+      |> add printi.hum_name printi.id
+      |> add closure_count.hum_name closure_count.id) )
 ;;
 
 let upd id k counts no_refs ref_once =
@@ -633,6 +636,7 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
   and call f a c counts =
     match f with
     | AVar v when String.equal v.hum_name "print" -> primop v a [] c counts
+    | AVar v when String.equal v.hum_name "closure_count" -> primop v a [] c counts
     | AVar _ | AConst _ | AUnit | ASafeBinop _ | ATuple _ ->
       let* func, arg, counts2 = blessa2 f a counts in
       let+ cont, counts3 = blessc c counts2 in

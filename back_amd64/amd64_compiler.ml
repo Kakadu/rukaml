@@ -24,8 +24,18 @@ let frontend cfg =
       let open Compile_lib in
       let open CPS in
       let+ cps_vb = cps_conv_program stru |> promote_error in
-      if not cfg.call_arity then [ cps1_vb_to_parsetree_vb cps_vb ]
-      else [ call_arity_anal cps_vb |> cpsm_vb_to_parsetree_vb ]
+      match cfg.call_arity, cfg.dump_cps with
+      | false, false -> [ cps1_vb_to_parsetree_vb cps_vb ]
+      | true, false -> [ call_arity_anal cps_vb |> cpsm_vb_to_parsetree_vb ]
+      | false, true -> ( Format.printf "After CPS optimisations.\n%!";
+      Format.printf "%a\n%!" pp_cps1_vb cps_vb;
+       [ cps1_vb_to_parsetree_vb cps_vb ]
+      )
+      | true, true ->  (Format.printf "After CPS optimisations.\n%!";
+      let cps_vb = call_arity_anal cps_vb in
+      Format.printf "%a\n%!" pp_cpsm_vb cps_vb;
+       [ cpsm_vb_to_parsetree_vb cps_vb ]
+      )
   in
   let stru =
     let init = CConv.standart_globals, [] in
@@ -70,6 +80,7 @@ let cfg =
   ; dump_anf = false
   ; stop_after = SA_dont
   ; call_arity = false
+  ; dump_cps = false
   }
 ;;
 
