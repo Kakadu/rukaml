@@ -25,17 +25,17 @@ let frontend cfg =
       match cfg.call_arity, cfg.dump_cps with
       | false, false -> [ cps1_vb_to_parsetree_vb cps_vb ]
       | true, false -> [ call_arity_anal cps_vb |> cpsm_vb_to_parsetree_vb ]
-      | false, true -> ( Format.printf "After CPS optimisations.\n%!";
-      Format.printf "%a\n%!" pp_cps1_vb cps_vb;
-       [ cps1_vb_to_parsetree_vb cps_vb ]
-      )
-      | true, true ->  (Format.printf "After CPS optimisations.\n%!";
-      let cps_vb = call_arity_anal cps_vb in
-      Format.printf "%a\n%!" pp_cpsm_vb cps_vb;
-       [ cpsm_vb_to_parsetree_vb cps_vb ]
-      )
+      | false, true ->
+        Format.printf "After CPS optimisations.\n%!";
+        Format.printf "%a\n%!" pp_cps1_vb cps_vb;
+        [ cps1_vb_to_parsetree_vb cps_vb ]
+      | true, true ->
+        Format.printf "After CPS optimisations.\n%!";
+        let cps_vb = call_arity_anal cps_vb in
+        Format.printf "%a\n%!" pp_cpsm_vb cps_vb;
+        [ cpsm_vb_to_parsetree_vb cps_vb ]
   in
-  if  cfg.stop_after = SA_CPS then exit 0;
+  if cfg.stop_after = SA_CPS then exit 0;
   let stru =
     let init = CConv.standart_globals, [] in
     Stdlib.ListLabels.fold_left
@@ -111,9 +111,9 @@ let () =
       , Arg.Unit (fun () -> RV64_impl.set_verbose true)
       , " verbose output of RV64 backend" )
     ; "-cps", Arg.Unit (fun () -> cfg.cps_on <- true), " include cps conversion"
-    ; "-call_arity",
-        Arg.Unit (fun () -> cfg.call_arity <- true),
-        " include call arity analysis"
+    ; ( "-call_arity"
+      , Arg.Unit (fun () -> cfg.call_arity <- true)
+      , " include call arity analysis" )
     ]
     (fun s -> cfg.input_file <- Some s)
     "help";

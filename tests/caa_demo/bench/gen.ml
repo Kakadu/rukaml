@@ -1,4 +1,13 @@
-let tests = [ "fibk5", "fibk5"; "fibk10", "fibk10"; "fibk15", "fibk15"; "fibst5", "fibst5"; "fack5", "fack5" ; "fack10", "fack10" ; "fack15", "fack15" ]
+let tests =
+  [ "fibk5", "fibk5"
+  ; "fibk10", "fibk10"
+  ; "fibk15", "fibk15"
+  ; "fibst5", "fibst5"
+  ; "fack5", "fack5"
+  ; "fack10", "fack10"
+  ; "fack15", "fack15"
+  ]
+;;
 
 type mode =
   | CPSOff
@@ -45,7 +54,7 @@ let () =
  (action
   (progn
    (run nasm -g -F dwarf -felf64 %%{src} -o %s.o)
-   (run gcc -g -no-pie %s.o %%{stdlib} -o %s.exe))))
+   (run gcc-13 -g -no-pie %s.o %%{stdlib} -o %s.exe))))
 |}
       name
       name
