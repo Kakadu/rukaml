@@ -475,7 +475,12 @@ let generate_body is_toplevel ppf body =
       else failwith "Arity mismatch: over application"
     | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), []) ->
       assert (Option.is_none (is_toplevel f));
-      let arg = match arg with  | AVar id when id.Frontend.Ident.hum_name = "closure_count" -> ANF.AConst (PConst_int 0) | _ -> arg in
+      let arg =
+        match arg with
+        | AVar id when id.Frontend.Ident.hum_name = "closure_count" ->
+          ANF.AConst (PConst_int 0)
+        | _ -> arg
+      in
       let arg1 = Ident.of_string "arg1" in
       let temp_padding = Ident.of_string "temp_padding" in
       Addr_of_local.extend temp_padding;

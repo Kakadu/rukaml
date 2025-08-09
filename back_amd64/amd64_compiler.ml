@@ -1,4 +1,3 @@
-
 open Compile_lib.CFlags
 open Frontend
 
@@ -27,15 +26,15 @@ let frontend cfg =
       match cfg.call_arity, cfg.dump_cps with
       | false, false -> [ cps1_vb_to_parsetree_vb cps_vb ]
       | true, false -> [ call_arity_anal cps_vb |> cpsm_vb_to_parsetree_vb ]
-      | false, true -> ( Format.printf "After CPS optimisations.\n%!";
-      Format.printf "%a\n%!" pp_cps1_vb cps_vb;
-       [ cps1_vb_to_parsetree_vb cps_vb ]
-      )
-      | true, true ->  (Format.printf "After CPS optimisations.\n%!";
-      let cps_vb = call_arity_anal cps_vb in
-      Format.printf "%a\n%!" pp_cpsm_vb cps_vb;
-       [ cpsm_vb_to_parsetree_vb cps_vb ]
-      )
+      | false, true ->
+        Format.printf "After CPS optimisations.\n%!";
+        Format.printf "%a\n%!" pp_cps1_vb cps_vb;
+        [ cps1_vb_to_parsetree_vb cps_vb ]
+      | true, true ->
+        Format.printf "After CPS optimisations.\n%!";
+        let cps_vb = call_arity_anal cps_vb in
+        Format.printf "%a\n%!" pp_cpsm_vb cps_vb;
+        [ cpsm_vb_to_parsetree_vb cps_vb ]
   in
   let stru =
     let init = CConv.standart_globals, [] in
@@ -71,7 +70,6 @@ let frontend cfg =
 ;;
 
 let cfg =
-
   { out_file = "a.out"
   ; dsource = false
   ; input_file = None
@@ -102,9 +100,9 @@ let () =
       , Arg.Unit (fun () -> Amd64_impl.set_verbose true)
       , " verbose output of Amd64 backend" )
     ; "-cps", Arg.Unit (fun () -> cfg.cps_on <- true), " include cps conversion"
-    ;  "-call_arity",
-        Arg.Unit (fun () -> cfg.call_arity <- true),
-        " include call arity analysis"
+    ; ( "-call_arity"
+      , Arg.Unit (fun () -> cfg.call_arity <- true)
+      , " include call arity analysis" )
     ]
     (fun s -> cfg.input_file <- Some s)
     "help";
