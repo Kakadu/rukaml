@@ -34,104 +34,105 @@
        7	extern rukaml_initialize
        8	extern rukaml_gc_compact
        9	extern rukaml_gc_print_stats
-      10	
-      11	_start:
-      12	              push    rbp
-      13	              mov     rbp, rsp   ; prologue
-      14	              call main
-      15	              mov rdi, rax    ; rdi stores return code
-      16	              mov rax, 60     ; exit syscall
-      17	              syscall
-      18	GLOBAL fib
-      19	
-      20	fib:
-      21	  push rbp
-      22	  mov  rbp, rsp
-      23	  sub rsp, 8*6 ; allocate for local variables temp8, temp7, temp6, temp5, temp3, temp1
-      24	  mov qword r11, [rbp+2*8]
-      25	  mov qword r12, 0
-      26	  cmp r11, r12
-      27	  je lab_12
-      28	  mov qword [rbp-1*8], 0
-      29	  jmp lab_13
-      30	lab_12:
-      31	  mov qword [rbp-1*8], 1
-      32	  jmp lab_13
-      33	lab_13:
-      34	  mov qword rdx, [rbp-1*8]
-      35	  cmp rdx, 0
-      36	  je lab_then_14
-      37	  mov qword rax,  0
-      38	  jmp lab_endif_15
-      39	lab_then_14:
-      40	  mov qword r11, [rbp+2*8]
-      41	  mov qword r12, 1
-      42	  cmp r11, r12
-      43	  je lab_16
-      44	  mov qword [rbp-2*8], 0
-      45	  jmp lab_17
-      46	lab_16:
-      47	  mov qword [rbp-2*8], 1
-      48	  jmp lab_17
-      49	lab_17:
-      50	  mov qword rdx, [rbp-2*8]
-      51	  cmp rdx, 0
-      52	  je lab_then_18
-      53	  mov qword rax,  1
-      54	  jmp lab_endif_19
-      55	lab_then_18:
-      56	  mov qword r11, [rbp+2*8]
-      57	  sub r11, 2
-      58	  mov qword [rbp-3*8], r11
-      59	  sub rsp, 8 ; trying to save alignment 16 bytes
-      60	  sub rsp, 8*1 ; fun arguments
-      61	  mov qword r8, [rbp-3*8]  ; arg "temp5"
-      62	  mov qword [rsp+0*8], r8
-      63	  call fib
-      64	  add rsp, 8*2 ; dealloc args
-      65	  mov [rbp-4*8], rax
-      66	  mov qword r11, [rbp+2*8]
-      67	  dec r11
-      68	  mov qword [rbp-5*8], r11
-      69	  sub rsp, 8 ; trying to save alignment 16 bytes
-      70	  sub rsp, 8*1 ; fun arguments
-      71	  mov qword r8, [rbp-5*8]  ; arg "temp7"
-      72	  mov qword [rsp+0*8], r8
-      73	  call fib
-      74	  add rsp, 8*2 ; dealloc args
-      75	  mov [rbp-6*8], rax
-      76	  mov qword r11, [rbp-4*8]
-      77	  mov qword r12, [rbp-6*8]
-      78	  add  r11, r12
-      79	  mov rax, r11
-      80	lab_endif_19:
-      81	lab_endif_15:
-      82	  add rsp, 8*6 ; deallocate local variables temp8, temp7, temp6, temp5, temp3, temp1
-      83	  pop rbp
-      84	  ret  ;;;; fib
-      85	GLOBAL main
-      86	main:
-      87	  push rbp
-      88	  mov  rbp, rsp
-      89	  mov rdi, rsp
-      90	  call rukaml_initialize
-      91	  sub rsp, 8*2 ; allocate for local variables u, temp10
-      92	  sub rsp, 8 ; trying to save alignment 16 bytes
-      93	  sub rsp, 8*1 ; fun arguments
-      94	  mov qword [rsp+0*8], 8 ; constant
-      95	  call fib
-      96	  add rsp, 8*2 ; dealloc args
-      97	  mov [rbp-1*8], rax
-      98	  add rsp, -8*2
-      99	  mov r11, [rbp-1*8]
-     100	  mov qword [rsp], r11
-     101	  call rukaml_print_int ; short
-     102	  add rsp, 8*2
-     103	  mov [rbp-2*8], rax
-     104	  mov qword rax,  0
-     105	  add rsp, 8*2 ; deallocate local variables u, temp10
-     106	  pop rbp
-     107	  ret  ;;;; main
+      10	extern rukaml_print_alloc_closure_count
+      11	
+      12	_start:
+      13	              push    rbp
+      14	              mov     rbp, rsp   ; prologue
+      15	              call main
+      16	              mov rdi, rax    ; rdi stores return code
+      17	              mov rax, 60     ; exit syscall
+      18	              syscall
+      19	GLOBAL fib
+      20	
+      21	fib:
+      22	  push rbp
+      23	  mov  rbp, rsp
+      24	  sub rsp, 8*6 ; allocate for local variables temp8, temp7, temp6, temp5, temp3, temp1
+      25	  mov qword r11, [rbp+2*8]
+      26	  mov qword r12, 0
+      27	  cmp r11, r12
+      28	  je lab_12
+      29	  mov qword [rbp-1*8], 0
+      30	  jmp lab_13
+      31	lab_12:
+      32	  mov qword [rbp-1*8], 1
+      33	  jmp lab_13
+      34	lab_13:
+      35	  mov qword rdx, [rbp-1*8]
+      36	  cmp rdx, 0
+      37	  je lab_then_14
+      38	  mov qword rax,  0
+      39	  jmp lab_endif_15
+      40	lab_then_14:
+      41	  mov qword r11, [rbp+2*8]
+      42	  mov qword r12, 1
+      43	  cmp r11, r12
+      44	  je lab_16
+      45	  mov qword [rbp-2*8], 0
+      46	  jmp lab_17
+      47	lab_16:
+      48	  mov qword [rbp-2*8], 1
+      49	  jmp lab_17
+      50	lab_17:
+      51	  mov qword rdx, [rbp-2*8]
+      52	  cmp rdx, 0
+      53	  je lab_then_18
+      54	  mov qword rax,  1
+      55	  jmp lab_endif_19
+      56	lab_then_18:
+      57	  mov qword r11, [rbp+2*8]
+      58	  sub r11, 2
+      59	  mov qword [rbp-3*8], r11
+      60	  sub rsp, 8 ; trying to save alignment 16 bytes
+      61	  sub rsp, 8*1 ; fun arguments
+      62	  mov qword r8, [rbp-3*8]  ; arg "temp5"
+      63	  mov qword [rsp+0*8], r8
+      64	  call fib
+      65	  add rsp, 8*2 ; dealloc args
+      66	  mov [rbp-4*8], rax
+      67	  mov qword r11, [rbp+2*8]
+      68	  dec r11
+      69	  mov qword [rbp-5*8], r11
+      70	  sub rsp, 8 ; trying to save alignment 16 bytes
+      71	  sub rsp, 8*1 ; fun arguments
+      72	  mov qword r8, [rbp-5*8]  ; arg "temp7"
+      73	  mov qword [rsp+0*8], r8
+      74	  call fib
+      75	  add rsp, 8*2 ; dealloc args
+      76	  mov [rbp-6*8], rax
+      77	  mov qword r11, [rbp-4*8]
+      78	  mov qword r12, [rbp-6*8]
+      79	  add  r11, r12
+      80	  mov rax, r11
+      81	lab_endif_19:
+      82	lab_endif_15:
+      83	  add rsp, 8*6 ; deallocate local variables temp8, temp7, temp6, temp5, temp3, temp1
+      84	  pop rbp
+      85	  ret  ;;;; fib
+      86	GLOBAL main
+      87	main:
+      88	  push rbp
+      89	  mov  rbp, rsp
+      90	  mov rdi, rsp
+      91	  call rukaml_initialize
+      92	  sub rsp, 8*2 ; allocate for local variables u, temp10
+      93	  sub rsp, 8 ; trying to save alignment 16 bytes
+      94	  sub rsp, 8*1 ; fun arguments
+      95	  mov qword [rsp+0*8], 8 ; constant
+      96	  call fib
+      97	  add rsp, 8*2 ; dealloc args
+      98	  mov [rbp-1*8], rax
+      99	  add rsp, -8*2
+     100	  mov r11, [rbp-1*8]
+     101	  mov qword [rsp], r11
+     102	  call rukaml_print_int ; short
+     103	  add rsp, 8*2
+     104	  mov [rbp-2*8], rax
+     105	  mov qword rax,  0
+     106	  add rsp, 8*2 ; deallocate local variables u, temp10
+     107	  pop rbp
+     108	  ret  ;;;; main
 
 $ nasm -felf64 program.asm -o program.o && ld -o program.exe program.o && chmod u+x program.exe && ./program.exe
   $ nasm -felf64 program.asm -o program.o
