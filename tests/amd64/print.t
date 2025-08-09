@@ -25,67 +25,68 @@
        7	extern rukaml_initialize
        8	extern rukaml_gc_compact
        9	extern rukaml_gc_print_stats
-      10	
-      11	GLOBAL prod
-      12	
-      13	prod:
-      14	  push rbp
-      15	  mov  rbp, rsp
-      16	  mov qword r11, [rbp+4*8]
-      17	  imul r11, 2
-      18	  mov qword rax, r11
-      19	  pop rbp
-      20	  ret  ;;;; prod
-      21	GLOBAL main
-      22	main:
-      23	  push rbp
-      24	  mov  rbp, rsp
-      25	  mov rdi, rsp
-      26	  call rukaml_initialize
-      27	  sub rsp, 8*4 ; allocate for local variables u, w, temp3, temp2
-      28	  sub rsp, 8 ; trying to save alignment 16 bytes
-      29	  sub rsp, 8*1 ; fun arguments
-      30	  mov qword [rsp+0*8], 1 ; constant
-      31	  mov rdi, prod
-      32	  mov rsi, 3
-      33	  call rukaml_alloc_closure
-      34	  mov rdi, rax
-      35	  mov rsi, 1
-      36	  mov rdx, [rsp+8*0]
-      37	  mov al, 0
-      38	  call rukaml_applyN
-      39	  add rsp, 8*2 ; deallocate args of rukaml_applyN
-      40	  mov [rbp-1*8], rax
-      41	  sub rsp, 8 ; padding
-      42	  sub rsp, 8 ; first arg of a function temp2
-      43	  mov qword [rbp-6*8],  8
-      44	  mov rax, 0  ; no float arguments
-      45	  mov rdi, [rbp-1*8]
-      46	  mov rsi, 1
-      47	  mov rdx, [rbp-6*8]
-      48	  call rukaml_applyN
-      49	  add rsp, 8*2 ; free space for args of function "temp2"
-      50	  mov [rbp-2*8], rax
-      51	  sub rsp, 8 ; padding
-      52	  sub rsp, 8 ; first arg of a function temp3
-      53	  mov qword [rbp-6*8],  10
-      54	  mov rax, 0  ; no float arguments
-      55	  mov rdi, [rbp-2*8]
-      56	  mov rsi, 1
-      57	  mov rdx, [rbp-6*8]
-      58	  call rukaml_applyN
-      59	  add rsp, 8*2 ; free space for args of function "temp3"
-      60	  mov [rbp-3*8], rax
-      61	  add rsp, -8*2
-      62	  mov r11, [rbp-3*8]
-      63	  mov qword [rsp], r11
-      64	  call rukaml_print_int ; short
-      65	  add rsp, 8*2
-      66	  mov [rbp-4*8], rax
-      67	  mov qword rax,  0
-      68	  add rsp, 8*4 ; deallocate local variables u, w, temp3, temp2
-      69	  pop rbp
-      70	  ret  ;;;; main
+      10	extern rukaml_print_alloc_closure_count
+      11	
+      12	GLOBAL prod
+      13	
+      14	prod:
+      15	  push rbp
+      16	  mov  rbp, rsp
+      17	  mov qword r11, [rbp+4*8]
+      18	  imul r11, 2
+      19	  mov qword rax, r11
+      20	  pop rbp
+      21	  ret  ;;;; prod
+      22	GLOBAL main
+      23	main:
+      24	  push rbp
+      25	  mov  rbp, rsp
+      26	  mov rdi, rsp
+      27	  call rukaml_initialize
+      28	  sub rsp, 8*4 ; allocate for local variables u, w, temp3, temp2
+      29	  sub rsp, 8 ; trying to save alignment 16 bytes
+      30	  sub rsp, 8*1 ; fun arguments
+      31	  mov qword [rsp+0*8], 1 ; constant
+      32	  mov rdi, prod
+      33	  mov rsi, 3
+      34	  call rukaml_alloc_closure
+      35	  mov rdi, rax
+      36	  mov rsi, 1
+      37	  mov rdx, [rsp+8*0]
+      38	  mov al, 0
+      39	  call rukaml_applyN
+      40	  add rsp, 8*2 ; deallocate args of rukaml_applyN
+      41	  mov [rbp-1*8], rax
+      42	  sub rsp, 8 ; padding
+      43	  sub rsp, 8 ; first arg of a function temp2
+      44	  mov qword [rbp-6*8],  8
+      45	  mov rax, 0  ; no float arguments
+      46	  mov rdi, [rbp-1*8]
+      47	  mov rsi, 1
+      48	  mov rdx, [rbp-6*8]
+      49	  call rukaml_applyN
+      50	  add rsp, 8*2 ; free space for args of function "temp2"
+      51	  mov [rbp-2*8], rax
+      52	  sub rsp, 8 ; padding
+      53	  sub rsp, 8 ; first arg of a function temp3
+      54	  mov qword [rbp-6*8],  10
+      55	  mov rax, 0  ; no float arguments
+      56	  mov rdi, [rbp-2*8]
+      57	  mov rsi, 1
+      58	  mov rdx, [rbp-6*8]
+      59	  call rukaml_applyN
+      60	  add rsp, 8*2 ; free space for args of function "temp3"
+      61	  mov [rbp-3*8], rax
+      62	  add rsp, -8*2
+      63	  mov r11, [rbp-3*8]
+      64	  mov qword [rsp], r11
+      65	  call rukaml_print_int ; short
+      66	  add rsp, 8*2
+      67	  mov [rbp-4*8], rax
+      68	  mov qword rax,  0
+      69	  add rsp, 8*4 ; deallocate local variables u, w, temp3, temp2
+      70	  pop rbp
+      71	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o
   $ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
   /usr/bin/ld: program.o: warning: relocation in read-only section `.text'

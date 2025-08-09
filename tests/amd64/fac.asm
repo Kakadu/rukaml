@@ -8,6 +8,7 @@ extern rukaml_alloc_pair
 extern rukaml_initialize
 extern rukaml_gc_compact
 extern rukaml_gc_print_stats
+extern rukaml_print_alloc_closure_count
 
 _start:
               push    rbp
