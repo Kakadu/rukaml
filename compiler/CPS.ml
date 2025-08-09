@@ -69,6 +69,7 @@ struct
     | CIf of triv * p * p
     | Let of rec_flag * pat * triv * p
     | Primop of pat * var * triv * triv list * p
+      (* primop constructor conisists of param to bound primop result, operation, first op's arg, other op's args, and wh  *)
     | Letc of var * cont * p
 
   and cont =
@@ -78,6 +79,7 @@ struct
 
   and triv =
     | Lam of pat Args.t * var * p
+      (* lam contsructor is a triple: params, a cont-param, and a body*)
     | TSafeBinop of triv safe_binop
     | UVar of var
     | TConst of const
