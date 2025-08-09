@@ -62,8 +62,7 @@ let free_vars_of_expr =
     | EVar s -> String_set.add s acc
     | EIf (c, th, el) -> helper (helper (helper acc c) th) el
     | EApp (l, r) -> helper (helper acc l) r
-    | ELet (NonRecursive, _, rhs, wher) -> helper (helper acc rhs) wher
-    | ELet (Recursive, pat, rhs, wher) ->
+    | ELet (_, pat, rhs, wher) ->
       String_set.diff (helper (helper acc rhs) wher) (vars_from_pattern pat)
     | ETuple (a, b, es) -> List.fold_left helper (helper (helper acc a) b) es
     | ELam (pat, rhs) -> SS.diff (helper acc rhs) (vars_from_pattern pat)
