@@ -1,5 +1,6 @@
 let tests =
-  [ "fibk5", "fibk5"
+  [ "fib0", "fib0"
+  ; "fibk5", "fibk5"
   ; "fibk10", "fibk10"
   ; "fibk15", "fibk15"
   ; "fibst5", "fibst5"

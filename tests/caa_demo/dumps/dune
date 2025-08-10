@@ -2,6 +2,7 @@
  (deps
   (package rukaml)
   (package MiniML_rv64)
+  ../bench/fib0.ml
   ../bench/fibk5.ml
   ../bench/fibst5.ml
   ../bench/fack5.ml
