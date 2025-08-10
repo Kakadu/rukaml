@@ -1,6 +1,7 @@
 type stop_after_t =
   | SA_dont
   | SA_ANF
+  | SA_CPS
 
 type cfg =
   { mutable out_file : string
@@ -10,4 +11,6 @@ type cfg =
   ; mutable stop_after : stop_after_t
   ; mutable wrap_main_into_start : bool
   ; mutable cps_on : bool
+  ; mutable call_arity : bool
+  ; mutable dump_cps : bool
   }

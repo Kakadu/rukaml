@@ -11,12 +11,16 @@ let tests =
   ; "nikita3", "../rv64/nikita3"
   ; "order1", "../rv64/order1"
   ; "pass_print", "../rv64/pass_print"
+  ; "dead_print", "dead_print"
+  ; "caa_print_order", "caa_print_order"
+  ; "caa_print_order_rec", "caa_print_order_rec"
   ]
 ;;
 
 type mode =
   | CPSOff
   | CPSOn
+  | CallArOn
 
 let () =
   let pp1 ~mode ppf name suf path =
@@ -44,6 +48,7 @@ let () =
     match mode with
     | CPSOff -> "--no-start\n    %{src}"
     | CPSOn -> "-cps\n    --no-start\n    %{src}"
+    | CallArOn -> "-cps\n    -call_arity\n    --no-start\n    %{src}"
   in
   let pp2 ppf name =
     Format.fprintf
@@ -80,8 +85,10 @@ let () =
       Format.fprintf ppf "\n;;; %s\n\n" name;
       pp1 ppf name "cpsoff" mlpath ~mode:CPSOff;
       pp1 ppf name "cpson" mlpath ~mode:CPSOn;
+      pp1 ppf name "callaron" mlpath ~mode:CallArOn;
       pp2 ppf (name ^ "_cpsoff");
       pp2 ppf (name ^ "_cpson");
+      pp2 ppf (name ^ "_callaron");
       Format.fprintf
         ppf
         {|
@@ -92,11 +99,13 @@ let () =
   %s.ml
   %s_cpsoff.exe
   %s_cpson.exe
+  %s_callaron.exe
   ;
   ))
   |}
         name
         mlpath
+        name
         name
         name;
       Out_channel.with_open_text (name ^ ".t") (fun ch ->
@@ -107,6 +116,10 @@ let () =
         Printf.fprintf
           ch
           "  $ qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64  ./%s_cpson.exe\n\n"
+          name;
+        Printf.fprintf
+          ch
+          "  $ qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64  ./%s_callaron.exe\n\n"
           name;
         flush ch);
       Format.pp_print_flush ppf ()))

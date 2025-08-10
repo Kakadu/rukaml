@@ -9,11 +9,16 @@ type error =
   | `Let_rec_not_allowed of ds_expr
   ]
 
-type pat (*cps pat*)
-type p (*cps program*)
+type cps1_vb (* one-arg cps lang vb*)
 
-val cps_conv_program : value_binding list -> (rec_flag * pat * p, error) Result.t
-val cps_conv_vb : value_binding -> (rec_flag * pat * p, error) Result.t
-val cps_vb_to_parsetree_vb : rec_flag * pat * p -> value_binding
+val cps_conv_program : value_binding list -> (cps1_vb, error) Result.t
+val cps_conv_vb : value_binding -> (cps1_vb, error) Result.t
+val cps1_vb_to_parsetree_vb : cps1_vb -> value_binding
 val pp_error : Format.formatter -> error -> unit
-val pp_vb : Format.formatter -> rec_flag * pat * p -> unit
+val pp_cps1_vb : Format.formatter -> cps1_vb -> unit
+
+type cpsm_vb (* multi-arg cps lang vb*)
+
+val cpsm_vb_to_parsetree_vb : cpsm_vb -> value_binding
+val pp_cpsm_vb : Format.formatter -> cpsm_vb -> unit
+val call_arity_anal : cps1_vb -> cpsm_vb
