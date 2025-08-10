@@ -183,7 +183,7 @@ struct
 
   let rec pp_cont ppf = function
     | HALT -> fprintf ppf "@[%s@]" "(fun x -> x)"
-    | Cont (pat, p) -> fprintf ppf "@[(fun %a ->@[ %a@])" pp_pat pat pp_p p
+    | Cont (pat, p) -> fprintf ppf "@[(fun %a ->@[ %a@])@]" pp_pat pat pp_p p
     | CVar v -> Frontend.Ident.pp ppf v
 
   and pp_triv ?(ps = true) ppf =
@@ -192,18 +192,18 @@ struct
     function
     | Lam (pats, k, b) ->
       let pats = cons_uncurry @@ to_cons pats in
-      fprintf ppf "@[(fun %a %a ->@[ %a@])" pp_pats pats Ident.pp k pp_p b
+      fprintf ppf "@[<hv 2>";
+      fprintf ppf "@[(fun %a %a -> @]@," pp_pats pats Ident.pp k;
+      fprintf ppf "@[%a@])" pp_p b;
+      fprintf ppf "@]"
     | TSafeBinop (op, l, r) when ANF.is_infix_binop op.hum_name ->
       pp_binop ppf (ps, op, l, r)
     | UVar v -> Ident.pp ppf v
     | TConst c -> Pprint.pp_const ppf c
     | TTuple (t1, t2, tt) ->
       fprintf ppf "@[(%a, " no_pars t1;
-      Format.fprintf
-        ppf
-        "%a"
-        (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") no_pars)
-        (t2 :: tt);
+      let pp_sep = fun ppf () -> fprintf ppf ", " in
+      Format.fprintf ppf "%a" (pp_print_list ~pp_sep no_pars) (t2 :: tt);
       fprintf ppf ")@]"
     | TUnit -> fprintf ppf "()"
     | TSafeBinop _ -> failwith "not a binop in TSafeBinop"
@@ -214,11 +214,23 @@ struct
     function
     | Call (f, aa, k) ->
       let aa = cons_uncurry @@ to_cons aa in
-      let args = pp_list maybe_pars in
-      fprintf ppf "@[<hv>%a %a %a@]" maybe_pars f args aa pp_cont k
+      (* let args = pp_list maybe_pars in *)
+      fprintf ppf "@[<hv 2>";
+      fprintf ppf "@[%a @]@," maybe_pars f;
+      List.iter (fprintf ppf "@[%a @]@," maybe_pars) aa;
+      fprintf ppf "%a@]@," pp_cont k
     | Ret (k, a) -> fprintf ppf "@[<hv>%a %a@]" pp_cont k maybe_pars a
     | CIf (c, th, el) ->
-      fprintf ppf "@[<hov>@[if %a@ @]@[then %a@ @]@[else %a@]@]" no_pars c pp_p th pp_p el
+      fprintf
+        ppf
+        "@[<hov>@[if %a@ @]@,@[then %a@ @]@,@[else %a@]@]"
+        no_pars
+        c
+        pp_p
+        th
+        pp_p
+        el;
+      ()
     | Let (rec_flag, pat, Lam (pats', k, b), wh) ->
       let rec_ =
         match rec_flag with
@@ -227,8 +239,17 @@ struct
       in
       let pats' = cons_uncurry @@ to_cons pats' in
       let open Ident in
-      fprintf ppf "@[<v>@[<hv>@[let %s%a %a %a =@] " rec_ pp_pat pat pp_pats pats' pp k;
-      fprintf ppf "@[<2>%a @]@[in @]@]" pp_p b;
+      fprintf
+        ppf
+        "@[<v>@[<hv 2>@[let %s%a %a %a =@] @,"
+        rec_
+        pp_pat
+        pat
+        pp_pats
+        pats'
+        pp
+        k;
+      fprintf ppf "@[<2>%a @]@,@[in @]@]@," pp_p b;
       fprintf ppf "@[%a@]@]" pp_p wh
     | Let (rec_flag, pat, b, wh) ->
       let rec_ =
@@ -278,9 +299,12 @@ struct
     match p with
     | Ret (HALT, Lam (pats', k, b)) ->
       let pats' = cons_uncurry @@ to_cons pats' in
-      fprintf ppf "%a@ %a@ =@ @]@[%a@]@] " pp_pats pats' Frontend.Ident.pp k pp_p b
-    | Ret (HALT, t) -> fprintf ppf "=@ @]@[%a@]@]" no_pars t
-    | _ -> fprintf ppf "=@ @]@[%a@]@]" pp_p p
+      fprintf ppf "%a@ %a@ =@,@]@," pp_pats pats' Frontend.Ident.pp k;
+      fprintf ppf "@[%a@]@]" pp_p b
+    | Ret (HALT, t) -> fprintf ppf "=@ @]@,@[%a@]@]" no_pars t
+    | _ ->
+      fprintf ppf "=@,@]@,";
+      fprintf ppf "@[%a@]@]" pp_p p
 
   and pp_pats ppf = pp_list pp_pat ppf
   and no_pars ppf = pp_triv ~ps:false ppf
