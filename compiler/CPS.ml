@@ -914,8 +914,10 @@ let test_cps_vb text =
 let%expect_test "cps simple func" =
   test_cps_vb {| let double x = 2 * x|};
   [%expect
-    {| let double x k1 = k1 (2 * x)
-|}]
+    {|
+    let double x k1 =
+      k1 (2 * x)
+    |}]
 ;;
 
 let%expect_test "cps simple prog" =
@@ -924,10 +926,10 @@ let%expect_test "cps simple prog" =
   let main = double (double 3)|};
   [%expect
     {|
-let main = let double x k1 = k1 (2 * x) in double 3 (fun t2 -> double t2
-                                                               (fun t3 ->
-                                                                (fun x -> x) t3))
-|}]
+    let main =
+      let double x k1 = k1 (2 * x) in
+      double 3 (fun t2 -> double t2 (fun t3 -> (fun x -> x) t3))
+    |}]
 ;;
 
 let%expect_test "cps prog inlining" =
@@ -936,15 +938,20 @@ let%expect_test "cps prog inlining" =
   let double x = 2 * x
   let main = double (y + y)|};
   [%expect
-    {|  let main = 2 * (3 + 3)
-|}]
+    {|
+    let main =
+      2 * (3 + 3)
+    |}]
 ;;
 
 let%expect_test "cps rec func (inlining banned)" =
   test_cps_vb {| let y = let rec t x = t 1 in t 2|};
   [%expect
-    {| let y = let rec t x k1 = t 1 k1 in t 2 (fun x -> x)
-|}]
+    {|
+    let y =
+      let rec t x k1 = t 1 k1 in
+      t 2 (fun x -> x)
+    |}]
 ;;
 
 let%expect_test "cps eta" =
@@ -952,8 +959,11 @@ let%expect_test "cps eta" =
     {|
    let main = let g x = x in (fun x -> g x) g|};
   [%expect
-    {| let main = let g x k1 = k1 x in g g (fun x -> x)
-|}]
+    {|
+    let main =
+      let g x k1 = k1 x in
+      g g (fun x -> x)
+    |}]
 ;;
 
 let%expect_test "cps eta let" =
@@ -961,15 +971,20 @@ let%expect_test "cps eta let" =
     {|
    let main = let g x = x in let f y = g y in f (g 0)|};
   [%expect
-    {| let main = let g x k1 = k1 x in g 0 (fun t2 -> g t2 (fun x -> x))
-|}]
+    {|
+    let main =
+      let g x k1 = k1 x in
+      g 0 (fun t2 -> g t2 (fun x -> x))
+    |}]
 ;;
 
 let%expect_test "cps fac" =
   test_cps_vb {| let rec fac n = if n = 1 then 1 else fac (n-1) * n|};
   [%expect
-    {| let rec fac n k1 = if n = 1 then k1 1 else fac (n - 1) (fun t2 -> k1 (t2 * n))
-|}]
+    {|
+    let rec fac n k1 =
+      if n = 1 then k1 1 else fac (n - 1) (fun t2 -> k1 (t2 * n))
+    |}]
 ;;
 
 let%expect_test "cps fib" =
@@ -980,74 +995,91 @@ if n < 2 then n else fib (n - 1) + fib (n - 2)
   |};
   [%expect
     {|
-let rec fib n k1 = if n < 2 then k1 n else fib (n - 1) (fun t2 -> fib (n - 2)
-                                                                  (fun t3 ->
-                                                                   k1 (t2 + t3)))|}]
+    let rec fib n k1 =
+      if n < 2 then k1 n
+      else fib (n - 1) (fun t2 -> fib (n - 2) (fun t3 -> k1 (t2 + t3)))
+    |}]
 ;;
 
 let%expect_test "cps complex branching" =
   test_cps_vb {| let x f = 1 + if (f 2) then 3 else 5|};
   [%expect
     {|
-    let x f k1 = f 2 (fun t2 -> let jv3 t4 = k1 (1 + t4) in if t2 then jv3 3
-                                                            else jv3 5)
-|}]
+    let x f k1 =
+      f 2 (fun t2 -> let jv3 t4 = k1 (1 + t4) in if t2 then jv3 3 else jv3 5)
+    |}]
 ;;
 
 let%expect_test "cps print" =
   test_cps_vb {|let main  = (fun z -> 1) (print 0) |};
   [%expect
-    {|   let main = let x1 = print 0 in (fun z -> (fun x -> x) 1) x1
-|}]
+    {|
+    let main =
+      let x1 = print 0 in (fun z -> (fun x -> x) 1) x1
+    |}]
 ;;
 
 let%expect_test "cps print alias " =
   test_cps_vb {| let f = let p = print in let z = p 0 in z + 1|};
   [%expect
-    {| let f = let z = print 0 in (fun x -> x) (z + 1)
-|}]
+    {|
+    let f =
+      let z = print 0 in (fun x -> x) (z + 1)
+    |}]
 ;;
 
 let%expect_test "cps one ref arg-binop" =
   test_cps_vb {| let f = let g x = x + 1 in g (2 * 2)   |};
   [%expect
-    {| let f = (2 * 2) + 1
-|}]
+    {|
+    let f =
+      (2 * 2) + 1
+    |}]
 ;;
 
 let%expect_test "cps one ref binop" =
   test_cps_vb {| let f g = let x = 2 * 2 in g x |};
   [%expect
-    {| let f g k1 = g (2 * 2) k1
-|}]
+    {|
+    let f g k1 =
+      g (2 * 2) k1
+    |}]
 ;;
 
 let%expect_test "cps mult refs arg-const" =
   test_cps_vb {| let f g = let x = 2 in g x x|};
   [%expect
-    {| let f g k1 = g 2 (fun t2 -> t2 2 k1)
-|}]
+    {|
+    let f g k1 =
+      g 2 (fun t2 -> t2 2 k1)
+    |}]
 ;;
 
 let%expect_test "cps  mult refs arg-binop (inlining banned)" =
   test_cps_vb {| let f g = let x = 2 * 2 in g x x|};
   [%expect
-    {| let f g k1 = let x = 2 * 2 in g x (fun t2 -> t2 x k1)
-|}]
+    {|
+    let f g k1 =
+      let x = 2 * 2 in g x (fun t2 -> t2 x k1)
+    |}]
 ;;
 
 let%expect_test "cps complex tuple-arg" =
   test_cps_vb {| let f g = g (g 3, 1)|};
   [%expect
-    {| let f g k1 = g 3 (fun t2 -> g (t2, 1) k1)
-|}]
+    {|
+    let f g k1 =
+      g 3 (fun t2 -> g (t2, 1) k1)
+    |}]
 ;;
 
 let%expect_test "cps ptuple" =
   test_cps_vb {| let f (x,y) = x + y|};
   [%expect
-    {| let f (x, y) k1 = k1 (x + y)
-|}]
+    {|
+    let f (x, y) k1 =
+      k1 (x + y)
+    |}]
 ;;
 
 let%expect_test "cps free vars" =
@@ -1063,8 +1095,11 @@ let%expect_test "cps free vars" =
 let%expect_test "cps func in func" =
   test_cps_vb {| let z = let rec g y = y in  let f = fun x -> g in f 2 3|};
   [%expect
-    {|  let z = let rec g y k1 = k1 y in (fun x -> g 3 (fun x -> x)) 2
-|}]
+    {|
+    let z =
+      let rec g y k1 = k1 y in
+      (fun x -> g 3 (fun x -> x)) 2
+    |}]
 ;;
 
 let%expect_test "cps not allowed let rec" =
@@ -1084,8 +1119,10 @@ let%expect_test "cps not allowed let rec lambda complex" =
 let%expect_test "cps fake rec" =
   test_cps_vb {| let main  = let rec x = (fun y -> 8) 12 in 0|};
   [%expect
-    {|  let main = (fun y -> let rec x = 8 in (fun x -> x) 0) 12
-|}]
+    {|
+    let main =
+      (fun y -> let rec x = 8 in (fun x -> x) 0) 12
+    |}]
 ;;
 
 (* multi-arg CPS language *)
@@ -2265,7 +2302,11 @@ open CallArityAnal (VeryNaiveCoCallGraph)
 
 let test_call_ar_anal cps_prog =
   Format.printf "before:\n%a\n" pp_vb cps_prog;
+  (* TODO: printer above creates non-closed boxes.
+    We need to fix it. Flush is a temporary workaround. *)
+  Format.printf "%!";
   call_arity_anal cps_prog |> Format.printf "after:\n%a\n" MACPS.pp_vb;
+  Format.printf "%!";
   ANF.reset_gensym ()
 ;;
 
@@ -2306,25 +2347,15 @@ let%expect_test "expand call" =
   [%expect
     {|
     before:
-    let main = let f x k1 = k1 (fun y k2 -> k2 (x + y)) in if true
-                                                                   then f 1
-                                                                        (fun g ->
-
-                                                                        g 1
-                                                                        (fun x -> x))
-                                                                        else
-                                                                        f 2
-                                                                        (fun t ->
-
-                                                                        t 1
-                                                                        (fun x -> x))
+    let main =
+              let f x k1 = k1 (fun y k2 -> k2 (x + y)) in
+              if true then f 1 (fun g -> g 1 (fun x -> x))
+              else f 2 (fun t -> t 1 (fun x -> x))
     after:
-
-                       let main = let f x e1 k1 = k1 (x + e1) in if true
-                                                                 then f 1 1
-                                                                      (fun x -> x)
-                                                                 else f 2 1
-                                                                      (fun x -> x) |}]
+    let main =
+             let f x e1 k1 = k1 (x + e1) in
+             if true then f 1 1 (fun x -> x) else f 2 1 (fun x -> x)
+    |}]
 ;;
 
 let%expect_test "not expand call (one of entries has init arity )" =
@@ -2351,24 +2382,17 @@ let%expect_test "not expand call (one of entries has init arity )" =
   [%expect
     {|
     before:
-    let main = let f x k1 = k1 (fun y k2 -> k2 (x + y)) in let h a k3 =
-                                                                   a 1 k3
-                                                                   in if true
-                                                                      then
-                                                                      f 1
-                                                                      (fun g ->
-                                                                       g 1
-                                                                       (fun x -> x))
-                                                                      else
-                                                                      f 1
-                                                                      (fun t ->
-                                                                       h t
-                                                                       (fun x -> x))
+    let main =
+              let f x k1 = k1 (fun y k2 -> k2 (x + y)) in
+              let h a k3 = a 1 k3 in
+              if true then f 1 (fun g -> g 1 (fun x -> x))
+              else f 1 (fun t -> h t (fun x -> x))
     after:
-
-                       let main = let f x k1 = k1 (fun y k2 -> k2 (x + y)) in
-                                  if true then f 1 (fun g -> g 1 (fun x -> x))
-                                          else f 1 (fun t -> t 1 (fun x -> x)) |}]
+    let main =
+             let f x k1 = k1 (fun y k2 -> k2 (x + y)) in
+             if true then f 1 (fun g -> g 1 (fun x -> x))
+             else f 1 (fun t -> t 1 (fun x -> x))
+    |}]
 ;;
 
 let%expect_test "expaned but not fully inlined call (argument is big) " =
@@ -2394,26 +2418,19 @@ let%expect_test "expaned but not fully inlined call (argument is big) " =
   [%expect
     {|
     before:
-    let main = let f x k1 = k1 (fun y k2 -> k2 (fun a k3 -> k3 (x, x, y + a)))
-                                    in f (1, 1, 1) (fun g -> if true then
-                                                                     g 1
-                                                                     (fun t ->
-                                                                      t 1
-                                                                      (fun x -> x))
-                                                                     else
-                                                                     g 1
-                                                                     (fun b ->
-                                                                      b 1
-                                                                      (fun x -> x)))
-    after:
+    let main =
+              let f x k1 = k1 (fun y k2 -> k2 (fun a k3 -> k3 (x, x, y + a))) in
+              f
+                (1, 1, 1)
+                (fun g -> if true then g 1 (fun t -> t 1 (fun x -> x))
+                          else g 1 (fun b -> b 1 (fun x -> x)))
 
-                                      let main = (fun g -> if true then g 1 1
-                                                                        (fun x -> x)
-                                                                   else g 1 1
-                                                                        (fun x -> x))
-                                                 (fun e1 e2 k3 -> (fun x k1 ->
-                                                                   k1 (x, x, e1 + e2))
-                                                                  (1, 1, 1) k3) |}]
+    after:
+    let main =
+             (fun g -> if true then g 1 1 (fun x -> x) else g 1 1 (fun x -> x))
+             (fun e1 e2 k3 ->
+               (fun x k1 -> k1 (x, x, e1 + e2)) (1, 1, 1) k3)
+    |}]
 ;;
 
 let%expect_test "not expand call (because of sharing loses)" =
@@ -2452,70 +2469,35 @@ let%expect_test "not expand call (because of sharing loses)" =
   [%expect
     {|
     before:
-    let main = let f x k1 = let h b k3 = k3 (b + b) in h x (fun l ->
-                                                                    k1 (fun y k2 ->
-                                                                        h y
-                                                                        (fun r ->
+    let main =
+              let f x k1 =
+                let h b k3 = k3 (b + b) in
+                h x (fun l -> k1 (fun y k2 -> h y (fun r -> k2 (l + r))))
+                in
+              if true
+              then f
+                     1
+                     (fun g -> g 1 (fun t -> g 1 (fun q -> (fun x -> x) (q + t))))
 
-                                                                        k2 (l + r))))
-                                                               in if true
-                                                                  then f 1
-                                                                       (fun g ->
-                                                                        g 1
-                                                                        (fun t ->
+              else f
+                     1
+                     (fun g -> g 1 (fun s -> g 1 (fun z -> (fun x -> x) (z + s))))
 
-                                                                        g 1
-                                                                        (fun q ->
-
-                                                                        (fun x -> x) (q + t))))
-                                                                       else
-                                                                       f 1
-                                                                       (fun g ->
-                                                                        g 1
-                                                                        (fun s ->
-
-                                                                        g 1
-                                                                        (fun z ->
-
-                                                                        (fun x -> x) (z + s))))
     after:
+    let main =
+             let f x k1 =
+               let h b k3 = k3 (b + b) in
+               h x (fun l -> k1 (fun y k2 -> h y (fun r -> k2 (l + r))))
+               in
+             if true
+             then f
+                    1
+                    (fun g -> g 1 (fun t -> g 1 (fun q -> (fun x -> x) (q + t))))
 
-                                                                  let main =
-                                                                    let f x k1 =
-                                                                    let h b k3 =
-                                                                    k3 (b + b)
-                                                                    in h x
-                                                                       (fun l ->
-                                                                        k1
-                                                                        (fun y k2 ->
-
-                                                                        h y
-                                                                        (fun r ->
-
-                                                                        k2 (l + r))))
-                                                                       in
-                                                                    if true
-                                                                    then
-                                                                    f 1 (fun g ->
-
-                                                                        g 1
-                                                                        (fun t ->
-
-                                                                        g 1
-                                                                        (fun q ->
-
-                                                                        (fun x -> x) (q + t))))
-                                                                        else
-                                                                        f 1
-                                                                        (fun g ->
-
-                                                                        g 1
-                                                                        (fun s ->
-
-                                                                        g 1
-                                                                        (fun z ->
-
-                                                                        (fun x -> x) (z + s)))) |}]
+             else f
+                    1
+                    (fun g -> g 1 (fun s -> g 1 (fun z -> (fun x -> x) (z + s))))
+    |}]
 ;;
 
 let%expect_test "expand call (no sharing loses since the variables are dead)" =
@@ -2554,53 +2536,29 @@ let%expect_test "expand call (no sharing loses since the variables are dead)" =
   [%expect
     {|
     before:
-    let main = let f x k1 = let h b k3 = k3 (b + b) in h x (fun l ->
-                                                                    k1 (fun y k2 ->
-                                                                        h y
-                                                                        (fun r ->
+    let main =
+              let f x k1 =
+                let h b k3 = k3 (b + b) in
+                h x (fun l -> k1 (fun y k2 -> h y (fun r -> k2 (l + r))))
+                in
+              if true
+              then f
+                     1
+                     (fun g -> g 1 (fun t -> g 1 (fun q -> (fun x -> x) (t + t))))
 
-                                                                        k2 (l + r))))
-                                                               in if true
-                                                                  then f 1
-                                                                       (fun g ->
-                                                                        g 1
-                                                                        (fun t ->
+              else f
+                     1
+                     (fun g -> g 1 (fun s -> g 1 (fun z -> (fun x -> x) (s + s))))
 
-                                                                        g 1
-                                                                        (fun q ->
-
-                                                                        (fun x -> x) (t + t))))
-                                                                       else
-                                                                       f 1
-                                                                       (fun g ->
-                                                                        g 1
-                                                                        (fun s ->
-
-                                                                        g 1
-                                                                        (fun z ->
-
-                                                                        (fun x -> x) (s + s))))
     after:
-
-                                                                  let main =
-                                                                    let f x e1 k1 =
-                                                                    let h b k3 =
-                                                                    k3 (b + b)
-                                                                    in h x
-                                                                       (fun l ->
-                                                                        h e1
-                                                                        (fun r ->
-
-                                                                        k1 (l + r)))
-                                                                    in if true
-                                                                       then
-                                                                       f 1 1
-                                                                       (fun t ->
-                                                                        (fun x -> x) (t + t))
-                                                                       else
-                                                                       f 1 1
-                                                                       (fun s ->
-                                                                        (fun x -> x) (s + s)) |}]
+    let main =
+             let f x e1 k1 =
+               let h b k3 = k3 (b + b) in
+               h x (fun l -> h e1 (fun r -> k1 (l + r)))
+               in
+             if true then f 1 1 (fun t -> (fun x -> x) (t + t))
+             else f 1 1 (fun s -> (fun x -> x) (s + s))
+    |}]
 ;;
 
 let%expect_test "not expand call (because of sharing loses). LamCall version" =
@@ -2634,40 +2592,21 @@ let%expect_test "not expand call (because of sharing loses). LamCall version" =
   [%expect
     {|
     before:
-    let main = (fun x k1 -> let h b k3 = k3 (x, b) in h x (fun l ->
-                                                                   k1 (fun y k2 ->
-                                                                       h y
-                                                                       (fun r ->
-                                                                        k2 (l, r))))) (1 + 1)
-                                                              (fun g -> g 1
-                                                                        (fun t ->
+    let main =
+              (fun x k1 ->
+                let h b k3 = k3 (x, b) in
+                h x (fun l -> k1 (fun y k2 -> h y (fun r -> k2 (l, r)))))
+                (1 + 1)
+                (fun g -> g 1 (fun t -> g 1 (fun q -> (fun x -> x) (q + t))))
 
-                                                                        g 1
-                                                                        (fun q ->
-
-                                                                        (fun x -> x) (q + t))))
     after:
-
-                                                              let main =
-                                                                (fun x k1 ->
-                                                                 let h b k3 =
-                                                                 k3 (x, b)
-                                                                 in h x (fun l ->
-
-                                                                        k1
-                                                                        (fun y k2 ->
-
-                                                                        h y
-                                                                        (fun r ->
-
-                                                                        k2
-                                                                        (l, r))))) (1 + 1)
-                                                                    (fun g ->
-                                                                     g 1
-                                                                     (fun t ->
-                                                                      g 1
-                                                                      (fun q ->
-                                                                       (fun x -> x) (q + t)))) |}]
+    let main =
+             (fun x k1 ->
+               let h b k3 = k3 (x, b) in
+               h x (fun l -> k1 (fun y k2 -> h y (fun r -> k2 (l, r)))))
+               (1 + 1)
+               (fun g -> g 1 (fun t -> g 1 (fun q -> (fun x -> x) (q + t))))
+    |}]
 ;;
 
 let%expect_test
@@ -2703,33 +2642,21 @@ let%expect_test
   [%expect
     {|
     before:
-    let main = (fun x k1 -> let h b k3 = k3 (x, b) in h x (fun l ->
-                                                                   k1 (fun y k2 ->
-                                                                       h y
-                                                                       (fun r ->
-                                                                        k2 (l, r))))) (1 + 1)
-                                                              (fun g -> g 1
-                                                                        (fun t ->
+    let main =
+              (fun x k1 ->
+                let h b k3 = k3 (x, b) in
+                h x (fun l -> k1 (fun y k2 -> h y (fun r -> k2 (l, r)))))
+                (1 + 1)
+                (fun g -> g 1 (fun t -> g 1 (fun q -> (fun x -> x) (q + q))))
 
-                                                                        g 1
-                                                                        (fun q ->
-
-                                                                        (fun x -> x) (q + q))))
     after:
-
-                                                              let main =
-                                                                (fun x k1 ->
-                                                                 let h b k3 =
-                                                                 k3 (x, b)
-                                                                 in h x (fun l ->
-
-                                                                        h 1
-                                                                        (fun r ->
-
-                                                                        k1
-                                                                        (l, r)))) (1 + 1)
-                                                                 (fun q ->
-                                                                  (fun x -> x) (q + q)) |}]
+    let main =
+             (fun x k1 ->
+               let h b k3 = k3 (x, b) in
+               h x (fun l -> h 1 (fun r -> k1 (l, r))))
+               (1 + 1)
+               (fun q -> (fun x -> x) (q + q))
+    |}]
 ;;
 
 let%expect_test " expand call thanks to fake shared comput. and cheap exprs detection " =
@@ -2753,44 +2680,32 @@ let%expect_test " expand call thanks to fake shared comput. and cheap exprs dete
   [%expect
     {|
     before:
-    let main = let f x k1 = if true then k1 (fun y k2 -> k2 (x + y))
-                                            else k1 (fun a k3 -> k3 (x + a))
-                                    in if true then f 1 (fun g -> g 1 (fun t ->
-                                                                       g 1
-                                                                       (fun q ->
-                                                                        (fun x -> x) (t + q))))
-                                                                 else f 1
-                                                                      (fun g ->
-                                                                       g 1
-                                                                       (fun s ->
-                                                                        g 1
-                                                                        (fun z ->
+    let main =
+              let f x k1 =
+                if true then k1 (fun y k2 -> k2 (x + y))
+                else k1 (fun a k3 -> k3 (x + a))
+                in
+              if true
+              then f
+                     1
+                     (fun g -> g 1 (fun t -> g 1 (fun q -> (fun x -> x) (t + q))))
 
-                                                                        (fun x -> x) (s + z))))
+              else f
+                     1
+                     (fun g -> g 1 (fun s -> g 1 (fun z -> (fun x -> x) (s + z))))
+
     after:
+    let main =
+             let f x e1 k1 = if true then k1 (x + e1) else k1 (x + e1) in
+             if true
+             then (fun g -> g 1 (fun t -> g 1 (fun q -> (fun x -> x) (t + q))))
+                  (fun e4 k5 ->
+                    f 1 e4 k5)
 
-                                               let main = let f x e1 k1 =
-                                                          if true then k1 (x + e1)
-                                                                  else k1 (x + e1)
-                                                          in if true then
-                                                                     (fun g ->
-                                                                      g 1
-                                                                      (fun t ->
-                                                                       g 1
-                                                                       (fun q ->
-                                                                        (fun x -> x) (t + q))))
-                                                                      (fun e4 k5 ->
-                                                                       f 1 e4 k5)
-                                                                      else
-                                                                      (fun g ->
-                                                                       g 1
-                                                                       (fun s ->
-                                                                        g 1
-                                                                        (fun z ->
-
-                                                                        (fun x -> x) (s + z))))
-                                                                       (fun e2 k3 ->
-                                                                        f 1 e2 k3) |}]
+             else (fun g -> g 1 (fun s -> g 1 (fun z -> (fun x -> x) (s + z))))
+                  (fun e2 k3 ->
+                    f 1 e2 k3)
+    |}]
 ;;
 
 let%expect_test
@@ -2819,61 +2734,28 @@ let%expect_test
   [%expect
     {|
     before:
-    let main = (fun f k4 -> if true then f 1 (fun g -> g 1 (fun t ->
-                                                                    g 1 (fun q ->
+    let main =
+              (fun f k4 ->
+                if true
+                then f 1 (fun g -> g 1 (fun t -> g 1 (fun q -> k4 (t + q))))
+                else f 1 (fun g -> g 1 (fun s -> g 1 (fun z -> k4 (s + z)))))
+                (fun x k1 ->
+                  if true then k1 (fun y k2 -> k2 (x + y))
+                  else k1 (fun a k3 -> k3 (x + a)))
+                (fun x -> x)
 
-                                                                        k4 (t + q))))
-                                                              else f 1 (fun g ->
-                                                                        g 1
-                                                                        (fun s ->
-
-                                                                        g 1
-                                                                        (fun z ->
-
-                                                                        k4 (s + z)))))
-                                                              (fun x k1 ->
-                                                               if true then
-                                                                       k1
-                                                                       (fun y k2 ->
-                                                                        k2 (x + y))
-                                                                       else
-                                                                       k1
-                                                                       (fun a k3 ->
-                                                                        k3 (x + a)))
-                                                               (fun x -> x)
     after:
-
-                                                              let main =
-                                                                (fun f k4 ->
-                                                                 if true
-                                                                 then (fun g ->
-                                                                       g 1
-                                                                       (fun t ->
-                                                                        g 1
-                                                                        (fun q ->
-
-                                                                        k4 (t + q))))
-                                                                       (fun e3 k4 ->
+    let main =
+             (fun f k4 ->
+               if true
+               then (fun g -> g 1 (fun t -> g 1 (fun q -> k4 (t + q)))) (fun e3 k4 ->
                                                                         f 1 e3 k4)
-                                                                       else
-                                                                       (fun g ->
-                                                                        g 1
-                                                                        (fun s ->
 
-                                                                        g 1
-                                                                        (fun z ->
-
-                                                                        k4 (s + z))))
-                                                                        (fun e1 k2 ->
-
+               else (fun g -> g 1 (fun s -> g 1 (fun z -> k4 (s + z)))) (fun e1 k2 ->
                                                                         f 1 e1 k2))
-                                                                       (fun x e5 k1 ->
-                                                                        if true
-                                                                        then
-                                                                        k1 (x + e5)
-                                                                        else
-                                                                        k1 (x + e5))
-                                                                       (fun x -> x) |}]
+               (fun x e5 k1 -> if true then k1 (x + e5) else k1 (x + e5))
+               (fun x -> x)
+    |}]
 ;;
 
 let%expect_test "expand lam call argument" =
@@ -2909,36 +2791,18 @@ let%expect_test "expand lam call argument" =
   [%expect
     {|
     before:
-    let main = let f x k1 = k1 (fun y k2 -> k2 (x, y)) in if true
-                                                                  then (fun h k3 ->
-                                                                        h 1
-                                                                        (fun s ->
-
-                                                                        s 1 k3))
-                                                                       (fun t k4 ->
-                                                                        f
-                                                                        (1, t) k4)
-                                                                       (fun x -> x)
-                                                                       else
-                                                                       f
-                                                                       (1, 1)
-                                                                       (fun g ->
-                                                                        g 1
-                                                                        (fun x -> x))
+    let main =
+              let f x k1 = k1 (fun y k2 -> k2 (x, y)) in
+              if true
+              then (fun h k3 -> h 1 (fun s -> s 1 k3))
+                     (fun t k4 -> f (1, t) k4)
+                     (fun x -> x)
+               else f (1, 1) (fun g -> g 1 (fun x -> x))
     after:
-
-                                                                  let main =
-                                                                    let f x e1 k1 =
-                                                                    k1 (x, e1)
-                                                                    in if true
-                                                                       then
-                                                                       f
-                                                                       (1, 1) 1
-                                                                       (fun x -> x)
-                                                                       else
-                                                                       f
-                                                                       (1, 1) 1
-                                                                       (fun x -> x) |}]
+    let main =
+             let f x e1 k1 = k1 (x, e1) in
+             if true then f (1, 1) 1 (fun x -> x) else f (1, 1) 1 (fun x -> x)
+    |}]
 ;;
 
 let%expect_test "expand but not inl lam call argument" =
@@ -2977,52 +2841,24 @@ let%expect_test "expand but not inl lam call argument" =
   [%expect
     {|
     before:
-    let main = let f x k1 = k1 (fun y k2 -> k2 (x, y)) in if true
-                                                                  then (fun h k3 ->
-                                                                        if true
-                                                                        then
-                                                                        h 1
-                                                                        (fun s ->
-
-                                                                        s 1 k3)
-                                                                        else
-                                                                        h 1
-                                                                        (fun q ->
-
-                                                                        q 1 k3))
-                                                                        (fun t k4 ->
-
-                                                                        f
-                                                                        (1, t) k4)
-                                                                        (fun x -> x)
-                                                                        else
-                                                                        f
-                                                                        (1, 1)
-                                                                        (fun g ->
-
-                                                                        g 1
-                                                                        (fun x -> x))
+    let main =
+              let f x k1 = k1 (fun y k2 -> k2 (x, y)) in
+              if true
+              then (fun h k3 ->
+                     if true then h 1 (fun s -> s 1 k3)
+                     else h 1 (fun q -> q 1 k3))
+                     (fun t k4 -> f (1, t) k4)
+                     (fun x -> x)
+               else f (1, 1) (fun g -> g 1 (fun x -> x))
     after:
-
-                                                                  let main =
-                                                                    let f x e1 k1 =
-                                                                    k1 (x, e1)
-                                                                    in if true
-                                                                       then
-                                                                       (fun h k3 ->
-                                                                        if true
-                                                                        then
-                                                                        h 1 1 k3
-                                                                        else
-                                                                        h 1 1 k3)
-                                                                       (fun t e2 k4 ->
-                                                                        f
-                                                                        (1, t) e2 k4)
-                                                                       (fun x -> x)
-                                                                       else
-                                                                       f
-                                                                       (1, 1) 1
-                                                                       (fun x -> x) |}]
+    let main =
+             let f x e1 k1 = k1 (x, e1) in
+             if true
+             then (fun h k3 -> if true then h 1 1 k3 else h 1 1 k3)
+                    (fun t e2 k4 -> f (1, t) e2 k4)
+                    (fun x -> x)
+              else f (1, 1) 1 (fun x -> x)
+    |}]
 ;;
 
 let%expect_test "expand jv" =
@@ -3053,37 +2889,26 @@ let%expect_test "expand jv" =
   [%expect
     {|
     before:
-    let main = let jv1 f = f 1 (fun g -> g 1 (fun x -> x)) in if true
-                                                                      then
-                                                                      jv1
-                                                                      (fun x k1 ->
-                                                                       k1
-                                                                       (fun y k2 ->
+    let main =
+              let jv1 f = f 1 (fun g -> g 1 (fun x -> x)) in if true
+                                                             then jv1 (fun x k1 ->
+                                                                        k1
+                                                                        (fun y k2 ->
                                                                         k2 (x + y)))
-                                                                      else
-                                                                      jv1
-                                                                      (fun l k3 ->
-                                                                       k1
-                                                                       (fun r k4 ->
+
+                                                             else jv1 (fun l k3 ->
+                                                                        k1
+                                                                        (fun r k4 ->
                                                                         k2 (l + r)))
     after:
+    let main =
+             let jv1 f = f 1 1 (fun x -> x) in if true
+                                               then jv1 (fun x e2 k1 ->
+                                                          k1 (x + e2))
 
-                                                                      let main =
-                                                                        let jv1 f =
-                                                                        f 1 1
-                                                                        (fun x -> x)
-                                                                        in
-                                                                        if true
-                                                                        then
-                                                                        jv1
-                                                                        (fun x e2 k1 ->
-
-                                                                        k1 (x + e2))
-                                                                        else
-                                                                        jv1
-                                                                        (fun l e1 k3 ->
-
-                                                                        k1 (l + e1)) |}]
+                                               else jv1 (fun l e1 k3 ->
+                                                          k1 (l + e1))
+    |}]
 ;;
 
 let%expect_test "dead jv param" =
@@ -3110,31 +2935,19 @@ let%expect_test "dead jv param" =
   [%expect
     {|
     before:
-    let main = let jv1 f = (fun x -> x) (1 + 1) in if true then jv1
-                                                                        (fun x k1 ->
+    let main =
+              let jv1 f = (fun x -> x) (1 + 1) in if true
+                                                  then jv1 (fun x k1 ->
+                                                             k1 (fun y k2 ->
+                                                                  k2 (x + y)))
 
-                                                                        k1
-                                                                        (fun y k2 ->
-
-                                                                        k2 (x + y)))
-                                                                        else
-                                                                        jv1
-                                                                        (fun l k3 ->
-
-                                                                        k1
-                                                                        (fun r k4 ->
-
-                                                                        k2 (l + r)))
+                                                  else jv1 (fun l k3 ->
+                                                             k1 (fun r k4 ->
+                                                                  k2 (l + r)))
     after:
-
-                                                           let main = let jv1 f =
-                                                                      (fun x -> x) (1 + 1)
-                                                                      in
-                                                                      if true
-                                                                      then
-                                                                      jv1 ()
-                                                                      else
-                                                                      jv1 () |}]
+    let main =
+             let jv1 f = (fun x -> x) (1 + 1) in if true then jv1 () else jv1 ()
+    |}]
 ;;
 
 let%expect_test
@@ -3171,19 +2984,25 @@ let%expect_test
   [%expect
     {|
     before:
-    let main = let f x k1 = let h a k3 = k3 (fun b k4 -> k4 (a, b)) in
-                                    k1 (fun y k2 -> if y then k2 h else k2 h)
-                                    in f () (fun r -> r (2 <= 1) (fun g ->
-                                                                  g (1, 2)
-                                                                  (fun t ->
-                                                                   t 2 (fun x -> x))))
-    after:
+    let main =
+              let f x k1 =
+                let h a k3 = k3 (fun b k4 -> k4 (a, b)) in
+                k1 (fun y k2 -> if y then k2 h else k2 h)
+                in
+              f
+                ()
+                (fun r -> r
+                            (2 <= 1)
+                            (fun g -> g (1, 2) (fun t -> t 2 (fun x -> x)))
+                         )
 
-                                      let main = let h a e1 k3 = k3 (a, e1) in
-                                                 (fun e2 k2 -> if 2 <= 1
-                                                               then h e2 2 k2
-                                                               else h e2 2 k2)
-                                                 (1, 2) (fun x -> x) |}]
+    after:
+    let main =
+             let h a e1 k3 = k3 (a, e1) in
+             (fun e2 k2 -> if 2 <= 1 then h e2 2 k2 else h e2 2 k2)
+               (1, 2)
+               (fun x -> x)
+    |}]
 ;;
 
 let%expect_test "fack" =
@@ -3218,30 +3037,23 @@ let%expect_test "fack" =
   [%expect
     {|
     before:
-    let main = let rec fack n k1 = if n <= 1 then k1 (fun k k2 -> k 1 k2)
-                                                     else fack (n - 1) (fun h ->
-                                                                        k1
-                                                                        (fun k k3 ->
+    let main =
+              let rec fack n k1 =
+                if n <= 1 then k1 (fun k k2 -> k 1 k2)
+                else fack
+                       (n - 1)
+                       (fun h -> k1 (fun k k3 -> h k (fun t -> k (t * n) k3)))
 
-                                                                        h k
-                                                                        (fun t ->
-
-                                                                        k (t * n) k3)))
-                                                     in fack 1 (fun g ->
-                                                                        g
-                                                                        (fun x k4 ->
-
-                                                                        k4 x)
-                                                                        (fun x -> x))
+                in
+              fack 1 (fun g -> g (fun x k4 -> k4 x) (fun x -> x))
     after:
-
-                                           let main = let rec fack n e1 k1 =
-                                                      if n <= 1 then e1 1 k1
-                                                      else fack (n - 1) e1
-                                                           (fun t -> e1 (t * n) k1)
-                                                        in fack 1 (fun x k4 ->
-                                                                   k4 x)
-                                                                  (fun x -> x) |}]
+    let main =
+             let rec fack n e1 k1 =
+               if n <= 1 then e1 1 k1
+               else fack (n - 1) e1 (fun t -> e1 (t * n) k1)
+               in
+             fack 1 (fun x k4 -> k4 x) (fun x -> x)
+    |}]
 ;;
 
 let%expect_test "fibk" =
@@ -3255,46 +3067,42 @@ let%expect_test "fibk" =
   [%expect
     {|
     before:
-    let main = let rec fibk n k1 = if n <= 1 then k1 (fun k k2 -> k 1 k2)
-                                                     else fibk (n - 1) (fun t3 ->
-                                                                        k1
-                                                                        (fun k k4 ->
+    let main =
+              let rec fibk n k1 =
+                if n <= 1 then k1 (fun k k2 -> k 1 k2)
+                else fibk
+                       (n - 1)
+                       (fun t3 -> k1 (fun k k4 ->
+                                       t3
+                                         (fun l k5 ->
+                                           fibk
+                                             (n - 2)
+                                             (fun t6 -> t6
+                                                          (fun r k7 ->
+                                                            k (l + r) k7)
+                                                          k5
+                                                       )
+                                           )
+                                         k4
+                                       ))
 
-                                                                        t3
-                                                                        (fun l k5 ->
+                in
+              fibk
+                1
+                (fun t8 -> t8 (fun x k9 -> k9 x) (fun t10 -> (fun x -> x) t10))
 
-                                                                        fibk (n - 2)
-                                                                        (fun t6 ->
-
-                                                                        t6
-                                                                        (fun r k7 ->
-
-                                                                        k (l + r) k7) k5)) k4))
-                                                                       in
-                                                          fibk 1 (fun t8 ->
-                                                                  t8 (fun x k9 ->
-                                                                      k9 x)
-                                                                     (fun t10 ->
-                                                                      (fun x -> x) t10))
     after:
+    let main =
+             let rec fibk n e11 k1 =
+               if n <= 1 then e11 1 k1
+               else fibk
+                      (n - 1)
+                      (fun l k5 -> fibk (n - 2) (fun r k7 -> e11 (l + r) k7) k5)
+                      k1
 
-                                                          let main = let rec fibk n e11 k1 =
-                                                                     if n <= 1
-                                                                     then
-                                                                     e11 1 k1
-                                                                     else
-                                                                     fibk (n - 1)
-                                                                     (fun l k5 ->
-                                                                      fibk (n - 2)
-                                                                      (fun r k7 ->
-                                                                       e11 (l + r) k7) k5) k1
-                                                                     in fibk 1
-                                                                        (fun x k9 ->
-
-                                                                        k9 x)
-                                                                        (fun t10 ->
-
-                                                                        (fun x -> x) t10) |}]
+               in
+             fibk 1 (fun x k9 -> k9 x) (fun t10 -> (fun x -> x) t10)
+    |}]
 ;;
 
 let%expect_test "branches with diff fin_call_ars" =
@@ -3363,99 +3171,45 @@ let%expect_test "branches with diff fin_call_ars" =
   [%expect
     {|
     before:
-    let main = let g x k1 = let h b k4 = k4 (b + b) in h x (fun l ->
-                                                                    k1 (fun z k2 ->
-                                                                        k2
-                                                                        (fun y k3 ->
+    let main =
+              let g x k1 =
+                let h b k4 = k4 (b + b) in
+                h
+                  x
+                  (fun l -> k1 (fun z k2 ->
+                                 k2 (fun y k3 -> h y (fun r -> k3 (z + (l + r))))))
 
-                                                                        h y
-                                                                        (fun r ->
+                in
+              let rec q s k5 =
+                let u a k8 = k8 (a + a) in
+                u
+                  s
+                  (fun n -> k5 (fun j k6 ->
+                                 k6 (fun c k7 -> u c (fun d -> k7 (j + (n + d))))))
 
-                                                                        k3 (z + (l + r))))))
-                                                               in let rec q s k5 =
-                                                                  let u a k8 =
-                                                                  k8 (a + a)
-                                                                  in u s
-                                                                     (fun n ->
-                                                                      k5
-                                                                      (fun j k6 ->
-                                                                       k6
-                                                                       (fun c k7 ->
-                                                                        u c
-                                                                        (fun d ->
-
-                                                                        k7 (j + (n + d))))))
-                                                                     in let rec f t k9 =
-                                                                        if true
-                                                                        then
-                                                                        q t k9
-                                                                        else
-                                                                        g t k9
-                                                                        in
-                                                                        f 1
-                                                                        (fun v ->
-
-                                                                        v 1
-                                                                        (fun w ->
-
-                                                                        w 1
-                                                                        (fun m ->
-
-                                                                        (fun x -> x)
-                                                                        (m, g))))
+                in
+              let rec f t k9 = if true then q t k9 else g t k9 in
+              f 1 (fun v -> v 1 (fun w -> w 1 (fun m -> (fun x -> x) (m, g))))
     after:
+    let main =
+             let g x k1 =
+               let h b k4 = k4 (b + b) in
+               h
+                 x
+                 (fun l -> k1 (fun z k2 ->
+                                k2 (fun y k3 -> h y (fun r -> k3 (z + (l + r))))))
 
-                                                                    let main =
-                                                                      let g x k1 =
-                                                                      let h b k4 =
-                                                                      k4 (b + b)
-                                                                      in
-                                                                      h x
-                                                                      (fun l ->
-                                                                       k1
-                                                                       (fun z k2 ->
-                                                                        k2
-                                                                        (fun y k3 ->
-
-                                                                        h y
-                                                                        (fun r ->
-
-                                                                        k3 (z + (l + r))))))
-                                                                      in
-                                                                      let rec q s e2 e1 k5 =
-                                                                      let u a k8 =
-                                                                      k8 (a + a)
-                                                                      in
-                                                                      u s
-                                                                      (fun n ->
-                                                                       u e1
-                                                                       (fun d ->
-                                                                        k5 (e2 + (n + d))))
-                                                                      in
-                                                                        let rec f t k9 =
-                                                                        if true
-                                                                        then
-                                                                        k9
-                                                                        (fun e5 k6 ->
-
-                                                                        k6
-                                                                        (fun e3 k4 ->
-
-                                                                        q t e5 e3 k4))
-                                                                        else
-                                                                        g t k9
-                                                                        in
-                                                                        f 1
-                                                                        (fun v ->
-
-                                                                        v 1
-                                                                        (fun w ->
-
-                                                                        w 1
-                                                                        (fun m ->
-
-                                                                        (fun x -> x)
-                                                                        (m, g)))) |}]
+               in
+             let rec q s e2 e1 k5 =
+               let u a k8 = k8 (a + a) in
+               u s (fun n -> u e1 (fun d -> k5 (e2 + (n + d))))
+               in
+             let rec f t k9 =
+               if true then k9 (fun e5 k6 -> k6 (fun e3 k4 -> q t e5 e3 k4))
+               else g t k9
+               in
+             f 1 (fun v -> v 1 (fun w -> w 1 (fun m -> (fun x -> x) (m, g))))
+    |}]
 ;;
 
 let%expect_test "dead lam_call_bnd lam par. near the barrier" =
@@ -3476,16 +3230,17 @@ let%expect_test "dead lam_call_bnd lam par. near the barrier" =
   [%expect
     {|
     before:
-    let main = (fun x k1 -> if true then k1 1 else k1 2) (fun a k3 ->
-                                                                  k3 (fun b k4 ->
-                                                                      k4 (a, b)))
-                                                                 (fun y ->
-                                                                  (fun x -> x)
-                                                                  (y, y))
-    after:
+    let main =
+              (fun x k1 -> if true then k1 1 else k1 2)
+                (fun a k3 -> k3 (fun b k4 -> k4 (a, b)))
+                (fun y -> (fun x -> x) (y, y))
 
-                       let main = (fun x k1 -> if true then k1 1 else k1 2) ()
-                                  (fun y -> (fun x -> x) (y, y)) |}]
+    after:
+    let main =
+             (fun x k1 -> if true then k1 1 else k1 2)
+               ()
+               (fun y -> (fun x -> x) (y, y))
+    |}]
 ;;
 
 type cps1_vb = OneACPS.cps_vb
