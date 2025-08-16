@@ -9,7 +9,7 @@
   (package rukaml)
   compiler.exe
   ;%{project_root}/llvm/llvm_backend.cmxs # issues with linksing C code
-  %{project_root}/compiler/rukaml_stdlib.o
+  %{project_root}/middle/rukaml_stdlib.o
   ;
   fack.ml
   ;

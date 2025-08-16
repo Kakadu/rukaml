@@ -38,6 +38,6 @@
     %0 = call i64 @id(i64 4)
     ret i64 %0
   }
-  $ clang-16 fack.ll ../../compiler/rukaml_stdlib.o -o fack.exe
+  $ clang-16 fack.ll ../../middle/rukaml_stdlib.o -o fack.exe
   $ ./fack.exe
   [4]

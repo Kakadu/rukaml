@@ -104,7 +104,7 @@
     ret i64 %3
   }
 
-  $ clang-16 fack.ll ../../compiler/rukaml_stdlib.o -o fack.exe
+  $ clang-16 fack.ll ../../middle/rukaml_stdlib.o -o fack.exe
   $ ./fack.exe
   [24]
 
@@ -147,6 +147,6 @@
   let main =
     let temp11 = fack 5  in
       temp11 fresh_2 
-  $ clang-16 fack.ll ../../compiler/rukaml_stdlib.o -o fack.exe
+  $ clang-16 fack.ll ../../middle/rukaml_stdlib.o -o fack.exe
   $ ./fack.exe
   [120]

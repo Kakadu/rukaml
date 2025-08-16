@@ -70,6 +70,6 @@
     %2 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %1, i64 1, i64 13)
     ret i64 %2
   }
-  $ clang-16 mydiv.ll ../../compiler/rukaml_stdlib.o -o mydiv.exe #--verbose
+  $ clang-16 mydiv.ll ../../middle/rukaml_stdlib.o -o mydiv.exe #--verbose
   $ ./mydiv.exe
   [27]

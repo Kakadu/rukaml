@@ -51,6 +51,6 @@
     %3 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %2, i64 1, i64 5)
     ret i64 %3
   }
-  $ clang-16 fack.ll ../../compiler/rukaml_stdlib.o -o fack.exe
+  $ clang-16 fack.ll ../../middle/rukaml_stdlib.o -o fack.exe
   $ ./fack.exe
   [5]
