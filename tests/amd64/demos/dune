@@ -14,7 +14,7 @@
 ;  (action
 ;   (progn
 ;    (run
-;     %{project_root}/back_amd64/amd64_compiler.exe
+;     %{project_root}/back/amd64/amd64_compiler.exe
 ;     double.ml
 ;     -o
 ;     double.asm)
@@ -25,12 +25,12 @@
  (targets if.asm if.exe)
  (deps
   (:src if.ml)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
   (progn
-   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o if.asm)
+   (run %{project_root}/back/amd64/amd64_compiler.exe %{src} -o if.asm)
    (run nasm -g -F dwarf -felf64 if.asm -o if.o)
    (run gcc-13 -g -o if.exe %{stdlib} if.o))))
 
@@ -38,12 +38,12 @@
  (targets fac.asm fac.exe)
  (deps
   (:src fac.ml)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
   (progn
-   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o fac.asm)
+   (run %{project_root}/back/amd64/amd64_compiler.exe %{src} -o fac.asm)
    (run nasm -g -F dwarf -felf64 fac.asm -o fac.o)
    (run gcc-13 -g -o fac.exe %{stdlib} fac.o))))
 
@@ -51,13 +51,13 @@
  (targets fack.asm fack.exe)
  (deps
   (:src fack.ml)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
   (progn
    (run
-    %{project_root}/back_amd64/amd64_compiler.exe
+    %{project_root}/back/amd64/amd64_compiler.exe
     %{src}
     -o
     fack.asm
@@ -70,12 +70,12 @@
  (targets gc1.asm gc1.exe)
  (deps
   (:src gc1.ml)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
   (progn
-   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o gc1.asm)
+   (run %{project_root}/back/amd64/amd64_compiler.exe %{src} -o gc1.asm)
    (run nasm -g -F dwarf -felf64 gc1.asm -o gc1.o)
    (run gcc-13 -g -o gc1.exe %{stdlib} gc1.o))))
 
@@ -83,13 +83,13 @@
  (targets app1.asm app1.exe)
  (deps
   (:src app1.ml)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
   (progn
    (run
-    %{project_root}/back_amd64/amd64_compiler.exe
+    %{project_root}/back/amd64/amd64_compiler.exe
     %{src}
     -o
     app1.asm
@@ -103,12 +103,12 @@
  (targets hack.asm hack.exe)
  (deps
   (:src hack.ml)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
   (progn
-   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o hack.asm)
+   (run %{project_root}/back/amd64/amd64_compiler.exe %{src} -o hack.asm)
    (run nasm -g -F dwarf -felf64 hack.asm -o hack.o)
    (run gcc-13 -g -no-pie hack.o %{stdlib} -o hack.exe))))
 
@@ -116,7 +116,7 @@
 ;  (targets hack.exe)
 ;  (deps
 ;   (:src hack.asm)
-;   (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+;   (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
 ;  (mode
 ;   (promote (until-clean)))
 ;  (action

@@ -1,4 +1,4 @@
-  $ ../../back_rv64/RV64_compiler.exe -o program.s --no-start -danf -stop-after anf pass_print2.ml
+  $ ../../back/rv64/RV64_compiler.exe -o program.s --no-start -danf -stop-after anf pass_print2.ml
   After ANF transformation.
   let addk a b k =
     let temp1 = (a + b) in

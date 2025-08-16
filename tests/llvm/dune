@@ -1,6 +1,6 @@
 (rule
  (target compiler.exe)
- (deps %{project_root}/back_LLVM/llvm_compiler.exe)
+ (deps %{project_root}/back/llvm/llvm_compiler.exe)
  (action
   (run cp %{deps} %{target})))
 

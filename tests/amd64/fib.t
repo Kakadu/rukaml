@@ -1,4 +1,4 @@
-  $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm - -vamd64
+  $ cat << EOF | ../../back/amd64/amd64_compiler.exe -o program.asm - -vamd64
   > let rec fib n =
   >   if n=0 then 0 else if n=1 then 1 else fib (n-2) + fib (n-1)
   > let main = let u = print (fib 8) in 0
@@ -136,6 +136,6 @@
 
 $ nasm -felf64 program.asm -o program.o && ld -o program.exe program.o && chmod u+x program.exe && ./program.exe
   $ nasm -felf64 program.asm -o program.o
-  $ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
+  $ gcc-13 program.o ../../back/amd64/rukaml_stdlib.o -o program.exe
   $ chmod u+x program.exe && ./program.exe
   rukaml_print_int 21

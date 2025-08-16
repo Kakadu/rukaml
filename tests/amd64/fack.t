@@ -1,4 +1,4 @@
-  $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm --no-start - # -vamd64
+  $ cat << EOF | ../../back/amd64/amd64_compiler.exe -o program.asm --no-start - # -vamd64
   > let rec fack n k = if n=1 then k 1 else fack (n-1) (fun m -> k (n*m))
   > let id u = u
   > let main =
@@ -188,7 +188,7 @@
      178	  pop rbp
      179	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o
-  $ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
+  $ gcc-13 program.o ../../back/amd64/rukaml_stdlib.o -o program.exe
   /usr/bin/ld: program.o: warning: relocation in read-only section `.text'
   /usr/bin/ld: warning: creating DT_TEXTREL in a PIE
   $ chmod u+x program.exe && ./program.exe

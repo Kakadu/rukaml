@@ -1,4 +1,4 @@
-  $ cat print.ml | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 --no-start -
+  $ cat print.ml | ../../back/amd64/amd64_compiler.exe -o program.asm -vamd64 --no-start -
   ANF: let prod a b c =
          (2 * c)
        let main =
@@ -88,7 +88,7 @@
       70	  pop rbp
       71	  ret  ;;;; main
   $ nasm -felf64 program.asm -o program.o
-  $ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
+  $ gcc-13 program.o ../../back/amd64/rukaml_stdlib.o -o program.exe
   /usr/bin/ld: program.o: warning: relocation in read-only section `.text'
   /usr/bin/ld: warning: creating DT_TEXTREL in a PIE
 

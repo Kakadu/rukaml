@@ -12,7 +12,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     --no-start
@@ -27,7 +27,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     -cps
@@ -54,9 +54,9 @@
 (rule
  (targets anon1_cpsoff.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src anon1_cpsoff.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -65,7 +65,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     anon1_cpsoff.o
     -o
     %{targets}))))
@@ -73,9 +73,9 @@
 (rule
  (targets anon1_cpson.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src anon1_cpson.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -84,7 +84,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     anon1_cpson.o
     -o
     %{targets}))))
@@ -111,7 +111,7 @@
 (cram
  (applies_to anon1)
  (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
+  %{project_root}/back/rv64/rukaml_stdlib.o
   ../rv64/anon1.ml
   anon1_cpsoff.exe
   anon1_cpson.exe
@@ -131,7 +131,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     --no-start
@@ -146,7 +146,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     -cps
@@ -173,9 +173,9 @@
 (rule
  (targets empty_cpsoff.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src empty_cpsoff.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -184,7 +184,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     empty_cpsoff.o
     -o
     %{targets}))))
@@ -192,9 +192,9 @@
 (rule
  (targets empty_cpson.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src empty_cpson.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -203,7 +203,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     empty_cpson.o
     -o
     %{targets}))))
@@ -230,7 +230,7 @@
 (cram
  (applies_to empty)
  (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
+  %{project_root}/back/rv64/rukaml_stdlib.o
   ../rv64/empty.ml
   empty_cpsoff.exe
   empty_cpson.exe
@@ -250,7 +250,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     --no-start
@@ -265,7 +265,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     -cps
@@ -292,9 +292,9 @@
 (rule
  (targets fac_cpsoff.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src fac_cpsoff.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -303,7 +303,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     fac_cpsoff.o
     -o
     %{targets}))))
@@ -311,9 +311,9 @@
 (rule
  (targets fac_cpson.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src fac_cpson.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -322,7 +322,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     fac_cpson.o
     -o
     %{targets}))))
@@ -349,7 +349,7 @@
 (cram
  (applies_to fac)
  (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
+  %{project_root}/back/rv64/rukaml_stdlib.o
   ../rv64/fac.ml
   fac_cpsoff.exe
   fac_cpson.exe
@@ -369,7 +369,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     --no-start
@@ -384,7 +384,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     -cps
@@ -411,9 +411,9 @@
 (rule
  (targets fac_acc_cpsoff.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src fac_acc_cpsoff.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -422,7 +422,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     fac_acc_cpsoff.o
     -o
     %{targets}))))
@@ -430,9 +430,9 @@
 (rule
  (targets fac_acc_cpson.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src fac_acc_cpson.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -441,7 +441,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     fac_acc_cpson.o
     -o
     %{targets}))))
@@ -468,7 +468,7 @@
 (cram
  (applies_to fac_acc)
  (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
+  %{project_root}/back/rv64/rukaml_stdlib.o
   ../rv64/fac_acc.ml
   fac_acc_cpsoff.exe
   fac_acc_cpson.exe
@@ -488,7 +488,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     --no-start
@@ -503,7 +503,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     -cps
@@ -530,9 +530,9 @@
 (rule
  (targets fac_cps_cpsoff.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src fac_cps_cpsoff.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -541,7 +541,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     fac_cps_cpsoff.o
     -o
     %{targets}))))
@@ -549,9 +549,9 @@
 (rule
  (targets fac_cps_cpson.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src fac_cps_cpson.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -560,7 +560,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     fac_cps_cpson.o
     -o
     %{targets}))))
@@ -587,7 +587,7 @@
 (cram
  (applies_to fac_cps)
  (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
+  %{project_root}/back/rv64/rukaml_stdlib.o
   ../rv64/fac_cps.ml
   fac_cps_cpsoff.exe
   fac_cps_cpson.exe
@@ -607,7 +607,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     --no-start
@@ -622,7 +622,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     -cps
@@ -649,9 +649,9 @@
 (rule
  (targets fib_cps_cpsoff.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src fib_cps_cpsoff.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -660,7 +660,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     fib_cps_cpsoff.o
     -o
     %{targets}))))
@@ -668,9 +668,9 @@
 (rule
  (targets fib_cps_cpson.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src fib_cps_cpson.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -679,7 +679,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     fib_cps_cpson.o
     -o
     %{targets}))))
@@ -706,7 +706,7 @@
 (cram
  (applies_to fib_cps)
  (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
+  %{project_root}/back/rv64/rukaml_stdlib.o
   ../rv64/fib_cps.ml
   fib_cps_cpsoff.exe
   fib_cps_cpson.exe
@@ -726,7 +726,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     --no-start
@@ -741,7 +741,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     -cps
@@ -768,9 +768,9 @@
 (rule
  (targets fib_cpsoff.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src fib_cpsoff.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -779,7 +779,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     fib_cpsoff.o
     -o
     %{targets}))))
@@ -787,9 +787,9 @@
 (rule
  (targets fib_cpson.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src fib_cpson.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -798,7 +798,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     fib_cpson.o
     -o
     %{targets}))))
@@ -825,7 +825,7 @@
 (cram
  (applies_to fib)
  (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
+  %{project_root}/back/rv64/rukaml_stdlib.o
   ../rv64/fib.ml
   fib_cpsoff.exe
   fib_cpson.exe
@@ -845,7 +845,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     --no-start
@@ -860,7 +860,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     -cps
@@ -887,9 +887,9 @@
 (rule
  (targets fib_acc_cpsoff.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src fib_acc_cpsoff.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -898,7 +898,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     fib_acc_cpsoff.o
     -o
     %{targets}))))
@@ -906,9 +906,9 @@
 (rule
  (targets fib_acc_cpson.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src fib_acc_cpson.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -917,7 +917,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     fib_acc_cpson.o
     -o
     %{targets}))))
@@ -944,7 +944,7 @@
 (cram
  (applies_to fib_acc)
  (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
+  %{project_root}/back/rv64/rukaml_stdlib.o
   ../rv64/fib_acc.ml
   fib_acc_cpsoff.exe
   fib_acc_cpson.exe
@@ -964,7 +964,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     --no-start
@@ -979,7 +979,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     -cps
@@ -1006,9 +1006,9 @@
 (rule
  (targets nikita2_cpsoff.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src nikita2_cpsoff.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -1017,7 +1017,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     nikita2_cpsoff.o
     -o
     %{targets}))))
@@ -1025,9 +1025,9 @@
 (rule
  (targets nikita2_cpson.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src nikita2_cpson.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -1036,7 +1036,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     nikita2_cpson.o
     -o
     %{targets}))))
@@ -1063,7 +1063,7 @@
 (cram
  (applies_to nikita2)
  (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
+  %{project_root}/back/rv64/rukaml_stdlib.o
   ../rv64/nikita2.ml
   nikita2_cpsoff.exe
   nikita2_cpson.exe
@@ -1083,7 +1083,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     --no-start
@@ -1098,7 +1098,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     -cps
@@ -1125,9 +1125,9 @@
 (rule
  (targets nikita3_cpsoff.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src nikita3_cpsoff.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -1136,7 +1136,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     nikita3_cpsoff.o
     -o
     %{targets}))))
@@ -1144,9 +1144,9 @@
 (rule
  (targets nikita3_cpson.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src nikita3_cpson.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -1155,7 +1155,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     nikita3_cpson.o
     -o
     %{targets}))))
@@ -1182,7 +1182,7 @@
 (cram
  (applies_to nikita3)
  (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
+  %{project_root}/back/rv64/rukaml_stdlib.o
   ../rv64/nikita3.ml
   nikita3_cpsoff.exe
   nikita3_cpson.exe
@@ -1202,7 +1202,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     --no-start
@@ -1217,7 +1217,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     -cps
@@ -1244,9 +1244,9 @@
 (rule
  (targets order1_cpsoff.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src order1_cpsoff.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -1255,7 +1255,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     order1_cpsoff.o
     -o
     %{targets}))))
@@ -1263,9 +1263,9 @@
 (rule
  (targets order1_cpson.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src order1_cpson.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -1274,7 +1274,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     order1_cpson.o
     -o
     %{targets}))))
@@ -1301,7 +1301,7 @@
 (cram
  (applies_to order1)
  (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
+  %{project_root}/back/rv64/rukaml_stdlib.o
   ../rv64/order1.ml
   order1_cpsoff.exe
   order1_cpson.exe
@@ -1321,7 +1321,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     --no-start
@@ -1336,7 +1336,7 @@
  (action
   (progn
    (run
-    %{project_root}/back_rv64/RV64_compiler.exe
+    %{project_root}/back/rv64/RV64_compiler.exe
     -o
     %{targets}
     -cps
@@ -1363,9 +1363,9 @@
 (rule
  (targets pass_print_cpsoff.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src pass_print_cpsoff.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -1374,7 +1374,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     pass_print_cpsoff.o
     -o
     %{targets}))))
@@ -1382,9 +1382,9 @@
 (rule
  (targets pass_print_cpson.exe)
  (deps
-  %{project_root}/back_rv64/RV64_compiler.exe
+  %{project_root}/back/rv64/RV64_compiler.exe
   (:src pass_print_cpson.s)
-  %{project_root}/back_rv64/rukaml_stdlib.o)
+  %{project_root}/back/rv64/rukaml_stdlib.o)
  ;(mode
  ; (promote (until-clean)))
  (action
@@ -1393,7 +1393,7 @@
    (run
     riscv64-linux-gnu-gcc-13
     -g
-    %{project_root}/back_rv64/rukaml_stdlib.o
+    %{project_root}/back/rv64/rukaml_stdlib.o
     pass_print_cpson.o
     -o
     %{targets}))))
@@ -1420,7 +1420,7 @@
 (cram
  (applies_to pass_print)
  (deps
-  %{project_root}/back_rv64/rukaml_stdlib.o
+  %{project_root}/back/rv64/rukaml_stdlib.o
   ../rv64/pass_print.ml
   pass_print_cpsoff.exe
   pass_print_cpson.exe

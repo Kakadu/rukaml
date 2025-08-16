@@ -1,4 +1,4 @@
-  $ ../../back_rv64/RV64_compiler.exe -o program.s --no-start -danf fac.ml
+  $ ../../back/rv64/RV64_compiler.exe -o program.s --no-start -danf fac.ml
   After ANF transformation.
   let rec fac n =
     (if (n = 1)
@@ -73,6 +73,6 @@
     addi a7, x0, 93 # Service command code 93 terminates
     ecall # Call linux to terminate the program
   $ riscv64-linux-gnu-gcc-13 -c -g program.s -o program.o # 2>&1 | head -n5
-  $ riscv64-linux-gnu-gcc-13 -g program.o ../../back_rv64/rukaml_stdlib.o -o fac.exe 2>&1 | head -n5
+  $ riscv64-linux-gnu-gcc-13 -g program.o ../../back/rv64/rukaml_stdlib.o -o fac.exe 2>&1 | head -n5
   $ qemu-riscv64 -L /usr/riscv64-linux-gnu -cpu rv64  ./fac.exe
   rukaml_print_int 120

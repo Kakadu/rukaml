@@ -3,8 +3,8 @@
   (package rukaml)
   (package rukaml_amd64)
   %{project_root}/compiler.exe
-  %{project_root}/back_amd64/amd64_compiler.exe
-  %{project_root}/back_amd64/rukaml_stdlib.o
+  %{project_root}/back/amd64/amd64_compiler.exe
+  %{project_root}/back/amd64/rukaml_stdlib.o
   ;
   ))
 
@@ -18,17 +18,17 @@
  (targets fac.asm)
  (deps
   (:src fac.ml)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
-  (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o fac.asm)))
+  (run %{project_root}/back/amd64/amd64_compiler.exe %{src} -o fac.asm)))
 
 (rule
  (targets fac.exe)
  (deps
   (:src fac.asm)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
@@ -46,12 +46,12 @@
  (targets print.asm print.exe)
  (deps
   (:src print.ml)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
   (progn
-   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o print.asm)
+   (run %{project_root}/back/amd64/amd64_compiler.exe %{src} -o print.asm)
    (run nasm -g -F dwarf -felf64 print.asm -o print.o)
    (run gcc-13 -g -no-pie print.o %{stdlib} -o print.exe))))
 
@@ -65,12 +65,12 @@
  (targets print3.asm print3.exe)
  (deps
   (:src print3.ml)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
   (progn
-   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o print3.asm)
+   (run %{project_root}/back/amd64/amd64_compiler.exe %{src} -o print3.asm)
    (run nasm -g -F dwarf -felf64 print3.asm -o print3.o)
    (run gcc-13 -g -no-pie print3.o %{stdlib} -o print3.exe))))
 
@@ -87,12 +87,12 @@
  (targets if.asm if.exe)
  (deps
   (:src if.ml)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
   (progn
-   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o if.asm)
+   (run %{project_root}/back/amd64/amd64_compiler.exe %{src} -o if.asm)
    (run nasm -g -F dwarf -felf64 if.asm -o if.o)
    (run gcc-13 -g -no-pie if.o %{stdlib} -o if.exe))))
 
@@ -110,12 +110,12 @@
  (targets long_app.asm long_app.exe)
  (deps
   (:src long_app.ml)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
   (progn
-   (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o long_app.asm)
+   (run %{project_root}/back/amd64/amd64_compiler.exe %{src} -o long_app.asm)
    (run nasm -g -F dwarf -felf64 long_app.asm -o long_app.o)
    (run gcc-13 -g -no-pie long_app.o %{stdlib} -o long_app.exe))))
 
@@ -129,13 +129,13 @@
  (targets pass_print.asm pass_print.exe)
  (deps
   (:src pass_print.ml)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
   (progn
    (run
-    %{project_root}/back_amd64/amd64_compiler.exe
+    %{project_root}/back/amd64/amd64_compiler.exe
     %{src}
     -o
     pass_print.asm)
@@ -152,17 +152,17 @@
  (targets tuple0.asm)
  (deps
   (:src tuple0.ml)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
-  (run %{project_root}/back_amd64/amd64_compiler.exe %{src} -o tuple0.asm)))
+  (run %{project_root}/back/amd64/amd64_compiler.exe %{src} -o tuple0.asm)))
 
 (rule
  (targets tuple0.exe)
  (deps
   (:src tuple0.asm)
-  (:stdlib %{project_root}/back_amd64/rukaml_stdlib.o))
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action

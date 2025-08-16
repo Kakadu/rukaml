@@ -1,4 +1,4 @@
-  $ ../../back_rv64/RV64_compiler.exe -o program.s --no-start -danf -stop-after anf ite0.ml
+  $ ../../back/rv64/RV64_compiler.exe -o program.s --no-start -danf -stop-after anf ite0.ml
   After ANF transformation.
   let foo n =
     (if (n < 2)

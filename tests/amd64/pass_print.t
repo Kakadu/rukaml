@@ -1,4 +1,4 @@
-$ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 -
+$ cat << EOF | ../../back/amd64/amd64_compiler.exe -o program.asm -vamd64 -
 > let apply_zero f = f 21
 > let main =
 >   let x = apply_zero print in
@@ -14,7 +14,7 @@ $ cat program.asm  | grep -v 'section .note.GNU-stack' | nl -ba
 
 $ nasm -felf64 program.asm -o program.o && ld -o program.exe program.o && chmod u+x program.exe && ./program.exe
 $ nasm -felf64 program.asm -o program.o
-$ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
+$ gcc-13 program.o ../../back/amd64/rukaml_stdlib.o -o program.exe
   $ ./pass_print.exe
   rukaml_print_int 21
   rukaml_print_int 22

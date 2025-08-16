@@ -1,4 +1,4 @@
-  $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm -vamd64 -
+  $ cat << EOF | ../../back/amd64/amd64_compiler.exe -o program.asm -vamd64 -
   > let sq y = y * y
   > let double x = x+x
   > let main = sq 7
@@ -72,6 +72,6 @@
       53	  ret  ;;;; main
 
   $ nasm -felf64 program.asm -o program.o
-  $ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
+  $ gcc-13 program.o ../../back/amd64/rukaml_stdlib.o -o program.exe
   $ ./program.exe && echo $?
   [49]

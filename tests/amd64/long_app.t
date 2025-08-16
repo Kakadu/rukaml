@@ -5,7 +5,7 @@ $ ls
   rukaml_print_int 10
   rukaml_print_int 10
 # Shadowing introduces a bug
-  $ cat << EOF | ../../back_amd64/amd64_compiler.exe -o program.asm - #-vamd64
+  $ cat << EOF | ../../back/amd64/amd64_compiler.exe -o program.asm - #-vamd64
   > let wrap f = if 1 = 1 then f else f
   > let test3 a b c =
   >   let a1 = print a in
@@ -20,7 +20,7 @@ $ ls
 ; generated code for amd64
   $ cat program.asm  | grep -v 'section .note.GNU-stack' | nl -ba > /dev/null
   $ nasm -felf64 program.asm -o program.o
-  $ gcc-13 program.o ../../back_amd64/rukaml_stdlib.o -o program.exe
+  $ gcc-13 program.o ../../back/amd64/rukaml_stdlib.o -o program.exe
   /usr/bin/ld: program.o: warning: relocation in read-only section `.text'
   /usr/bin/ld: warning: creating DT_TEXTREL in a PIE
   $ ./program.exe && echo $?

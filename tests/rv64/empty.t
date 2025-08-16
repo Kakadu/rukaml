@@ -1,4 +1,4 @@
-  $  ../../back_rv64/RV64_compiler.exe -o program.s --no-start -danf -stop-after anf empty.ml
+  $  ../../back/rv64/RV64_compiler.exe -o program.s --no-start -danf -stop-after anf empty.ml
   After ANF transformation.
   let main =
     0
