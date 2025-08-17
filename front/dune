@@ -1,22 +1,6 @@
-(env
- (dev
-  (flags
-   (:standard -w -32-33 -warn-error -8-9-26-27-34-37-39-69))))
-
 (library
  (name Frontend)
- (public_name rukaml.frontend)
- (modules
-  Ident
-  inferencer
-  parsetree
-  parsing
-  Pprinttyped
-  Pprint
-  typedtree
-  ;
-  )
- ;(inline_tests)
+ (modules Ident inferencer parsetree parsing Pprinttyped Pprint typedtree)
  (libraries ppx_deriving.runtime angstrom base)
  (preprocess
   (pps ppx_deriving.show bisect_ppx ppx_expect)))

@@ -10,22 +10,3 @@
 
 (cram
  (deps ./REPL.exe))
-
-; Compiler executable and plugins
-
-(library
- (public_name rukaml.register)
- (name registration)
- (modules registration)
- (libraries Frontend))
-
-(executable
- (public_name minimlc)
- (name compiler)
- (modules sites compiler)
- (libraries registration dune-site dune-site.plugins))
-
-(generate_sites_module
- (module sites)
- (plugins
-  (rukaml plugins)))

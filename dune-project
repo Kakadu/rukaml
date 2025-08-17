@@ -1,5 +1,4 @@
 (lang dune 3.19)
-(using dune_site 0.1)
 
 (generate_opam_files true)
 (cram enable)
@@ -12,13 +11,11 @@
 
 (name rukaml)
 (package
+ (allow_empty)
  (name rukaml)
  (synopsis "Another ML compiler")
- (sites
-  (lib plugins))
  (depends
   dune
-  dune-site
   (ocaml
    (or
     (= 4.14.2)

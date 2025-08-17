@@ -45,14 +45,3 @@ let compile stru _stru_typed ~filename =
   (* Result.return () *)
   prepare_llvm anf ~filename
 ;;
-
-let () =
-  let module B = struct
-    type nonrec error = error
-
-    let pp_error = pp_error
-    let run = compile
-  end
-  in
-  Registration.register_backend_exn "llvm" (module B) []
-;;

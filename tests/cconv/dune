@@ -1,7 +1,7 @@
 (executable
  (name REPL)
  (modules REPL)
- (libraries stdio cconv rukaml.frontend))
+ (libraries stdio cconv Frontend))
 
 (cram
  (deps ./REPL.exe))

@@ -6,10 +6,9 @@
 
 (library
  (name rv64_impl)
- (public_name MiniML_rv64.impl)
  (modules RV64_impl Machine)
  (wrapped false)
- (libraries rukaml.cconv rukaml.compile)
+ (libraries cconv compile_lib)
  (preprocess
   (pps bisect_ppx)))
 
@@ -17,23 +16,6 @@
  (name RV64_compiler)
  (modules RV64_compiler)
  (libraries stdio rv64_impl))
-
-; (library
-;  (public_name MiniML_amd64.backend)
-;  (name plugin1_impl)
-;  (modules back_amd64)
-;  (libraries
-;   MiniML.frontend
-;   MiniML.compile
-;   MiniML.register
-;   MiniML.cconv
-;   amd64_impl))
-
-; (plugin
-;  (name plugin1)
-;  (libraries MiniML_amd64.backend)
-;  (site
-;   (MiniML plugins)))
 
 (rule
  (targets rukaml_stdlib.o)

@@ -1,7 +1,0 @@
-(cram
- (deps
-  (package rukaml)
-  (package rukaml_amd64)
-  (package rukaml_llvm)
-  ;
-  ))

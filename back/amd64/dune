@@ -7,10 +7,9 @@
 
 (library
  (name amd64_impl)
- (public_name rukaml_amd64.impl)
  (modules amd64_impl)
  (wrapped false)
- (libraries rukaml.cconv rukaml.compile)
+ (libraries cconv compile_lib)
  (preprocess
   (pps bisect_ppx)))
 
@@ -18,23 +17,6 @@
  (name amd64_compiler)
  (modules amd64_compiler)
  (libraries stdio amd64_impl))
-
-(library
- (public_name rukaml_amd64.backend)
- (name plugin1_impl)
- (modules back_amd64)
- (libraries
-  rukaml.frontend
-  rukaml.compile
-  rukaml.register
-  rukaml.cconv
-  amd64_impl))
-
-(plugin
- (name plugin1)
- (libraries rukaml_amd64.backend)
- (site
-  (rukaml plugins)))
 
 (rule
  (targets rukaml_stdlib.o)
