@@ -10,25 +10,27 @@ let () =
         ch
         {|
 (rule
- (targets %s.exe)
+ (target %s.exe)
+ (enabled_if
+  (not
+   (= none %%{read:../../../cc_rv64})))
+ (mode
+  (promote (until-clean)))
  (deps
   (:src %s.s)
   (:stdlib ../rukaml_stdlib.o))
- (mode
-  (promote (until-clean)))
  (action
-  (progn
-   (run riscv64-linux-gnu-gcc-13 -g -c %%{src} -o %s.o)
-   (run riscv64-linux-gnu-gcc-13 -g %%{stdlib} %s.o -o %%{targets}))))
-
+  (system "%%{read:../../../cc_rv64} %%{deps} -o %%{target}")))
 |}
-        test
-        test
         test
         test;
       Printf.fprintf
         ch
-        {|(cram
+        {|
+(cram
+ (enabled_if
+  (not
+   (= none %%{read:../../../cc_rv64})))
  (applies_to %s)
  (deps ../rukaml_stdlib.o ./%s.exe %s.s))
 

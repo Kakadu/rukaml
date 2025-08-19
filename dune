@@ -4,6 +4,16 @@
    (:standard -w -32-33 -warn-error -8-9-26-27-34-37-39-69))))
 
 (executable
+ (name discover)
+ (libraries dune-configurator))
+
+(rule
+ (alias discover)
+ (targets cc_rv64 cc_amd64)
+ (action
+  (run ./discover.exe)))
+
+(executable
  (name REPL)
  (modules REPL)
  (libraries stdio Frontend))

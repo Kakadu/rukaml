@@ -1,53 +1,65 @@
 ;;;;; add
 
 (rule
- (targets add.exe)
+ (target add.exe)
+ (enabled_if
+  (not
+   (= none %{read:../../../cc_rv64})))
+ (mode
+  (promote (until-clean)))
  (deps
   (:src add.s)
   (:stdlib ../rukaml_stdlib.o))
- (mode
-  (promote (until-clean)))
  (action
-  (progn
-   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o add.o)
-   (run riscv64-linux-gnu-gcc-13 -g %{stdlib} add.o -o %{targets}))))
+  (system "%{read:../../../cc_rv64} %{deps} -o %{target}")))
 
 (cram
+ (enabled_if
+  (not
+   (= none %{read:../../../cc_rv64})))
  (applies_to add)
  (deps ../rukaml_stdlib.o ./add.exe add.s))
 
 ;;;;; fib2
 
 (rule
- (targets fib2.exe)
+ (target fib2.exe)
+ (enabled_if
+  (not
+   (= none %{read:../../../cc_rv64})))
+ (mode
+  (promote (until-clean)))
  (deps
   (:src fib2.s)
   (:stdlib ../rukaml_stdlib.o))
- (mode
-  (promote (until-clean)))
  (action
-  (progn
-   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o fib2.o)
-   (run riscv64-linux-gnu-gcc-13 -g %{stdlib} fib2.o -o %{targets}))))
+  (system "%{read:../../../cc_rv64} %{deps} -o %{target}")))
 
 (cram
+ (enabled_if
+  (not
+   (= none %{read:../../../cc_rv64})))
  (applies_to fib2)
  (deps ../rukaml_stdlib.o ./fib2.exe fib2.s))
 
 ;;;;; fac_cps
 
 (rule
- (targets fac_cps.exe)
+ (target fac_cps.exe)
+ (enabled_if
+  (not
+   (= none %{read:../../../cc_rv64})))
+ (mode
+  (promote (until-clean)))
  (deps
   (:src fac_cps.s)
   (:stdlib ../rukaml_stdlib.o))
- (mode
-  (promote (until-clean)))
  (action
-  (progn
-   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o fac_cps.o)
-   (run riscv64-linux-gnu-gcc-13 -g %{stdlib} fac_cps.o -o %{targets}))))
+  (system "%{read:../../../cc_rv64} %{deps} -o %{target}")))
 
 (cram
+ (enabled_if
+  (not
+   (= none %{read:../../../cc_rv64})))
  (applies_to fac_cps)
  (deps ../rukaml_stdlib.o ./fac_cps.exe fac_cps.s))

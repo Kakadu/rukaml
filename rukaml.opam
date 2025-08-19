@@ -8,6 +8,7 @@ homepage: "https://github.com/kakadu/rukaml"
 bug-reports: "https://github.com/kakadu/rukaml/issues"
 depends: [
   "dune" {>= "3.19"}
+  "dune-configurator"
   "ocaml" {= "4.14.2" | >= "5.3.0"}
   "ppx_deriving"
   "angstrom" {= "0.16.0"}

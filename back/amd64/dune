@@ -19,45 +19,33 @@
  (libraries stdio amd64_impl))
 
 (rule
- (targets rukaml_stdlib.o)
+ (target rukaml_stdlib.o)
+ (enabled_if
+  (not
+   (= none %{read:../../cc_amd64})))
  (deps
   (:src rukaml_stdlib.c)
   rukaml_stdlib.h)
  (action
-  (run
-   gcc-13
-   -g
-   -Wall
-   -Wpedantic
-   %{src}
-   -c
-   -o
-   %{targets}
-   ;
-   )))
+  (system "%{read:../../cc_amd64} -c %{src} -o %{target}")))
 
 (rule
  (target tests.exe)
- (deps
-  (:stdlib rukaml_stdlib.o)
-  rukaml_stdlib.h
-  (:src tests.c))
+ (enabled_if
+  (not
+   (= none %{read:../../cc_amd64})))
  (mode
   (promote (until-clean)))
+ (deps
+  (:src tests.c)
+  (:stdlib rukaml_stdlib.o)
+  rukaml_stdlib.h)
  (action
-  (run
-   gcc-13
-   -g
-   -Wall
-   -Wpedantic
-   -o
-   %{target}
-   %{stdlib}
-   %{src}
-   -lcunit
-   ;
-   )))
+  (system "%{read:../../cc_amd64} -lcunit %{stdlib} %{src} -o %{target}")))
 
 (cram
+ (enabled_if
+  (not
+   (= none %{read:../../cc_amd64})))
  (applies_to tests)
  (deps tests.exe))

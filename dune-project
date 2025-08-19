@@ -16,6 +16,7 @@
  (synopsis "Another ML compiler")
  (depends
   dune
+  dune-configurator
   (ocaml
    (or
     (= 4.14.2)

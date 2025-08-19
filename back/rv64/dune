@@ -18,18 +18,10 @@
  (libraries stdio rv64_impl))
 
 (rule
- (targets rukaml_stdlib.o)
+ (target rukaml_stdlib.o)
+ (enabled_if
+  (not
+   (= none %{read:../../cc_rv64})))
  (deps rukaml_stdlib.c)
  (action
-  (run
-   riscv64-linux-gnu-gcc-13
-   -g
-   -fPIC
-   -Wall
-   -Wpedantic
-   %{deps}
-   -c
-   -o
-   %{targets}
-   ;
-   )))
+  (system "%{read:../../cc_rv64} -c %{deps} -o %{target}")))
