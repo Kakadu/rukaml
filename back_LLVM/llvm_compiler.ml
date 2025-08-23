@@ -32,7 +32,7 @@ module ToLLVM = struct
         let open CPSLang in
         if not cfg.call_arity
         then [ OneACPS.cps_vb_to_parsetree_vb cps_vb ]
-        else [ CAA.call_arity_anal cps_vb |> MACPS.cpsm_vb_to_parsetree_vb ]
+        else [ CAA.call_arity_anal cps_vb |> MACPS.cps_vb_to_parsetree_vb ]
     in
     let stru =
       let init = CConv.standart_globals, [] in
