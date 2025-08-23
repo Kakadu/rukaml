@@ -16,7 +16,7 @@ module ToLLVM = struct
     in
     let promote_error r =
       Result.map_error
-        (fun x -> (x :> [ Parsing.error | Inferencer.error | Compile_lib.CPS.error ]))
+        (fun x -> (x :> [ Parsing.error | Inferencer.error | Compile_lib.CPSConv.error ]))
         r
     in
     let ( let* ) x f = Result.bind x f in
@@ -27,11 +27,12 @@ module ToLLVM = struct
       then Ok stru
       else
         let open Compile_lib in
-        let open CPS in
+        let open CPSConv in
         let+ cps_vb = cps_conv_program stru |> promote_error in
+        let open CPSLang in
         if not cfg.call_arity
-        then [ cps1_vb_to_parsetree_vb cps_vb ]
-        else [ call_arity_anal cps_vb |> cpsm_vb_to_parsetree_vb ]
+        then [ OneACPS.cps_vb_to_parsetree_vb cps_vb ]
+        else [ CAA.call_arity_anal cps_vb |> MACPS.cpsm_vb_to_parsetree_vb ]
     in
     let stru =
       let init = CConv.standart_globals, [] in
@@ -74,7 +75,8 @@ let cfg =
 let print_errors = function
   | #Parsing.error as e -> Format.printf "%a\n%!" Parsing.pp_error e
   | #Inferencer.error as e -> Format.printf "%a\n%!" Inferencer.pp_error e
-  | #Compile_lib.CPS.error as e -> Format.printf "%a\n%!" Compile_lib.CPS.pp_error e
+  | #Compile_lib.CPSConv.error as e ->
+    Format.printf "%a\n%!" Compile_lib.CPSConv.pp_error e
 ;;
 
 let () =

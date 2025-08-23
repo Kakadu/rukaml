@@ -9,7 +9,7 @@ let frontend cfg =
   in
   let promote_error r =
     Result.map_error
-      (fun x -> (x :> [ Parsing.error | Inferencer.error | Compile_lib.CPS.error ]))
+      (fun x -> (x :> [ Parsing.error | Inferencer.error | Compile_lib.CPSConv.error ]))
       r
   in
   let ( let* ) x f = Result.bind x f in
@@ -20,20 +20,23 @@ let frontend cfg =
     then Ok stru
     else
       let open Compile_lib in
-      let open CPS in
+      let open CPSConv in
       let+ cps_vb = cps_conv_program stru |> promote_error in
-      match cfg.call_arity, cfg.dump_cps with
-      | false, false -> [ cps1_vb_to_parsetree_vb cps_vb ]
-      | true, false -> [ call_arity_anal cps_vb |> cpsm_vb_to_parsetree_vb ]
-      | false, true ->
-        Format.printf "After CPS optimisations.\n%!";
-        Format.printf "%a\n%!" pp_cps1_vb cps_vb;
-        [ cps1_vb_to_parsetree_vb cps_vb ]
-      | true, true ->
-        Format.printf "After CPS optimisations.\n%!";
-        let cps_vb = call_arity_anal cps_vb in
-        Format.printf "%a\n%!" pp_cpsm_vb cps_vb;
-        [ cpsm_vb_to_parsetree_vb cps_vb ]
+      let hndl_cps to_parsetree pp cps_vb =
+        if cfg.dump_cps
+        then (
+          Format.printf "After CPS optimisations.\n%!";
+          Format.printf "%a\n%!" pp cps_vb)
+        else ();
+        [ to_parsetree cps_vb ]
+      in
+      if cfg.call_arity
+      then
+        let open CPSLang.MACPS in
+        hndl_cps cps_vb_to_parsetree_vb pp_vb @@ CAA.call_arity_anal cps_vb
+      else
+        let open CPSLang.OneACPS in
+        hndl_cps cps_vb_to_parsetree_vb pp_vb cps_vb
   in
   if cfg.stop_after = SA_CPS then exit 0;
   let stru =
@@ -84,7 +87,8 @@ let cfg =
 let print_errors = function
   | #Parsing.error as e -> Format.printf "%a\n%!" Parsing.pp_error e
   | #Inferencer.error as e -> Format.printf "%a\n%!" Inferencer.pp_error e
-  | #Compile_lib.CPS.error as e -> Format.printf "%a\n%!" Compile_lib.CPS.pp_error e
+  | #Compile_lib.CPSConv.error as e ->
+    Format.printf "%a\n%!" Compile_lib.CPSConv.pp_error e
 ;;
 
 let () =
