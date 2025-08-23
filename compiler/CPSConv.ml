@@ -33,36 +33,10 @@ module IMap = Map.Make (Int)
 module ISet = Set.Make (Int)
 
 let gensym = ANF.gensym_s
+let tuple_fold_map_k = CPSLang.tuple_fold_map_k
+let list_fold_map_k = CPSLang.list_fold_map_k
 
-(* Syntax of CPS target language *)
-type var = ident
-type 'a tuple = 'a * 'a * 'a list
-type 'a safe_binop = var * 'a * 'a (* invarint:  division by zero isn't possible *)
-
-type pat =
-  | CPVar of var
-  | CPTuple of pat * pat * pat list
-
-type p =
-  | Call of triv * triv * cont
-  | Ret of cont * triv
-  | CIf of triv * p * p
-  | Let of rec_flag * pat * triv * p
-  | Primop of pat * var * triv list * p
-  | Letc of var * cont * p
-
-and cont =
-  | Cont of pat * p
-  | CVar of var
-  | HALT
-
-and triv =
-  | Lam of pat * var * p
-  | TSafeBinop of triv safe_binop
-  | UVar of var
-  | TConst of const
-  | TTuple of triv tuple
-  | TUnit
+open CPSLang.OneACPS
 
 (* Abstract args *)
 type a =
@@ -111,32 +85,21 @@ let start_glob_envs =
     SMap.add ident.hum_name ident.id
   in
   let printi = Frontend.Ident.of_string "print" in
-  ( IMap.add printi.id (AVar printi) IMap.empty
-  , SMap.empty
-    |> extend "<"
-    |> extend ">"
-    |> extend "<="
-    |> extend ">="
-    |> extend "="
-    |> extend "+"
-    |> extend "-"
-    |> extend "*"
-    |> extend "/"
-    |> SMap.add printi.hum_name printi.id )
-;;
-
-let list_fold_map_k f =
-  let rec helper lst k =
-    match lst with
-    | [] -> k []
-    | hd :: tl -> f hd (fun hd' -> helper tl (fun tl' -> k (hd' :: tl')))
-  in
-  helper
-;;
-
-let tuple_fold_map_k f el1 el2 els k =
-  f el1 (fun el1' ->
-    f el2 (fun el2' -> list_fold_map_k f els (fun els' -> k el1' el2' els')))
+  let closure_count = Frontend.Ident.of_string "closure_count" in
+  ( IMap.(add printi.id (AVar printi) (add closure_count.id (AVar closure_count) empty))
+  , SMap.(
+      empty
+      |> extend "<"
+      |> extend ">"
+      |> extend "<="
+      |> extend ">="
+      |> extend "="
+      |> extend "+"
+      |> extend "-"
+      |> extend "*"
+      |> extend "/"
+      |> add printi.hum_name printi.id
+      |> add closure_count.hum_name closure_count.id) )
 ;;
 
 let upd id k counts no_refs ref_once =
@@ -264,19 +227,19 @@ let%expect_test "counts simple" =
   test_count {| let m x y z = x y y|};
   [%expect
     {|
-  var x got id 23
-  var y got id 24
-  var z got id 25
-  var m got id 26
-  id: 23; counts 1
-  id: 24; counts 2
-  id: 25; counts 0
-  id: 26; counts 0
+  var x got id 25
+  var y got id 26
+  var z got id 27
+  var m got id 28
+  id: 25; counts 1
+  id: 26; counts 2
+  id: 27; counts 0
+  id: 28; counts 0
   ids that ref_once:
-  23
-  ids that no_refs:
   25
-  26
+  ids that no_refs:
+  27
+  28
 |}]
 ;;
 
@@ -284,22 +247,22 @@ let%expect_test "counts branching, shadowing" =
   test_count {| let m x y = if x then fun x -> x 1 else fun x -> (y , y x)|};
   [%expect
     {|
-    var x got id 27
-    var y got id 28
     var x got id 29
-    var x got id 30
-    var m got id 31
-    id: 27; counts 1
-    id: 28; counts 2
+    var y got id 30
+    var x got id 31
+    var x got id 32
+    var m got id 33
     id: 29; counts 1
-    id: 30; counts 1
-    id: 31; counts 0
+    id: 30; counts 2
+    id: 31; counts 1
+    id: 32; counts 1
+    id: 33; counts 0
     ids that ref_once:
-    27
     29
-    30
-    ids that no_refs:
     31
+    32
+    ids that no_refs:
+    33
 |}]
 ;;
 
@@ -307,12 +270,12 @@ let%expect_test "counts rec, ptuple" =
   test_count {| let rec (x,y) = x x y|};
   [%expect
     {|
-    var x got id 32
-    var y got id 33
-    id: 32; counts 2
-    id: 33; counts 1
+    var x got id 34
+    var y got id 35
+    id: 34; counts 2
+    id: 35; counts 1
     ids that ref_once:
-    33
+    35
     ids that no_refs:
 |}]
 ;;
@@ -417,7 +380,8 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
     | BinopsSecondArgCont (op, a1, c') -> binop op a1 a c' counts
   and call f a c counts =
     match f with
-    | AVar v when String.equal v.hum_name "print" -> primop v [ a ] c counts
+    | AVar v when String.equal v.hum_name "print" -> primop v a [] c counts
+    | AVar v when String.equal v.hum_name "closure_count" -> primop v a [] c counts
     | AVar _ | AConst _ | AUnit | ASafeBinop _ | ATuple _ ->
       let* func, arg, counts2 = blessa2 f a counts in
       let+ cont, counts3 = blessc c counts2 in
@@ -467,25 +431,26 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
       constr b w, counts3
   and binop op a1 a2 c counts =
     match a1, a2, op.hum_name with
-    | _, (AConst (PConst_int 0) | AVar _), "/" -> primop op [ a1; a2 ] c counts
+    | _, (AConst (PConst_int 0) | AVar _), "/" -> primop op a1 [ a2 ] c counts
     | _ -> ret c (ASafeBinop (op, a1, a2)) counts
-  and primop f aa c counts =
+  and primop f a aa c counts =
     let* counts2, args = blessa_many counts aa in
+    let* arg, counts3 = blessa a counts2 in
     match c with
     | LetNonRecCont ((DPVar _ as dp_pat), wh, env, c') ->
-      let cp_pat, env', counts3 = extend_env env counts2 dp_pat in
-      let+ w, counts4 = cps env' wh c' counts3 in
-      Primop (cp_pat, f, args, w), counts4
+      let cp_pat, env', counts4 = extend_env env counts3 dp_pat in
+      let+ w, counts5 = cps env' wh c' counts4 in
+      Primop (cp_pat, f, arg, args, w), counts5
     | ToplevelLetNonRecCont ((DPVar _ as dp_pat), vbs, main_id) ->
-      let c', e, glob_env', counts2 = helper_toplevelletcont main_id counts2 vbs in
-      let cp_pat, glob_env'', counts3 = extend_env glob_env' counts2 dp_pat in
-      let+ wh, counts4 = cps_glob glob_env'' e c' counts3 in
-      Primop (cp_pat, f, args, wh), counts4
+      let c', e, glob_env', counts4 = helper_toplevelletcont main_id counts3 vbs in
+      let cp_pat, glob_env'', counts5 = extend_env glob_env' counts4 dp_pat in
+      let+ wh, counts6 = cps_glob glob_env'' e c' counts5 in
+      Primop (cp_pat, f, arg, args, wh), counts6
     | _ ->
       let x = gensym ~prefix:"x" () |> of_string in
-      let counts3 = new_count x.id counts2 in
-      let+ wh, counts4 = ret c (AVar x) counts3 in
-      Primop (CPVar x, f, args, wh), counts4
+      let counts4 = new_count x.id counts3 in
+      let+ wh, counts5 = ret c (AVar x) counts4 in
+      Primop (CPVar x, f, arg, args, wh), counts5
   (* Two "blessing" functions to render abstract continuations
      and abstract arguments into actual syntax. *)
   and blessc c counts =
@@ -603,176 +568,6 @@ let cps_conv_program vbs =
   NonRecursive, CPVar (of_string "main"), p
 ;;
 
-let cps_vb_to_parsetree_vb (rec_flag, pat, p) =
-  let rec helper_pat pat k' =
-    match pat with
-    | CPVar i -> k' (PVar i.hum_name)
-    | CPTuple (pat1, pat2, pats) ->
-      let k ptrn1 ptrn2 ptrns = k' (PTuple (ptrn1, ptrn2, ptrns)) in
-      tuple_fold_map_k helper_pat pat1 pat2 pats k
-  in
-  let rec helper_triv t k' =
-    match t with
-    | TUnit -> k' EUnit
-    | TTuple (t1, t2, tt) ->
-      tuple_fold_map_k helper_triv t1 t2 tt (fun e1 e2 ee -> k' (ETuple (e1, e2, ee)))
-    | UVar i -> k' (EVar i.hum_name)
-    | TConst d -> k' (EConst d)
-    | Lam (pat, i, p) ->
-      let k1 ptrn =
-        helper_p p (fun b ->
-          let l1 = elam (pvar i.hum_name) b in
-          let l2 = elam ptrn l1 in
-          k' l2)
-      in
-      helper_pat pat k1
-    | TSafeBinop (op, t1, t2) ->
-      helper_triv t1 (fun e1 ->
-        helper_triv t2 (fun e2 ->
-          let eop = evar op.hum_name in
-          let res = eapp eop [ e1; e2 ] in
-          k' res))
-  and helper_cont cont k' =
-    match cont with
-    | Cont (pat, p) ->
-      helper_pat pat (fun ptrn -> helper_p p (fun e -> k' (ELam (ptrn, e))))
-    | CVar v -> k' (EVar v.hum_name)
-    | HALT -> k' (ELam (PVar "x", EVar "x"))
-  and helper_p p k =
-    match p with
-    | Call (t1, t2, c) ->
-      helper_triv t1 (fun e1 ->
-        helper_triv t2 (fun e2 ->
-          helper_cont c (fun e3 ->
-            let res = eapp e1 [ e2; e3 ] in
-            k res)))
-    | Ret (HALT, t) -> helper_triv t k
-    | Ret (c, t) -> helper_cont c (fun e1 -> helper_triv t (fun e2 -> k (EApp (e1, e2))))
-    | CIf (t, p1, p2) ->
-      helper_triv t (fun e1 ->
-        helper_p p1 (fun e2 -> helper_p p2 (fun e3 -> k (EIf (e1, e2, e3)))))
-    | Letc (v, c, p) ->
-      helper_cont c (fun e1 ->
-        helper_p p (fun e2 ->
-          let res = elet (PVar v.hum_name) e1 e2 in
-          k res))
-    | Let (rec_flag, pat, t, p) ->
-      helper_pat pat (fun ptrn ->
-        helper_triv t (fun e1 -> helper_p p (fun e2 -> k (ELet (rec_flag, ptrn, e1, e2)))))
-    | Primop (pat, f, tt, p) ->
-      (fun ptrn ->
-        list_fold_map_k helper_triv tt (fun ee ->
-          helper_p p (fun e2 ->
-            let body = eapp (EVar f.hum_name) ee in
-            k (ELet (rec_flag, ptrn, body, e2)))))
-      |> helper_pat pat
-  in
-  helper_pat pat (fun ptrn -> helper_p p (fun e -> rec_flag, ptrn, e))
-;;
-
-open Format
-
-let rec pp_pat ppf = function
-  | CPVar v -> Ident.pp ppf v
-  | CPTuple (pat1, pat2, pats) ->
-    fprintf ppf "@[(%a" pp_pat pat1;
-    List.iter (fprintf ppf ", %a" pp_pat) (pat2 :: pats);
-    fprintf ppf ")@]"
-;;
-
-let rec pp_cont ppf = function
-  | HALT -> fprintf ppf "@[%s@]" "(fun x -> x)"
-  | Cont (pat, p) -> fprintf ppf "@[(fun %a ->@[ %a@])" pp_pat pat pp_p p
-  | CVar v -> Frontend.Ident.pp ppf v
-
-and pp_triv ?(ps = true) ppf =
-  let open Frontend in
-  function
-  | Lam (pat, k, b) -> fprintf ppf "@[(fun %a %a ->@[ %a@])" pp_pat pat Ident.pp k pp_p b
-  | TSafeBinop (op, l, r) when ANF.is_infix_binop op.hum_name ->
-    pp_binop ppf (ps, op, l, r)
-  | UVar v -> Ident.pp ppf v
-  | TConst c -> Pprint.pp_const ppf c
-  | TTuple (t1, t2, tt) ->
-    fprintf ppf "@[(%a, " no_pars t1;
-    Format.fprintf
-      ppf
-      "%a"
-      (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") no_pars)
-      (t2 :: tt);
-    fprintf ppf ")@]"
-  | TUnit -> fprintf ppf "()"
-  | TSafeBinop _ -> failwith "not a binop in TSafeBinop"
-
-and pp_p ppf =
-  let open Frontend in
-  function
-  | Call (f, a, k) -> fprintf ppf "@[<hv>%a %a %a@]" maybe_pars f maybe_pars a pp_cont k
-  | Ret (k, a) -> fprintf ppf "@[<hv>%a %a@]" pp_cont k maybe_pars a
-  | CIf (c, th, el) ->
-    fprintf ppf "@[<hov>@[if %a@ @]@[then %a@ @]@[else %a@]@]" no_pars c pp_p th pp_p el
-  | Let (rec_flag, pat, Lam (pat', k, b), wh) ->
-    let rec_ =
-      match rec_flag with
-      | Recursive -> "rec "
-      | _ -> ""
-    in
-    fprintf ppf "@[<v>@[<hv>@[let %s%a %a %a =@] " rec_ pp_pat pat pp_pat pat' Ident.pp k;
-    fprintf ppf "@[<2>%a @]@[in @]@]" pp_p b;
-    fprintf ppf "@[%a@]@]" pp_p wh
-  | Let (rec_flag, pat, b, wh) ->
-    let rec_ =
-      match rec_flag with
-      | Recursive -> "rec "
-      | _ -> ""
-    in
-    fprintf ppf "@[<v>@[<hv>@[let %s%a =@] " rec_ pp_pat pat;
-    fprintf ppf "@[<2>%a @]@[in @]@]" no_pars b;
-    fprintf ppf "@[%a@]@]" pp_p wh
-  | Primop (pat, op, [ l; r ], wh) when ANF.is_infix_binop op.hum_name ->
-    fprintf ppf "@[<v>@[<hv>@[let %a =@] " pp_pat pat;
-    fprintf ppf "@[<2>%a @]@[in @]@]" pp_binop (false, op, l, r);
-    fprintf ppf "@[%a@]@]" pp_p wh
-  | Letc (v, Cont (pat, p), wh) ->
-    fprintf ppf "@[<v>@[<hv>@[let %a %a =@] " Ident.pp v pp_pat pat;
-    fprintf ppf "@[<2>%a @]@[in @]@]" pp_p p;
-    fprintf ppf "@[%a@]@]" pp_p wh
-  | Letc (v, k, wh) ->
-    fprintf ppf "@[<v>@[<hv>@[let %a =@] " Ident.pp v;
-    fprintf ppf "@[<2>%a @]@[in @]@]" pp_cont k;
-    fprintf ppf "@[%a@]@]" pp_p wh
-  | Primop (pat, f, aa, wh) ->
-    let pp_app ppf (f, aa) =
-      fprintf ppf "@[<hv>%a" Ident.pp f;
-      List.iteri (fun _ -> fprintf ppf " @[%a@]" maybe_pars) aa;
-      fprintf ppf "@]"
-    in
-    fprintf ppf "@[<v>@[<hv>@[let %a =@] " pp_pat pat;
-    fprintf ppf "@[<2>%a @]@[in @]@]" pp_app (f, aa);
-    fprintf ppf "@[%a@]@]" pp_p wh
-
-and pp_binop ppf (ps, op, l, r) =
-  if ps
-  then fprintf ppf "(%a %a %a)" maybe_pars l Ident.pp op maybe_pars r
-  else fprintf ppf "%a %a %a" maybe_pars l Ident.pp op maybe_pars r
-
-and pp_vb ppf (rec_flag, pat, p) =
-  let () =
-    (match rec_flag with
-     | Recursive -> fprintf ppf "@[<v 2>@[let rec %a "
-     | NonRecursive -> fprintf ppf "@[<v 2>@[let %a ")
-      pp_pat
-      pat
-  in
-  match p with
-  | Ret (HALT, Lam (pat', k, b)) ->
-    fprintf ppf "%a@ %a@ =@ @]@[%a@]@] " pp_pat pat' Ident.pp k pp_p b
-  | Ret (HALT, t) -> fprintf ppf "=@ @]@[%a@]@]" no_pars t
-  | _ -> fprintf ppf "=@ @]@[%a@]@]" pp_p p
-
-and no_pars ppf = pp_triv ~ps:false ppf
-and maybe_pars ppf = pp_triv ~ps:true ppf
-
 let ds_expr_to_expr ds_expr =
   let rec helper_p dp k =
     match dp with
@@ -838,8 +633,10 @@ let test_cps_vb text =
 let%expect_test "cps simple func" =
   test_cps_vb {| let double x = 2 * x|};
   [%expect
-    {| let double x k1 = k1 (2 * x)
-|}]
+    {|
+    let double x k1 =
+      k1 (2 * x)
+    |}]
 ;;
 
 let%expect_test "cps simple prog" =
@@ -848,10 +645,10 @@ let%expect_test "cps simple prog" =
   let main = double (double 3)|};
   [%expect
     {|
-let main = let double x k1 = k1 (2 * x) in double 3 (fun t2 -> double t2
-                                                               (fun t3 ->
-                                                                (fun x -> x) t3))
-|}]
+    let main =
+      let double x k1 = k1 (2 * x) in
+      double 3 (fun t2 -> double t2 (fun t3 -> (fun x -> x) t3))
+    |}]
 ;;
 
 let%expect_test "cps prog inlining" =
@@ -860,15 +657,20 @@ let%expect_test "cps prog inlining" =
   let double x = 2 * x
   let main = double (y + y)|};
   [%expect
-    {|  let main = 2 * (3 + 3)
-|}]
+    {|
+    let main =
+      2 * (3 + 3)
+    |}]
 ;;
 
 let%expect_test "cps rec func (inlining banned)" =
   test_cps_vb {| let y = let rec t x = t 1 in t 2|};
   [%expect
-    {| let y = let rec t x k1 = t 1 k1 in t 2 (fun x -> x)
-|}]
+    {|
+    let y =
+      let rec t x k1 = t 1 k1 in
+      t 2 (fun x -> x)
+    |}]
 ;;
 
 let%expect_test "cps eta" =
@@ -876,8 +678,11 @@ let%expect_test "cps eta" =
     {|
    let main = let g x = x in (fun x -> g x) g|};
   [%expect
-    {| let main = let g x k1 = k1 x in g g (fun x -> x)
-|}]
+    {|
+    let main =
+      let g x k1 = k1 x in
+      g g (fun x -> x)
+    |}]
 ;;
 
 let%expect_test "cps eta let" =
@@ -885,15 +690,20 @@ let%expect_test "cps eta let" =
     {|
    let main = let g x = x in let f y = g y in f (g 0)|};
   [%expect
-    {| let main = let g x k1 = k1 x in g 0 (fun t2 -> g t2 (fun x -> x))
-|}]
+    {|
+    let main =
+      let g x k1 = k1 x in
+      g 0 (fun t2 -> g t2 (fun x -> x))
+    |}]
 ;;
 
 let%expect_test "cps fac" =
   test_cps_vb {| let rec fac n = if n = 1 then 1 else fac (n-1) * n|};
   [%expect
-    {| let rec fac n k1 = if n = 1 then k1 1 else fac (n - 1) (fun t2 -> k1 (t2 * n))
-|}]
+    {|
+    let rec fac n k1 =
+      if n = 1 then k1 1 else fac (n - 1) (fun t2 -> k1 (t2 * n))
+    |}]
 ;;
 
 let%expect_test "cps fib" =
@@ -904,74 +714,91 @@ if n < 2 then n else fib (n - 1) + fib (n - 2)
   |};
   [%expect
     {|
-let rec fib n k1 = if n < 2 then k1 n else fib (n - 1) (fun t2 -> fib (n - 2)
-                                                                  (fun t3 ->
-                                                                   k1 (t2 + t3)))|}]
+    let rec fib n k1 =
+      if n < 2 then k1 n
+      else fib (n - 1) (fun t2 -> fib (n - 2) (fun t3 -> k1 (t2 + t3)))
+    |}]
 ;;
 
 let%expect_test "cps complex branching" =
   test_cps_vb {| let x f = 1 + if (f 2) then 3 else 5|};
   [%expect
     {|
-    let x f k1 = f 2 (fun t2 -> let jv3 t4 = k1 (1 + t4) in if t2 then jv3 3
-                                                            else jv3 5)
-|}]
+    let x f k1 =
+      f 2 (fun t2 -> let jv3 t4 = k1 (1 + t4) in if t2 then jv3 3 else jv3 5)
+    |}]
 ;;
 
 let%expect_test "cps print" =
   test_cps_vb {|let main  = (fun z -> 1) (print 0) |};
   [%expect
-    {|   let main = let x1 = print 0 in (fun z -> (fun x -> x) 1) x1
-|}]
+    {|
+    let main =
+      let x1 = print 0 in (fun z -> (fun x -> x) 1) x1
+    |}]
 ;;
 
 let%expect_test "cps print alias " =
   test_cps_vb {| let f = let p = print in let z = p 0 in z + 1|};
   [%expect
-    {| let f = let z = print 0 in (fun x -> x) (z + 1)
-|}]
+    {|
+    let f =
+      let z = print 0 in (fun x -> x) (z + 1)
+    |}]
 ;;
 
 let%expect_test "cps one ref arg-binop" =
   test_cps_vb {| let f = let g x = x + 1 in g (2 * 2)   |};
   [%expect
-    {| let f = (2 * 2) + 1
-|}]
+    {|
+    let f =
+      (2 * 2) + 1
+    |}]
 ;;
 
 let%expect_test "cps one ref binop" =
   test_cps_vb {| let f g = let x = 2 * 2 in g x |};
   [%expect
-    {| let f g k1 = g (2 * 2) k1
-|}]
+    {|
+    let f g k1 =
+      g (2 * 2) k1
+    |}]
 ;;
 
 let%expect_test "cps mult refs arg-const" =
   test_cps_vb {| let f g = let x = 2 in g x x|};
   [%expect
-    {| let f g k1 = g 2 (fun t2 -> t2 2 k1)
-|}]
+    {|
+    let f g k1 =
+      g 2 (fun t2 -> t2 2 k1)
+    |}]
 ;;
 
 let%expect_test "cps  mult refs arg-binop (inlining banned)" =
   test_cps_vb {| let f g = let x = 2 * 2 in g x x|};
   [%expect
-    {| let f g k1 = let x = 2 * 2 in g x (fun t2 -> t2 x k1)
-|}]
+    {|
+    let f g k1 =
+      let x = 2 * 2 in g x (fun t2 -> t2 x k1)
+    |}]
 ;;
 
 let%expect_test "cps complex tuple-arg" =
   test_cps_vb {| let f g = g (g 3, 1)|};
   [%expect
-    {| let f g k1 = g 3 (fun t2 -> g (t2, 1) k1)
-|}]
+    {|
+    let f g k1 =
+      g 3 (fun t2 -> g (t2, 1) k1)
+    |}]
 ;;
 
 let%expect_test "cps ptuple" =
   test_cps_vb {| let f (x,y) = x + y|};
   [%expect
-    {| let f (x, y) k1 = k1 (x + y)
-|}]
+    {|
+    let f (x, y) k1 =
+      k1 (x + y)
+    |}]
 ;;
 
 let%expect_test "cps free vars" =
@@ -987,8 +814,11 @@ let%expect_test "cps free vars" =
 let%expect_test "cps func in func" =
   test_cps_vb {| let z = let rec g y = y in  let f = fun x -> g in f 2 3|};
   [%expect
-    {|  let z = let rec g y k1 = k1 y in (fun x -> g 3 (fun x -> x)) 2
-|}]
+    {|
+    let z =
+      let rec g y k1 = k1 y in
+      (fun x -> g 3 (fun x -> x)) 2
+    |}]
 ;;
 
 let%expect_test "cps not allowed let rec" =
@@ -1008,6 +838,8 @@ let%expect_test "cps not allowed let rec lambda complex" =
 let%expect_test "cps fake rec" =
   test_cps_vb {| let main  = let rec x = (fun y -> 8) 12 in 0|};
   [%expect
-    {|  let main = (fun y -> let rec x = 8 in (fun x -> x) 0) 12
-|}]
+    {|
+    let main =
+      (fun y -> let rec x = 8 in (fun x -> x) 0) 12
+    |}]
 ;;

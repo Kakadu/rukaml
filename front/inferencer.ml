@@ -551,6 +551,7 @@ let start_env =
   |> extend_s "/" int_arith_scheme
   |> extend_s "gc_compact" (Scheme.make_mono (tarrow unit_typ unit_typ))
   |> extend_s "gc_stats" (Scheme.make_mono (tarrow unit_typ unit_typ))
+  |> extend_s "closure_count" (Scheme.make_mono (tarrow unit_typ unit_typ))
 ;;
 
 let w e =
