@@ -1,6 +1,0 @@
-(cram
- (enabled_if
-  (and
-   (< %{ocaml_version} "5")
-   (= true %{ocaml-config:flambda})))
- (deps sum.ml))
