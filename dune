@@ -12,11 +12,3 @@
  (targets cc_rv64 cc_amd64)
  (action
   (run ./discover.exe)))
-
-(executable
- (name REPL)
- (modules REPL)
- (libraries stdio Frontend))
-
-(cram
- (deps ./REPL.exe))
