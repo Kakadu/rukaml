@@ -18,6 +18,8 @@ depends: [
   "ocamlgraph" {>= "2.1.0"}
   "odoc" {with-doc}
   "ocamlformat" {= "0.27.0" & with-dev-setup}
+  "ocaml-lsp-server" {with-dev-setup}
+  "utop" {with-dev-setup}
 ]
 build: [
   ["dune" "subst"] {dev}
