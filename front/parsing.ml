@@ -13,13 +13,14 @@ let log fmt =
 ;;
 
 let pp_list eta = Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf " ") eta
+let skip_ws = skip_while Base.Char.is_whitespace
 
-let ws =
-  skip_while (function
-    | '\x20' | '\x0a' | '\x0d' | '\x09' -> true
-    | _ -> false)
+let skip_comments =
+  let scomment = string "(*" *> many_till any_char (string "*)") in
+  sep_by skip_ws scomment *> return ()
 ;;
 
+let ws = skip_ws *> skip_comments *> skip_ws
 let failf fmt = Format.kasprintf fail fmt
 
 let trace_pos msg =

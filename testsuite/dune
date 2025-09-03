@@ -1,0 +1,17 @@
+(executable
+ (name build)
+ (preprocess
+  (pps ppx_sexp_conv ppx_deriving.show))
+ (libraries base stdio file_path parsexp angstrom))
+
+(rule
+ (targets expected.dune artifacts.dune cram.dune)
+ (deps
+  (glob_files_rec tests/*.ml))
+ (action
+  (run ./build.exe %{project_root} %{deps})))
+
+(alias
+ (name runtest)
+ (deps
+  (alias_rec all)))

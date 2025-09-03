@@ -13,8 +13,8 @@
   (pps bisect_ppx)))
 
 (executable
- (name RV64_compiler)
- (modules RV64_compiler)
+ (name rv64_compiler)
+ (modules rv64_compiler)
  (libraries stdio rv64_impl))
 
 (rule

@@ -5,10 +5,24 @@
 
 (executable
  (name discover)
- (libraries dune-configurator))
+ (libraries dune-configurator base stdio))
 
 (rule
- (alias discover)
- (targets cc_rv64 cc_amd64)
+ (targets
+  cc_amd64
+  as_amd64
+  ld_amd64
+  run_amd64
+  cc_rv64
+  as_rv64
+  ld_rv64
+  run_rv64)
  (action
   (run ./discover.exe)))
+
+(alias
+ (name default)
+ (deps
+  (alias_rec front/all)
+  (alias_rec middle/all)
+  (alias_rec back/all)))

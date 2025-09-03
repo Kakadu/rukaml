@@ -1,5 +1,6 @@
-.PHONY: debs deps clean
-all:
+MAKEFLAGS += --always-make
+
+build:
 	dune build
 
 test:
@@ -14,6 +15,14 @@ promote:
 clean:
 	dune clean
 
+testsuite:
+ifdef CLEAN
+	git clean -fxdq testsuite/artifacts
+	rm -rf testsuite/expected/*.out
+endif
+	dune b testsuite
+	dune runt testsuite
+
 DEBS += nasm clang-16 gcc-13 pkg-config
 DEBS += gcc-13-riscv64-linux-gnu libc6-dev-riscv64-cross qemu-user binutils-riscv64-linux-gnu libcunit1-dev
 
@@ -21,10 +30,8 @@ debs:
 	sudo apt install --yes --no-install-recommends $(DEBS)
 
 deps: debs
-	opam install --confirm-level=yes \
-		dune-site angstrom.0.16.0 ppx_blob ppx_deriving.6.0.3 ppx_expect llvm.16.0.6+nnp ctypes-foreign
+	opam install --deps-only --with-doc --with-dev-setup .
 
-.PHONY: coverage
 TEST_COV_D ?= /tmp/rukaml
 coverage:
 	if [ -d $(TEST_COV_D) ]; then $(RM) -r $(TEST_COV_D); fi
