@@ -895,15 +895,13 @@ end = struct
           else ex_call c get_c' ~cont_stuff:(etas, cont_hndl) env [] ec
         in
         match pat, t1_prep, t2_prep with
+        | CPVar { id; _ }, `HeavyT (Lam (lam_pat, i, lam_b)), _
+          when find id counts <= 1 && v_arity > 0 ->
+          simpl_p_sh b
+          @@ add id (`ExLamCall ((lam_pat, i, lam_b), t2_prep, extra_args)) env
         | CPVar { id; _ }, _, (#ex_triv as t2_prep)
           when find id counts <= 1 && v_arity > 0 ->
-          let ec =
-            match t1_prep with
-            | `HeavyT (Lam (lam_pat, i, lam_b)) ->
-              `ExLamCall ((lam_pat, i, lam_b), t2_prep, extra_args)
-            | _ -> `ExTArgsCall (t1_prep, t2_prep, extra_args)
-          in
-          simpl_p_sh b @@ add id ec env
+          simpl_p_sh b @@ add id (`ExTArgsCall (t1_prep, t2_prep, extra_args)) env
         | _, `HeavyT (Lam (lam_pat, i, lam_b)), _ ->
           not_inl_ex_call @@ `ExLamCall ((lam_pat, i, lam_b), t2_prep, extra_args)
         | _, _, (#ex_triv as t2_prep) ->
