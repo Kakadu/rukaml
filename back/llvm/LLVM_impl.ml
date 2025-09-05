@@ -240,6 +240,7 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
   in
   let return_val = gen body in
   let (_ : Llvm.llvalue) = Llvm.build_ret return_val LL.builder in
+
   (* log "@[%a@]\n===\n" LL.pp_value the_function; *)
   (* Llvm.dump_value the_function; *)
 

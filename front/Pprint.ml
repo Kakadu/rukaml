@@ -96,6 +96,7 @@ let rec pp_expr_helper ?(ps = true) ppf = function
     fprintf ppf ")@]"
 
 and no_pars ppf = pp_expr_helper ~ps:false ppf
+
 and maybe_pars ppf = pp_expr_helper ~ps:true ppf
 
 let pp_expr = pp_expr_helper ~ps:true

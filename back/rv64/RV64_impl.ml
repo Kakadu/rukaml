@@ -873,6 +873,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
           "There are left over variables (before function %s): %s "
           name.Ident.hum_name
           (Addr_of_local.keys ());
+
       (* printfn ppf "";
            fprintf ppf "\t; %a\n" Loc_of_ident.pp (); *)
 

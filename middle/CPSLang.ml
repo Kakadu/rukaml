@@ -275,7 +275,9 @@ struct
       fprintf ppf "@[%a@]@]" pp_p p
 
   and pp_pats ppf = pp_list pp_pat ppf
+
   and no_pars ppf = pp_triv ~ps:false ppf
+
   and maybe_pars ppf = pp_triv ~ps:true ppf
 end
 
