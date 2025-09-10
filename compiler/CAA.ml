@@ -177,11 +177,10 @@ end = struct
         let int2 = ISet.add id int in
         anal_rec_bnd id conts int2 t @@ anal_p conts ress inc_ar body int2
     and anal_bnd1 ?(jv_specif = None) id conts body int ress inc_ar =
-      anal_bnd_cont ~jv_specif id @@ anal_p conts ress inc_ar body @@ ISet.add id int
-    and anal_bnd_cont ?(jv_specif = None) v_id (b_co_calls, b_ars, ress) =
+      let b_co_calls, b_ars, ress = anal_p conts ress inc_ar body @@ ISet.add id int in
       let default v_arity =
-        let k_co_calls, k_ars = leave_vars_scope b_co_calls b_ars v_id in
-        let neigh = adj_nodes v_id b_co_calls |> IMap.remove v_id in
+        let bnd_lam_co_calls, bnd_lam_ars = leave_vars_scope b_co_calls b_ars id in
+        let neigh = adj_nodes id b_co_calls |> IMap.remove id in
         let ress2 =
           match jv_specif with
           | None -> ress
@@ -190,21 +189,21 @@ end = struct
         ( ress2
         , fun _ non_dead_hndl ->
             let (rhs_co_calls, rhs_ars, ress3), rhs_fv =
-              non_dead_hndl b_co_calls v_id v_arity
+              non_dead_hndl b_co_calls id v_arity
             in
-            let p_ars = ar_union k_ars rhs_ars in
+            let p_ars = ar_union bnd_lam_ars rhs_ars in
             let p_co_calls =
-              union k_co_calls @@ union rhs_co_calls @@ cartesian rhs_fv neigh
+              union bnd_lam_co_calls @@ union rhs_co_calls @@ cartesian rhs_fv neigh
             in
             p_co_calls, p_ars, ress3 )
       in
-      match IMap.find v_id b_ars with
+      match IMap.find id b_ars with
       | exception Not_found ->
         (* dead var case *)
-        (match IMap.find v_id bnd_unsafities with
+        (match IMap.find id bnd_unsafities with
          | SideEffUnsafe | NonRemovable -> default 0
          | (exception Not_found) | Unsafe ->
-           let dead_id = Option.value jv_specif ~default:v_id in
+           let dead_id = Option.value jv_specif ~default:id in
            ( { ress with dead_vars = ISet.add dead_id ress.dead_vars }
            , fun ress2 _ -> b_co_calls, b_ars, ress2 ))
       | v_arity -> default v_arity
@@ -260,10 +259,7 @@ end = struct
     and lam_call_anal lam_b conts int inc_ar ress pat t =
       match pat, t with
       | CPVar { id; _ }, t when is_int_triv_rhs int t ->
-        fin_int_triv_bnd_anal conts int t
-        @@ anal_bnd_cont id
-        @@ anal_p conts ress inc_ar lam_b
-        @@ ISet.add id int
+        fin_int_triv_bnd_anal conts int t @@ anal_bnd1 id conts lam_b int ress inc_ar
       | _, t ->
         fin_unint_bnd_anal (fun ress' -> anal_triv conts int inc_ar t ress' |> ignore_fst)
         @@ anal_p conts ress inc_ar lam_b int
