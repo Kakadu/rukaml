@@ -36,8 +36,9 @@ end = struct
   ;;
 
   type bnd_unsafety =
-    (*`SideEffUnsafe < Unsafe *)
+    (* SideEffUnsafe < NonRemovable < Unsafe *)
     | Unsafe
+    | NonRemovable
     | SideEffUnsafe
   [@@deriving show { with_path = false }]
 
@@ -79,7 +80,7 @@ end = struct
     let take_safety_into_acc unsafety v_id b_co_calls v_arity =
       match unsafety with
       | Some SideEffUnsafe -> 0
-      | Some Unsafe when has_loop v_id b_co_calls -> 0
+      | Some (Unsafe | NonRemovable) when has_loop v_id b_co_calls -> 0
       | _ -> v_arity
     in
     let rec anal_p conts ress inc_ar p int =
@@ -201,7 +202,7 @@ end = struct
       | exception Not_found ->
         (* dead var case *)
         (match IMap.find v_id bnd_unsafities with
-         | SideEffUnsafe -> default 0
+         | SideEffUnsafe | NonRemovable -> default 0
          | (exception Not_found) | Unsafe ->
            let dead_id = Option.value jv_specif ~default:v_id in
            ( { ress with dead_vars = ISet.add dead_id ress.dead_vars }
@@ -235,11 +236,7 @@ end = struct
       in
       match IMap.find v_id b_ars with
       | exception Not_found ->
-        (* dead var case *)
-        (match IMap.find v_id bnd_unsafities with
-         | SideEffUnsafe -> default 0
-         | (exception Not_found) | Unsafe ->
-           b_co_calls, b_ars, { ress with dead_vars = ISet.add v_id ress.dead_vars })
+        b_co_calls, b_ars, { ress with dead_vars = ISet.add v_id ress.dead_vars }
       | v_arity -> default v_arity
     and fin_bnd_call_anal unsafety conts int f a (ress, fin_anal) =
       fin_anal ress
@@ -503,7 +500,7 @@ end = struct
     let min = map2 min
   end
 
-  (* s_ars elemet is a pair: max safe arity in terms of comp sharing and min unsafe arity in terms of side eff (None means no side effects) *)
+  (* s_ars elemet is a pair: min apl. arity causes non-trivial computations and one produces side eff *)
   type safe_ars_elem = int * int option
 
   type min_prev_res =
@@ -648,7 +645,7 @@ end = struct
                   id
                   (match b_res with
                    | _, Some se_s_ar when se_s_ar <= n -> SideEffUnsafe
-                   | _ -> Unsafe)
+                   | _ -> NonRemovable)
                   bnd_unsafeties
               , () )
             else if fst rhs_res <= 0 && not not_upd
