@@ -63,7 +63,6 @@ end = struct
       | UVar { id; _ } -> ISet.mem id int
       | TSafeBinop _ | TConst _ | TTuple _ | TUnit -> false
     in
-    let ignore_fst (_, b, c) = b, c in
     let ret_with_fv ((_, ars, _) as fst) = fst, domain ars in
     let ret_with_fv_bad (_, ars, ress) =
       let rhs_fv = domain ars in
@@ -93,8 +92,6 @@ end = struct
     in
     let rec anal_p conts ress inc_ar p int =
       let open IMap in
-      let anal_tt0_ign a aa ress2 = anal_tt0 conts int a aa ress2 |> ignore_fst in
-      let anal_triv0_ign t ress = anal_triv conts int 0 t ress |> ignore_fst in
       let clear_lam_call_anal lam_b pat a =
         lam_call_anal lam_b conts int inc_ar ress pat a
       in
@@ -134,7 +131,7 @@ end = struct
          | `TuplePatCont (b_co_calls, b_ars, b_fv) ->
            fin_unint_bnd_anal
              ~b_fv:(Some b_fv)
-             (anal_triv0_ign t)
+             (anal_triv conts int 0 t)
              (b_co_calls, b_ars, ress)
          | exception Not_found -> clear_triv_ret_anal t)
       | Ret (Cont (CPVar { id; _ }, body), t)
@@ -144,9 +141,9 @@ end = struct
       | Ret (Cont ((CPTuple _ | CPVar _), body), t)
       | Let (NonRecursive, CPVar _, t, body)
       | Let (_, CPTuple _, t, body) ->
-        fin_unint_bnd_anal (anal_triv0_ign t) @@ anal_p conts ress inc_ar body int
+        fin_unint_bnd_anal (anal_triv conts int 0 t) @@ anal_p conts ress inc_ar body int
       | Primop (_, _, t, tt, body) ->
-        fin_unint_bnd_anal (anal_tt0_ign t tt) @@ anal_p conts ress inc_ar body int
+        fin_unint_bnd_anal (anal_tt0 conts int t tt) @@ anal_p conts ress inc_ar body int
       | Call (f, a, Cont (CPTuple _, body)) ->
         let (b_co_calls, b_ars, ress), b_fv =
           anal_p conts ress inc_ar body int |> ret_with_fv
@@ -255,13 +252,7 @@ end = struct
         | Some b_fv -> b_fv
         | None -> domain b_ars
       in
-      let rhs_ars, ress2 = anal_rhs ress in
-      let rhs_fv = domain rhs_ars in
-      let p_ars = ar_union b_ars rhs_ars in
-      let p_co_calls =
-        union b_co_calls @@ union (cartesian_square rhs_fv) @@ cartesian rhs_fv b_fv
-      in
-      p_co_calls, p_ars, ress2
+      merge_bnd_subexprs b_ars b_co_calls b_fv @@ ret_with_fv @@ anal_rhs ress
     and fin_tuple_bnd_call_anal (b_co_calls, b_ars, b_fv) conts int ress f a =
       merge_bnd_subexprs b_ars b_co_calls b_fv
       @@ ret_with_fv
@@ -274,7 +265,7 @@ end = struct
       | CPVar { id; _ }, t when is_int_triv_rhs int t ->
         fin_int_triv_bnd_anal conts int t @@ anal_bnd1 id conts lam_b int ress inc_ar
       | _, t ->
-        fin_unint_bnd_anal (fun ress' -> anal_triv conts int inc_ar t ress' |> ignore_fst)
+        fin_unint_bnd_anal (anal_triv conts int inc_ar t)
         @@ anal_p conts ress inc_ar lam_b int
     and fin_lam_call_bnd_anal ~had_upd c lam_b conts int pat t unsafety rf =
       let ress, fin_anal = rf in
