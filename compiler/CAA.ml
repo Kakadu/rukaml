@@ -83,13 +83,18 @@ end = struct
       | Some (Unsafe | NonRemovable) when has_loop v_id b_co_calls -> 0
       | _ -> v_arity
     in
+    let merge_bnd_subexprs bnd_lam_ars bnd_lam_co_calls neigh = function
+      | (rhs_co_calls, rhs_ars, ress), rhs_fv ->
+        let p_ars = ar_union bnd_lam_ars rhs_ars in
+        let p_co_calls =
+          union bnd_lam_co_calls @@ union rhs_co_calls @@ cartesian rhs_fv neigh
+        in
+        p_co_calls, p_ars, ress
+    in
     let rec anal_p conts ress inc_ar p int =
       let open IMap in
       let anal_tt0_ign a aa ress2 = anal_tt0 conts int a aa ress2 |> ignore_fst in
       let anal_triv0_ign t ress = anal_triv conts int 0 t ress |> ignore_fst in
-      let lam_call_anal0_ign lam_b pat a ress =
-        ignore_fst @@ lam_call_anal lam_b conts int 0 ress pat a
-      in
       let clear_lam_call_anal lam_b pat a =
         lam_call_anal lam_b conts int inc_ar ress pat a
       in
@@ -100,18 +105,14 @@ end = struct
         let had_upd, unsafety = false, find_opt id bnd_unsafities in
         fin_lam_call_bnd_anal ~had_upd c lam_b conts int pat a unsafety
         @@ anal_bnd1 id conts body int ress inc_ar
-      | Call (Lam (pat, _, lam_b), a, Cont (CPTuple _, body)) ->
-        let rhs_anal = lam_call_anal0_ign lam_b pat a in
-        fin_unint_bnd_anal rhs_anal @@ anal_p conts ress inc_ar body int
-      | Call (Lam (pat, c, lam_b), a, CVar { id; _ }) ->
+      | Call ((Lam (pat, c, lam_b) as f), a, CVar { id; _ }) ->
         (match find id conts with
-         | `Int fin_anal ->
+         | `VarPatCont fin_anal ->
            let had_upd = true in
            let unsafety = find_opt id bnd_unsafities in
            (ress, fin_anal)
            |> fin_lam_call_bnd_anal ~had_upd c lam_b conts int pat a unsafety
-         | `UnInt (b_co_calls, b_ars) ->
-           fin_unint_bnd_anal (lam_call_anal0_ign lam_b pat a) (b_co_calls, b_ars, ress)
+         | `TuplePatCont b_info -> fin_tuple_bnd_call_anal b_info conts int ress f a
          | exception Not_found -> clear_lam_call_anal lam_b pat a)
       | Call (Lam (pat, _, lam_b), a, HALT) -> clear_lam_call_anal lam_b pat a
       | Call (f, a, Cont (CPVar { id; _ }, body)) ->
@@ -120,19 +121,21 @@ end = struct
         @@ anal_bnd1 id conts body int ress inc_ar
       | Call (f, a, CVar { id; _ }) ->
         (match find id conts with
-         | `Int fin_anal ->
+         | `VarPatCont fin_anal ->
            let unsafety = find_opt id bnd_unsafities in
            fin_bnd_call_anal unsafety conts int f a (ress, fin_anal)
-         | `UnInt (b_co_calls, b_ars) ->
-           (b_co_calls, b_ars, ress) |> fin_unint_bnd_anal @@ anal_tt0_ign f [ a ]
+         | `TuplePatCont b_info -> fin_tuple_bnd_call_anal b_info conts int ress f a
          | exception Not_found -> anal_tt0 ~fst_inc_ar:(inc_ar + 1) conts int f [ a ] ress)
       | Call (f, a, HALT) -> anal_tt0 ~fst_inc_ar:(inc_ar + 1) conts int f [ a ] ress
       | Ret (CVar { id; _ }, t) ->
         (match find id conts with
-         | `Int fin_anal ->
+         | `VarPatCont fin_anal ->
            fin_int_triv_bnd_anal ~had_upd:true conts int t (ress, fin_anal)
-         | `UnInt (b_co_calls, b_ars) ->
-           fin_unint_bnd_anal (anal_triv0_ign t) (b_co_calls, b_ars, ress)
+         | `TuplePatCont (b_co_calls, b_ars, b_fv) ->
+           fin_unint_bnd_anal
+             ~b_fv:(Some b_fv)
+             (anal_triv0_ign t)
+             (b_co_calls, b_ars, ress)
          | exception Not_found -> clear_triv_ret_anal t)
       | Ret (Cont (CPVar { id; _ }, body), t)
       | Let (NonRecursive, CPVar { id; _ }, t, body)
@@ -145,15 +148,20 @@ end = struct
       | Primop (_, _, t, tt, body) ->
         fin_unint_bnd_anal (anal_tt0_ign t tt) @@ anal_p conts ress inc_ar body int
       | Call (f, a, Cont (CPTuple _, body)) ->
-        fin_unint_bnd_anal (anal_tt0_ign f [ a ]) @@ anal_p conts ress inc_ar body int
+        let (b_co_calls, b_ars, ress), b_fv =
+          anal_p conts ress inc_ar body int |> ret_with_fv
+        in
+        fin_tuple_bnd_call_anal (b_co_calls, b_ars, b_fv) conts int ress f a
       | Letc ({ id = jv_id; _ }, Cont (CPVar { id; _ }, body), p) ->
         let jv_specif = Some jv_id in
         let ress2, fin_anal = anal_bnd1 ~jv_specif id conts body int ress inc_ar in
-        let conts2 = add jv_id (`Int fin_anal) conts in
+        let conts2 = add jv_id (`VarPatCont fin_anal) conts in
         anal_p conts2 ress2 0 p int
       | Letc ({ id = jp_id; _ }, Cont (CPTuple _, body), p) ->
-        let b_co_calls, b_ars, ress2 = anal_p conts ress inc_ar body int in
-        let conts2 = add jp_id (`UnInt (b_co_calls, b_ars)) conts in
+        let (b_co_calls, b_ars, ress2), b_fv =
+          anal_p conts ress inc_ar body int |> ret_with_fv
+        in
+        let conts2 = add jp_id (`TuplePatCont (b_co_calls, b_ars, b_fv)) conts in
         anal_p conts2 ress2 0 p int
       | Letc ({ id = jp_id1; _ }, CVar { id = jp_id2; _ }, p) ->
         let upd_ress () =
@@ -166,8 +174,8 @@ end = struct
         in
         let conts2, ress2 =
           match find jp_id2 conts with
-          | `Int _ as c -> add jp_id1 c conts, upd_ress ()
-          | `UnInt _ as c -> add jp_id1 c conts, ress
+          | `VarPatCont _ as c -> add jp_id1 c conts, upd_ress ()
+          | `TuplePatCont _ as c -> add jp_id1 c conts, ress
           | exception Not_found -> conts, ress
         in
         anal_p conts2 ress2 inc_ar p int
@@ -188,14 +196,8 @@ end = struct
         in
         ( ress2
         , fun _ non_dead_hndl ->
-            let (rhs_co_calls, rhs_ars, ress3), rhs_fv =
-              non_dead_hndl b_co_calls id v_arity
-            in
-            let p_ars = ar_union bnd_lam_ars rhs_ars in
-            let p_co_calls =
-              union bnd_lam_co_calls @@ union rhs_co_calls @@ cartesian rhs_fv neigh
-            in
-            p_co_calls, p_ars, ress3 )
+            merge_bnd_subexprs bnd_lam_ars bnd_lam_co_calls neigh
+            @@ non_dead_hndl b_co_calls id v_arity )
       in
       match IMap.find id b_ars with
       | exception Not_found ->
@@ -247,8 +249,12 @@ end = struct
       @@ fun b_co_calls v_id v_arity ->
       let ress2 = if had_upd then ress else add_if_incr v_arity t ress in
       anal_triv conts int v_arity t ress2 |> ret_with_fv_cond v_id v_arity b_co_calls
-    and fin_unint_bnd_anal anal_rhs (b_co_calls, b_ars, ress) =
-      let b_fv = domain b_ars in
+    and fin_unint_bnd_anal ?(b_fv = None) anal_rhs (b_co_calls, b_ars, ress) =
+      let b_fv =
+        match b_fv with
+        | Some b_fv -> b_fv
+        | None -> domain b_ars
+      in
       let rhs_ars, ress2 = anal_rhs ress in
       let rhs_fv = domain rhs_ars in
       let p_ars = ar_union b_ars rhs_ars in
@@ -256,8 +262,15 @@ end = struct
         union b_co_calls @@ union (cartesian_square rhs_fv) @@ cartesian rhs_fv b_fv
       in
       p_co_calls, p_ars, ress2
-    and lam_call_anal lam_b conts int inc_ar ress pat t =
-      match pat, t with
+    and fin_tuple_bnd_call_anal (b_co_calls, b_ars, b_fv) conts int ress f a =
+      merge_bnd_subexprs b_ars b_co_calls b_fv
+      @@ ret_with_fv
+      @@
+      match f with
+      | Lam (pat, _, b) -> lam_call_anal b conts int 0 ress pat a
+      | _ -> anal_tt0 ~fst_inc_ar:1 conts int f [ a ] ress
+    and lam_call_anal lam_b conts int inc_ar ress lam_pat t =
+      match lam_pat, t with
       | CPVar { id; _ }, t when is_int_triv_rhs int t ->
         fin_int_triv_bnd_anal conts int t @@ anal_bnd1 id conts lam_b int ress inc_ar
       | _, t ->
