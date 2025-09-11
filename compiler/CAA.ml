@@ -103,9 +103,8 @@ end = struct
       | Call ((Lam (pat, c, lam_b) as f), a, CVar { id; _ }) ->
         (match find id conts with
          | `VarPatCont fin_anal ->
-           let had_upd = true in
-           let unsafety = find_opt id bnd_unsafities in
-           (ress, fin_anal) |> fin_lam_call_bnd_anal ~had_upd c lam_b int pat a unsafety
+           let had_upd, unsafety = true, find_opt id bnd_unsafities in
+           fin_lam_call_bnd_anal ~had_upd c lam_b int pat a unsafety (ress, fin_anal)
          | `TuplePatCont b_info -> fin_tuple_bnd_call_anal b_info int ress f a
          | exception Not_found -> clear_lam_call_anal lam_b pat a)
       | Call (Lam (pat, _, lam_b), a, HALT) -> clear_lam_call_anal lam_b pat a
@@ -353,32 +352,32 @@ end = struct
       | Call ((Lam (pat, _, _) as t1), t2, Cont (CPTuple _, b)) ->
         anal_t_bnd pat t2 counts (anal_t t1 (anal_p b ar k))
       | Call ((Lam (pat, i, lam_b) as t1), t2, Cont (CPVar { id; _ }, b)) ->
-        let counts' = add id 0 counts in
-        anal_t_bnd pat t2 counts' (fun counts'' barriers' fin_call_ars' ->
-          let k_none _ = anal_t t1 (anal_p b ar k) counts'' barriers' fin_call_ars' in
+        let counts = add id 0 counts in
+        anal_t_bnd pat t2 counts (fun counts barriers fin_call_ars ->
+          let k_none _ = anal_t t1 (anal_p b ar k) counts barriers fin_call_ars in
           lookup_call_ars i.id k_none (fun call_ar ->
-            let k1 rest_ar _ counts''' barriers'' fin_call_ars'' =
-              let fin_call_ars''' = add id (call_ar - rest_ar) fin_call_ars'' in
-              anal_p b ar k counts''' barriers'' fin_call_ars'''
+            let k1 rest_ar _ counts barriers fin_call_ars =
+              let fin_call_ars = add id (call_ar - rest_ar) fin_call_ars in
+              anal_p b ar k counts barriers fin_call_ars
             in
-            lam_hndl ~ar:call_ar pat i lam_b k1 counts'' barriers' fin_call_ars'))
+            lam_hndl ~ar:call_ar pat i lam_b k1 counts barriers fin_call_ars))
       | Call (Lam (pat, i, lam_b), t2, _) ->
         anal_t_bnd pat t2 counts (lam_hndl ~ar pat i lam_b k)
       | Call (t1, t2, Cont (CPTuple _, b)) ->
         foldd_k anal_t [ t1; t2 ] (anal_p b ar k) counts
       | Call (t1, t2, Cont (CPVar { id; _ }, b)) ->
-        let k1 counts' barriers' =
-          let counts'' = add id 0 counts' in
-          let k_none = anal_p b ar k counts'' barriers' in
-          lookup_fin_call_ars t1 k_none (fun t_ar fin_call_ars' ->
-            let fin_call_ars'' = add id (Int.max 0 (t_ar - 1)) fin_call_ars' in
-            anal_p b ar k counts'' barriers' fin_call_ars'')
+        let k1 counts barriers =
+          let counts = add id 0 counts in
+          let k_none = anal_p b ar k counts barriers in
+          lookup_fin_call_ars t1 k_none (fun t_ar fin_call_ars ->
+            let fin_call_ars = add id (Int.max 0 (t_ar - 1)) fin_call_ars in
+            anal_p b ar k counts barriers fin_call_ars)
         in
         foldd_k anal_t [ t1; t2 ] k1 counts
       | Call (t1, t2, _) ->
-        let k1 counts' barriers' =
-          lookup_fin_call_ars t1 (k ar Other counts' barriers') (fun t_ar ->
-            k (ar - Int.max 0 (t_ar - 1)) Other counts' barriers')
+        let k1 counts barriers =
+          lookup_fin_call_ars t1 (k ar Other counts barriers) (fun t_ar ->
+            k (ar - Int.max 0 (t_ar - 1)) Other counts barriers)
         in
         foldd_k anal_t [ t1; t2 ] k1 counts
       | CIf (t, p1, p2) ->
@@ -392,20 +391,20 @@ end = struct
       | Ret (_, Lam (pat, i, lam_b)) ->
         lam_hndl ~ar:(Int.max 0 (ar - 1)) pat i lam_b k counts
       | Ret (_, t) ->
-        let k1 counts' barriers' =
-          lookup_fin_call_ars t (k 0 Other counts' barriers') (fun t_ar ->
-            k (ar - t_ar) Other counts' barriers')
+        let k1 counts barriers =
+          lookup_fin_call_ars t (k 0 Other counts barriers) (fun t_ar ->
+            k (ar - t_ar) Other counts barriers)
         in
         anal_t t k1 counts
       | Primop (_, _, t, tt, b) -> foldd_k anal_t (t :: tt) (anal_p b ar k) counts
       | Letc (i, Cont (CPVar { id; _ }, cont_b), b) ->
         let jv call_ar =
-          let counts' = add id 0 counts in
-          let k1 rest_ar _ counts'' barriers' fin_call_ars' =
-            let fin_call_ars'' = add id (call_ar - rest_ar) fin_call_ars' in
-            anal_p cont_b ar k counts'' barriers' fin_call_ars''
+          let counts = add id 0 counts in
+          let k1 rest_ar _ counts barriers fin_call_ars =
+            let fin_call_ars = add id (call_ar - rest_ar) fin_call_ars in
+            anal_p cont_b ar k counts barriers fin_call_ars
           in
-          anal_p ~dead_jv_mode:(ISet.mem i.id dead_vars) b call_ar k1 counts'
+          anal_p ~dead_jv_mode:(ISet.mem i.id dead_vars) b call_ar k1 counts
         in
         lookup_call_ars i.id (fun _ -> jv 0) jv
       | Letc (_, Cont (CPTuple _, cont_b), b) ->
@@ -416,40 +415,40 @@ end = struct
       | CPVar { id; _ } when ISet.mem id dead_vars -> k counts barriers fin_call_ars
       | CPTuple _ -> anal_t t k counts barriers fin_call_ars
       | CPVar { id; _ } ->
-        let counts' = add id 0 counts in
-        let k_anal_t _ = anal_t t k counts' barriers fin_call_ars in
+        let counts = add id 0 counts in
+        let k_anal_t _ = anal_t t k counts barriers fin_call_ars in
         (match t with
          | Lam (pat, i, p) ->
            let rec anal_lam ar k1 =
-             let fin_call_ars' =
+             let fin_call_ars =
                match rec_flag with
                | Recursive -> add id ar fin_call_ars
                | NonRecursive -> fin_call_ars
              in
-             let k2 rest_ar _ counts'' barriers' fin_call_ars'' =
+             let k2 rest_ar _ counts barriers fin_call_ars =
                if rec_flag = Recursive && rest_ar <> 0
                then anal_lam (ar - rest_ar) k1
                else (
-                 let fin_call_ars''' = add id (ar - rest_ar) fin_call_ars'' in
-                 k1 counts'' barriers' fin_call_ars''')
+                 let fin_call_ars = add id (ar - rest_ar) fin_call_ars in
+                 k1 counts barriers fin_call_ars)
              in
-             lam_hndl ~ar:(Int.max 0 (ar - 1)) pat i p k2 counts' barriers fin_call_ars'
+             lam_hndl ~ar:(Int.max 0 (ar - 1)) pat i p k2 counts barriers fin_call_ars
            in
            lookup_call_ars i.id k_anal_t (fun ar -> anal_lam ar k)
          | t ->
            let k_found t_ar _ =
-             let fin_call_ars' = add id t_ar fin_call_ars in
-             anal_t t k counts barriers fin_call_ars'
+             let fin_call_ars = add id t_ar fin_call_ars in
+             anal_t t k counts barriers fin_call_ars
            in
            lookup_fin_call_ars t (fun _ -> k_anal_t ()) k_found fin_call_ars)
     and lam_hndl ?(ar = 0) pat i p k counts =
-      let k1 rest_ar fork_pos counts' barriers' fin_call_ars' =
-        let barriers'' =
+      let k1 rest_ar fork_pos counts barriers fin_call_ars =
+        let barriers =
           match fork_pos with
-          | Right_After -> ISet.add i.id barriers'
-          | Other -> barriers'
+          | Right_After -> ISet.add i.id barriers
+          | Other -> barriers
         in
-        k rest_ar Other counts' barriers'' fin_call_ars'
+        k rest_ar Other counts barriers fin_call_ars
       in
       let jv = anal_p p ar k1 in
       match pat with
@@ -460,12 +459,12 @@ end = struct
       | Lam (pat, i, p) -> lam_hndl pat i p (fun _ _ -> k) counts
       | TSafeBinop (_, t1, t2) -> anal_t t1 (anal_t t2 k) counts
       | UVar { id; _ } ->
-        let counts' =
+        let counts =
           match find id counts with
           | n -> add id (n + 1) counts
           | exception Not_found -> counts
         in
-        k counts'
+        k counts
       | TTuple (t1, t2, tt) -> foldd_k anal_t (t1 :: t2 :: tt) k counts
       | TUnit | TConst _ -> k counts
     in
@@ -485,12 +484,12 @@ end = struct
     let map2 f (a1, b1) (a2, b2) = f a1 a2, f @@? (b1, b2)
 
     let ( +.+ ) (a, b) c =
-      let b' =
+      let b =
         match b with
         | None -> None
         | Some b -> Some (b + c)
       in
-      a + c, b'
+      a + c, b
     ;;
 
     let min = map2 min
@@ -517,8 +516,8 @@ end = struct
     let u_return x () = return x in
     let upd_bnd_unsafities f =
       let* bnd_unsafeties, conts = get in
-      let bnd_unsafeties', res = f bnd_unsafeties in
-      put (bnd_unsafeties', conts) >>= u_return res
+      let bnd_unsafeties, res = f bnd_unsafeties in
+      put (bnd_unsafeties, conts) >>= u_return res
     in
     let add_cont id cont =
       let* bnd_unsafeties, conts = get in
@@ -550,24 +549,24 @@ end = struct
         >>= (function
          | (_, None) as rhs_res -> check_p (add id rhs_res s_ars) b n
          | rhs_res ->
-           let* s_ars' = t_bnd (add id rhs_res s_ars) pat rhs in
-           check_p s_ars' b n)
+           let* s_ars = t_bnd (add id rhs_res s_ars) pat rhs in
+           check_p s_ars b n)
         >>= bnd_return n
       | Let (_, pat, rhs, b) | Ret (Cont (pat, b), rhs) ->
-        let* s_ars' = t_bnd s_ars pat rhs in
-        check_p s_ars' b n >>= bnd_return n
+        let* s_ars = t_bnd s_ars pat rhs in
+        check_p s_ars b n >>= bnd_return n
       | Primop (_, _, _, _, b) ->
         let* _ = check_p s_ars b n in
         return (n, Some n)
       | Letc (_, HALT, b) -> check_p s_ars b n
-      | Letc ({ id = id'; _ }, CVar { id; _ }, b) ->
+      | Letc ({ id = id2; _ }, CVar { id; _ }, b) ->
         let* bnd_unsafeties, conts = get in
-        let conts' =
+        let conts =
           match find id conts with
-          | cont -> add id' cont conts
+          | cont -> add id2 cont conts
           | exception Not_found -> conts
         in
-        put (bnd_unsafeties, conts') >>= fun () -> check_p s_ars b n
+        put (bnd_unsafeties, conts) >>= fun () -> check_p s_ars b n
       | Letc ({ id = jv_id; _ }, Cont (CPVar { id; _ }, cont_b), b) ->
         add_cont jv_id (CPVarContJV (id, cont_b, none)) >>= fun () -> check_p s_ars b n
       | Letc ({ id; _ }, Cont (CPTuple _, cont_b), b) ->
@@ -604,12 +603,12 @@ end = struct
                 check_p (add id rhs_res s_ars) b n >>= bnd_return n))
       | Call (f, a, c) ->
         let f_a_hndl =
-          let* s_ars' =
+          let* s_ars =
             match f with
             | Lam (pat, _, _) -> t_bnd s_ars pat a
             | _ -> run_check_t s_ars n a >>= fun _ -> return s_ars
           in
-          let* f_s_ar, f_se_s_ar = run_check_t s_ars' 0 f in
+          let* f_s_ar, f_se_s_ar = run_check_t s_ars 0 f in
           return (f_s_ar - 1, sub f_se_s_ar)
         in
         let rid_off_neg_s_ar (s_ar, se_s_ar) = return (Int.max 0 s_ar, se_s_ar) in
@@ -627,8 +626,8 @@ end = struct
                 has_side_eff
         in
         let b_hndl id b rhs_res =
-          let* rhs_res' = rid_off_neg_s_ar rhs_res in
-          let* b_res = check_p (add id rhs_res' s_ars) b n in
+          let* rhs_res = rid_off_neg_s_ar rhs_res in
+          let* b_res = check_p (add id rhs_res s_ars) b n in
           return (rhs_res, b_res)
         in
         let fin_var_bnd ?(not_upd = false) id (rhs_res, b_res) =
@@ -679,8 +678,8 @@ end = struct
                  else if new_min = prev_min.rhs_res
                  then fin_var_bnd ~not_upd:true id (rhs_res, prev_min.b_res)
                  else
-                   let* new_min' = rid_off_neg_s_ar new_min in
-                   let* min_b_res = check_p (add id new_min' s_ars) b n in
+                   let* new_min = rid_off_neg_s_ar new_min in
+                   let* min_b_res = check_p (add id new_min s_ars) b n in
                    let* () =
                      add_cont
                        cvar_id
@@ -691,10 +690,10 @@ end = struct
       | UVar { id; _ } -> return (find_with_default id s_ars (0, Some 0) +.+ n)
       | Lam (_, _, b) ->
         let* bnd_unsafeties = get in
-        let bnd_unsafeties', b_res =
+        let bnd_unsafeties, b_res =
           bnd_unsafeties |> compose drop_conts @@ emp_run2 @@ check_p s_ars b @@ inc n
         in
-        let* () = put bnd_unsafeties' in
+        let* () = put bnd_unsafeties in
         return b_res
       | _ -> return (n, none)
     and run_check_t s_ars n t = upd_bnd_unsafities @@ run @@ check_t s_ars n t
@@ -802,18 +801,18 @@ end = struct
         let prep_t = prep_t_for_env env t in
         triv_bnd env id_opt prep_t (simpl_p_sh b)
         @@ fun _ ->
-        let pat' = translate_pat pat in
-        let t' = expand env v_ar prep_t in
-        let b' = simpl_p_sh b env in
-        fin_constr pat' b' t'
+        let pat = translate_pat pat in
+        let t = expand env v_ar prep_t in
+        let b = simpl_p_sh b env in
+        fin_constr pat b t
       in
       let ret_or_prep_call ?(etas = etas) call_ar prep_t c get_c' =
         let default ~c ~get_c' = function
           | (#ex_triv as eta) :: etas, `HeavyT (Lam (pat, i, b)) ->
             ex_lam_call pat i b eta etas c get_c' env
           | eta :: etas, (#ex_triv as prep_t) ->
-            let t1', t2', tt' = translate_prep_t_tuple env prep_t eta etas in
-            MACPS.Call (t1', (t2', tt'), get_c' ())
+            let t1, t2, tt = translate_prep_t_tuple env prep_t eta etas in
+            MACPS.Call (t1, (t2, tt), get_c' ())
           | [], (#ex_triv as prep_t) -> Ret (get_c' (), get_triv_sh prep_t)
           | etas, (#ex_call as prep_t) -> ex_call c get_c' env etas prep_t
         in
@@ -821,15 +820,15 @@ end = struct
           let new_etas, pats_and_k = gen_many_etas_with_k diff in
           let rec helper = function
             | [] -> failwith "unreachable: diff couldn't be less then 1"
-            | (pat', k) :: [] ->
-              let b' =
+            | (pat, k) :: [] ->
+              let b =
                 default
                   ~c:(CVar k)
                   ~get_c':(fun () -> MACPS.CVar k)
                   (etas @ new_etas, prep_t)
               in
-              MACPS.Lam ((pat', []), k, b')
-            | (pat', k) :: tl -> MACPS.Lam ((pat', []), k, Ret (CVar k, helper tl))
+              MACPS.Lam ((pat, []), k, b)
+            | (pat, k) :: tl -> MACPS.Lam ((pat, []), k, Ret (CVar k, helper tl))
           in
           helper pats_and_k
         in
@@ -847,8 +846,8 @@ end = struct
             let eta_arg, eta_pat = gen_eta () in
             let eta_args, eta_pats = gen_many_etas (n - 1) in
             let k = gensym ~prefix:"k" () |> of_string in
-            let b' = MACPS.Ret (CVar k, stepped (eta_arg :: eta_args) diff) in
-            MACPS.Ret (get_c' (), Lam ((eta_pat, eta_pats), k, b')))
+            let b = MACPS.Ret (CVar k, stepped (eta_arg :: eta_args) diff) in
+            MACPS.Ret (get_c' (), Lam ((eta_pat, eta_pats), k, b)))
       in
       let ret ?(call_ar = None) t =
         let call_ar =
@@ -882,9 +881,7 @@ end = struct
         let not_inl_ex_call ec =
           let get_c' () = MACPS.Cont (translate_pat pat, simpl_p_sh b env) in
           if v_arity > 0
-          then (
-            let t' = expand_ex_call env v_arity ec in
-            MACPS.Ret (get_c' (), t'))
+          then MACPS.Ret (get_c' (), expand_ex_call env v_arity ec)
           else ex_call c get_c' ~cont_stuff:(etas, cont_hndl) env [] ec
         in
         match pat, t1_prep, t2_prep with
@@ -912,32 +909,23 @@ end = struct
       | Sub ((Cont (pat, b) as c), cont_hndl, extra_args), Call (t1, t2, _) ->
         call_bnd ~cont_hndl ~extra_args t1 t2 pat b c
       | _, Ret (Cont (pat, b), t) ->
-        let_or_ret_bnd pat b t @@ fun pat' b' t' -> MACPS.Ret (Cont (pat', b'), t')
+        let_or_ret_bnd pat b t @@ fun pat b t -> MACPS.Ret (Cont (pat, b), t)
       | _, Let (NonRecursive, pat, t, b) ->
-        let_or_ret_bnd pat b t @@ fun pat' b' t' -> MACPS.Let (NonRecursive, pat', t', b')
+        let_or_ret_bnd pat b t @@ fun pat b t -> MACPS.Let (NonRecursive, pat, t, b)
       | _, Let (Recursive, pat, t, b) ->
-        let t' = expand env (v_ar pat) @@ prep_t_for_env env t in
-        let b' = simpl_p_sh b env in
-        MACPS.Let (Recursive, translate_pat pat, t', b')
-      | _, CIf (t, p1, p2) ->
-        let t' = simpl_t_sh t in
-        let p1', p2' = simpl_p_sh p1 env, simpl_p_sh p2 env in
-        CIf (t', p1', p2')
+        let t = expand env (v_ar pat) @@ prep_t_for_env env t in
+        MACPS.Let (Recursive, translate_pat pat, t, simpl_p_sh b env)
+      | _, CIf (t, p1, p2) -> CIf (simpl_t_sh t, simpl_p_sh p1 env, simpl_p_sh p2 env)
       | _, Primop (pat, i, t1, tt, p) ->
-        let pat' = translate_pat pat in
-        let t1' = simpl_t_sh t1 in
-        let tt' = List.map simpl_t_sh tt in
-        let p' = simpl_p_sh p env in
-        Primop (pat', i, t1', tt', p')
+        let t1, tt = simpl_t_sh t1, List.map simpl_t_sh tt in
+        Primop (translate_pat pat, i, t1, tt, simpl_p_sh p env)
       | cont_hndl, Letc (i, Cont (pat, b1), b2)
       | Sub (Cont (pat, b1), cont_hndl, _), Letc (i, _, b2) ->
-        let pat' = translate_pat pat in
-        let b1' = simpl_p ~cont_hndl etas b1 env in
+        let b1 = simpl_p ~cont_hndl etas b1 env in
         let cont_hndl, etas2 =
           if ISet.mem i.id dead_vars then DeadJV, Future 0 else Def, Future (v_ar pat)
         in
-        let b2' = simpl_p ~cont_hndl etas2 b2 env in
-        Letc (i, Cont (pat', b1'), b2')
+        Letc (i, Cont (translate_pat pat, b1), simpl_p ~cont_hndl etas2 b2 env)
       | DeadJV, Letc (_, _, b) -> simpl_p ~cont_hndl etas b env
       | (Def | Sub ((CVar _ | HALT), _, _)), Letc (_, c, b) ->
         simpl_p ~cont_hndl:(Sub (c, cont_hndl, [])) etas b env
@@ -964,10 +952,10 @@ end = struct
     and ex_call ?(cont_stuff = Present [], Def) c get_c' env =
       let rec helper args =
         let triv_triv_call prep_t1 prep_t2 prep_tt =
-          let t1', t2', tt' =
+          let t1, t2, tt =
             translate_prep_t_tuple env prep_t1 prep_t2 @@ List.append prep_tt args
           in
-          MACPS.Call (t1', (t2', tt'), get_c' ())
+          MACPS.Call (t1, (t2, tt), get_c' ())
         in
         function
         | `ExTArgsCall ((#ex_call as ec), prep_t, prep_tt) ->
@@ -979,19 +967,14 @@ end = struct
       in
       helper
     and translate_prep_t_tuple env prep_t1 prep_t2 prep_tt =
-      get_triv env |> fun f -> f prep_t1, f prep_t2, List.map f prep_tt
+      let trans = get_triv env in
+      trans prep_t1, trans prep_t2, List.map trans prep_tt
     and ex_lam_call ?(cont_stuff = Present [], Def) pat i b prep_t args c get_c' env =
       let is_barrier = ISet.mem i.id barriers in
       let rev_unzip =
         List.fold_left (fun (pats, tt) (pat, t) -> pat :: pats, t :: tt) ([], [])
       in
-      let pat' () = translate_pat pat in
-      let t' () =
-        match pat with
-        | CPVar { id; _ } when ISet.mem id dead_vars -> MACPS.TUnit
-        | _ -> expand env (v_ar pat) prep_t
-      in
-      let addl_rev_pats_tt', args' =
+      let addl_rev_pats_tt, args =
         if not @@ is_barrier
         then [], args
         else
@@ -1000,37 +983,44 @@ end = struct
                | #light_t as lt -> acc, lt
                | `HeavyT tn ->
                  let eta_arg, eta_pat = gen_eta () in
-                 let tn' = simpl_t env tn in
-                 (eta_pat, tn') :: acc, eta_arg)
+                 let tn = simpl_t env tn in
+                 (eta_pat, tn) :: acc, eta_arg)
             []
             args
       in
-      let pats', tt' = rev_unzip @@ addl_rev_pats_tt' in
+      let pats, tt = rev_unzip addl_rev_pats_tt in
       let id_opt =
         match pat with
         | CPVar { id; _ } -> Some id
         | CPTuple _ -> None
       in
       let k_not_fully_inl () =
-        let lam' = MACPS.Lam ((pat' (), pats'), i, simpl_p (Present args') b env) in
-        MACPS.Call (lam', (t' (), tt'), get_c' ())
+        let lam =
+          MACPS.Lam ((translate_pat pat, pats), i, simpl_p (Present args) b env)
+        in
+        let t =
+          match pat with
+          | CPVar { id; _ } when ISet.mem id dead_vars -> MACPS.TUnit
+          | _ -> expand env (v_ar pat) prep_t
+        in
+        MACPS.Call (lam, (t, tt), get_c' ())
       in
       let try_inl k_inl = triv_bnd env id_opt prep_t k_inl k_not_fully_inl in
-      match (pats', tt'), c with
+      match (pats, tt), c with
       | ([], []), Cont _ when is_barrier -> k_not_fully_inl ()
-      | (pat' :: pats', t' :: tt'), _ ->
+      | (pat :: pats, t :: tt), _ ->
         try_inl
-        @@ fun env' ->
-        let lam' = MACPS.Lam ((pat', pats'), i, simpl_p (Present args') b env') in
-        MACPS.Call (lam', (t', tt'), get_c' ())
+        @@ fun env ->
+        let lam = MACPS.Lam ((pat, pats), i, simpl_p (Present args) b env) in
+        MACPS.Call (lam, (t, tt), get_c' ())
       | _ ->
         let k_inl =
           let cont_hndl, etas =
             match cont_stuff, c with
-            | (etas, cont_hndl), Cont _ -> Sub (c, cont_hndl, args'), etas
+            | (etas, cont_hndl), Cont _ -> Sub (c, cont_hndl, args), etas
             | (_, Sub ((CVar _ | HALT), cont_hndl, eas)), (CVar _ | HALT) ->
-              Sub (c, cont_hndl, eas), Present args'
-            | (_, cont_hndl), _ -> Sub (c, cont_hndl, []), Present args'
+              Sub (c, cont_hndl, eas), Present args
+            | (_, cont_hndl), _ -> Sub (c, cont_hndl, []), Present args
           in
           simpl_p ~cont_hndl etas b
         in
@@ -1038,9 +1028,7 @@ end = struct
     and expand env v_ar =
       let expand_lam pat i b etas_count =
         let eta_args, eta_pats = gen_many_etas etas_count in
-        let pat' = translate_pat pat in
-        let b' = simpl_p (Present eta_args) b env in
-        MACPS.Lam ((pat', eta_pats), i, b')
+        MACPS.Lam ((translate_pat pat, eta_pats), i, simpl_p (Present eta_args) b env)
       in
       function
       | `HeavyT (Lam (lam_pat, i, lam_b)) when v_ar > 1 ->
@@ -1053,11 +1041,11 @@ end = struct
       else (
         let eta_arg, eta_pat = gen_eta () in
         let eta_args, eta_pats = gen_many_etas (v_ar - 1) in
-        let i' = gensym ~prefix:"k" () |> of_string in
-        let lam_b' =
-          ex_call (CVar i') (fun () -> MACPS.CVar i') env (eta_arg :: eta_args) ec
+        let i = gensym ~prefix:"k" () |> of_string in
+        let lam_b =
+          ex_call (CVar i) (fun () -> MACPS.CVar i) env (eta_arg :: eta_args) ec
         in
-        MACPS.Lam ((eta_pat, eta_pats), i', lam_b'))
+        MACPS.Lam ((eta_pat, eta_pats), i, lam_b))
     and simpl_t ?(ignore_ids = false) env = function
       | UVar i ->
         if ignore_ids
