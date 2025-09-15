@@ -947,8 +947,8 @@ let%expect_test "dead lam_call_bnd lam par. near the barrier" =
     |}]
 ;;
 
-(*due to wrong call bnd co-call graph f (that use result of rhs analys intead of fv(rhs)^2 in case of safe bnd that called twice) f function eta-expanded and comp. sharing is lost *)
-let%expect_test "fix motivation" =
+(*see commit "test: motivation for call bnd rhs co-call graph fix". For now it's fixed*)
+let%expect_test "(ex-)motivation for call bnd rhs co-call graph fix" =
   test_call_ar_anal
   @@ Result.get_ok
   @@ CPSConv.cps_conv_program
@@ -1001,15 +1001,18 @@ let%expect_test "fix motivation" =
              let rec big n k1 =
                if n < 2 then k1 1 else big n (fun t2 -> k1 (n * t2))
                in
-             let rec f x e15 k3 = big 10 (fun t4 -> k3 (e15 + t4)) in
-             let rec h x e17 e16 k7 = f 1 e16 k7 in
-             (fun t10 -> t10
-                           2
-                           2
-                           (fun t12 -> t10
-                                         3
-                                         3
-                                         (fun t14 -> (fun x -> x) (t12, t14))
-                                      )
-                        ) (fun e18 e19 k20 -> h (1, 2) e18 e19 k20) |}]
+             let rec f x k3 = big 10 (fun t4 -> k3 (fun y k5 -> k5 (y + t4))) in
+             f
+               1
+               (fun t6 -> let rec h x e16 e15 k7 = t6 e15 k7 in
+                          (fun t10 -> t10
+                                        2
+                                        2
+                                        (fun t12 -> t10
+                                                      3
+                                                      3
+                                                      (fun t14 -> (fun x -> x)
+                                                                  (t12, t14))
+                                                   )
+                                     ) (fun e17 e18 k19 -> h (1, 2) e17 e18 k19)) |}]
 ;;

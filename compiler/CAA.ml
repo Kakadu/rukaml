@@ -235,7 +235,7 @@ end = struct
       fin_anal ress
       @@ fun b_co_calls v_id v_arity ->
       let fst_inc_ar = ( + ) 1 @@ take_safety_into_acc unsafety v_id b_co_calls v_arity in
-      anal_tt0 ~fst_inc_ar int f [ a ] ress |> ret_with_fv
+      anal_tt0 ~fst_inc_ar int f [ a ] ress |> ret_with_fv_cond v_id v_arity b_co_calls
     and fin_int_triv_bnd_anal ?(had_upd = false) int t (ress, fin_anal) =
       fin_anal ress
       @@ fun b_co_calls v_id v_arity ->
