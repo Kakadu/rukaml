@@ -946,3 +946,70 @@ let%expect_test "dead lam_call_bnd lam par. near the barrier" =
                (fun y -> (fun x -> x) (y, y))
     |}]
 ;;
+
+(*due to wrong call bnd co-call graph f (that use result of rhs analys intead of fv(rhs)^2 in case of safe bnd that called twice) f function eta-expanded and comp. sharing is lost *)
+let%expect_test "fix motivation" =
+  test_call_ar_anal
+  @@ Result.get_ok
+  @@ CPSConv.cps_conv_program
+  @@ Result.get_ok
+  @@ Frontend.Parsing.parse_structure
+       "let main = \n\
+       \      let rec big n = if n < 2 then 1 else n * big n in\n\
+       \      let rec f x = let n = big 10 in fun y -> y + n in\n\
+       \      let g = f 1 in\n\
+       \             let rec h x y = g in\n\
+       \      let p x = (f, h)  in\n\
+       \             let t = h (1,2) in (t 2 2, t 3 3) ";
+  [%expect
+    {|
+    before:
+    let main =
+              let rec big n k1 =
+                if n < 2 then k1 1 else big n (fun t2 -> k1 (n * t2))
+                in
+              let rec f x k3 =
+                big 10 (fun t4 -> k3 (fun y k5 -> k5 (y + t4)))
+                in
+              f
+                1
+                (fun t6 -> let rec h x k7 = k7 (fun y k8 -> k8 t6) in
+                           let p x k9 = k9 (f, h) in
+                           h
+                             (1, 2)
+                             (fun t10 -> t10
+                                           2
+                                           (fun t11 -> t11
+                                                         2
+                                                         (fun t12 -> t10
+                                                                       3
+                                                                       (fun t13 ->
+                                                                        t13
+                                                                        3
+                                                                        (fun t14 ->
+
+                                                                        (fun x -> x)
+                                                                        (t12, t14))
+                                                                       )
+                                                                    )
+                                                      )
+                                        )
+                           )
+
+    after:
+    let main =
+             let rec big n k1 =
+               if n < 2 then k1 1 else big n (fun t2 -> k1 (n * t2))
+               in
+             let rec f x e15 k3 = big 10 (fun t4 -> k3 (e15 + t4)) in
+             let rec h x e17 e16 k7 = f 1 e16 k7 in
+             (fun t10 -> t10
+                           2
+                           2
+                           (fun t12 -> t10
+                                         3
+                                         3
+                                         (fun t14 -> (fun x -> x) (t12, t14))
+                                      )
+                        ) (fun e18 e19 k20 -> h (1, 2) e18 e19 k20) |}]
+;;
