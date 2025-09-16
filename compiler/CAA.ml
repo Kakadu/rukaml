@@ -667,7 +667,7 @@ end = struct
               let fully_new_min =
                 let* ((rhs_res, b_res) as ress) = b_hndl id b rhs_res in
                 add_cont cvar_id (CPVarContJV (id, b, Some { rhs_res; b_res }))
-                >>= fun () -> fin_var_bnd id ress
+                >>= fun () -> fin_var_bnd cvar_id ress
               in
               (match prev_min with
                | None -> fully_new_min
@@ -676,7 +676,7 @@ end = struct
                  if new_min = rhs_res
                  then fully_new_min
                  else if new_min = prev_min.rhs_res
-                 then fin_var_bnd ~not_upd:true id (rhs_res, prev_min.b_res)
+                 then fin_var_bnd ~not_upd:true cvar_id (rhs_res, prev_min.b_res)
                  else
                    let* new_min = rid_off_neg_s_ar new_min in
                    let* min_b_res = check_p (add id new_min s_ars) b n in
@@ -685,7 +685,7 @@ end = struct
                        cvar_id
                        (CPVarContJV (id, b, Some { rhs_res = new_min; b_res = min_b_res }))
                    in
-                   b_hndl id b rhs_res >>= fin_var_bnd ~not_upd:true id)))
+                   b_hndl id b rhs_res >>= fin_var_bnd ~not_upd:true cvar_id)))
     and check_t s_ars n = function
       | UVar { id; _ } -> return (find_with_default id s_ars (0, Some 0) +.+ n)
       | Lam (_, _, b) ->

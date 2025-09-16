@@ -1016,3 +1016,54 @@ let%expect_test "(ex-)motivation for call bnd rhs co-call graph fix" =
                                                    )
                                      ) (fun e17 e18 k19 -> h (1, 2) e17 e18 k19)) |}]
 ;;
+
+let%expect_test "not expand call (because of sharing loses): jv version" =
+  let cont2 = Cont (CPVar var_q, Ret (HALT, sum (UVar var_q) (UVar var_t))) in
+  let cont1 = Cont (CPVar var_t, Call (UVar var_g, one, cont2)) in
+  let th = Call (UVar var_f, one, CVar var_jv1) in
+  let el = Call (UVar var_f, one, CVar var_jv1) in
+  let letc =
+    Letc (var_jv1, Cont (CPVar var_g, Call (UVar var_g, one, cont1)), CIf (tr, th, el))
+  in
+  let big_def b =
+    Let
+      ( NonRecursive
+      , CPVar var_h
+      , Lam (CPVar var_b, var_k3, Ret (CVar var_k3, sum (UVar var_b) (UVar var_b)))
+      , b )
+  in
+  let rhs =
+    let sum = sum (UVar var_l) (UVar var_r) in
+    let ret =
+      Ret
+        ( CVar var_k1
+        , Lam
+            ( CPVar var_y
+            , var_k2
+            , Call (UVar var_h, UVar var_y, Cont (CPVar var_r, Ret (CVar var_k2, sum))) )
+        )
+    in
+    let b = big_def (Call (UVar var_h, UVar var_x, Cont (CPVar var_l, ret))) in
+    Lam (CPVar var_x, var_k1, b)
+  in
+  test_call_ar_anal @@ prog (Let (NonRecursive, CPVar var_f, rhs, letc));
+  [%expect
+    {|
+    before:
+    let main =
+              let f x k1 =
+                let h b k3 = k3 (b + b) in
+                h x (fun l -> k1 (fun y k2 -> h y (fun r -> k2 (l + r))))
+                in
+              let jv1 g = g 1 (fun t -> g 1 (fun q -> (fun x -> x) (q + t))) in
+              if true then f 1 jv1 else f 1 jv1
+    after:
+    let main =
+             let f x k1 =
+               let h b k3 = k3 (b + b) in
+               h x (fun l -> k1 (fun y k2 -> h y (fun r -> k2 (l + r))))
+               in
+             let jv1 g = g 1 (fun t -> g 1 (fun q -> (fun x -> x) (q + t))) in
+             if true then f 1 jv1 else f 1 jv1
+    |}]
+;;
