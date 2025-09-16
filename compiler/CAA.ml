@@ -1005,26 +1005,29 @@ end = struct
         in
         MACPS.Call (lam, (t, tt), get_c' ())
       in
+      let k_fully_inl c =
+        let cont_hndl, etas =
+          match cont_stuff, c with
+          | (etas, cont_hndl), Cont _ -> Sub (c, cont_hndl, args), etas
+          | (_, Sub ((CVar _ | HALT), cont_hndl, eas)), (CVar _ | HALT) ->
+            Sub (c, cont_hndl, eas), Present args
+          | (_, cont_hndl), _ -> Sub (c, cont_hndl, []), Present args
+        in
+        simpl_p ~cont_hndl etas b
+      in
       let try_inl k_inl = triv_bnd env id_opt prep_t k_inl k_not_fully_inl in
       match (pats, tt), c with
-      | ([], []), Cont _ when is_barrier -> k_not_fully_inl ()
+      | ([], []), Cont _ when is_barrier ->
+        try_inl
+        @@ fun env ->
+        let jv = gensym ~prefix:"jv" () |> of_string in
+        Letc (jv, get_c' (), k_fully_inl (CVar jv) env)
       | (pat :: pats, t :: tt), _ ->
         try_inl
         @@ fun env ->
         let lam = MACPS.Lam ((pat, pats), i, simpl_p (Present args) b env) in
         MACPS.Call (lam, (t, tt), get_c' ())
-      | _ ->
-        let k_inl =
-          let cont_hndl, etas =
-            match cont_stuff, c with
-            | (etas, cont_hndl), Cont _ -> Sub (c, cont_hndl, args), etas
-            | (_, Sub ((CVar _ | HALT), cont_hndl, eas)), (CVar _ | HALT) ->
-              Sub (c, cont_hndl, eas), Present args
-            | (_, cont_hndl), _ -> Sub (c, cont_hndl, []), Present args
-          in
-          simpl_p ~cont_hndl etas b
-        in
-        triv_bnd env id_opt prep_t k_inl k_not_fully_inl
+      | _ -> triv_bnd env id_opt prep_t (k_fully_inl c) k_not_fully_inl
     and expand env v_ar =
       let expand_lam pat i b etas_count =
         let eta_args, eta_pats = gen_many_etas etas_count in

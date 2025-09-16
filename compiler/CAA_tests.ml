@@ -916,7 +916,7 @@ let%expect_test "branches with diff fin_call_ars" =
     |}]
 ;;
 
-let%expect_test "dead lam_call_bnd lam par. near the barrier" =
+let%expect_test "heavy cont lam_call_bnd near the barrier" =
   let lam =
     Lam (CPVar var_x, var_k1, CIf (tr, Ret (CVar var_k1, one), Ret (CVar var_k1, two)))
   in
@@ -941,9 +941,7 @@ let%expect_test "dead lam_call_bnd lam par. near the barrier" =
 
     after:
     let main =
-             (fun x k1 -> if true then k1 1 else k1 2)
-               ()
-               (fun y -> (fun x -> x) (y, y))
+             let jv1 y = (fun x -> x) (y, y) in if true then jv1 1 else jv1 2
     |}]
 ;;
 
