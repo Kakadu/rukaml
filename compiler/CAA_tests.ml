@@ -4,19 +4,23 @@ open Frontend.Ident
 open CPSLang
 open CPSLang.OneACPS
 
+let disable_dead_code_elem = false
+
 let test_call_ar_anal cps_prog =
   Format.printf "before:\n%a\n" OneACPS.pp_vb cps_prog;
   (* TODO: printer above creates non-closed boxes.
     We need to fix it. Flush is a temporary workaround. *)
   Format.printf "%!";
-  call_arity_anal cps_prog |> Format.printf "after:\n%a\n" MACPS.pp_vb;
+  call_arity_anal ~disable_dead_code_elem cps_prog
+  |> Format.printf "after:\n%a\n" MACPS.pp_vb;
   Format.printf "%!";
   ANF.reset_gensym ()
 ;;
 
 let test_call_ar_anal_debug cps_prog =
   Format.printf "before:\n%a\n" OneACPS.pp_vb cps_prog;
-  call_arity_anal_debug cps_prog |> Format.printf "after:\n%a\n" MACPS.pp_vb;
+  call_arity_anal_debug ~disable_dead_code_elem cps_prog
+  |> Format.printf "after:\n%a\n" MACPS.pp_vb;
   ANF.reset_gensym ()
 ;;
 

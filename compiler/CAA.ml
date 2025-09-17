@@ -8,17 +8,21 @@ module ISet = Set.Make (Int)
 
 let gensym = ANF.gensym_s
 
-module CallArityAnal (CoCallGraph : sig
-    type t
+module CallArityAnal
+    (CoCallGraph : sig
+       type t
 
-    val empty : t
-    val adj_nodes : int -> t -> unit IMap.t
-    val has_loop : int -> t -> bool
-    val cartesian : unit IMap.t -> unit IMap.t -> t
-    val cartesian_square : unit IMap.t -> t
-    val union : t -> t -> t
-    val remove : int -> t -> t
-  end) : sig
+       val empty : t
+       val adj_nodes : int -> t -> unit IMap.t
+       val has_loop : int -> t -> bool
+       val cartesian : unit IMap.t -> unit IMap.t -> t
+       val cartesian_square : unit IMap.t -> t
+       val union : t -> t -> t
+       val remove : int -> t -> t
+     end)
+    (DeadCodeElemStatus : sig
+       val disable : bool
+     end) : sig
   val call_arity_anal : cps_vb -> MACPS.cps_vb
   val call_arity_anal_debug : cps_vb -> MACPS.cps_vb
 end = struct
@@ -197,9 +201,12 @@ end = struct
         (match IMap.find id bnd_unsafities with
          | SideEffUnsafe | NonRemovable -> default 0
          | (exception Not_found) | Unsafe ->
-           let dead_id = Option.value jv_specif ~default:id in
-           ( { ress with dead_vars = ISet.add dead_id ress.dead_vars }
-           , fun ress2 _ -> b_co_calls, b_ars, ress2 ))
+           if DeadCodeElemStatus.disable
+           then default 0
+           else (
+             let dead_id = Option.value jv_specif ~default:id in
+             ( { ress with dead_vars = ISet.add dead_id ress.dead_vars }
+             , fun ress2 _ -> b_co_calls, b_ars, ress2 )))
       | v_arity -> default v_arity
     and anal_rec_bnd v_id int t (b_co_calls, b_ars, ress) =
       let default v_arity =
@@ -229,7 +236,9 @@ end = struct
       in
       match IMap.find v_id b_ars with
       | exception Not_found ->
-        b_co_calls, b_ars, { ress with dead_vars = ISet.add v_id ress.dead_vars }
+        if DeadCodeElemStatus.disable
+        then default 0
+        else b_co_calls, b_ars, { ress with dead_vars = ISet.add v_id ress.dead_vars }
       | v_arity -> default v_arity
     and fin_bnd_call_anal unsafety int f a (ress, fin_anal) =
       fin_anal ress
@@ -784,7 +793,9 @@ end = struct
     in
     let triv_bnd env id_opt prep_t k_inl k_def =
       match id_opt, prep_t with
-      | Some id, _ when find id counts <= 1 -> k_inl @@ add id prep_t env
+      | Some id, _ when find id counts < 1 && not DeadCodeElemStatus.disable ->
+        k_inl @@ add id prep_t env
+      | Some id, _ when find id counts = 1 -> k_inl @@ add id prep_t env
       | Some id, #light_t -> k_inl @@ add id prep_t env
       | _ -> k_def ()
     in
@@ -884,13 +895,15 @@ end = struct
           then MACPS.Ret (get_c' (), expand_ex_call env v_arity ec)
           else ex_call c get_c' ~cont_stuff:(etas, cont_hndl) env [] ec
         in
+        let safe_inl id =
+          (find id counts = 1 || (find id counts < 1 && not DeadCodeElemStatus.disable))
+          && v_arity > 0
+        in
         match pat, t1_prep, t2_prep with
-        | CPVar { id; _ }, `HeavyT (Lam (lam_pat, i, lam_b)), _
-          when find id counts <= 1 && v_arity > 0 ->
+        | CPVar { id; _ }, `HeavyT (Lam (lam_pat, i, lam_b)), _ when safe_inl id ->
           simpl_p_sh b
           @@ add id (`ExLamCall ((lam_pat, i, lam_b), t2_prep, extra_args)) env
-        | CPVar { id; _ }, _, (#ex_triv as t2_prep)
-          when find id counts <= 1 && v_arity > 0 ->
+        | CPVar { id; _ }, _, (#ex_triv as t2_prep) when safe_inl id ->
           simpl_p_sh b @@ add id (`ExTArgsCall (t1_prep, t2_prep, extra_args)) env
         | _, `HeavyT (Lam (lam_pat, i, lam_b)), _ ->
           not_inl_ex_call @@ `ExLamCall ((lam_pat, i, lam_b), t2_prep, extra_args)
@@ -1156,7 +1169,32 @@ end = struct
   ;;
 end
 
-open CallArityAnal (VeryNaiveCoCallGraph)
+module Dis = struct
+  let disable = true
+end
 
-let call_arity_anal = call_arity_anal
-let call_arity_anal_debug = call_arity_anal_debug
+module En = struct
+  let disable = false
+end
+
+open CallArityAnal (VeryNaiveCoCallGraph) (Dis)
+
+let call_arity_anal ?(disable_dead_code_elem = true) =
+  if disable_dead_code_elem
+  then
+    let open CallArityAnal (VeryNaiveCoCallGraph) (Dis) in
+    call_arity_anal
+  else
+    let open CallArityAnal (VeryNaiveCoCallGraph) (En) in
+    call_arity_anal
+;;
+
+let call_arity_anal_debug ?(disable_dead_code_elem = true) =
+  if disable_dead_code_elem
+  then
+    let open CallArityAnal (VeryNaiveCoCallGraph) (Dis) in
+    call_arity_anal_debug
+  else
+    let open CallArityAnal (VeryNaiveCoCallGraph) (En) in
+    call_arity_anal_debug
+;;
