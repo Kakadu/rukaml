@@ -430,6 +430,8 @@ let rec check_pat ~level env : _ -> (_ * Typedtree.pattern * ty) t = function
     let* env, p2, t2 = check_pat ~level env p2 in
     return (env, Tpat_tuple (p1, p2, []), tprod t1 t2 [])
   | Parsetree.PTuple (_p1, _p2, _ps) -> failwith "Not implemented"
+  | Parsetree.PAny -> failwith "TODO (psi) : not implemented"
+  | Parsetree.PConstruct _ -> failwith "TODO (psi) : not implemented"
 ;;
 
 let infer env expr =
@@ -530,6 +532,13 @@ let infer env expr =
         let* () = unify tp _ty in
         let* twher, typed_wher = helper env wher in
         return (twher, TLet (NonRecursive, pat, Scheme.make_mono _ty, tbody, typed_wher))
+  
+      | Parsetree.ELet (_, PAny, _, _)
+      | Parsetree.ELet (_, PConstruct _, _, _)
+      | Parsetree.ELam (PAny, _)
+      | Parsetree.ELam (PConstruct _, _)
+      | Parsetree.EMatch _
+      | Parsetree.EConstruct _ -> failwith "TODO (psi) : not implemented"
   in
   helper env expr
 ;;
@@ -578,6 +587,7 @@ let vb ?(env = start_env) (flg, pat, body) : (_, [> error ]) Result.t =
       return (env, ty, Tpat_var (Type_env.ident_of_string_exn name env), tbody)
     | Recursive, PTuple _ -> fail `Only_varibles_on_the_left_of_letrec
     | NonRecursive, PTuple _ -> failwith "Not implemented"
+    | _ -> failwith "TODO (psi) : not implemented"
   in
   run comp
   |> Result.map ~f:(fun (env, ty, tpat, body) ->
@@ -600,9 +610,12 @@ let structure ?(env = start_env) stru =
       stru
       ~init:(return (env, []))
       ~f:(fun acc item ->
-        let* env, acc = acc in
-        let* env, new_item = vb ~env item in
-        return (env, new_item :: acc))
+        match item with
+        | Parsetree.SLet item ->
+          let* env, acc = acc in
+          let* env, new_item = vb ~env item in
+          return (env, new_item :: acc)
+        | Parsetree.SType _ -> failwith "TODO (psi) : not implemented")
   in
   return (List.rev items)
 ;;
