@@ -23,6 +23,13 @@ let rec pp_pattern ppf = function
     fprintf ppf "@[(%a" pp_pattern pa;
     List.iter (fprintf ppf ", %a" pp_pattern) (pb :: ps);
     fprintf ppf ")@]"
+    | PAny -> fprintf ppf "_"
+    | PConstruct (name, None) -> fprintf ppf "%s" name
+    | PConstruct (name, Some arg) ->
+      fprintf ppf "%a (" pp_print_string name;
+      pp_pattern ppf arg;
+      fprintf ppf ")";
+
 ;;
 
 let pp_const ppf = function
@@ -94,6 +101,23 @@ let rec pp_expr_helper ?(ps = true) ppf = function
       (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") no_pars)
       (h2 :: hs);
     fprintf ppf ")@]"
+  | EConstruct (name, None) -> fprintf ppf "%s" name
+  | EConstruct (name, Some arg) ->
+    fprintf ppf "%s (" name;
+    pp_expr ppf arg;
+    fprintf ppf ")" ;
+  | EMatch (e, (pe, pes)) ->
+    fprintf ppf "match ";
+    pp_expr ppf e;
+    fprintf ppf " with";
+    let helper (p, e) =
+      fprintf ppf "| ";
+      pp_pattern ppf p;
+      fprintf ppf " -> ";
+      pp_expr ppf e;
+    in
+    helper pe;
+    List.iter helper pes
 
 and no_pars ppf = pp_expr_helper ~ps:false ppf
 and maybe_pars ppf = pp_expr_helper ~ps:true ppf
