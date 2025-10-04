@@ -109,12 +109,13 @@ let rec pp_expr_helper ?(ps = true) ppf = function
   | EMatch (e, (pe, pes)) ->
     fprintf ppf "match ";
     pp_expr ppf e;
-    fprintf ppf " with";
+    fprintf ppf " with\n";
     let helper (p, e) =
       fprintf ppf "| ";
       pp_pattern ppf p;
       fprintf ppf " -> ";
       pp_expr ppf e;
+      fprintf ppf "\n";
     in
     helper pe;
     List.iter helper pes
