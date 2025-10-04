@@ -85,7 +85,7 @@ let alpha_digit_c =
 ;;
 
 let is_keyword = function
-  | "fun" | "in" | "let" | "rec" | "if" | "then" | "else" -> true
+  | "fun" | "in" | "let" | "rec" | "if" | "then" | "else" | "match" | "with" -> true
   | _ -> false
 ;;
 
@@ -103,17 +103,6 @@ let ident =
 
 let string s = trace_pos (Format.sprintf "string `%s`" s) *> string s
 
-let pattern =
-  fix (fun pattern ->
-    fail ""
-    <|> parens
-          (return (fun a b ps -> PTuple (a, b, ps))
-           <*> pattern
-           <*> string "," *> ws *> pattern
-           <*> many (string "," *> ws *> pattern))
-    <|> (ws *> ident >>= fun v -> return (pvar v) <* trace_pos v))
-;;
-
 (* >>| fun x ->
   log "pattern %a parsed" Pprint.pp_pattern x;
   x *)
@@ -127,6 +116,18 @@ let keyword kwd =
        let* p = pos in
        failf "input is not a keyword '%s', pos = %d" kwd p
      else ws *> return (log "keyword '%s' parsed" kwd)
+;;
+
+let pattern =
+  fix (fun pattern ->
+    fail ""
+    <|> parens
+          (return (fun a b ps -> PTuple (a, b, ps))
+           <*> pattern
+           <*> string "," *> ws *> pattern
+           <*> many (string "," *> ws *> pattern))
+    <|> (ws *> ident >>= fun v -> return (pvar v) <* trace_pos v)
+    <|> (ws *> keyword "_" *> return PAny))
 ;;
 
 let prio expr table =
@@ -205,6 +206,14 @@ let pack : dispatch =
                  <*> (string "," *> d.expr d <* ws)
                  <*> many (string "," *> d.expr d <* ws))
           <|> (ws *> ident >>| evar)
+          <|> (
+                  keyword "match" *> d.prio d >>= fun e -> ws
+                  *> keyword "with" *>
+                  (many (ws *> char '|' *> ws *> pattern >>= fun p -> ws *> string "->" *> ws *> d.prio d >>= fun e -> return (p, e)))
+                  >>= function
+                  | pe :: pes -> return (ematch e pe pes)
+                  | _ -> fail "Pattern matching cases expected"
+              )
           <|> (keyword "fun" *> pattern
                >>= fun p ->
                (* let () = log "Got a abstraction over %a" Pprint.pp_pattern p in *)
@@ -244,7 +253,9 @@ let parse str =
   Result.map_error (fun x -> `Parse_error x) (parse_pack pack.prio str)
 ;;
 
-let structure = many value_binding
+let type_definition = fail "TODO (psi) : not implemented"
+
+let structure = many (value_binding <|> type_definition)
 
 let parse_structure str =
   parse_string ~consume:All structure str
