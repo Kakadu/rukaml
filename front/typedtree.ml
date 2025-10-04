@@ -48,6 +48,8 @@ let of_untyped_pattern =
   let rec helper = function
     | Parsetree.PVar v -> Tpat_var (Ident.of_string v)
     | PTuple (a, b, xs) -> Tpat_tuple (helper a, helper b, List.map helper xs)
+    | Parsetree.PAny -> failwith "TODO (psi) : not implemented"
+    | Parsetree.PConstruct _ -> failwith "TODO (psi) : not implemented"
   in
   helper
 ;;
