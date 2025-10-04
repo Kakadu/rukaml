@@ -90,3 +90,6 @@ val ele : expr -> expr -> expr
 val egt : expr -> expr -> expr
 val etuple : expr -> expr -> expr list -> expr
 val group_lams : expr -> pattern list * expr
+
+(* TODO (psi) : make more pretty? *)
+val ematch : expr -> pattern * expr -> (pattern * expr) list -> expr
