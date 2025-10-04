@@ -44,6 +44,7 @@ let evar s = EVar s
 let elam v body = ELam (v, body)
 let eapp1 f x = EApp (f, x)
 let etuple a b xs = ETuple (a, b, xs)
+let ematch e pe pes = EMatch (e, (pe, pes))
 
 let eapp f = function
   | [] -> f
