@@ -1,6 +1,14 @@
+type const =
+  | PConst_int of int
+  (* | PConst_string of string *)
+  | PConst_bool of bool
+[@@deriving show { with_path = false }]
+
 type pattern =
+  | PAny
   | PVar of string
   | PTuple of pattern * pattern * pattern list
+  | PConstruct of string * pattern option
 [@@deriving show { with_path = false }]
 
 let pvar s = PVar s
@@ -10,10 +18,9 @@ type rec_flag =
   | NonRecursive
 [@@deriving show { with_path = false }]
 
-type const =
-  | PConst_int of int
-  (* | PConst_string of string *)
-  | PConst_bool of bool
+type 'a list1 = 'a * 'a list
+[@@deriving show { with_path = false }]
+type 'a list2 = 'a * 'a * 'a list
 [@@deriving show { with_path = false }]
 
 type expr =
@@ -25,6 +32,8 @@ type expr =
   | EApp of expr * expr
   | ETuple of expr * expr * expr list
   | ELet of rec_flag * pattern * expr * expr
+  | EConstruct of string * expr option
+  | EMatch of expr * (pattern * expr) list1
 [@@deriving show { with_path = false }]
 
 let const_int n = PConst_int n
@@ -52,7 +61,34 @@ let ele a b = eapp (evar "<=") [ a; b ]
 let egt a b = eapp (evar ">") [ a; b ]
 
 type value_binding = rec_flag * pattern * expr [@@deriving show { with_path = false }]
-type structure_item = value_binding [@@deriving show { with_path = false }]
+
+type type_definition = {
+  typedef_params : string list; (** ['a] is param in [type 'a list = ...]  *)
+  typedef_name : string; (** [list] is name in [type 'a list = ...]  *)
+  typedef_kind : type_kind;
+}
+[@@deriving show { with_path = false }]
+
+and type_kind =
+  | TKAlias of core_type  (** [t] is allias of [int] in [type t = int] *)
+  | TKVariants of (string * core_type option) list1
+      (** [type t = A of int | B of int -> int] *)
+  (* | TKRecord of (string * core_type) list1
+      * [type t = { x : int; y : int -> int }] *)
+[@@deriving show { with_path = false }]
+
+and core_type =
+  | CTVar of string  (** ['a] *)
+  | CTArrow of core_type * core_type  (** ['a -> 'b] *)
+  | CTTuple of core_type * core_type * core_type   (** ['a * 'b] *)
+  | CTConstr of core_type * string  (** ['a list] *)
+[@@deriving show { with_path = false }]
+
+type structure_item =
+  | SLet of value_binding
+  | SType of type_definition
+[@@deriving show { with_path = false }]
+
 type structure = structure_item list [@@deriving show { with_path = false }]
 
 let group_lams body =
