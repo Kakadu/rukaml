@@ -84,7 +84,7 @@ let alpha_digit_c =
 ;;
 
 let is_keyword = function
-  | "fun" | "in" | "let" | "rec" | "if" | "then" | "else" | "match" | "with" | "type" -> true
+  | "fun" | "in" | "let" | "rec" | "if" | "then" | "else" | "match" | "with" | "type" | "and" | "of" | "_" -> true
   | _ -> false
 ;;
 
@@ -206,9 +206,14 @@ let pack : dispatch =
                  <*> many (string "," *> d.expr d <* ws))
           <|> (ws *> ident >>| evar)
           <|> (
-                  keyword "match" *> d.prio d >>= fun e -> ws
-                  *> keyword "with" *>
-                  (many (ws *> char '|' *> ws *> pattern >>= fun p -> ws *> string "->" *> ws *> d.prio d >>= fun e -> return (p, e)))
+                  let parse_case =
+                    ws *> char '|' *>
+                    ws *> pattern >>= fun p ->
+                    ws *> string "->" *>
+                    ws *> d.prio d >>= fun e -> return (p, e) in
+
+                  keyword "match" *> ws *> d.prio d >>= fun e -> ws *>
+                  keyword "with" *> (many parse_case)
                   >>= function
                   | pe :: pes -> return (ematch e pe pes)
                   | _ -> fail "Pattern matching cases expected"
@@ -251,73 +256,79 @@ let parse str =
   Result.map_error (fun x -> `Parse_error x) (parse_pack pack.prio str)
 ;;
 
-let parse_name_fabric regexp error_message =
-  ws *> (take_while1 (fun ch -> is_alpha ch || ch = '\'')) >>= fun chs ->
+let is_char_valid_for_name = function
+  | ch when is_alpha ch -> true
+  | '0' .. '9' | '\'' | '_' -> true
+  | _ -> false
+
+let name_fabric regexp error_message =
+  ws *> (take_while1 is_char_valid_for_name) >>= fun chs ->
+  if is_keyword chs then fail "unexpected keyword" else
   if Str.string_match (Str.regexp regexp) chs 0 then return chs
   else fail error_message
 
-let parse_type_name =
+let type_name =
   let regexp = "^[a-z_][a-zA-Z0-9_]*$" in
-  let message = "type name expected" in
-  parse_name_fabric regexp message
+  let message = "not a type name" in
+  name_fabric regexp message
 
-let parse_type_param_name =
+let type_param_name =
   let regexp = "^'[a-zA-Z][a-zA-Z0-9_]*$" in
-  let message = "type param name expected" in
-  parse_name_fabric regexp message
+  let message = "not a type param name" in
+  name_fabric regexp message
 
-let parse_constructor_name =
+let constructor_name =
   let regexp = "^[A-Z][a-zA-Z0-9_]*$" in
   let message = "not a constructor name" in
-  parse_name_fabric regexp message
+  name_fabric regexp message
 
-let parse_ct_var =
-  ws *> parse_type_name <|> ws *> parse_type_param_name >>| fun name -> CTVar name
-
-let parse_one_type_param = ws *> parse_type_param_name >>| fun param -> [ param ]
-
-let parse_type_param_tuple =
+let type_param_tuple =
   ws *> (char '(')
-  *> ws *> (sep_by (ws *> (char ',')) (ws *> parse_type_param_name))
+  *> ws *> (sep_by (ws *> (char ',')) (ws *> type_param_name))
   >>= function
   | frst :: scnd :: rest -> return (frst :: scnd :: rest) <* ws *> (char ')')
   | _ -> fail "tuple of param names expected"
 
-let parse_type_params =
-  ws *> parse_one_type_param
-  <|> parens (ws *> parse_one_type_param)
-  <|> ws *> parse_type_param_tuple
-  <|> return []
+let type_params =
+  ws *>
+  ((type_param_name >>| fun param -> [ param ])
+  <|> parens ( type_param_name >>| fun param -> [ param ])
+  <|> type_param_tuple
+  <|> return [])
 
-let parse_ctconstr parse_core_type =
-  ws *> parse_core_type >>= fun arg ->
-  ws *> parse_type_name >>| fun consructor -> CTConstr (arg, consructor)
+let core_type_var =
+  ws *> (type_name <|> type_param_name >>| fun name -> CTVar name)
 
-let parse_ctarrow parse_core_type =
-  fix (fun opp ->
-      ws *> parse_core_type >>= fun operand ->
-      ws *> (string "->") *> ws *> opp
+let core_type_constr core_type =
+  ws *> core_type >>= fun arg ->
+  ws *> (type_name <|> type_param_name) >>| fun consructor -> CTConstr (arg, consructor)
+
+let core_type_arrow core_type =
+  fix (fun self ->
+      ws *> core_type >>= fun operand ->
+      ws *> (string "->") *> ws *> self
       >>| (fun operand2 -> CTArrow (operand, operand2))
       <|> return operand)
 
-let parse_cttuple parse_core_type =
-  parse_core_type >>= fun first ->
-  many (ws *> char '*' *> ws *> parse_core_type) >>= function
-  | [] -> return first  (* Not a tuple, just return the single type *)
+let core_type_tuple core_type =
+  core_type >>= fun first ->
+  many (ws *> char '*' *> ws *> core_type) >>= function
+  | [] -> return first
   | second :: rest -> return (CTTuple (first, second, rest))
 
-let parse_core_type =
-  fix (fun ct ->
-      let ct = ws *> parse_ct_var <|> parens ct in
-      let ct = ws *> (parse_ctconstr ct) <|> ct in
-      let ct = ws *> (parse_cttuple ct) <|> ct in
-      let ct = ws *> (parse_ctarrow ct) <|> ct in
-      ct)
+let core_type =
+  ws *>
+  (fix (fun ct ->
+      let ct = core_type_var <|> parens ct in
+      let ct = (core_type_constr ct) <|> ct in
+      let ct = (core_type_tuple ct) <|> ct in
+      let ct = (core_type_arrow ct) <|> ct in
+      ct))
 
-let parse_variants =
+let type_kind_variants =
   let parse_variant =
-    ws *> (char '|') *> ws *> parse_constructor_name >>= fun name ->
-    ws *> (string "of") *> ws *> parse_core_type
+    ws *> (char '|') *> ws *> constructor_name >>= fun name ->
+    ws *> (keyword "of") *> ws *> core_type
     >>| (fun core_type -> (name, Some core_type))
     <|> return (name, None)
   in
@@ -325,24 +336,21 @@ let parse_variants =
   | var :: vars -> return (TKVariants (var, vars))
   | _ -> fail "is not variants"
 
-let parse_record = fail "not implemented" (* TODO *)
-let parse_allias = ws *> parse_core_type >>| fun core_type -> TKAlias core_type
+let type_kind_record = fail "TODO (psi) : not implemented"
 
-let parse_type_kinds =
-  ws *> parse_allias <|> ws *> parse_variants <|> ws *> parse_record
+let type_kind_alias = ws *> core_type >>| fun core_type -> TKAlias core_type
 
-let type_definition params name kind =
+let type_kind = ws *> (type_kind_variants <|> type_kind_record <|> type_kind_alias)
+
+let single_type_definition =
+  ws *> type_params >>= fun params ->
+  ws *> type_name >>= fun name ->
+  ws *> (char '=') *> ws *> type_kind >>| fun kind ->
   { typedef_params = params; typedef_name = name; typedef_kind = kind }
 
-let parse_type_definition =
-  ws *> parse_type_params >>= fun params ->
-  ws *> parse_type_name >>= fun name ->
-  ws *> (char '=') *> ws *> parse_type_kinds >>| fun kind ->
-  type_definition params name kind
-
-let parse_stype =
-  ws *> (string "type") *> parse_type_definition >>= fun frst ->
-  sep_by (ws *> (string "and")) parse_type_definition >>| fun rest ->
+let type_definition =
+  ws *> (string "type") *> ws *> single_type_definition >>= fun frst ->
+  many (ws *> string "and" *> single_type_definition) >>| fun rest ->
   SType (frst, rest)
 
 let value_binding = letdef (pack.expr pack) <* ws
@@ -351,7 +359,7 @@ let structure = many1
 (
   (value_binding  >>| fun vb -> SLet vb)
   <|>
-  parse_stype
+  type_definition
 )
 
 let parse_structure str =
