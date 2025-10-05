@@ -12,7 +12,6 @@ type pattern =
   | PTuple of pattern * pattern * pattern list
   | PConstruct of string * pattern option
 
-
 val pp_pattern : Format.formatter -> pattern -> unit
 val show_pattern : pattern -> string
 val pvar : string -> pattern
@@ -57,12 +56,12 @@ and type_kind =
 and core_type =
   | CTVar of string  (** ['a] *)
   | CTArrow of core_type * core_type  (** ['a -> 'b] *)
-  | CTTuple of core_type * core_type * core_type  (** ['a * 'b] *)
+  | CTTuple of core_type * core_type * core_type list (** ['a * 'b] *)
   | CTConstr of core_type * string  (** ['a list] *)
 
 type structure_item =
   | SLet of value_binding
-  | SType of type_definition
+  | SType of type_definition list1
 
 type structure = structure_item list
 

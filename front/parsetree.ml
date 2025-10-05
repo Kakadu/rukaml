@@ -81,13 +81,13 @@ and type_kind =
 and core_type =
   | CTVar of string  (** ['a] *)
   | CTArrow of core_type * core_type  (** ['a -> 'b] *)
-  | CTTuple of core_type * core_type * core_type   (** ['a * 'b] *)
+  | CTTuple of core_type * core_type * core_type list (** ['a * 'b] *)
   | CTConstr of core_type * string  (** ['a list] *)
 [@@deriving show { with_path = false }]
 
 type structure_item =
   | SLet of value_binding
-  | SType of type_definition
+  | SType of type_definition list1
 [@@deriving show { with_path = false }]
 
 type structure = structure_item list [@@deriving show { with_path = false }]
