@@ -184,41 +184,56 @@ let rec pp_core_type ppf = function
     fprintf ppf ")";
   ;;
 
-let pp_typedef ppf td =
+let pp_type_definition ppf first rest =
+  let pp_type_params td =
+    match td.typedef_params with
+    | [] -> fprintf ppf " "
+    | [ x ] -> fprintf ppf " %s " x
+    | xs ->
+      fprintf ppf " (";
+      List.iter (fun name -> fprintf ppf "%s, " name) xs;
+      fprintf ppf ") "
+  in
+  let pp_type_kind td =
+    match td.typedef_kind with
+    | TKAlias alias ->
+      fprintf ppf " ";
+      pp_core_type ppf alias;
+    | TKVariants (x, xs) ->
+      fprintf ppf "\n";
+      List.iter
+        (
+          fun (name, ct_opt) ->
+              match ct_opt with
+              | None -> fprintf ppf "| %s\n" name;
+              | Some ct ->
+                fprintf ppf "| %s of " name;
+                pp_core_type ppf ct;
+                fprintf ppf "\n";
+        ) (x :: xs);
+  in
+
   fprintf ppf "type";
-
-  (match td.typedef_params with
-  | [] -> ()
-  | [ x ] -> fprintf ppf " %s " x
-  | xs ->
-    fprintf ppf " (";
-    List.iter (fun name -> fprintf ppf "%s, " name) xs;
-    fprintf ppf ")");
+  pp_type_params first;
+  fprintf ppf "%s =" first.typedef_name;
+  pp_type_kind first;
+  fprintf ppf "\n";
   
-  fprintf ppf " %s =" td.typedef_name;
-
-  match td.typedef_kind with
-  | TKAlias alias ->
-    fprintf ppf " ";
-    pp_core_type ppf alias;
-  | TKVariants (x, xs) ->
-    fprintf ppf "\n";
-    List.iter
-      (
-        fun (name, ct_opt) ->
-            match ct_opt with
-            | None -> fprintf ppf "| %s\n" name;
-            | Some ct ->
-              fprintf ppf "| %s of " name;
-              pp_core_type ppf ct;
-              fprintf ppf "\n";
-      ) (x :: xs);
-    
+  List.iter
+    (
+      fun td ->
+        fprintf ppf "and";
+        pp_type_params td;
+        fprintf ppf "%s =" td.typedef_name;
+        pp_type_kind td;
+        fprintf ppf "\n";
+    ) (rest);
+ 
 ;;
 
 let pp_structure_item ppf = function
   | SLet item -> pp_value_binding ppf item
-  | SType (x, xs) -> List.iter (fun item -> pp_typedef ppf item) (x :: xs)
+  | SType (x, xs) -> pp_type_definition ppf x xs
 
 ;;
 
