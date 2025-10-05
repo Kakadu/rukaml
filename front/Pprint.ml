@@ -23,13 +23,12 @@ let rec pp_pattern ppf = function
     fprintf ppf "@[(%a" pp_pattern pa;
     List.iter (fprintf ppf ", %a" pp_pattern) (pb :: ps);
     fprintf ppf ")@]"
-    | PAny -> fprintf ppf "_"
-    | PConstruct (name, None) -> fprintf ppf "%s" name
-    | PConstruct (name, Some arg) ->
-      fprintf ppf "%a (" pp_print_string name;
-      pp_pattern ppf arg;
-      fprintf ppf ")";
-
+  | PAny -> fprintf ppf "_"
+  | PConstruct (name, None) -> fprintf ppf "%s" name
+  | PConstruct (name, Some arg) ->
+    fprintf ppf "%a (" pp_print_string name;
+    pp_pattern ppf arg;
+    fprintf ppf ")"
 ;;
 
 let pp_const ppf = function
@@ -105,7 +104,7 @@ let rec pp_expr_helper ?(ps = true) ppf = function
   | EConstruct (name, Some arg) ->
     fprintf ppf "%s (" name;
     pp_expr ppf arg;
-    fprintf ppf ")" ;
+    fprintf ppf ")"
   | EMatch (e, (pe, pes)) ->
     fprintf ppf "match ";
     pp_expr ppf e;
@@ -115,7 +114,7 @@ let rec pp_expr_helper ?(ps = true) ppf = function
       pp_pattern ppf p;
       fprintf ppf " -> ";
       pp_expr ppf e;
-      fprintf ppf "\n";
+      fprintf ppf "\n"
     in
     helper pe;
     List.iter helper pes
@@ -158,15 +157,75 @@ let pp_scheme ppf = function
   | S (xs, t) -> fprintf ppf "forall %a . %a" Var_set.pp xs pp_typ t
 ;;
 
-let pp_stru ppf vbs =
-  let open Format in
-  open_vbox 0;
-  pp_print_list
-    ~pp_sep:(fun ppf () -> fprintf ppf "@\n")
-    (fun ppf -> fprintf ppf "@[%a@]" pp_value_binding)
-    ppf
-    vbs;
-  close_box ()
+let pp_ls ppf sep pp = function
+  | [] -> ()
+  | [ x ] -> pp ppf x
+  | x :: xs ->
+    pp ppf x;
+    List.iter
+      (fun x ->
+         fprintf ppf "%s" sep;
+         pp ppf x)
+      xs
 ;;
 
-let structure = pp_stru
+let rec pp_core_type ppf = function
+  | CTVar name -> fprintf ppf "%s" name
+  | CTArrow (a, b) ->
+    fprintf ppf "(";
+    pp_core_type ppf a;
+    fprintf ppf " -> ";
+    pp_core_type ppf b;
+    fprintf ppf ")"
+  | CTTuple (a, b, xs) ->
+    fprintf ppf "(";
+    pp_ls ppf " * " pp_core_type (a :: b :: xs);
+    fprintf ppf ")"
+  | CTConstr (arg, name) ->
+    fprintf ppf "%s (" name;
+    pp_core_type ppf arg;
+    fprintf ppf ")"
+;;
+
+let pp_typedef ppf td =
+  fprintf ppf "type";
+
+  (match td.typedef_params with
+   | [] -> ()
+   | [ x ] -> fprintf ppf " %s " x
+   | xs ->
+     fprintf ppf " (";
+     List.iter (fun name -> fprintf ppf "%s, " name) xs;
+     fprintf ppf ")");
+
+  fprintf ppf " %s =" td.typedef_name;
+
+  match td.typedef_kind with
+  | TKAlias alias ->
+    fprintf ppf " ";
+    pp_core_type ppf alias
+  | TKVariants (x, xs) ->
+    fprintf ppf "\n";
+    List.iter
+      (fun (name, ct_opt) ->
+         match ct_opt with
+         | None -> fprintf ppf "| %s\n" name
+         | Some ct ->
+           fprintf ppf "| %s of " name;
+           pp_core_type ppf ct;
+           fprintf ppf "\n")
+      (x :: xs)
+;;
+
+let pp_structure_item ppf = function
+  | SLet item -> pp_value_binding ppf item
+  | SType (x, xs) -> List.iter (fun item -> pp_typedef ppf item) (x :: xs)
+;;
+
+let structure ppf xs =
+  List.iter
+    (fun x ->
+       pp_structure_item ppf x;
+       fprintf ppf "\n")
+    xs
+;;
