@@ -4,8 +4,11 @@
   > let main = zed fac
   > EOF
   Parsed: let rec zed f x = f (zed f) x
-          let fac self n = if n = 1 then 1 else n * (self (n - 1))
-          let main = zed fac
+  let fac self n = if n = 1 then 1 
+                                                         else n * (self (n - 1))
+  
+  let main = zed fac
+  
 
   $ cat << EOF | ./run.exe  -stru -
   > let id = fun x -> x
@@ -20,6 +23,7 @@
   > let rec fix f = f (fix f)
   > EOF
   Parsed: let rec fix f = f (fix f)
+  
 
   $ cat << EOF | ./run.exe -stru  -
   > let rec fix f = f (fix f)
@@ -27,8 +31,12 @@
   > let main = fix fac
   > EOF
   Parsed: let rec fix f = f (fix f)
-          let fac self n = if n = 1 then 1 else n * (self (n - 1))
-          let main = fix fac
+  let fac self n = if n = 1 then 1 else n * (
+                                                                     self 
+                                                                     (n - 1))
+  
+  let main = fix fac
+  
 
   $ cat << EOF | ./run.exe  -stru -
   > let rec zed f x = f (zed f) x
@@ -36,8 +44,11 @@
   > let main = zed fac
   > EOF
   Parsed: let rec zed f x = f (zed f) x
-          let fac self n = if n = 1 then 1 else n * (self (n - 1))
-          let main = zed fac
+  let fac self n = if n = 1 then 1 
+                                                         else n * (self (n - 1))
+  
+  let main = zed fac
+  
 
   $ cat << EOF | ./run.exe  -stru -
   > (fun fix -> fun f -> f (fix f))
@@ -54,7 +65,9 @@
   > let main = fac
   > EOF
   Parsed: let rec fac n = if n = 1 then 1 else n * (fac (n - 1))
-          let main = fac
+  let main = 
+                                                                   fac
+  
 
   $ cat << EOF | ./run.exe  -stru -
   > fun f -> fun x -> f (f x)
@@ -72,8 +85,9 @@
   > let main = add1 13
   > EOF
   Parsed: let add x y = x + y
-          let add1 = add 1
-          let main = add1 13
+  let add1 = add 1
+  let main = add1 13
+  
 
   $ cat << EOF | ./run.exe  -stru -
   > let add = fun x -> x + x
@@ -81,8 +95,9 @@
   > let main = add 1
   > EOF
   Parsed: let add x = x + x
-          let add1 = add 1
-          let main = add 1
+  let add1 = add 1
+  let main = add 1
+  
 
   $ cat << EOF | ./run.exe  -stru -
   > let double = fun x -> (x, x)
@@ -122,7 +137,9 @@ patterns
   >   a+b
   > EOF
   Parsed: let swap (a, b) = (b, a)
-          let resum p = let (a, b) = swap p in a + b
+  let resum p = let (a, b) = swap p in 
+                                                 a + b
+  
 
 CPS
   $ cat << EOF | ./run.exe -stru -
@@ -143,3 +160,4 @@ CPS
                                                                   q -> 
                                                                       k 
                                                                       (p + q)))
+  
