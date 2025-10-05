@@ -30,14 +30,16 @@
   (system "%{read:../../cc_amd64} -c %{src} -o %{target}")))
 
 (rule
- (target tests.exe)
+ (target stdlib_cunit.exe)
  (enabled_if
-  (not
-   (= none %{read:../../cc_amd64})))
+  (and
+   (= %{architecture} amd64)
+   (not
+    (= none %{read:../../cc_amd64}))))
  (mode
   (promote (until-clean)))
  (deps
-  (:src tests.c)
+  (:src stdlib_cunit.c)
   (:stdlib rukaml_stdlib.o)
   rukaml_stdlib.h)
  (action
@@ -45,7 +47,9 @@
 
 (cram
  (enabled_if
-  (not
-   (= none %{read:../../cc_amd64})))
- (applies_to tests)
- (deps tests.exe))
+  (and
+   (= %{architecture} amd64)
+   (not
+    (= none %{read:../../cc_amd64}))))
+ (applies_to stdlib_cunit)
+ (deps stdlib_cunit.exe))

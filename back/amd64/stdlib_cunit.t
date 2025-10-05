@@ -1,6 +1,4 @@
-$ ls -ls
-$ file `readlink tests.exe`
-  $ ./tests.exe --help
+  $ ./stdlib_cunit.exe --help
   
   
        CUnit - A unit testing framework for C - Version 2.1-3
