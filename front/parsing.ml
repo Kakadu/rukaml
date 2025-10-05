@@ -84,7 +84,7 @@ let alpha_digit_c =
 ;;
 
 let is_keyword = function
-  | "fun" | "in" | "let" | "rec" | "if" | "then" | "else" | "match" | "with" -> true
+  | "fun" | "in" | "let" | "rec" | "if" | "then" | "else" | "match" | "with" | "type" -> true
   | _ -> false
 ;;
 
@@ -238,7 +238,6 @@ let pack : dispatch =
   { expr_basic; expr_long; prio; expr = prio }
 ;;
 
-let value_binding = letdef (pack.expr pack) <* ws
 let parse_pack p str = parse_string ~consume:All (p pack) str
 
 type error = [ `Parse_error of string ]
@@ -252,9 +251,108 @@ let parse str =
   Result.map_error (fun x -> `Parse_error x) (parse_pack pack.prio str)
 ;;
 
-let type_definition = fail "TODO (psi) : not implemented"
+let parse_name_fabric regexp error_message =
+  ws *> (take_while1 (fun ch -> is_alpha ch || ch = '\'')) >>= fun chs ->
+  if Str.string_match (Str.regexp regexp) chs 0 then return chs
+  else fail error_message
 
-let structure = many (value_binding <|> type_definition)
+let parse_type_name =
+  let regexp = "^[a-z_][a-zA-Z0-9_]*$" in
+  let message = "type name expected" in
+  parse_name_fabric regexp message
+
+let parse_type_param_name =
+  let regexp = "^'[a-zA-Z][a-zA-Z0-9_]*$" in
+  let message = "type param name expected" in
+  parse_name_fabric regexp message
+
+let parse_constructor_name =
+  let regexp = "^[A-Z][a-zA-Z0-9_]*$" in
+  let message = "not a constructor name" in
+  parse_name_fabric regexp message
+
+let parse_ct_var =
+  ws *> parse_type_name <|> ws *> parse_type_param_name >>| fun name -> CTVar name
+
+let parse_one_type_param = ws *> parse_type_param_name >>| fun param -> [ param ]
+
+let parse_type_param_tuple =
+  ws *> (char '(')
+  *> ws *> (sep_by (ws *> (char ',')) (ws *> parse_type_param_name))
+  >>= function
+  | frst :: scnd :: rest -> return (frst :: scnd :: rest) <* ws *> (char ')')
+  | _ -> fail "tuple of param names expected"
+
+let parse_type_params =
+  ws *> parse_one_type_param
+  <|> parens (ws *> parse_one_type_param)
+  <|> ws *> parse_type_param_tuple
+  <|> return []
+
+let parse_ctconstr parse_core_type =
+  ws *> parse_core_type >>= fun arg ->
+  ws *> parse_type_name >>| fun consructor -> CTConstr (arg, consructor)
+
+let parse_ctarrow parse_core_type =
+  fix (fun opp ->
+      ws *> parse_core_type >>= fun operand ->
+      ws *> (string "->") *> ws *> opp
+      >>| (fun operand2 -> CTArrow (operand, operand2))
+      <|> return operand)
+
+let parse_cttuple parse_core_type =
+  parse_core_type >>= fun first ->
+  many (ws *> char '*' *> ws *> parse_core_type) >>= function
+  | [] -> return first  (* Not a tuple, just return the single type *)
+  | second :: rest -> return (CTTuple (first, second, rest))
+
+let parse_core_type =
+  fix (fun ct ->
+      let ct = ws *> parse_ct_var <|> parens ct in
+      let ct = ws *> (parse_ctconstr ct) <|> ct in
+      let ct = ws *> (parse_cttuple ct) <|> ct in
+      let ct = ws *> (parse_ctarrow ct) <|> ct in
+      ct)
+
+let parse_variants =
+  let parse_variant =
+    ws *> (char '|') *> ws *> parse_constructor_name >>= fun name ->
+    ws *> (string "of") *> ws *> parse_core_type
+    >>| (fun core_type -> (name, Some core_type))
+    <|> return (name, None)
+  in
+  many parse_variant >>= function
+  | var :: vars -> return (TKVariants (var, vars))
+  | _ -> fail "is not variants"
+
+let parse_record = fail "not implemented" (* TODO *)
+let parse_allias = ws *> parse_core_type >>| fun core_type -> TKAlias core_type
+
+let parse_type_kinds =
+  ws *> parse_allias <|> ws *> parse_variants <|> ws *> parse_record
+
+let type_definition params name kind =
+  { typedef_params = params; typedef_name = name; typedef_kind = kind }
+
+let parse_type_definition =
+  ws *> parse_type_params >>= fun params ->
+  ws *> parse_type_name >>= fun name ->
+  ws *> (char '=') *> ws *> parse_type_kinds >>| fun kind ->
+  type_definition params name kind
+
+let parse_stype =
+  ws *> (string "type") *> parse_type_definition >>= fun frst ->
+  sep_by (ws *> (string "and")) parse_type_definition >>| fun rest ->
+  SType (frst, rest)
+
+let value_binding = letdef (pack.expr pack) <* ws
+
+let structure = many1
+(
+  (value_binding  >>| fun vb -> SLet vb)
+  <|>
+  parse_stype
+)
 
 let parse_structure str =
   parse_string ~consume:All structure str
