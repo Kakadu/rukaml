@@ -71,11 +71,9 @@ type type_definition = {
 [@@deriving show { with_path = false }]
 
 and type_kind =
-  | TKAlias of core_type  (** [t] is allias of [int] in [type t = int] *)
-  | TKVariants of (string * core_type option) list1
-      (** [type t = A of int | B of int -> int] *)
-  (* | TKRecord of (string * core_type) list1
-      * [type t = { x : int; y : int -> int }] *)
+  | TKAlias of core_type                              (** [t] is alias of [int] in [type t = int] *)
+  | TKVariants of (string * core_type option) list1   (** [type t = A of int | B of int -> int] *)
+  (* | TKRecord of (string * core_type) list1 *)
 [@@deriving show { with_path = false }]
 
 and core_type =
