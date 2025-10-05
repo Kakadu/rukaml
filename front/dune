@@ -17,7 +17,7 @@
   ;
   )
  ;(inline_tests)
- (libraries ppx_deriving.runtime angstrom base)
+ (libraries ppx_deriving.runtime angstrom base str)
  (preprocess
   (pps ppx_deriving.show bisect_ppx ppx_expect)))
 
