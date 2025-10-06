@@ -130,16 +130,62 @@ let keyword kwd =
      else ws *> return (log "keyword '%s' parsed" kwd)
 ;;
 
+let is_char_valid_for_name = function
+  | ch when is_alpha ch -> true
+  | '0' .. '9' | '\'' | '_' -> true
+  | _ -> false
+;;
+
+let name_fabric regexp error_message =
+  ws *> take_while1 is_char_valid_for_name
+  >>= fun chs ->
+  if is_keyword chs
+  then fail "unexpected keyword"
+  else if Str.string_match (Str.regexp regexp) chs 0
+  then return chs
+  else fail error_message
+;;
+
+let constructor_name =
+  let regexp = "^[A-Z][a-zA-Z0-9_]*$" in
+  let message = "not a constructor name" in
+  name_fabric regexp message
+;;
+
+let parse_econsruct parse_expression =
+  let* name = ws *> constructor_name in
+  (let* expr = ws *> parse_expression in
+   return (EConstruct (name, Some expr)))
+  <|> return (EConstruct (name, None))
+;;
+
+let parse_pconsruct parse_pattern =
+  let* name = ws *> constructor_name in
+  (let* patt = ws *> parse_pattern in
+   return (PConstruct (name, Some patt)))
+  <|> return (PConstruct (name, None))
+;;
+
 let pattern =
-  fix (fun pattern ->
-    fail ""
-    <|> parens
-          (return (fun a b ps -> PTuple (a, b, ps))
-           <*> pattern
-           <*> string "," *> ws *> pattern
-           <*> many (string "," *> ws *> pattern))
-    <|> (ws *> ident >>= fun v -> return (pvar v) <* trace_pos v)
-    <|> ws *> keyword "_" *> return PAny)
+  ws
+  *> fix (fun pattern ->
+    let pattern =
+      choice
+        [ parens pattern
+        ; char '_' *> return PAny
+        ; (ident >>= fun v -> return (pvar v) <* trace_pos v)
+        ]
+    in
+    let pattern = parse_pconsruct pattern <|> pattern in
+    let pattern =
+      let* first = pattern in
+      many (ws *> string "," *> ws *> pattern)
+      >>= function
+      | [] -> return first
+      | second :: rest -> return (PTuple (first, second, rest))
+    in
+    pattern)
+  <?> "not a pattern"
 ;;
 
 let prio expr table =
@@ -267,22 +313,6 @@ let parse str =
   Result.map_error (fun x -> `Parse_error x) (parse_pack pack.prio str)
 ;;
 
-let is_char_valid_for_name = function
-  | ch when is_alpha ch -> true
-  | '0' .. '9' | '\'' | '_' -> true
-  | _ -> false
-;;
-
-let name_fabric regexp error_message =
-  ws *> take_while1 is_char_valid_for_name
-  >>= fun chs ->
-  if is_keyword chs
-  then fail "unexpected keyword"
-  else if Str.string_match (Str.regexp regexp) chs 0
-  then return chs
-  else fail error_message
-;;
-
 let type_name =
   let regexp = "^[a-z_][a-zA-Z0-9_]*$" in
   let message = "not a type name" in
@@ -372,18 +402,19 @@ let type_kind_alias = ws *> core_type >>| fun core_type -> TKAlias core_type
 let type_kind = ws *> (type_kind_variants <|> type_kind_record <|> type_kind_alias)
 
 let single_type_definition =
-  ws *> type_params
-  >>= fun params ->
-  ws *> type_name
-  >>= fun name ->
-  ws *> char '=' *> ws *> type_kind
-  >>| fun kind -> { typedef_params = params; typedef_name = name; typedef_kind = kind }
+  let* params = ws *> type_params in
+  let* name = ws *> type_name in
+  let* kind = ws *> char '=' *> ws *> type_kind in
+  return { typedef_params = params; typedef_name = name; typedef_kind = kind }
 ;;
 
 let type_definition =
-  ws *> string "type" *> ws *> single_type_definition
-  >>= fun frst ->
-  many (ws *> string "and" *> single_type_definition) >>| fun rest -> frst, rest
+  ws
+  *> string "type"
+  *>
+  let* frst = ws *> single_type_definition in
+  let* rest = many (ws *> string "and" *> single_type_definition) in
+  return (frst, rest)
 ;;
 
 let value_binding = letdef (pack.expr pack) <* ws
