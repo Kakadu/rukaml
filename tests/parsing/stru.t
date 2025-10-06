@@ -44,11 +44,8 @@
   > let main = zed fac
   > EOF
   Parsed: let rec zed f x = f (zed f) x
-  let fac self n = if n = 1 then 1 
-                                                         else n * (self (n - 1))
-  
-  let main = zed fac
-  
+          let fac self n = if n = 1 then 1 else n * (self (n - 1))
+          let main = zed fac
 
   $ cat << EOF | ./run.exe  -stru -
   > (fun fix -> fun f -> f (fix f))
@@ -95,9 +92,8 @@
   > let main = add 1
   > EOF
   Parsed: let add x = x + x
-  let add1 = add 1
-  let main = add 1
-  
+          let add1 = add 1
+          let main = add 1
 
   $ cat << EOF | ./run.exe  -stru -
   > let double = fun x -> (x, x)
@@ -160,4 +156,3 @@ CPS
                                                                   q -> 
                                                                       k 
                                                                       (p + q)))
-  
