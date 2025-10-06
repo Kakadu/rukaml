@@ -18,10 +18,8 @@ type rec_flag =
   | NonRecursive
 [@@deriving show { with_path = false }]
 
-type 'a list1 = 'a * 'a list
-[@@deriving show { with_path = false }]
-type 'a list2 = 'a * 'a * 'a list
-[@@deriving show { with_path = false }]
+type 'a list1 = 'a * 'a list [@@deriving show { with_path = false }]
+type 'a list2 = 'a * 'a * 'a list [@@deriving show { with_path = false }]
 
 type expr =
   | EUnit
@@ -63,24 +61,26 @@ let egt a b = eapp (evar ">") [ a; b ]
 
 type value_binding = rec_flag * pattern * expr [@@deriving show { with_path = false }]
 
-type type_definition = {
-  typedef_params : string list; (** ['a] is param in [type 'a list = ...]  *)
-  typedef_name : string; (** [list] is name in [type 'a list = ...]  *)
-  typedef_kind : type_kind;
-}
+type type_definition =
+  { typedef_params : string list (** ['a] is param in [type 'a list = ...]  *)
+  ; typedef_name : string (** [list] is name in [type 'a list = ...]  *)
+  ; typedef_kind : type_kind
+  }
 [@@deriving show { with_path = false }]
 
 and type_kind =
-  | TKAlias of core_type                              (** [t] is alias of [int] in [type t = int] *)
-  | TKVariants of (string * core_type option) list1   (** [type t = A of int | B of int -> int] *)
-  (* | TKRecord of (string * core_type) list1 *)
+  | TKAlias of core_type (** [t] is alias of [int] in [type t = int] *)
+  | TKVariants of (string * core_type option) list1
+  (** [type t = A of int | B of int -> int] *)
+(* | TKRecord of (string * core_type) list1 *)
+(* TODO (psi) *)
 [@@deriving show { with_path = false }]
 
 and core_type =
-  | CTVar of string  (** ['a] *)
-  | CTArrow of core_type * core_type  (** ['a -> 'b] *)
+  | CTVar of string (** ['a] *)
+  | CTArrow of core_type * core_type (** ['a -> 'b] *)
   | CTTuple of core_type * core_type * core_type list (** ['a * 'b] *)
-  | CTConstr of core_type * string  (** ['a list] *)
+  | CTConstr of core_type * string (** ['a list] *)
 [@@deriving show { with_path = false }]
 
 type structure_item =
