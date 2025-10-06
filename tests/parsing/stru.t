@@ -10,7 +10,6 @@
   
   let main = zed fac
   
-
   $ cat << EOF | ./REPL.exe  -stru -
   > let id = fun x -> x
   > let idd = fun x -> x
@@ -27,7 +26,6 @@
   "let rec fix f = f (fix f)"
   Parsed: let rec fix f = f (fix f)
   
-
   $ cat << EOF | ./REPL.exe -stru  -
   > let rec fix f = f (fix f)
   > let fac = fun self -> fun n -> if n=1 then 1 else n * (self (n-1))
@@ -41,7 +39,6 @@
   
   let main = fix fac
   
-
   $ cat << EOF | ./REPL.exe  -stru -
   > let rec zed f x = f (zed f) x
   > let fac = fun self -> fun n -> if n=1 then 1 else n * (self (n-1))
@@ -74,7 +71,6 @@
   let main = 
                                                                    fac
   
-
   $ cat << EOF | ./REPL.exe  -stru -
   > fun f -> fun x -> f (f x)
   > EOF
@@ -95,7 +91,6 @@
   let add1 = add 1
   let main = add1 13
   
-
   $ cat << EOF | ./REPL.exe  -stru -
   > let add = fun x -> x + x
   > let add1 = add 1
@@ -153,8 +148,6 @@
   let resum p = let (a, b) = swap p in 
                                                  a + b
   
-
-
 # CPS tests
   $ cat << EOF | ./REPL.exe -stru -
   > let rec fack n k =
