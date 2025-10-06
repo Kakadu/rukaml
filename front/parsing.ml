@@ -85,7 +85,19 @@ let alpha_digit_c =
 ;;
 
 let is_keyword = function
-  | "fun" | "in" | "let" | "rec" | "if" | "then" | "else" | "match" | "with" | "type" | "and" | "of" | "_" -> true
+  | "fun"
+  | "in"
+  | "let"
+  | "rec"
+  | "if"
+  | "then"
+  | "else"
+  | "match"
+  | "with"
+  | "type"
+  | "and"
+  | "of"
+  | "_" -> true
   | _ -> false
 ;;
 
@@ -127,7 +139,7 @@ let pattern =
            <*> string "," *> ws *> pattern
            <*> many (string "," *> ws *> pattern))
     <|> (ws *> ident >>= fun v -> return (pvar v) <* trace_pos v)
-    <|> (ws *> keyword "_" *> return PAny))
+    <|> ws *> keyword "_" *> return PAny)
 ;;
 
 let prio expr table =
@@ -206,19 +218,17 @@ let pack : dispatch =
                  <*> (string "," *> d.expr d <* ws)
                  <*> many (string "," *> d.expr d <* ws))
           <|> (ws *> ident >>| evar)
-          <|> (
-                  let parse_case =
-                    ws *> char '|' *>
-                    ws *> pattern >>= fun p ->
-                    ws *> string "->" *>
-                    ws *> d.prio d >>= fun e -> return (p, e) in
-
-                  keyword "match" *> ws *> d.prio d >>= fun e -> ws *>
-                  keyword "with" *> (many parse_case)
-                  >>= function
-                  | pe :: pes -> return (ematch e pe pes)
-                  | _ -> fail "Pattern matching cases expected"
-              )
+          <|> (let parse_case =
+                 ws *> char '|' *> ws *> pattern
+                 >>= fun p ->
+                 ws *> string "->" *> ws *> d.prio d >>= fun e -> return (p, e)
+               in
+               keyword "match" *> ws *> d.prio d
+               >>= fun e ->
+               ws *> keyword "with" *> many parse_case
+               >>= function
+               | pe :: pes -> return (ematch e pe pes)
+               | _ -> fail "Pattern matching cases expected")
           <|> (keyword "fun" *> pattern
                >>= fun p ->
                (* let () = log "Got a abstraction over %a" Pprint.pp_pattern p in *)
@@ -261,107 +271,127 @@ let is_char_valid_for_name = function
   | ch when is_alpha ch -> true
   | '0' .. '9' | '\'' | '_' -> true
   | _ -> false
+;;
 
 let name_fabric regexp error_message =
-  ws *> (take_while1 is_char_valid_for_name) >>= fun chs ->
-  if is_keyword chs then fail "unexpected keyword" else
-  if Str.string_match (Str.regexp regexp) chs 0 then return chs
+  ws *> take_while1 is_char_valid_for_name
+  >>= fun chs ->
+  if is_keyword chs
+  then fail "unexpected keyword"
+  else if Str.string_match (Str.regexp regexp) chs 0
+  then return chs
   else fail error_message
+;;
 
 let type_name =
   let regexp = "^[a-z_][a-zA-Z0-9_]*$" in
   let message = "not a type name" in
   name_fabric regexp message
+;;
 
 let type_param_name =
   let regexp = "^'[a-zA-Z][a-zA-Z0-9_]*$" in
   let message = "not a type param name" in
   name_fabric regexp message
+;;
 
 let constructor_name =
   let regexp = "^[A-Z][a-zA-Z0-9_]*$" in
   let message = "not a constructor name" in
   name_fabric regexp message
+;;
 
 let type_param_tuple =
-  ws *> (char '(')
-  *> ws *> (sep_by (ws *> (char ',')) (ws *> type_param_name))
+  ws *> char '(' *> ws *> sep_by (ws *> char ',') (ws *> type_param_name)
   >>= function
-  | frst :: scnd :: rest -> return (frst :: scnd :: rest) <* ws *> (char ')')
+  | frst :: scnd :: rest -> return (frst :: scnd :: rest) <* ws *> char ')'
   | _ -> fail "tuple of param names expected"
+;;
 
 let type_params =
-  ws *>
-  ((type_param_name >>| fun param -> [ param ])
-  <|> parens ( type_param_name >>| fun param -> [ param ])
-  <|> type_param_tuple
-  <|> return [])
+  ws
+  *> (type_param_name
+      >>| (fun param -> [ param ])
+      <|> parens (type_param_name >>| fun param -> [ param ])
+      <|> type_param_tuple
+      <|> return [])
+;;
 
-let core_type_var =
-  ws *> (type_name <|> type_param_name >>| fun name -> CTVar name)
+let core_type_var = ws *> (type_name <|> type_param_name >>| fun name -> CTVar name)
 
 let core_type_constr core_type =
-  ws *> core_type >>= fun arg ->
+  ws *> core_type
+  >>= fun arg ->
   ws *> (type_name <|> type_param_name) >>| fun consructor -> CTConstr (arg, consructor)
+;;
 
 let core_type_arrow core_type =
   fix (fun self ->
-      ws *> core_type >>= fun operand ->
-      ws *> (string "->") *> ws *> self
-      >>| (fun operand2 -> CTArrow (operand, operand2))
-      <|> return operand)
+    ws *> core_type
+    >>= fun operand ->
+    ws *> string "->" *> ws *> self
+    >>| (fun operand2 -> CTArrow (operand, operand2))
+    <|> return operand)
+;;
 
 let core_type_tuple core_type =
-  core_type >>= fun first ->
-  many (ws *> char '*' *> ws *> core_type) >>= function
+  core_type
+  >>= fun first ->
+  many (ws *> char '*' *> ws *> core_type)
+  >>= function
   | [] -> return first
   | second :: rest -> return (CTTuple (first, second, rest))
+;;
 
 let core_type =
-  ws *>
-  (fix (fun ct ->
-      let ct = core_type_var <|> parens ct in
-      let ct = (core_type_constr ct) <|> ct in
-      let ct = (core_type_tuple ct) <|> ct in
-      let ct = (core_type_arrow ct) <|> ct in
-      ct))
+  ws
+  *> fix (fun ct ->
+    let ct = core_type_var <|> parens ct in
+    let ct = core_type_constr ct <|> ct in
+    let ct = core_type_tuple ct <|> ct in
+    let ct = core_type_arrow ct <|> ct in
+    ct)
+;;
 
 let type_kind_variants =
   let parse_variant =
-    ws *> (char '|') *> ws *> constructor_name >>= fun name ->
-    ws *> (keyword "of") *> ws *> core_type
-    >>| (fun core_type -> (name, Some core_type))
+    ws *> char '|' *> ws *> constructor_name
+    >>= fun name ->
+    ws *> keyword "of" *> ws *> core_type
+    >>| (fun core_type -> name, Some core_type)
     <|> return (name, None)
   in
-  many parse_variant >>= function
+  many parse_variant
+  >>= function
   | var :: vars -> return (TKVariants (var, vars))
   | _ -> fail "is not variants"
+;;
 
 let type_kind_record = fail "TODO (psi) : not implemented"
-
 let type_kind_alias = ws *> core_type >>| fun core_type -> TKAlias core_type
-
 let type_kind = ws *> (type_kind_variants <|> type_kind_record <|> type_kind_alias)
 
 let single_type_definition =
-  ws *> type_params >>= fun params ->
-  ws *> type_name >>= fun name ->
-  ws *> (char '=') *> ws *> type_kind >>| fun kind ->
-  { typedef_params = params; typedef_name = name; typedef_kind = kind }
+  ws *> type_params
+  >>= fun params ->
+  ws *> type_name
+  >>= fun name ->
+  ws *> char '=' *> ws *> type_kind
+  >>| fun kind -> { typedef_params = params; typedef_name = name; typedef_kind = kind }
+;;
 
 let type_definition =
-  ws *> (string "type") *> ws *> single_type_definition >>= fun frst ->
-  many (ws *> string "and" *> single_type_definition) >>| fun rest ->
-  SType (frst, rest)
+  ws *> string "type" *> ws *> single_type_definition
+  >>= fun frst ->
+  many (ws *> string "and" *> single_type_definition) >>| fun rest -> frst, rest
+;;
 
 let value_binding = letdef (pack.expr pack) <* ws
 
-let structure = many1
-(
-  (value_binding  >>| fun vb -> SLet vb)
-  <|>
-  type_definition
-)
+let structure =
+  many1
+    (value_binding >>| (fun vb -> SLet vb) <|> (type_definition >>| fun td -> SType td))
+;;
 
 let parse_structure str =
   parse_string ~consume:All structure str
