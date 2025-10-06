@@ -1,13 +1,13 @@
-cram tests for parser on structure item "type_definition"
+tests for parser on structure item "type_definition"
 
-simple allias
+# simple allias
   $ cat << EOF | ./REPL.exe -stru -
   > type a = int
   "type a = int"
   Parsed: type a = int
   
   
-type constructors
+# type constructors
   $ cat << EOF | ./REPL.exe -stru -
   > type 'a my_list = 'a list
   "type 'a my_list = 'a list"
@@ -25,18 +25,47 @@ type constructors
   $ cat << EOF | ./REPL.exe -stru -
   > type ('a, 'b) pair = 'a * 'b
   "type ('a, 'b) pair = 'a * 'b"
-  Parsed: type ('a, 'b, ) pair = ('a * 'b)
+  Parsed: type ('a, 'b) pair = ('a * 'b)
   
   
 
   $ cat << EOF | ./REPL.exe -stru -
   > type ('t1, 't2, 't3, 't4, 't5, 't6) foo = ('t1 -> 't2 -> 't3) -> ('t4 -> 't5) -> 't6
   "type ('t1, 't2, 't3, 't4, 't5, 't6) foo = ('t1 -> 't2 -> 't3) -> ('t4 -> 't5) -> 't6"
-  Parsed: type ('t1, 't2, 't3, 't4, 't5, 't6, ) foo = (('t1 -> ('t2 -> 't3)) -> (('t4 -> 't5) -> 't6))
+  Parsed: type ('t1, 't2, 't3, 't4, 't5, 't6) foo = (('t1 -> ('t2 -> 't3)) -> (('t4 -> 't5) -> 't6))
   
   
 
-option
+# arrow
+  $ cat << EOF | ./REPL.exe -stru -
+  > type ('a, 'b) arrow = 'a -> 'b
+  "type ('a, 'b) arrow = 'a -> 'b"
+  Parsed: type ('a, 'b) arrow = ('a -> 'b)
+  
+  
+  $ cat << EOF | ./REPL.exe -stru -
+  > type ('a, 'b) arrow = ('a -> 'b) -> ('a -> 'b)
+  "type ('a, 'b) arrow = ('a -> 'b) -> ('a -> 'b)"
+  Parsed: type ('a, 'b) arrow = (('a -> 'b) -> ('a -> 'b))
+  
+  
+
+# tuple
+  $ cat << EOF | ./REPL.exe -stru -
+  > type ('a, 'b) pair = 'a * 'b
+  "type ('a, 'b) pair = 'a * 'b"
+  Parsed: type ('a, 'b) pair = ('a * 'b)
+  
+  
+
+  $ cat << EOF | ./REPL.exe -stru -
+  > type ('a, 'b) pair_pair = ('a * 'b) * ('a * 'b)
+  "type ('a, 'b) pair_pair = ('a * 'b) * ('a * 'b)"
+  Parsed: type ('a, 'b) pair_pair = (('a * 'b) * ('a * 'b))
+  
+  
+
+# option
   $ cat << EOF | ./REPL.exe -stru -
   > type 'a option =
   > | Some of 'a
@@ -47,9 +76,8 @@ option
   | None
   
   
-  
 
-list
+# list
   $ cat << EOF | ./REPL.exe -stru -
   > type 'a list =
   > | Nil
@@ -60,38 +88,19 @@ list
   | Cons of ('a * list ('a))
   
   
-  
 
-arrow
-  $ cat << EOF | ./REPL.exe -stru -
-  > type ('a, 'b) arrow = 'a -> 'b
-  "type ('a, 'b) arrow = 'a -> 'b"
-  Parsed: type ('a, 'b, ) arrow = ('a -> 'b)
-  
-  
-
-tuple
-  $ cat << EOF | ./REPL.exe -stru -
-  > type ('a, 'b) pair = 'a * 'b
-  "type ('a, 'b) pair = 'a * 'b"
-  Parsed: type ('a, 'b, ) pair = ('a * 'b)
-  
-  
-
-something more complex
+# something more complex
   $ cat << EOF | ./REPL.exe -stru -
   > type ('a, 'b) qwe =
   > | Asd of 'a -> ('a -> 'b) -> 'b
   > | Zxc of ('a -> 'a) * ('a -> 'a) * 'a
   "type ('a, 'b) qwe =\n| Asd of 'a -> ('a -> 'b) -> 'b\n| Zxc of ('a -> 'a) * ('a -> 'a) * 'a"
-  Parsed: type ('a, 'b, ) qwe =
+  Parsed: type ('a, 'b) qwe =
   | Asd of ('a -> (('a -> 'b) -> 'b))
   | Zxc of (('a -> 'a) * ('a -> 'a) * 'a)
   
   
-  
-type definition chains with "and" keyword
-
+# type definition chains with "and" keyword
   $ cat << EOF | ./REPL.exe -stru -
   > type a = int
   > and b = bool
@@ -100,7 +109,6 @@ type definition chains with "and" keyword
   Parsed: type a = int
   and b = bool
   and c = char
-  
   
 
   $ cat << EOF | ./REPL.exe -stru -
@@ -117,17 +125,13 @@ type definition chains with "and" keyword
   Parsed: type 'a list =
   | Nil
   | Cons of ('a * list ('a))
-  
   and 't option =
   | Some of 't
   | None
-  
   and name = string
   
-  
 
-invalid type definition
-
+# invalid input
   $ cat << EOF | ./REPL.exe -stru -
   > type foo =
   "type foo ="
@@ -195,13 +199,13 @@ invalid type definition
   Error: : end_of_input
 
 unsorted
-
   $ cat << EOF | ./REPL.exe -stru -
   > type foo = 'a * 'b * 'c -> 'd * 'e -> 'f
   "type foo = 'a * 'b * 'c -> 'd * 'e -> 'f"
   Parsed: type foo = (('a * 'b * 'c) -> (('d * 'e) -> 'f))
   
   
+
   $ cat << EOF | ./REPL.exe -stru -
   > type foo = (int -> int)
   "type foo = (int -> int)"
@@ -214,7 +218,6 @@ unsorted
   Parsed: type foo = ((a -> b) * (c -> d))
   
   
-
   $ cat << EOF | ./REPL.exe -stru -
   > type foo = (a * b) * (c * d)
   "type foo = (a * b) * (c * d)"
