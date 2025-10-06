@@ -17,7 +17,4 @@
                                                                        
                                                                       k 
                                                                       (a + b)))
-  
-                            let main = let u = print_int (fib 8 (fun w -> w)) 
-                                                 in 0
-  
+            let main = let u = print_int (fib 8 (fun w -> w)) in 0
