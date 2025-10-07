@@ -27,6 +27,7 @@ type mode =
   | VB
   | Stru
   | Pat
+  | CoreType
 
 [@@@ocaml.warning "-69"]
 
@@ -48,6 +49,7 @@ let () =
     ; "-vb", mode_arg VB, " value binding"
     ; "-stru", mode_arg Stru, " structure"
     ; "-pat", mode_arg Pat, " pattern"
+    ; "-core-type", mode_arg CoreType, " core type"
     ]
     (fun _ -> assert false)
     "TODO";
@@ -61,6 +63,7 @@ let () =
    | VB ->
      run_single Parsing.(value_binding) Pprint.pp_value_binding Format.pp_print_string
    | Pat -> run_single Parsing.pattern Pprint.pp_pattern pp_print_string
+   | CoreType -> run_single Parsing.core_type Pprint.pp_core_type Format.pp_print_string
    | Stru -> run_single Parsing.structure Pprint.structure Format.pp_print_string)
     s
 ;;
