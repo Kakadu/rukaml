@@ -17,6 +17,7 @@ val is_keyword : string -> bool
 val ident : string Angstrom.t
 val string : string -> string Angstrom.t
 val pattern : Parsetree.pattern Angstrom.t
+val core_type : Parsetree.core_type Angstrom.t
 val keyword : string -> unit Angstrom.t
 
 val prio
