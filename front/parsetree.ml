@@ -11,8 +11,6 @@ type pattern =
   | PConstruct of string * pattern option
 [@@deriving show { with_path = false }]
 
-let pvar s = PVar s
-
 type rec_flag =
   | Recursive
   | NonRecursive
@@ -34,11 +32,12 @@ type expr =
   | EMatch of expr * (pattern * expr) list1
 [@@deriving show { with_path = false }]
 
+let evar s = EVar s
+let pvar s = PVar s
 let const_int n = PConst_int n
 let const_bool b = PConst_bool b
 let eunit = EUnit
 let econst n = EConst n
-let evar s = EVar s
 let elam v body = ELam (v, body)
 let eapp1 f x = EApp (f, x)
 let etuple a b xs = ETuple (a, b, xs)
