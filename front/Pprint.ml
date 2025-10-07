@@ -149,10 +149,15 @@ let rec pp_core_type ppf = function
   | CTVar name -> fprintf ppf "%s" name
   | CTArrow (ctl, ctr) -> fprintf ppf "(%a -> %a)" pp_core_type ctl pp_core_type ctr
   | CTTuple (ct1, ct2, cts) ->
-    fprintf ppf "@[(%a, %a" pp_core_type ct1 pp_core_type ct2;
-    List.iter (fprintf ppf ", %a" pp_core_type) cts;
+    fprintf ppf "@[(%a * %a" pp_core_type ct1 pp_core_type ct2;
+    List.iter (fprintf ppf " * %a" pp_core_type) cts;
     fprintf ppf ")@]"
-  | CTConstr (arg, name) -> fprintf ppf "@[%a %s@]" pp_core_type arg name
+  | CTConstr (name, []) -> fprintf ppf "@[%s@]" name
+  | CTConstr (name, [ arg ]) -> fprintf ppf "@[(%a) %s@]" pp_core_type arg name
+  | CTConstr (name, arg :: args) ->
+    fprintf ppf "@[(%a" pp_core_type arg;
+    List.iter (fprintf ppf " * %a" pp_core_type) args;
+    fprintf ppf ") %s@]" name
 ;;
 
 let pp_type_params ppf td =
@@ -167,8 +172,9 @@ let pp_type_params ppf td =
 
 let pp_type_kind ppf td =
   match td.typedef_kind with
-  | TKAlias ct -> fprintf ppf "@[%a@]" pp_core_type ct
-  | TKVariants (case, cases) ->
+  | KAbstract None -> ()
+  | KAbstract (Some ct) -> fprintf ppf "@[%a@]" pp_core_type ct
+  | KVariants (case, cases) ->
     let pp_case ppf = function
       | name, None -> fprintf ppf "| %s" name
       | name, Some ct -> fprintf ppf "| %s of %a" name pp_core_type ct
@@ -203,7 +209,7 @@ let pp_type_definition ppf (td, tds) =
 ;;
 
 let pp_structure_item ppf = function
-  | Parsetree.SLet vb -> pp_value_binding ppf vb
+  | Parsetree.SValue vb -> pp_value_binding ppf vb
   | Parsetree.SType tds -> pp_type_definition ppf tds
 ;;
 
