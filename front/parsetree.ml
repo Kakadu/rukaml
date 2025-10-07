@@ -61,7 +61,7 @@ let egt a b = eapp (evar ">") [ a; b ]
 
 type value_binding = rec_flag * pattern * expr [@@deriving show { with_path = false }]
 
-type type_definition =
+type type_declaration =
   { typedef_params : string list (** ['a] is param in [type 'a list = ...]  *)
   ; typedef_name : string (** [list] is name in [type 'a list = ...]  *)
   ; typedef_kind : type_kind
@@ -69,23 +69,23 @@ type type_definition =
 [@@deriving show { with_path = false }]
 
 and type_kind =
-  | TKAlias of core_type (** [t] is alias of [int] in [type t = int] *)
-  | TKVariants of (string * core_type option) list1
-  (** [type t = A of int | B of int -> int] *)
-(* | TKRecord of (string * core_type) list1 *)
-(* TODO (psi) *)
+  | KAbstract of core_type option
+  (** [t] is an abstract when it is defined as [type t] or [type t = x]. *)
+  | KVariants of (string * core_type option) list1 (** [type t = Some of int | None]  *)
+(* TODO (psi) : *)
+(* | KRecord of (string * core_type) list *)
 [@@deriving show { with_path = false }]
 
 and core_type =
-  | CTVar of string (** ['a] *)
+  | CTVar of string (** ['a, 'b] are type variables in [type ('a, 'b) ty = ... ] *)
   | CTArrow of core_type * core_type (** ['a -> 'b] *)
-  | CTTuple of core_type * core_type * core_type list (** ['a * 'b] *)
-  | CTConstr of core_type * string (** ['a list] *)
+  | CTTuple of core_type * core_type * core_type list (** [('a * 'b * 'c)] *)
+  | CTConstr of string * core_type list (** [int], [('t, int) list], ['a option] etc. *)
 [@@deriving show { with_path = false }]
 
 type structure_item =
-  | SLet of value_binding
-  | SType of type_definition list1
+  | SValue of value_binding (** [let x = ...] *)
+  | SType of type_declaration list1 (** [type x = ...] *)
 [@@deriving show { with_path = false }]
 
 type structure = structure_item list [@@deriving show { with_path = false }]

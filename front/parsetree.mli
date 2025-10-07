@@ -11,6 +11,7 @@ type pattern =
   | PVar of string
   | PTuple of pattern * pattern * pattern list
   | PConstruct of string * pattern option
+(* | PRecord of (string * pattern) list *)
 
 val pp_pattern : Format.formatter -> pattern -> unit
 val show_pattern : pattern -> string
@@ -40,28 +41,28 @@ type expr =
 
 type value_binding = rec_flag * pattern * expr
 
-type type_definition =
+type type_declaration =
   { typedef_params : string list (** ['a] is param in [type 'a list = ...]  *)
   ; typedef_name : string (** [list] is name in [type 'a list = ...]  *)
   ; typedef_kind : type_kind
   }
 
 and type_kind =
-  | TKAlias of core_type (** [t] is allias of [int] in [type t = int] *)
-  | TKVariants of (string * core_type option) list1
-  (** [type t = A of int | B of int -> int] *)
-(* | TKRecord of (string * core_type) list1
-      * [type t = { x : int; y : int -> int }] *)
+  | KAbstract of core_type option
+  (** [t] is an abstract when it is defined as [type t] or [type t = x]. *)
+  | KVariants of (string * core_type option) list1 (** [type t = Some of int | None]  *)
+(* TODO (psi) : *)
+(* | KRecord of (string * core_type) list *)
 
 and core_type =
-  | CTVar of string (** ['a] *)
+  | CTVar of string (** ['a, 'b] are type variables in [type ('a, 'b) ty = ... ] *)
   | CTArrow of core_type * core_type (** ['a -> 'b] *)
-  | CTTuple of core_type * core_type * core_type list (** ['a * 'b] *)
-  | CTConstr of core_type * string (** ['a list] *)
+  | CTTuple of core_type * core_type * core_type list (** [('a * 'b * 'c)] *)
+  | CTConstr of string * core_type list (** [int], [('t, int) list], ['a option] etc. *)
 
 type structure_item =
-  | SLet of value_binding
-  | SType of type_definition list1
+  | SValue of value_binding (** [let x = ...] *)
+  | SType of type_declaration list1 (** [type x = ...] *)
 
 type structure = structure_item list
 
@@ -72,6 +73,8 @@ val const_bool : bool -> const
 (* val pp_value_binding : Format.formatter -> value_binding -> unit *)
 val pp_expr : Format.formatter -> expr -> unit
 val show_expr : expr -> string
+val pp_core_type : Format.formatter -> core_type -> unit
+val show_core_type : core_type -> string
 val econst : const -> expr
 val eunit : expr
 val evar : string -> expr
