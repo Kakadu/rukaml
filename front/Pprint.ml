@@ -156,7 +156,7 @@ let rec pp_core_type ppf = function
   | CTConstr (name, [ arg ]) -> fprintf ppf "@[(%a) %s@]" pp_core_type arg name
   | CTConstr (name, arg :: args) ->
     fprintf ppf "@[(%a" pp_core_type arg;
-    List.iter (fprintf ppf " * %a" pp_core_type) args;
+    List.iter (fprintf ppf ", %a" pp_core_type) args;
     fprintf ppf ") %s@]" name
 ;;
 
