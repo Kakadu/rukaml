@@ -1,4 +1,4 @@
-tests for parser on structure item "type_definition"
+tests for parser on structure item "type_declaration"
 
 # simple allias
   $ cat << EOF | ./REPL.exe -stru -
@@ -12,21 +12,21 @@ tests for parser on structure item "type_definition"
   > type 'a my_list = 'a list
   "type 'a my_list = 'a list"
   Parsed: type 'a my_list =
-            'a list
+            ('a) list
           
 
   $ cat << EOF | ./REPL.exe -stru -
   > type int_list = int list
   "type int_list = int list"
   Parsed: type int_list =
-            int list
+            (int) list
           
 
   $ cat << EOF | ./REPL.exe -stru -
   > type ('a, 'b) pair = 'a * 'b
   "type ('a, 'b) pair = 'a * 'b"
   Parsed: type ('a, 'b) pair =
-            ('a, 'b)
+            ('a * 'b)
           
 
   $ cat << EOF | ./REPL.exe -stru -
@@ -55,14 +55,14 @@ tests for parser on structure item "type_definition"
   > type ('a, 'b) pair = 'a * 'b
   "type ('a, 'b) pair = 'a * 'b"
   Parsed: type ('a, 'b) pair =
-            ('a, 'b)
+            ('a * 'b)
           
 
   $ cat << EOF | ./REPL.exe -stru -
   > type ('a, 'b) pair_pair = ('a * 'b) * ('a * 'b)
   "type ('a, 'b) pair_pair = ('a * 'b) * ('a * 'b)"
   Parsed: type ('a, 'b) pair_pair =
-            (('a, 'b), ('a, 'b))
+            (('a * 'b) * ('a * 'b))
           
 
 # option
@@ -85,7 +85,7 @@ tests for parser on structure item "type_definition"
   "type 'a list =\n| Nil\n| Cons of 'a * 'a list"
   Parsed: type 'a list =
             | Nil
-            | Cons of ('a, 'a list)
+            | Cons of ('a * ('a) list)
             
           
 
@@ -97,7 +97,7 @@ tests for parser on structure item "type_definition"
   "type ('a, 'b) qwe =\n| Asd of 'a -> ('a -> 'b) -> 'b\n| Zxc of ('a -> 'a) * ('a -> 'a) * 'a"
   Parsed: type ('a, 'b) qwe =
             | Asd of ('a -> (('a -> 'b) -> 'b))
-            | Zxc of (('a -> 'a), ('a -> 'a), 'a)
+            | Zxc of (('a -> 'a) * ('a -> 'a) * 'a)
             
           
 # type definition chains with "and" keyword
@@ -127,7 +127,7 @@ tests for parser on structure item "type_definition"
   "type 'a list =\n| Nil\n| Cons of 'a * 'a list\n\nand 't option =\n| Some of 't\n| None\n\nand name = string"
   Parsed: type 'a list =
             | Nil
-            | Cons of ('a, 'a list)
+            | Cons of ('a * ('a) list)
             
           and 't option =
             | Some of 't
@@ -141,12 +141,12 @@ tests for parser on structure item "type_definition"
   $ cat << EOF | ./REPL.exe -stru -
   > type foo =
   "type foo ="
-  Error: : not enough input
+  Error: : count_while1
 
   $ cat << EOF | ./REPL.exe -stru -
   > type foo = 123
   "type foo = 123"
-  Error: : char '('
+  Error: : not a type param name
 
   $ cat << EOF | ./REPL.exe -stru -
   > type foo = a ->
@@ -188,7 +188,7 @@ tests for parser on structure item "type_definition"
   > | a
   > | b
   "type foo =\n| a\n| b"
-  Error: : char '('
+  Error: : count_while1
 
   $ cat << EOF | ./REPL.exe -stru -
   > type foo =
@@ -209,7 +209,7 @@ unsorted
   > type foo = 'a * 'b * 'c -> 'd * 'e -> 'f
   "type foo = 'a * 'b * 'c -> 'd * 'e -> 'f"
   Parsed: type foo =
-            (('a, 'b, 'c) -> (('d, 'e) -> 'f))
+            (('a * 'b * 'c) -> (('d * 'e) -> 'f))
           
 
   $ cat << EOF | ./REPL.exe -stru -
@@ -222,13 +222,13 @@ unsorted
   > type foo = (a -> b) * (c -> d)
   "type foo = (a -> b) * (c -> d)"
   Parsed: type foo =
-            ((a -> b), (c -> d))
+            ((a -> b) * (c -> d))
           
   $ cat << EOF | ./REPL.exe -stru -
   > type foo = (a * b) * (c * d)
   "type foo = (a * b) * (c * d)"
   Parsed: type foo =
-            ((a, b), (c, d))
+            ((a * b) * (c * d))
           
 
   $ cat << EOF | ./REPL.exe -stru -
