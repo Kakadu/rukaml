@@ -80,6 +80,7 @@ val eunit : expr
 val evar : string -> expr
 val elam : pattern -> expr -> expr
 val eapp : expr -> expr list -> expr
+val ematch : expr -> pattern * expr -> (pattern * expr) list -> expr
 val eapp1 : expr -> expr -> expr
 val elet : ?isrec:rec_flag -> pattern -> expr -> expr -> expr
 val eite : expr -> expr -> expr -> expr
@@ -92,6 +93,3 @@ val ele : expr -> expr -> expr
 val egt : expr -> expr -> expr
 val etuple : expr -> expr -> expr list -> expr
 val group_lams : expr -> pattern list * expr
-
-(* TODO (psi) : make more pretty? *)
-val ematch : expr -> pattern * expr -> (pattern * expr) list -> expr
