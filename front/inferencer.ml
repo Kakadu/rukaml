@@ -532,13 +532,12 @@ let infer env expr =
         let* () = unify tp _ty in
         let* twher, typed_wher = helper env wher in
         return (twher, TLet (NonRecursive, pat, Scheme.make_mono _ty, tbody, typed_wher))
-  
       | Parsetree.ELet (_, PAny, _, _)
       | Parsetree.ELet (_, PConstruct _, _, _)
       | Parsetree.ELam (PAny, _)
       | Parsetree.ELam (PConstruct _, _)
-      | Parsetree.EMatch _
-      | Parsetree.EConstruct _ -> failwith "TODO (psi) : not implemented"
+      | Parsetree.EMatch _ | Parsetree.EConstruct _ ->
+        failwith "TODO (psi) : not implemented"
   in
   helper env expr
 ;;
@@ -611,7 +610,7 @@ let structure ?(env = start_env) stru =
       ~init:(return (env, []))
       ~f:(fun acc item ->
         match item with
-        | Parsetree.SLet item ->
+        | Parsetree.SValue item ->
           let* env, acc = acc in
           let* env, new_item = vb ~env item in
           return (env, new_item :: acc)
