@@ -68,19 +68,9 @@ let number =
   scan_state h (fun st c -> if is_digit c then Some ((10 * st) + to_digit c) else None)
 ;;
 
-let is_alpha = function
-  | 'a' .. 'z' | 'A' .. 'Z' -> true
+let is_char_valid_for_name = function
+  | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '\'' | '_' -> true
   | _ -> false
-;;
-
-let alpha_c =
-  any_char
-  >>= function
-  | c -> if is_alpha c then return c else fail (Format.sprintf "'%c' not a letter" c)
-;;
-
-let alpha_digit_c =
-  satisfy (fun c -> is_alpha c || is_digit c || c = '_') <?> "not a alpha or digit"
 ;;
 
 let is_keyword = function
@@ -100,18 +90,6 @@ let is_keyword = function
   | _ -> false
 ;;
 
-let ident =
-  let* i =
-    let* h = ws *> alpha_c in
-    let* tl = many alpha_digit_c in
-    return (Base.String.of_char_list (h :: tl))
-  in
-  if is_keyword i
-  then fail "got a keyword"
-  else (* let () = log "got ident %S" i in *)
-    return i
-;;
-
 let string s = trace_pos (Format.sprintf "string `%s`" s) *> string s
 
 (* >>| fun x ->
@@ -122,27 +100,44 @@ let keyword kwd =
   ws
   *> string kwd
   *> let* c = peek_char_fail in
-     if is_alpha c || is_digit c
+     if is_char_valid_for_name c
      then
        let* p = pos in
        failf "input is not a keyword '%s', pos = %d" kwd p
      else ws *> return (log "keyword '%s' parsed" kwd)
 ;;
 
-let is_char_valid_for_name = function
-  | ch when is_alpha ch -> true
-  | '0' .. '9' | '\'' | '_' -> true
-  | _ -> false
-;;
-
 let name_fabric regexp error_message =
-  ws *> take_while1 is_char_valid_for_name
-  >>= fun chs ->
+  let* chs = ws *> take_while1 is_char_valid_for_name in
   if is_keyword chs
   then fail "unexpected keyword"
   else if Str.string_match (Str.regexp regexp) chs 0
   then return chs
   else fail error_message
+;;
+
+let var_name =
+  let regexp = "^[a-zA-Z][a-zA-Z0-9_]*$" in
+  let message = "not a variable name" in
+  name_fabric regexp message
+;;
+
+let constructor_name =
+  let regexp = "^[A-Z][a-zA-Z0-9_]*$" in
+  let message = "not a constructor name" in
+  name_fabric regexp message
+;;
+
+let type_name =
+  let regexp = "^[a-z_][a-zA-Z0-9_]*$" in
+  let message = "not a type name" in
+  name_fabric regexp message
+;;
+
+let type_param_name =
+  let regexp = "^'[a-zA-Z][a-zA-Z0-9_]*$" in
+  let message = "not a type param name" in
+  name_fabric regexp message
 ;;
 
 let constructor_name =
@@ -158,32 +153,27 @@ let parse_econsruct parse_expression =
   <|> return (EConstruct (name, None))
 ;;
 
-let parse_pconsruct parse_pattern =
-  let* name = ws *> constructor_name in
-  (let* patt = ws *> parse_pattern in
-   return (PConstruct (name, Some patt)))
-  <|> return (PConstruct (name, None))
-;;
-
 let pattern =
   ws
   *> fix (fun pattern ->
     let pattern =
-      choice
-        [ parens pattern
-        ; char '_' *> return PAny
-        ; (ident >>= fun v -> return (pvar v) <* trace_pos v)
-        ]
+      fail ""
+      <|> parens pattern
+      <|> char '_' *> return PAny
+      <|> (var_name >>= fun v -> return (pvar v) <* trace_pos v)
     in
-    let pattern = parse_pconsruct pattern <|> pattern in
     let pattern =
-      let* first = pattern in
-      many (ws *> string "," *> ws *> pattern)
-      >>= function
-      | [] -> return first
-      | second :: rest -> return (PTuple (first, second, rest))
+      (let* name = ws *> constructor_name in
+       (let* patt = ws *> pattern in
+        return (PConstruct (name, Some patt)))
+       <|> return (PConstruct (name, None)))
+      <|> pattern
     in
-    pattern)
+    let* first = ws *> pattern in
+    many (ws *> char ',' *> ws *> pattern)
+    >>= function
+    | [] -> return first
+    | second :: rest -> return (PTuple (first, second, rest)))
   <?> "not a pattern"
 ;;
 
@@ -252,7 +242,7 @@ let pack : dispatch =
       *> (fail ""
           <|> ws *> (number >>| fun n -> econst (const_int n))
           <|> (ws *> char '(' *> char ')' >>| fun _ -> eunit)
-          <|> (ws *> ident
+          <|> (ws *> var_name
                >>= function
                | "true" -> return @@ econst (const_bool true)
                | "false" -> return @@ econst (const_bool true)
@@ -262,7 +252,7 @@ let pack : dispatch =
                  <*> (d.expr d <* ws)
                  <*> (string "," *> d.expr d <* ws)
                  <*> many (string "," *> d.expr d <* ws))
-          <|> (ws *> ident >>| evar)
+          <|> (ws *> var_name >>| evar)
           <|> (let parse_case =
                  ws *> char '|' *> ws *> pattern
                  >>= fun p ->
@@ -312,29 +302,53 @@ let parse str =
   Result.map_error (fun x -> `Parse_error x) (parse_pack pack.prio str)
 ;;
 
-let type_name =
-  let regexp = "^[a-z_][a-zA-Z0-9_]*$" in
-  let message = "not a type name" in
-  name_fabric regexp message
-;;
-
-let type_param_name =
-  let regexp = "^'[a-zA-Z][a-zA-Z0-9_]*$" in
-  let message = "not a type param name" in
-  name_fabric regexp message
-;;
-
-let constructor_name =
-  let regexp = "^[A-Z][a-zA-Z0-9_]*$" in
-  let message = "not a constructor name" in
-  name_fabric regexp message
-;;
-
 let type_param_tuple =
   ws *> char '(' *> ws *> sep_by (ws *> char ',') (ws *> type_param_name)
   >>= function
   | frst :: scnd :: rest -> return (frst :: scnd :: rest) <* ws *> char ')'
   | _ -> fail "tuple of param names expected"
+;;
+
+let core_type_var = ws *> (type_name <|> type_param_name >>| fun name -> CTVar name)
+
+let core_type_arrow core_type =
+  fix (fun self ->
+    let* operand = ws *> core_type in
+    ws *> string "->" *> ws *> self
+    >>| (fun operand2 -> CTArrow (operand, operand2))
+    <|> return operand)
+;;
+
+let core_type_tuple core_type =
+  let* first = ws *> core_type in
+  many (ws *> char '*' *> ws *> core_type)
+  >>= function
+  | [] -> return first
+  | second :: rest -> return (CTTuple (first, second, rest))
+;;
+
+let core_type =
+  ws
+  *> fix (fun self ->
+    let prims =
+      fail ""
+      <|> (type_name >>| fun v -> CTConstr (v, []))
+      <|> (type_param_name >>| fun v -> CTConstr (v, []))
+    in
+    let prims =
+      (let* arg = prims in
+       let* name = ws *> type_name in
+       return (CTConstr (name, [ arg ])))
+      <|> prims
+    in
+    let self = parens self <|> prims in
+    let self = core_type_tuple self <|> self in
+    let self = core_type_arrow self <|> self in
+    (let* ct = char '(' *> ws *> self in
+     let* cts = many (ws *> char ',' *> self) in
+     let* name = ws *> char ')' *> type_name in
+     return (CTConstr (name, ct :: cts)))
+    <|> self)
 ;;
 
 let type_params =
@@ -346,77 +360,11 @@ let type_params =
       <|> return [])
 ;;
 
-let core_type_var = ws *> (type_name <|> type_param_name >>| fun name -> CTVar name)
-
-let core_type_arrow core_type =
-  fix (fun self ->
-    ws *> core_type
-    >>= fun operand ->
-    ws *> string "->" *> ws *> self
-    >>| (fun operand2 -> CTArrow (operand, operand2))
-    <|> return operand)
-;;
-
-let core_type_tuple core_type =
-  core_type
-  >>= fun first ->
-  many (ws *> char '*' *> ws *> core_type)
-  >>= function
-  | [] -> return first
-  | second :: rest -> return (CTTuple (first, second, rest))
-;;
-
-(* let core_type_constr core_type =
-  fail ""
-  <|> (type_name >>| fun name -> CTConstr (name, []))
-  <|> (type_param_name >>| fun name -> CTConstr (name, []))
-  <|> (char '(' *> ws *> core_type
-       >>= fun ct ->
-       many (ws *> char ',' *> core_type)
-       >>= fun cts ->
-       ws *> char ')' *> type_name >>| fun name -> CTConstr (name, ct :: cts))
-;;
-
-let core_type =
-  ws
-  *> fix (fun ct ->
-    let ct = core_type_var <|> parens ct in
-    let ct = core_type_constr ct <|> ct in
-    let ct = core_type_tuple ct <|> ct in
-    let ct = core_type_arrow ct <|> ct in
-    ct)
-;; *)
-
-let core_type =
-  ws
-  *> fix (fun self ->
-    let p =
-      type_name
-      >>| (fun name -> CTConstr (name, []))
-      <|> (type_param_name >>| fun name -> CTConstr (name, []))
-    in
-    let p =
-      p >>= (fun arg -> ws *> type_name >>| fun name -> CTConstr (name, [ arg ])) <|> p
-    in
-    let self = parens self <|> p in
-    let self = core_type_tuple self <|> self in
-    let self = core_type_arrow self <|> self in
-    let self =
-      char '(' *> ws *> self
-      >>= (fun ct ->
-      many (ws *> char ',' *> self)
-      >>= fun cts -> ws *> char ')' *> type_name >>| fun name -> CTConstr (name, ct :: cts))
-      <|> self
-    in
-    self)
-;;
-
 let type_kind_variants =
   let parse_variant =
-    ws *> char '|' *> ws *> constructor_name
-    >>= fun name ->
-    ws *> keyword "of" *> ws *> core_type
-    >>| (fun core_type -> name, Some core_type)
+    let* name = ws *> char '|' *> ws *> constructor_name in
+    (let* ct = ws *> keyword "of" *> ws *> core_type in
+     return (name, Some ct))
     <|> return (name, None)
   in
   many parse_variant
