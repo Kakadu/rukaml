@@ -348,12 +348,6 @@ let type_params =
 
 let core_type_var = ws *> (type_name <|> type_param_name >>| fun name -> CTVar name)
 
-let core_type_constr core_type =
-  ws *> core_type
-  >>= fun arg ->
-  ws *> (type_name <|> type_param_name) >>| fun consructor -> CTConstr (arg, consructor)
-;;
-
 let core_type_arrow core_type =
   fix (fun self ->
     ws *> core_type
@@ -372,6 +366,17 @@ let core_type_tuple core_type =
   | second :: rest -> return (CTTuple (first, second, rest))
 ;;
 
+(* let core_type_constr core_type =
+  fail ""
+  <|> (type_name >>| fun name -> CTConstr (name, []))
+  <|> (type_param_name >>| fun name -> CTConstr (name, []))
+  <|> (char '(' *> ws *> core_type
+       >>= fun ct ->
+       many (ws *> char ',' *> core_type)
+       >>= fun cts ->
+       ws *> char ')' *> type_name >>| fun name -> CTConstr (name, ct :: cts))
+;;
+
 let core_type =
   ws
   *> fix (fun ct ->
@@ -380,6 +385,30 @@ let core_type =
     let ct = core_type_tuple ct <|> ct in
     let ct = core_type_arrow ct <|> ct in
     ct)
+;; *)
+
+let core_type =
+  ws
+  *> fix (fun self ->
+    let p =
+      type_name
+      >>| (fun name -> CTConstr (name, []))
+      <|> (type_param_name >>| fun name -> CTConstr (name, []))
+    in
+    let p =
+      p >>= (fun arg -> ws *> type_name >>| fun name -> CTConstr (name, [ arg ])) <|> p
+    in
+    let self = parens self <|> p in
+    let self = core_type_tuple self <|> self in
+    let self = core_type_arrow self <|> self in
+    let self =
+      char '(' *> ws *> self
+      >>= (fun ct ->
+      many (ws *> char ',' *> self)
+      >>= fun cts -> ws *> char ')' *> type_name >>| fun name -> CTConstr (name, ct :: cts))
+      <|> self
+    in
+    self)
 ;;
 
 let type_kind_variants =
@@ -392,12 +421,12 @@ let type_kind_variants =
   in
   many parse_variant
   >>= function
-  | var :: vars -> return (TKVariants (var, vars))
+  | var :: vars -> return (KVariants (var, vars))
   | _ -> fail "is not variants"
 ;;
 
 let type_kind_record = fail "TODO (psi) : not implemented"
-let type_kind_alias = ws *> core_type >>| fun core_type -> TKAlias core_type
+let type_kind_alias = ws *> core_type >>| fun core_type -> KAbstract (Some core_type)
 let type_kind = ws *> (type_kind_variants <|> type_kind_record <|> type_kind_alias)
 
 let single_type_definition =
@@ -420,7 +449,7 @@ let value_binding = letdef (pack.expr pack) <* ws
 
 let structure =
   many1
-    (value_binding >>| (fun vb -> SLet vb) <|> (type_definition >>| fun td -> SType td))
+    (value_binding >>| (fun vb -> SValue vb) <|> (type_definition >>| fun td -> SType td))
 ;;
 
 let parse_structure str =
