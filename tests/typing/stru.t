@@ -90,14 +90,16 @@
   let main: int -> int =
     zed fac
 
-  $ cat << EOF | ./REPL.exe  -stru -
+  $ cat << EOF | ./REPL.exe  -e -
   > (fun fix -> fun f -> f (fix f))
   > EOF
-  Error: : end_of_input
-  $ cat << EOF | ./REPL.exe  -stru -
+  Parsed.
+  (fun fix -> (fun f -> f (fix f)))
+  $ cat << EOF | ./REPL.exe  -e -
   > let rec s f g x = f x (g x) in s
   > EOF
-  Error: : end_of_input
+  Parsed.
+  let rec s f g x = f x (g x) in s
   $ cat << EOF | ./REPL.exe  -stru -
   > let rec fac = fun n -> if n=1 then 1 else n * (fac (n-1))
   > let main = fac
@@ -110,14 +112,16 @@
   let main: int -> int =
     fac
 
-  $ cat << EOF | ./REPL.exe  -stru -
+  $ cat << EOF | ./REPL.exe  -e -
   > fun f -> fun x -> f (f x)
   > EOF
-  Error: : end_of_input
-  $ cat << EOF | ./REPL.exe  -stru -
+  Parsed.
+  (fun f -> (fun x -> f (f x)))
+  $ cat << EOF | ./REPL.exe  -e -
   > fun x -> let v = x in v
   > EOF
-  Error: : end_of_input
+  Parsed.
+  (fun x -> let v = x in v)
   $ cat << EOF | ./REPL.exe  -stru -
   > let add = fun x -> fun  y -> x + y
   > let add1 = add 1
