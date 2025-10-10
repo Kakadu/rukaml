@@ -28,11 +28,11 @@
   > EOF
   "fun x -> x"
   Parsed: (fun x -> x)
-  $ cat << EOF | ./REPL.exe -long -
+  $ cat << EOF | ./REPL.exe -prio -
   > 1+(2*3)
   > EOF
   "1+(2*3)"
-  Error: : end_of_input
+  Parsed: (1 + (2 * 3))
   $ cat << EOF | ./REPL.exe -long -
   > if 1 then 2 else 3
   > EOF
