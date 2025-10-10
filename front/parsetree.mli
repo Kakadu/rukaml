@@ -29,17 +29,17 @@ type 'a list1 = 'a * 'a list
 
 type expr =
   | EUnit
-  | EConst of const
-  | EVar of string
-  | EIf of expr * expr * expr
-  | ELam of pattern * expr
-  | EApp of expr * expr
+  | EConst of const (** Constant *)
+  | EVar of string (** Variable *)
+  | EIf of expr * expr * expr (** if ... then ... else ... *)
+  | ELam of pattern * expr (** fun ... -> ... *)
+  | EApp of expr * expr (** Application f x *)
   | ETuple of expr * expr * expr list
-  | ELet of rec_flag * pattern * expr * expr
-  | EConstruct of string * expr option
-  | EMatch of expr * (pattern * expr) list1
+  | ELet of rec_flag * pattern * expr * expr (** let rec? .. = ... in ...  *)
+  | EConstruct of string * expr option (** ConstructorName(expr) *)
+  | EMatch of expr * (pattern * expr) list1 (** match expr with ... *)
 
-type value_binding = rec_flag * pattern * expr
+type value_binding = rec_flag * pattern * expr (* let rec? .. = ... *)
 
 type type_declaration =
   { typedef_params : string list (** ['a] is param in [type 'a list = ...]  *)
