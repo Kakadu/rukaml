@@ -47,35 +47,32 @@
           let fac self n = if n = 1 then 1 else n * (self (n - 1))
           let main = zed fac
 
-  $ cat << EOF | ./run.exe  -stru -
+  $ cat << EOF | ./run.exe  -e -
   > (fun fix -> fun f -> f (fix f))
   > EOF
-  Error: : end_of_input
-
-  $ cat << EOF | ./run.exe  -stru -
+  "(fun fix -> fun f -> f (fix f))"
+  Parsed: (fun fix -> (fun f -> f (fix f)))
+  $ cat << EOF | ./run.exe  -e -
   > let rec s f g x = f x (g x) in s
   > EOF
-  Error: : end_of_input
-
+  "let rec s f g x = f x (g x) in s"
+  Parsed: let rec s f g x = f x (g x) in s
   $ cat << EOF | ./run.exe  -stru -
   > let rec fac = fun n -> if n=1 then 1 else n * (fac (n-1))
   > let main = fac
   > EOF
   Parsed: let rec fac n = if n = 1 then 1 else n * (fac (n - 1))
-  let main = 
-                                                                   fac
-  
-
-  $ cat << EOF | ./run.exe  -stru -
+          let main = fac
+  $ cat << EOF | ./run.exe  -e -
   > fun f -> fun x -> f (f x)
   > EOF
-  Error: : end_of_input
-
-  $ cat << EOF | ./run.exe  -stru -
+  "fun f -> fun x -> f (f x)"
+  Parsed: (fun f -> (fun x -> f (f x)))
+  $ cat << EOF | ./run.exe  -e -
   > fun x -> let v = x in v
   > EOF
-  Error: : end_of_input
-
+  "fun x -> let v = x in v"
+  Parsed: (fun x -> let v = x in v)
   $ cat << EOF | ./run.exe  -stru -
   > let add = fun x -> fun  y -> x + y
   > let add1 = add 1
