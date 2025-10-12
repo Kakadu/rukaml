@@ -13,8 +13,9 @@ let frontend cfg =
       r
   in
   let ( let* ) x f = Result.bind x f in
-  let ( let+ ) x f = Result.map f x in
   let* stru = Parsing.parse_structure text |> promote_error in
+  (* TODO (psi)  : fix
+  let ( let+ ) x f = Result.map f x in
   let* stru =
     if not cfg.cps_on
     then Ok stru
@@ -37,7 +38,7 @@ let frontend cfg =
       else
         let open CPSLang.OneACPS in
         hndl_cps cps_vb_to_parsetree_vb pp_vb cps_vb
-  in
+  in *)
   if cfg.stop_after = SA_CPS then exit 0;
   let stru =
     let init = CConv.standart_globals, [] in
@@ -45,13 +46,17 @@ let frontend cfg =
       (stru : Parsetree.structure)
       ~init
       ~f:(fun (glob, ans) stru ->
-        let new_strus = CConv.conv ~standart_globals:glob stru in
-        let new_glob =
-          ListLabels.fold_left ~init:glob new_strus ~f:(fun acc -> function
-            | _, Parsetree.PVar s, _ -> CConv.String_set.add s acc
-            | _, PTuple _, _ -> acc)
-        in
-        new_glob, List.append ans new_strus)
+        match stru with
+        | Parsetree.SValue stru ->
+          let new_strus = CConv.conv ~standart_globals:glob stru in
+          let new_glob =
+            ListLabels.fold_left ~init:glob new_strus ~f:(fun acc -> function
+              | _, Parsetree.PVar s, _ -> CConv.String_set.add s acc
+              | _, PTuple _, _ -> acc
+              | _, PAny, _ | _, PConstruct _, _ -> failwith "not implemented")
+          in
+          new_glob, ans @ List.map (fun vb -> Parsetree.SValue vb) new_strus
+        | Parsetree.SType _ as td -> glob, List.append ans [ td ])
     |> snd
   in
   let* typedtree =

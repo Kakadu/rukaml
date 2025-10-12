@@ -9,10 +9,10 @@ let run_single text =
   let ( let* ) x f = Result.bind x ~f in
   let* stru = Frontend.Parsing.parse_structure text in
   (* List.iter ~f:(Format.printf "%a\n%!" Pprint.pp_value_binding) stru; *)
-  let stru = List.concat_map ~f:CConv.conv stru in
+  let stru = List.concat_map ~f:CConv.structure_item stru in
   (* List.iter ~f:(Format.printf "%a\n%!" Pprint.pp_value_binding) stru; *)
   let* xs =
-    let f acc ((_, Parsetree.PVar name, _) as vb) =
+    let f acc (Parsetree.SValue ((_, Parsetree.PVar name, _) as vb)) =
       let* ans, env = acc in
       let* env, rez = Inferencer.vb ~env vb in
       let ident = Inferencer.Type_env.ident_of_string_exn name env in

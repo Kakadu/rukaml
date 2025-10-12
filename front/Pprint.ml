@@ -223,4 +223,5 @@ let pp_stru ppf vbs =
   close_box ()
 ;;
 
+let value_bindings ppf = List.iter (fun vb -> pp_value_binding ppf vb)
 let structure = pp_stru
