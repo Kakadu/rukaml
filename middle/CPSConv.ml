@@ -131,6 +131,7 @@ let preconv_chore ?(with_printing = false) (rec_flag, ptrn, e) k glob_vars free_
       new_count name ident.id k
     | PTuple (p1, p2, pp) ->
       tuple_fold_map_k helper_p p1 p2 pp (fun dp1 dp2 dps -> k (DPTuple (dp1, dp2, dps)))
+    | PAny | PConstruct _ -> failwith "not implemented"
   in
   let rec helper_e e vars k free_vars =
     match e with
@@ -187,6 +188,7 @@ let preconv_chore ?(with_printing = false) (rec_flag, ptrn, e) k glob_vars free_
         helper_e e1 vars k2 free_vars
       in
       helper_p ptrn k1 vars
+    | EMatch _ | EConstruct _ -> failwith "not implemented"
   in
   match rec_flag with
   | Recursive ->
@@ -613,7 +615,7 @@ let pp_error ppf : error -> _ = function
 
 let test_cps_program text =
   let open Frontend in
-  let stru = Result.get_ok @@ Parsing.parse_structure text in
+  let stru = Result.get_ok @@ Parsing.parse_value_bindings text in
   match cps_conv_program stru with
   | Ok cps_prog ->
     Format.printf "%a" pp_vb cps_prog;

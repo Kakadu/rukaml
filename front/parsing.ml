@@ -147,6 +147,8 @@ let constructor_name =
   name_fabric regexp message
 ;;
 
+let ident = var_name
+
 let parse_econsruct parse_expression =
   let* name = ws *> constructor_name in
   (let* expr = ws *> parse_expression in
@@ -395,6 +397,7 @@ let type_definition =
 ;;
 
 let value_binding = letdef (pack.expr pack) <* ws
+let value_bindings = many1 value_binding
 
 let structure =
   many1
@@ -403,6 +406,11 @@ let structure =
 
 let parse_structure str =
   parse_string ~consume:All structure str
+  |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
+;;
+
+let parse_value_bindings str =
+  parse_string ~consume:All (many1 value_binding) str
   |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
 ;;
 
