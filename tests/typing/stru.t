@@ -166,5 +166,27 @@ tuples
   $ run << EOF
   > let rec (a,b) = (a,b)
   > EOF
-  infer error: Only variables are allowed as left-hand side of `let rec'
-  [1]
+  Parsed.
+  let rec (a, b) = (a, b)
+  Error: Only variables are allowed as left-hand side of `let rec'
+
+
+  $ cat << EOF | ./REPL.exe -stru -
+  > let f = [||]
+  Parsed.
+  let f = [||]
+  let f: unit array =
+    [||]
+
+  $ cat << EOF | ./REPL.exe -stru -
+  > let f = [|1; 2; 3; 4|]
+  Parsed.
+  let f = [|1; 2; 3; 4|]
+  let f: int array =
+    [|1; 2; 3; 4|]
+
+  $ cat << EOF | ./REPL.exe -stru -
+  > let f = [|1;true; 2; 3; 4|]
+  Parsed.
+  let f = [|1; true; 2; 3; 4|]
+  Error: unification failed on int and bool

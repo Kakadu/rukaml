@@ -19,6 +19,7 @@ and type_desc =
   | Prim of string
   | V of var_info
   | Arrow of ty * ty
+  | TPoly of ty * string
   | TLink of ty
   | TProd of ty * ty * ty list
 
@@ -33,12 +34,14 @@ val pp_scheme : Format.formatter -> scheme -> unit
 val show_scheme : scheme -> string
 val tarrow : ty -> ty -> ty
 val tprim : string -> ty
+val tpoly : ty -> string -> ty
 val tv : binder -> level:int -> ty
 val tlink : ty -> ty
 val tprod : ty -> ty -> ty list -> ty
 val int_typ : ty
 val bool_typ : ty
 val unit_typ : ty
+val array_typ : ty -> ty
 
 type pattern =
   | Tpat_var of Ident.t
@@ -54,6 +57,7 @@ type expr =
   | TIf of expr * expr * expr * ty (** if ... then ... else ... *)
   | TLam of pattern * expr * ty (** fun ... -> ... *)
   | TApp of expr * expr * ty (** Application f x *)
+  | TArray of expr list * ty (** Array [| ... |]*)
   | TTuple of expr * expr * expr list * ty (** Tuple (a,b,...,_) as a tuple (a,b,...) *)
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
   (** let rec? .. = ... in ... *)

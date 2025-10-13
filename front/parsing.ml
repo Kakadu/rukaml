@@ -39,7 +39,18 @@ let trace_avai msg =
 ;;
 
 let lchar c = ws *> char c
-let parens p = char '(' *> trace_pos "after(" *> p <* trace_pos "before ')'" <* lchar ')'
+
+let parens p =
+  char '(' *> trace_pos "after '('" *> p <* trace_pos "before ')'" <* lchar ')'
+;;
+
+let brackets p =
+  char '[' *> char '|' *> trace_pos "after '[|'" *> p
+  <* trace_pos "before '|]'"
+  <* lchar '|'
+  <* char ']'
+;;
+
 let const = char '0' >>= fun c -> return (Printf.sprintf "%c" c)
 
 let is_digit = function
@@ -314,6 +325,12 @@ let pack : dispatch =
                let* case = first in
                let* cases = many parse_case in
                return (ematch subject case cases))
+                 <*> many (string "," *> d.expr d <* ws))
+          <|> brackets
+                (return (fun h tl -> earray (h :: tl))
+                 <*> (d.expr d <* ws)
+                 <*> many (string ";" *> d.expr d <* ws)
+                 <|> return @@ earray [])
           <|> (keyword "fun" *> pattern
                >>= fun p ->
                (* let () = log "Got a abstraction over %a" Pprint.pp_pattern p in *)

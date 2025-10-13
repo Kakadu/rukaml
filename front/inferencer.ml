@@ -160,6 +160,7 @@ end = struct
          | exception Not_found_s _ -> typ
          | x -> x)
       | Arrow (l, r) -> tarrow (helper l) (helper r)
+      | TPoly (a, t) -> tpoly (helper a) t
       | TProd (a, b, ts) -> tprod (helper a) (helper b) (List.map ~f:helper ts)
       | TLink ty -> helper ty
       | Prim _ -> typ
@@ -207,6 +208,7 @@ module Type = struct
       | Arrow (l, r) ->
         helper l;
         helper r
+      | TPoly (a, _) -> helper a
       | TProd (a, b, ts) ->
         helper a;
         helper b;
@@ -228,6 +230,7 @@ module Type = struct
       | Prim _ -> acc
       | V { binder; _ } -> Var_set.add binder acc
       | TLink t -> helper acc t
+      | TPoly _ -> failwith "unimpl freevars for poly type"
       | Arrow (l, r) -> helper (helper acc l) r
       | TProd (a, b, ts) -> List.fold_left ts ~init:(helper (helper acc a) b) ~f:helper
     in
@@ -334,6 +337,10 @@ let unify l r =
     | Arrow (l1, r1), Arrow (l2, r2) ->
       let* () = helper l1 l2 in
       helper r1 r2
+    | TPoly (a1, t1), TPoly (a2, t2) ->
+      (* TODO: make tests *)
+      let* () = helper a1 a2 in
+      if String.equal t1 t2 then return () else fail (`UnificationFailed (l, r))
     | TProd (a1, b1, ts1), TProd (a2, b2, ts2) ->
       let* () = helper a1 a2 in
       let* () = helper b1 b2 in
@@ -343,6 +350,12 @@ let unify l r =
           let* () = acc in
           helper l r)
       else fail (`UnificationFailed (l, r))
+    | TPoly _, Arrow _
+    | Arrow _, TPoly _
+    | TPoly _, Prim _
+    | Prim _, TPoly _
+    | TProd _, TPoly _
+    | TPoly _, TProd _
     | TProd _, Arrow _
     | Arrow _, TProd _
     | TProd _, Prim _
@@ -374,6 +387,7 @@ let generalize : level:int -> Type.t -> Scheme.t =
     match typ.typ_desc with
     | V { var_level; binder } -> if var_level > level then Var_set.add binder acc else acc
     | TLink t -> helper acc t
+    | TPoly (a, _) -> helper acc a
     | Arrow (l, r) -> helper (helper acc l) r
     | TProd (a, b, tl) -> List.fold_left ~f:helper tl ~init:(helper (helper acc a) b)
     | Prim _ -> acc
@@ -446,15 +460,30 @@ let infer env expr =
   in
   let rec (helper : Type_env.t -> Parsetree.expr -> (ty * Typedtree.expr) R.t) =
     fun env -> function
-      (* | Parsetree.EVar "=" ->
-       (* TODO: make equality predefined *)
-       let typ = tarrow int_typ (tarrow int_typ bool_typ) in
-       return (typ, TVar ("=", typ)) *)
+      (* | Parsetree.EVar "=" -> *)
+      (*  (\* TODO: make equality predefined *\) *)
+      (*  let typ = tarrow int_typ (tarrow int_typ bool_typ) in *)
+      (*  return (typ, TVar ("=", typ)) *)
       | Parsetree.EVar x ->
         let* scheme = lookup_scheme_by_string x env in
         let* typ = instantiate ~level:!current_level scheme in
         return (typ, TVar (x, Type_env.ident_of_string_exn x env, typ))
       | EUnit -> return (unit_typ, TUnit)
+      | Parsetree.EArray r ->
+        (match r with
+         | [] -> return (array_typ unit_typ, TArray ([], unit_typ))
+         | h :: _ ->
+           let* ty, _ = helper env h in
+           let* _, exprs =
+             list_foldm
+               ~init:(return ([], []))
+               ~f:(fun (typs, exprs) e ->
+                 let* t1, e1 = helper env e in
+                 let* () = unify ty t1 in
+                 return (t1 :: typs, e1 :: exprs))
+               r
+           in
+           return (array_typ ty, TArray (List.rev exprs, ty)))
       (* lambda abstraction *)
       | ELam (PVar x, e1) ->
         let* tx = fresh_var ~level:!current_level in
@@ -485,7 +514,7 @@ let infer env expr =
         let* t3, tel = helper env el in
         let* () = unify t1 bool_typ in
         let* () = unify t2 t3 in
-        R.return (t2, TIf (tc, tth, tel, t2))
+        return (t2, TIf (tc, tth, tel, t2))
       | ETuple (a, b, es) ->
         let* ta, ea = helper env a in
         let* tb, eb = helper env b in

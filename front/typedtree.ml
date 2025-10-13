@@ -24,6 +24,7 @@ and type_desc =
   | Prim of string
   | V of var_info
   | Arrow of ty * ty
+  | TPoly of ty * string
   | TLink of ty
   | TProd of ty * ty * ty list
 [@@deriving show { with_path = false }]
@@ -34,10 +35,12 @@ let tarrow l r = { typ_desc = Arrow (l, r) }
 let tprim s = { typ_desc = Prim s }
 let tv binder ~level = { typ_desc = V { binder; var_level = level } }
 let tlink t = { typ_desc = TLink t }
+let tpoly a t = { typ_desc = TPoly (a, t) }
 let tprod a b ts = { typ_desc = TProd (a, b, ts) }
 let int_typ = tprim "int"
 let bool_typ = tprim "bool"
 let unit_typ = tprim "unit"
+let array_typ a = tpoly a "array"
 
 type pattern =
   | Tpat_var of Ident.t
@@ -61,6 +64,7 @@ type expr =
   | TIf of expr * expr * expr * ty
   | TLam of pattern * expr * ty
   | TApp of expr * expr * ty
+  | TArray of expr list * ty
   | TTuple of expr * expr * expr list * ty
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
 [@@deriving show { with_path = false }]
@@ -71,6 +75,7 @@ let rec type_of_expr = function
   | TVar (_, _, t)
   | TTuple (_, _, _, t)
   | TIf (_, _, _, t)
+  | TArray (_, t)
   | TLam (_, _, t)
   | TApp (_, _, t) -> t
   | TLet (_, _, _, _, wher) -> type_of_expr wher
@@ -83,6 +88,7 @@ let type_without_links =
     match t.typ_desc with
     | Prim _ | V _ -> t
     | Arrow (l, r) -> tarrow (helper l) (helper r)
+    | TPoly (a, t) -> tpoly (helper a) t
     | TLink ty -> helper ty
     | TProd (a, b, ts) -> { typ_desc = TProd (helper a, helper b, List.map helper ts) }
   in
@@ -96,6 +102,7 @@ let compact_expr =
     | TVar (name, id, ty) -> TVar (name, id, type_without_links ty)
     | TIf (a, b, c, ty) -> TIf (helper a, helper b, helper c, type_without_links ty)
     | TLam (pat, e, ty) -> TLam (pat, helper e, type_without_links ty)
+    | TArray (a, ty) -> TArray (List.map helper a, type_without_links ty)
     | TApp (l, r, ty) -> TApp (helper l, helper r, type_without_links ty)
     | TLet (flg, pat, S (vars, ty), e1, e2) ->
       TLet (flg, pat, S (vars, type_without_links ty), helper e1, helper e2)

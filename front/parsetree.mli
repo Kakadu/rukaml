@@ -28,6 +28,7 @@ type expr =
   | EUnit
   | EConst of const (** Constant *)
   | EVar of string (** Variable *)
+  | EArray of expr list (** [| ...  expressions ... |] *)
   | EIf of expr * expr * expr (** if ... then ... else ... *)
   | ELam of pattern * expr (** fun ... -> ... *)
   | EApp of expr * expr (** Application f x *)
@@ -93,4 +94,5 @@ val ele : expr -> expr -> expr
 val egt : expr -> expr -> expr
 val e_cons : expr -> expr -> expr
 val etuple : expr -> expr -> expr list -> expr
+val earray : expr list -> expr
 val group_lams : expr -> pattern list * expr

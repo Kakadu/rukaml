@@ -14,6 +14,9 @@ let pp_typ_hum =
     | Prim s -> fprintf ppf "%s" s
     | V { binder; _ } -> fprintf ppf "'_%d" binder
     | TLink ty -> pp_typ ctx ppf ty
+    | TPoly (a, t) ->
+      pp_typ ctx ppf a;
+      fprintf ppf " %s" t
     | Arrow (l, r) ->
       let fmt : _ format =
         match ctx with
@@ -67,6 +70,18 @@ let pp_expr =
     | TVar (name, _, _) -> fprintf ppf "%s" name
     | TIf (cond, th, el, _) ->
       fprintf ppf "(if %a then %a else %a)" expr_no cond expr_no th expr_no el
+    | TArray (xs, _) ->
+      fprintf ppf "[|";
+      (match xs with
+       | [] -> ()
+       | h :: tl ->
+         expr_gen ~pars:false ppf h;
+         List.iter
+           (fun x ->
+              fprintf ppf "; ";
+              expr_gen ~pars:false ppf x)
+           tl);
+      fprintf ppf "|]"
     | TLam (pat, e, _) ->
       (match extract_lambdas [ pat ] e with
        | [], _ -> failwith "TODO: Should not happend. Rewrite!"
