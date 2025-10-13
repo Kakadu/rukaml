@@ -170,6 +170,12 @@ tuples
   let rec (a, b) = (a, b)
   Error: Only variables are allowed as left-hand side of `let rec'
 
+  $ cat << EOF | ./REPL.exe -stru -
+  > let f = (1, 2, true, 2)
+  Parsed.
+  let f = (1, 2, true, 2)
+  let f: int * int * bool * int =
+    (1, 2, true, 2)
 
   $ cat << EOF | ./REPL.exe -stru -
   > let f = [||]

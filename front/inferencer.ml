@@ -483,7 +483,8 @@ let infer env expr =
                  return (t1 :: typs, e1 :: exprs))
                r
            in
-           return (array_typ ty, TArray (List.rev exprs, ty)))
+           let exprs = List.rev exprs in
+           return (array_typ ty, TArray (exprs, ty)))
       (* lambda abstraction *)
       | ELam (PVar x, e1) ->
         let* tx = fresh_var ~level:!current_level in
@@ -526,6 +527,8 @@ let infer env expr =
               return (t1 :: typs, e1 :: exprs))
             es
         in
+        let typs = List.rev typs in
+        let exprs = List.rev exprs in
         let tup_typ = tprod ta tb typs in
         return (tup_typ, TTuple (ea, eb, exprs, tup_typ))
       | Parsetree.ELet (NonRecursive, PVar x, rhs, e2) ->
