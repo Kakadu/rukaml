@@ -118,7 +118,7 @@ let name_fabric regexp error_message =
 ;;
 
 let var_name =
-  let regexp = "^[a-zA-Z][a-zA-Z0-9_]*$" in
+  let regexp = "^[a-z_][a-zA-Z0-9_]*$" in
   let message = "not a variable name" in
   name_fabric regexp message
 ;;
@@ -149,35 +149,58 @@ let constructor_name =
 
 let ident = var_name
 
-let parse_econsruct parse_expression =
-  let* name = ws *> constructor_name in
-  (let* expr = ws *> parse_expression in
-   return (EConstruct (name, Some expr)))
-  <|> return (EConstruct (name, None))
+type dispatch_patt =
+  { patt_basic : dispatch_patt -> pattern t
+  ; patt_cons : dispatch_patt -> pattern t
+  ; patt : dispatch_patt -> pattern t
+  }
+
+let pnil = PConstruct ("Nil", None)
+let pcons hd tl = PConstruct ("Cons", Some (PTuple (hd, tl, [])))
+let enil = EConstruct ("Nil", None)
+let econs hd tl = EConstruct ("Cons", Some (ETuple (hd, tl, [])))
+
+let patt_basic d =
+  ws
+  *> fix (fun _self ->
+    fail ""
+    <|> parens (d.patt_basic d)
+    <|> char '_' *> return PAny
+    <|> (var_name >>= fun v -> return (pvar v) <* trace_pos v)
+    <|> string "[]" *> return pnil
+    <|> (char '['
+         *> ws
+         *>
+         let* first = d.patt_cons d in
+         (let* rest = many (ws *> char ';' *> d.patt_cons d) in
+          return (pcons first (List.fold_right pcons rest pnil)))
+         <|> return (pcons first pnil)
+         <* ws
+         <* char ']')
+    <|> parens
+          (return (fun a b xs -> PTuple (a, b, xs))
+           <*> (d.patt d <* ws)
+           <*> (char ',' *> d.patt d <* ws)
+           <*> many (char ',' *> d.patt d <* ws))
+    <|> let* name = ws *> constructor_name in
+        (let* patt = ws *> d.patt_basic d in
+         return (PConstruct (name, Some patt)))
+        <|> return (PConstruct (name, None)))
 ;;
 
-let pattern =
+let patt_cons d =
   ws
-  *> fix (fun pattern ->
-    let pattern =
-      fail ""
-      <|> parens pattern
-      <|> char '_' *> return PAny
-      <|> (var_name >>= fun v -> return (pvar v) <* trace_pos v)
-    in
-    let pattern =
-      (let* name = ws *> constructor_name in
-       (let* patt = ws *> pattern in
-        return (PConstruct (name, Some patt)))
-       <|> return (PConstruct (name, None)))
-      <|> pattern
-    in
-    let* first = ws *> pattern in
-    many (ws *> char ',' *> ws *> pattern)
-    >>= function
-    | [] -> return first
-    | second :: rest -> return (PTuple (first, second, rest)))
-  <?> "not a pattern"
+  *> fix (fun _self ->
+    fail ""
+    <|> (return (fun head tail -> pcons head tail)
+         <*> d.patt_basic d
+         <*> ws *> string "::" *> ws *> (d.patt_basic d <|> d.patt_cons d))
+    <|> d.patt_basic d)
+;;
+
+let pattern : pattern t =
+  let self = { patt_basic; patt_cons; patt = patt_cons } in
+  self.patt_cons self <|> self.patt_basic self
 ;;
 
 let prio expr table =
@@ -256,6 +279,10 @@ let pack : dispatch =
                  <*> (string "," *> d.expr d <* ws)
                  <*> many (string "," *> d.expr d <* ws))
           <|> (ws *> var_name >>| evar)
+          <|> (let* name = ws *> constructor_name in
+               (let* patt = ws *> d.expr_basic d in
+                return (EConstruct (name, Some patt)))
+               <|> return (EConstruct (name, None)))
           <|> (let parse_case =
                  ws *> char '|' *> ws *> pattern
                  >>= fun p ->
@@ -376,9 +403,8 @@ let type_kind_variants =
   | _ -> fail "is not variants"
 ;;
 
-let type_kind_record = fail "TODO (psi) : not implemented"
 let type_kind_alias = ws *> core_type >>| fun core_type -> KAbstract (Some core_type)
-let type_kind = ws *> (type_kind_variants <|> type_kind_record <|> type_kind_alias)
+let type_kind = ws *> (type_kind_variants <|> type_kind_alias)
 
 let single_type_definition =
   let* params = ws *> type_params in
