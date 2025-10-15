@@ -471,7 +471,9 @@ let infer env expr =
       | EUnit -> return (unit_typ, TUnit)
       | Parsetree.EArray r ->
         (match r with
-         | [] -> return (array_typ unit_typ, TArray ([], unit_typ))
+         | [] ->
+           let* ty = fresh_var ~level:!current_level in
+           return (array_typ ty, TArray ([], ty))
          | h :: _ ->
            let* ty, _ = helper env h in
            let* _, exprs =
