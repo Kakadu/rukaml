@@ -152,36 +152,32 @@ let ident = var_name
 type dispatch_patt =
   { patt_basic : dispatch_patt -> pattern t
   ; patt_cons : dispatch_patt -> pattern t
+  ; patt_tuple : dispatch_patt -> pattern t
   ; patt : dispatch_patt -> pattern t
   }
 
 let pnil = PConstruct ("Nil", None)
-let pcons hd tl = PConstruct ("Cons", Some (PTuple (hd, tl, [])))
 let enil = EConstruct ("Nil", None)
+let pcons hd tl = PConstruct ("Cons", Some (PTuple (hd, tl, [])))
 let econs hd tl = EConstruct ("Cons", Some (ETuple (hd, tl, [])))
 
 let patt_basic d =
   ws
   *> fix (fun _self ->
     fail ""
-    <|> parens (d.patt_basic d)
+    <|> parens (d.patt d)
     <|> char '_' *> return PAny
     <|> (var_name >>= fun v -> return (pvar v) <* trace_pos v)
     <|> string "[]" *> return pnil
     <|> (char '['
          *> ws
          *>
-         let* first = d.patt_cons d in
-         (let* rest = many (ws *> char ';' *> d.patt_cons d) in
+         let* first = d.patt d in
+         (let* rest = many (ws *> char ';' *> d.patt d) in
           return (pcons first (List.fold_right pcons rest pnil)))
          <|> return (pcons first pnil)
          <* ws
          <* char ']')
-    <|> parens
-          (return (fun a b xs -> PTuple (a, b, xs))
-           <*> (d.patt d <* ws)
-           <*> (char ',' *> d.patt d <* ws)
-           <*> many (char ',' *> d.patt d <* ws))
     <|> let* name = ws *> constructor_name in
         (let* patt = ws *> d.patt_basic d in
          return (PConstruct (name, Some patt)))
@@ -194,13 +190,22 @@ let patt_cons d =
     fail ""
     <|> (return (fun head tail -> pcons head tail)
          <*> d.patt_basic d
-         <*> ws *> string "::" *> ws *> (d.patt_basic d <|> d.patt_cons d))
+         <*> ws *> string "::" *> ws *> d.patt_cons d)
     <|> d.patt_basic d)
 ;;
 
+let patt_tuple d =
+  ws
+  *> fix (fun _self ->
+    return (fun a b xs -> PTuple (a, b, xs))
+    <*> (d.patt_cons d <* ws)
+    <*> (char ',' *> d.patt_cons d <* ws)
+    <*> many (char ',' *> d.patt_cons d <* ws))
+;;
+
 let pattern : pattern t =
-  let self = { patt_basic; patt_cons; patt = patt_cons } in
-  self.patt_cons self <|> self.patt_basic self
+  let patt = fun d -> d.patt_tuple d <|> d.patt_cons d <|> d.patt_basic d in
+  patt { patt; patt_basic; patt_cons; patt_tuple }
 ;;
 
 let prio expr table =
@@ -267,12 +272,22 @@ let pack : dispatch =
       ws
       *> (fail ""
           <|> ws *> (number >>| fun n -> econst (const_int n))
-          <|> (ws *> char '(' *> char ')' >>| fun _ -> eunit)
+          <|> ws *> char '(' *> char ')' *> return eunit
+          <|> ws *> char '[' *> char ']' *> return enil
           <|> (ws *> var_name
                >>= function
                | "true" -> return @@ econst (const_bool true)
                | "false" -> return @@ econst (const_bool false)
                | _ -> fail "Not a boolean constant")
+          <|> (char '['
+               *> ws
+               *>
+               let* first = d.prio d in
+               (let* rest = many (ws *> char ';' *> d.prio d) in
+                return (econs first (List.fold_right econs rest enil)))
+               <|> return (econs first enil)
+               <* ws
+               <* char ']')
           <|> parens
                 (return (fun a b xs -> etuple a b xs)
                  <*> (d.expr d <* ws)
