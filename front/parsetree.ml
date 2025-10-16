@@ -42,11 +42,17 @@ let eapp1 f x = EApp (f, x)
 let etuple a b xs = ETuple (a, b, xs)
 let ematch e pe pes = EMatch (e, (pe, pes))
 
-let eapp f = function
-  | [] -> f
-  | args -> List.fold_left eapp1 f args
+let eapp f ?(is_right_assoc = false) args =
+  match is_right_assoc, args with
+  | _, [] -> f
+  | false, args -> List.fold_left eapp1 f args
+  | true, args -> List.fold_right eapp1 args f
 ;;
 
+let pnil = PConstruct ("Nil", None)
+let enil = EConstruct ("Nil", None)
+let pcons hd tl = PConstruct ("Cons", Some (PTuple (hd, tl, [])))
+let econs hd tl = EConstruct ("Cons", Some (ETuple (hd, tl, [])))
 let elet ?(isrec = NonRecursive) p b wher = ELet (isrec, p, b, wher)
 let eite c t e = EIf (c, t, e)
 let emul a b = eapp (evar "*") [ a; b ]
@@ -56,6 +62,7 @@ let eeq a b = eapp (evar "=") [ a; b ]
 let elt a b = eapp (evar "<") [ a; b ]
 let ele a b = eapp (evar "<=") [ a; b ]
 let egt a b = eapp (evar ">") [ a; b ]
+let e_cons a b = eapp ~is_right_assoc:true (evar "::") [ a; b ]
 
 type value_binding = rec_flag * pattern * expr [@@deriving show { with_path = false }]
 
