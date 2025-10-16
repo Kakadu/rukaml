@@ -67,11 +67,8 @@ type type_declaration =
 [@@deriving show { with_path = false }]
 
 and type_kind =
-  | KAbstract of core_type option
-  (** [t] is an abstract when it is defined as [type t] or [type t = x]. *)
+  | KAbstract of core_type option (** [type t] or [type t = x]. *)
   | KVariants of (string * core_type option) list1 (** [type t = Some of int | None]  *)
-(* TODO (psi) : *)
-(* | KRecord of (string * core_type) list *)
 [@@deriving show { with_path = false }]
 
 and core_type =
