@@ -92,9 +92,9 @@ value binding
   > | (x, y) -> (x, y)
   > | _ -> (y, x)
   "match (x, y) with\n| (x, y) -> (x, y)\n| _ -> (y, x)"
-  Parsed: match (ETuple ((EVar "x"), (EVar "y"), [])) with
-            | (x, y) -> (ETuple ((EVar "x"), (EVar "y"), []))
-            | _ -> (ETuple ((EVar "y"), (EVar "x"), []))
+  Parsed: match (x, y) with
+            | (x, y) -> (x, y)
+            | _ -> (y, x)
             
 
   $ cat << EOF | ./run.exe -e -
@@ -105,12 +105,12 @@ value binding
   > | (f, s) -> 1
   > | s -> 0
   "match e with\n| (f, (f, (f, (f, s)))) -> 4\n| (f, (f, (f, s))) -> 3\n| (f, (f, s)) -> 2\n| (f, s) -> 1\n| s -> 0"
-  Parsed: match (EVar "e") with
-            | (f, (f, (f, (f, s)))) -> (EConst (PConst_int 4))
-            | (f, (f, (f, s))) -> (EConst (PConst_int 3))
-            | (f, (f, s)) -> (EConst (PConst_int 2))
-            | (f, s) -> (EConst (PConst_int 1))
-            | s -> (EConst (PConst_int 0))
+  Parsed: match e with
+            | (f, (f, (f, (f, s)))) -> 4
+            | (f, (f, (f, s))) -> 3
+            | (f, (f, s)) -> 2
+            | (f, s) -> 1
+            | s -> 0
             
   $ cat << EOF | ./run.exe -e -
   > match x with
@@ -118,18 +118,18 @@ value binding
   > | Two (x, y) -> 2
   > | Three (x, y, z) -> 3
   "match x with\n| One x -> 1\n| Two (x, y) -> 2\n| Three (x, y, z) -> 3"
-  Parsed: match (EVar "x") with
-            | One (x) -> (EConst (PConst_int 1))
-            | Two ((x, y)) -> (EConst (PConst_int 2))
-            | Three ((x, y, z)) -> (EConst (PConst_int 3))
+  Parsed: match x with
+            | One (x) -> 1
+            | Two ((x, y)) -> 2
+            | Three ((x, y, z)) -> 3
             
 
   $ cat << EOF | ./run.exe -e -
   > match x with
   > | _ -> if x then y else z
   "match x with\n| _ -> if x then y else z"
-  Parsed: match (EVar "x") with
-            | _ -> (EIf ((EVar "x"), (EVar "y"), (EVar "z")))
+  Parsed: match x with
+            | _ -> if x then y else z
             
 
   $ cat << EOF | ./run.exe -e -
@@ -140,10 +140,10 @@ value binding
   >   match z with
   >   | _ -> Z
   "if x then \n  match y with\n  | _ -> y\nelse \n  match z with\n  | _ -> Z"
-  Parsed: (if x then match (EVar "y") with
-                       | _ -> (EVar "y")
-                        else match (EVar "z") with
-                               | _ -> (EVar "Z")
+  Parsed: (if x then match y with
+                       | _ -> y
+                        else match z with
+                               | _ -> Z
                                )
 
   $ cat << EOF | ./run.exe -e -
@@ -151,8 +151,8 @@ value binding
   > | Some x -> g x
   > | None -> a b c
   "match f x with\n| Some x -> g x\n| None -> a b c"
-  Parsed: match (EApp ((EVar "f"), (EVar "x"))) with
-            | Some (x) -> (EApp ((EVar "g"), (EVar "x")))
-            | None -> (EApp ((EApp ((EVar "a"), (EVar "b"))), (EVar "c")))
+  Parsed: match f x with
+            | Some (x) -> g x
+            | None -> a b c
             
 #
