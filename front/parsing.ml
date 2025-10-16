@@ -174,7 +174,6 @@ let patt_basic d =
          let* first = d.patt d in
          (let* rest = many (ws *> char ';' *> d.patt d) in
           return (pcons first (List.fold_right pcons rest pnil)))
-         <|> return (pcons first pnil)
          <* ws
          <* char ']')
     <|> let* name = ws *> constructor_name in
@@ -263,6 +262,7 @@ let pack : dispatch =
          ]
        ; [ ws *> string "+", eadd; ws *> string "-", esub ]
        ; [ ws *> string "*", emul ]
+       ; [ ws *> string "::", e_cons ]
       |]
   in
   let expr_basic d =
