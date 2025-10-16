@@ -42,13 +42,6 @@ let lchar c = ws *> char c
 let parens p = char '(' *> trace_pos "after(" *> p <* trace_pos "before ')'" <* lchar ')'
 let const = char '0' >>= fun c -> return (Printf.sprintf "%c" c)
 
-type dispatch =
-  { prio : dispatch -> expr t
-  ; expr_basic : dispatch -> expr t
-  ; expr_long : dispatch -> expr t
-  ; expr : dispatch -> expr t
-  }
-
 let is_digit = function
   | '0' .. '9' -> true
   | _ -> false
@@ -186,10 +179,9 @@ let patt_basic d =
 let patt_cons d =
   ws
   *> fix (fun _self ->
-    fail ""
-    <|> (return (fun head tail -> pcons head tail)
-         <*> d.patt_basic d
-         <*> ws *> string "::" *> ws *> d.patt_cons d)
+    return (fun head tail -> pcons head tail)
+    <*> d.patt_basic d
+    <*> ws *> string "::" *> ws *> d.patt_cons d
     <|> d.patt_basic d)
 ;;
 
@@ -242,7 +234,7 @@ let letdef erhs =
 (* The equivalent of [letdef] *)
 let letdef0 erhs =
   let+ isrec =
-    keyword "let" *> option NonRecursive (keyword "rec" >>| fun _ -> Recursive) <* ws
+    keyword "let" *> option NonRecursive (keyword "rec" *> return Recursive) <* ws
   in
   let+ name = pattern in
   (* TODO(Kakadu): not any pattern *)
@@ -251,20 +243,29 @@ let letdef0 erhs =
   isrec, name, List.fold_right elam ps rhs
 ;;
 
+type dispatch =
+  { prio : dispatch -> expr t
+  ; expr_basic : dispatch -> expr t
+  ; expr_long : dispatch -> expr t
+  ; expr : dispatch -> expr t
+  }
+
 let pack : dispatch =
   let open Format in
   let prio d =
-    prio
-      (d.expr_long d)
-      [| [ ws *> string "=", eeq
-         ; ws *> string "<=", ele
-         ; ws *> string "<", elt
-         ; ws *> string ">", egt
-         ]
-       ; [ ws *> string "+", eadd; ws *> string "-", esub ]
-       ; [ ws *> string "*", emul ]
-       ; [ ws *> string "::", e_cons ]
-      |]
+    ws
+    *> fix (fun _self ->
+      prio
+        (d.expr_long d)
+        [| [ ws *> string "=", eeq
+           ; ws *> string "<=", ele
+           ; ws *> string "<", elt
+           ; ws *> string ">", egt
+           ]
+         ; [ ws *> string "::", econs ]
+         ; [ ws *> string "+", eadd; ws *> string "-", esub ]
+         ; [ ws *> string "*", emul ]
+        |])
   in
   let expr_basic d =
     trace_pos "expr_basic"
@@ -291,8 +292,8 @@ let pack : dispatch =
           <|> parens
                 (return (fun a b xs -> etuple a b xs)
                  <*> (d.expr d <* ws)
-                 <*> (string "," *> d.expr d <* ws)
-                 <*> many (string "," *> d.expr d <* ws))
+                 <*> (char ',' *> d.expr d <* ws)
+                 <*> many (char ',' *> d.expr d <* ws))
           <|> (ws *> var_name >>| evar)
           <|> (let* name = ws *> constructor_name in
                (let* patt = ws *> d.expr_basic d in
