@@ -102,13 +102,13 @@ let rec pp_expr_helper ?(ps = true) ppf = function
     fprintf ppf ")@]"
   | EMatch (e, (pe, pes)) ->
     fprintf ppf "@[<v 2>";
-    fprintf ppf "match %a with@ " pp_expr e;
+    fprintf ppf "match %a with@ " no_pars e;
     List.iter
-      (fun (p, e) -> fprintf ppf "@[| %a -> %a@]@ " pp_pattern p pp_expr e)
+      (fun (p, e) -> fprintf ppf "@[| %a -> %a@]@ " pp_pattern p no_pars e)
       (pe :: pes);
     fprintf ppf "@]"
   | EConstruct ("Cons", Some (ETuple (head, tail, []))) ->
-    fprintf ppf "@[%a :: %a@]" no_pars head maybe_pars tail
+    fprintf ppf "@[(%a :: %a)@]" no_pars head maybe_pars tail
   | EConstruct ("Nil", None) -> fprintf ppf "[]"
   | EConstruct (name, None) -> fprintf ppf "%s" name
   | EConstruct (name, Some arg) -> fprintf ppf "@[%s %a@]" name maybe_pars arg
