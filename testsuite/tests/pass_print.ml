@@ -1,3 +1,12 @@
+(*
+test
+  (targets rv64 amd64)
+  (run
+    (stdout
+     "rukaml_print_int 21"
+     "rukaml_print_int 22"))
+*)
+
 let revapply a f = f a
 let apply f a = f a
 

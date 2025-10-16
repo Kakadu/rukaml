@@ -1,3 +1,15 @@
+(*
+test
+  (targets amd64)
+  (run
+    (stdout
+     "GC statistics"
+     "Total allocations: 18(words)"
+     "Currently allocated: 9(words)"
+     "Current bank: 0"
+     "rukaml_print_int 42"))
+*)
+
 let fst p =
   let (a, b) = p in
   a

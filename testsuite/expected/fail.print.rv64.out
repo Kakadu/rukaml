@@ -1,0 +1,44 @@
+
+.globl prod
+prod:
+  addi sp, sp, -16 # allocate for Pad, RA, and 0 locals 
+  sd ra, (sp)
+  ld t0, 32(sp)
+  li t1, 2
+  mulw t2, t0, t1
+  mv t2, a0
+  ld ra, (sp)
+  addi sp, sp, 16 # DEallocate for Pad, RA and 0 locals variables 
+  ret # prod
+
+.globl main
+main:
+# this is main
+  addi sp, sp, -32 # allocate for Pad, RA, and 2 locals u, w
+  sd ra, 16(sp)
+# Allocate args to call fun "prod" with args
+  addi sp, sp, -32 # last_pos = 8
+  li t0, 1
+  sd t0, (sp) # constant
+  li t0, 8
+  sd t0, 8(sp) # constant
+  li t0, 10
+  sd t0, 16(sp) # constant
+  call prod
+  addi sp, sp, 32 # deallocate 3 args
+  sd a0, 8(sp)
+  addi sp, sp, -16
+  sd ra, 8(sp)
+  ld t0, 24(sp)
+  sd t0, (sp)
+  call rukaml_print_int
+  ld ra, 8(sp)
+  sd a0, 16(sp)
+  addi sp, sp, 16
+  li a0, 0
+  ld ra, 16(sp)
+  addi sp, sp, 32 # DEallocate for Pad, RA and 2 locals variables u, w
+#  fin
+  addi a0, x0, 0 # Use 0 return code
+  addi a7, x0, 93 # Service command code 93 terminates
+  ecall # Call linux to terminate the program

@@ -1,3 +1,14 @@
+(*
+test
+  (targets rv64 amd64)
+  (run
+    (stdout
+     "rukaml_print_int 1111111111"
+     "rukaml_print_int 1"
+     "rukaml_print_int 10"
+     "rukaml_print_int 10"))
+*)
+
 let wrap f = if 1 = 1 then f else f
 
 let test3 a b c =
