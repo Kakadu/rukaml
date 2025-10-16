@@ -18,12 +18,15 @@ let group_applications l r =
 ;;
 
 let rec pp_pattern ppf = function
-  | Parsetree.PVar s -> fprintf ppf "@[%s@]" s
+  | PVar s -> fprintf ppf "@[%s@]" s
   | PTuple (pa, pb, ps) ->
     fprintf ppf "@[(%a" pp_pattern pa;
     List.iter (fprintf ppf ", %a" pp_pattern) (pb :: ps);
     fprintf ppf ")@]"
   | PAny -> fprintf ppf "@[_@]"
+  | PConstruct ("Cons", Some (PTuple (head, tail, []))) ->
+    fprintf ppf "@[(%a :: %a)@]" pp_pattern head pp_pattern tail
+  | PConstruct ("Nil", None) -> fprintf ppf "[]"
   | PConstruct (name, None) -> fprintf ppf "@[%s@]" name
   | PConstruct (name, Some arg) -> fprintf ppf "@[%s (%a)@]" name pp_pattern arg
 ;;
@@ -104,8 +107,11 @@ let rec pp_expr_helper ?(ps = true) ppf = function
       (fun (p, e) -> fprintf ppf "@[| %a -> %a@]@ " pp_pattern p pp_expr e)
       (pe :: pes);
     fprintf ppf "@]"
-  | EConstruct (name, None) -> fprintf ppf "@[%s@]" name
-  | EConstruct (name, Some arg) -> fprintf ppf "@[%s (%a)@]" name pp_expr arg
+  | EConstruct ("Cons", Some (ETuple (head, tail, []))) ->
+    fprintf ppf "@[%a :: %a@]" no_pars head maybe_pars tail
+  | EConstruct ("Nil", None) -> fprintf ppf "[]"
+  | EConstruct (name, None) -> fprintf ppf "%s" name
+  | EConstruct (name, Some arg) -> fprintf ppf "@[%s %a@]" name maybe_pars arg
 
 and no_pars ppf = pp_expr_helper ~ps:false ppf
 and maybe_pars ppf = pp_expr_helper ~ps:true ppf
