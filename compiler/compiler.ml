@@ -12,12 +12,15 @@ let run_single text =
   let stru = List.concat_map ~f:CConv.structure_item stru in
   (* List.iter ~f:(Format.printf "%a\n%!" Pprint.pp_value_binding) stru; *)
   let* xs =
-    let f acc (Parsetree.SValue ((_, Parsetree.PVar name, _) as vb)) =
-      let* ans, env = acc in
-      let* env, rez = Inferencer.vb ~env vb in
-      let ident = Inferencer.Type_env.ident_of_string_exn name env in
-      Result.return
-        (rez :: ans, Inferencer.Type_env.extend ~varname:name ident rez.tvb_typ env)
+    let f acc = function
+      | Parsetree.SValue ((_, PVar name, _) as vb) ->
+        let* ans, env = acc in
+        let* env, rez = Inferencer.vb ~env vb in
+        let ident = Inferencer.Type_env.ident_of_string_exn name env in
+        Result.return
+          (rez :: ans, Inferencer.Type_env.extend ~varname:name ident rez.tvb_typ env)
+      | Parsetree.SValue _ -> failwith "not implemented"
+      | Parsetree.SType _ -> failwith "not impelemented"
     in
     List.fold stru ~init:(Result.return ([], Inferencer.start_env)) ~f
     |> Result.map ~f:(fun (vbs, _) -> List.rev vbs)
