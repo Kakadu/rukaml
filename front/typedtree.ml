@@ -23,6 +23,7 @@ type ty = { mutable typ_desc : type_desc }
 and type_desc =
   | Prim of string
   | V of var_info
+  | Weak of binder
   | Arrow of ty * ty
   | TPoly of ty * string
   | TLink of ty
@@ -32,6 +33,7 @@ and type_desc =
 type scheme = S of binder_set * ty [@@deriving show { with_path = false }]
 
 let tarrow l r = { typ_desc = Arrow (l, r) }
+let tweak t = { typ_desc = Weak t }
 let tprim s = { typ_desc = Prim s }
 let tv binder ~level = { typ_desc = V { binder; var_level = level } }
 let tlink t = { typ_desc = TLink t }
@@ -86,7 +88,7 @@ let rec type_of_expr = function
 let type_without_links =
   let rec helper t =
     match t.typ_desc with
-    | Prim _ | V _ -> t
+    | Prim _ | V _ | Weak _ -> t
     | Arrow (l, r) -> tarrow (helper l) (helper r)
     | TPoly (a, t) -> tpoly (helper a) t
     | TLink ty -> helper ty

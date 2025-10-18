@@ -18,6 +18,7 @@ type ty = { mutable typ_desc : type_desc }
 and type_desc =
   | Prim of string
   | V of var_info
+  | Weak of binder
   | Arrow of ty * ty
   | TPoly of ty * string
   | TLink of ty
@@ -34,6 +35,7 @@ val pp_scheme : Format.formatter -> scheme -> unit
 val show_scheme : scheme -> string
 val tarrow : ty -> ty -> ty
 val tprim : string -> ty
+val tweak : binder -> ty
 val tpoly : ty -> string -> ty
 val tv : binder -> level:int -> ty
 val tlink : ty -> ty

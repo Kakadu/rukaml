@@ -3,7 +3,7 @@
   $ run << EOF
   > let foo = fun x -> fun y -> if x then y else true
   > EOF
-  let foo: bool -> bool -> bool =
+  let foo: '_1 -> '_2 -> bool =
     fun x y -> (if x then y else true)
 
   $ run << EOF
@@ -15,5 +15,5 @@
   $ run << EOF
   > let foo = fun x -> if x then print 52 else ()
   > EOF
-  let foo: bool -> unit =
+  let foo: '_1 -> unit =
     fun x -> (if x then print 52 else ())
