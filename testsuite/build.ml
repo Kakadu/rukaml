@@ -48,16 +48,9 @@ module Target = struct
 
   (** Compile input file to target's IL.
       Artifact's name is derived from input path - prefix path *)
-  let compile (tgt : t) ~(input : Path.t) ~(prefix : Path.t) ~promote : [ `Compile ] art =
+  let compile (tgt : t) ~name ~(input : Path.t) ~promote : [ `Compile ] art =
     let tgt_name = show_name tgt.name in
-    let name =
-      Path.chop_prefix_if_exists input ~prefix
-      |> Path.to_parts
-      |> List.map ~f:PPart.to_string
-      |> String.concat ~sep:"."
-      |> String.chop_suffix_if_exists ~suffix:".ml"
-      |> fun x -> String.concat [ x; "."; tgt_name; ".out" ]
-    in
+    let name = String.concat [ name; "."; tgt_name; ".out" ] in
     let rule =
       spf
         compile_rule
@@ -231,7 +224,8 @@ module TestSpec = struct
     }
 
   type t =
-    { targets : target list
+    { src : Path.t option
+    ; targets : target list
     ; run : run option
     }
 
@@ -274,11 +268,18 @@ module TestSpec = struct
     return { exit; stdout }
   ;;
 
+  let psrc =
+    let* () = string "src" in
+    let* path = atom in
+    return (Path.of_string path)
+  ;;
+
   let pspec =
     let* () = string "test" in
+    let* src = option None (list psrc >>| Option.some) in
     let* targets = list (string "targets" *> many1 ptarget) in
     let* run = option None (list prun >>| Option.some) in
-    return { targets; run }
+    return { src; targets; run }
   ;;
 
   let of_file (path : Path.t) =
@@ -343,18 +344,26 @@ module Test = struct
 
   (** Generate dune rules for the test. Requires project root path *)
   let gen test ~root : dune_rules =
+    let name =
+      Path.chop_prefix_if_exists test.path ~prefix:(Path.of_string "tests")
+      |> Path.to_parts
+      |> List.map ~f:PPart.to_string
+      |> String.concat ~sep:"."
+      |> String.chop_suffix_if_exists ~suffix:".ml"
+    in
+
     let input = Path.append Path.dot_dot test.path in
+    let input =
+      Option.value_map
+        test.spec.src
+        ~default:input
+        ~f:(Path.append (Path.dirname_defaulting_to_dot input))
+    in
 
     let f acc (tgt_spec : TestSpec.target) =
       let tgt = target_of_name tgt_spec.name ~root in
 
-      let compiled =
-        Target.compile
-          tgt
-          ~input
-          ~prefix:(Path.of_string "../tests")
-          ~promote:tgt_spec.promote
-      in
+      let compiled = Target.compile tgt ~name ~input ~promote:tgt_spec.promote in
       let expected = compiled.rule :: acc.expected in
 
       let assembled =
@@ -365,10 +374,9 @@ module Test = struct
         Path.of_string (spf "back/%s/rukaml_stdlib.o" (Target.show_name tgt.name))
       in
       let runtime = Path.append Path.dot_dot @@ Path.append root runtime in
-
       let linked = Target.link tgt { dir = Path.dot; art = assembled } ~runtime in
-      let artifacts = assembled.rule :: linked.rule :: acc.artifacts in
 
+      let artifacts = assembled.rule :: linked.rule :: acc.artifacts in
       let artifacts, cram =
         match test.spec.run with
         | None -> artifacts, acc.cram
