@@ -1,3 +1,13 @@
+(*
+test
+  (targets amd64)
+  (flags (-cps))
+  (run
+    (stdout
+      "rukaml_print_int 8"
+      "Total closure allocations: 55"))
+*)
+
 let fibst m =
   let rec aux n =
     if n = 0

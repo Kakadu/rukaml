@@ -1,3 +1,13 @@
+(*
+test
+  (targets amd64)
+  (flags (-cps))
+  (run
+    (stdout
+      "rukaml_print_int 2"
+      "Total closure allocations: 63"))
+*)
+
 let rec fack n =
   if n = 0
   then fun k -> k 1
