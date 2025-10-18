@@ -1,3 +1,9 @@
+(*
+test
+  (targets rv64)
+  (run (stdout "rukaml_print_int 8"))
+*)
+
 let id x = x
 
 let rec fib n k =

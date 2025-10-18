@@ -1,3 +1,15 @@
+(*
+test
+  (targets rv64 amd64)
+  (run
+    (stdout
+      "rukaml_print_int 1000"
+      "rukaml_print_int 100"
+      "rukaml_print_int 1"
+      "rukaml_print_int 10"
+      "rukaml_print_int 100"))
+*)
+
 let add a b c =
   let wa = print a in
   let wb = print b in

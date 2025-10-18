@@ -1,3 +1,9 @@
+(*
+test
+  (targets rv64 amd64)
+  (run (stdout "rukaml_print_int 255"))
+*)
+
 let revapply x k =
    k x
 let const0 x = 0
