@@ -1,4 +1,9 @@
-(* test (targets rv64 amd64) (run) *)
+(*
+test
+  (targets rv64 amd64)
+  (flags () (-cps) (-cps -call_arity))
+  (run)
+*)
 
 let revapply x k = k x
 let main =

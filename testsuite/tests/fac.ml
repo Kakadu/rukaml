@@ -1,10 +1,11 @@
 (*
 test
   (targets rv64 amd64)
+  (flags () (-cps) (-cps -call_arity))
   (run (stdout "rukaml_print_int 24"))
 *)
 
-let fac n =
+let rec fac n =
   if n = 1 then 1
   else
     let p = n - 1 in
