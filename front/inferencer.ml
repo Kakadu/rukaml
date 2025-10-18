@@ -1,7 +1,8 @@
 (* http://dev.stephendiehl.com/fun/006_hindley_milner.html *)
 
-open Base
 open Typedtree
+module IntMap = Map.Make (Int)
+open Base
 module Format = Stdlib.Format (* silencing a warning *)
 
 let use_logging = false
@@ -32,6 +33,8 @@ let pp_error ppf : error -> _ = function
 ;;
 
 type fresh_counter = int
+
+let weak_counter = ref 0 (* TODO(nikita): implement without side effects *)
 
 module R : sig
   type 'a t
@@ -163,7 +166,7 @@ end = struct
       | TPoly (a, t) -> tpoly (helper a) t
       | TProd (a, b, ts) -> tprod (helper a) (helper b) (List.map ~f:helper ts)
       | TLink ty -> helper ty
-      | Prim _ -> typ
+      | Prim _ | Weak _ -> typ
     in
     helper
   ;;
@@ -205,6 +208,7 @@ module Type = struct
       | V ({ var_level; _ } as v) ->
         let min_level = Int.min var_level info.var_level in
         v.var_level <- min_level
+      | Weak _ -> ()
       | Arrow (l, r) ->
         helper l;
         helper r
@@ -224,13 +228,29 @@ module Type = struct
       | Occurs -> true
   ;;
 
+  let make_weak =
+    let rec helper { typ_desc } =
+      match typ_desc with
+      | TLink t -> tlink (helper t)
+      | Prim p -> tprim p
+      | V _ ->
+        Int.incr weak_counter;
+        tweak !weak_counter
+      | TPoly (a, _) -> helper a
+      | Weak w -> tweak w
+      | Arrow (l, r) -> tarrow (helper l) (helper r)
+      | TProd (a, b, ts) -> tprod (helper a) (helper b) (List.map ts ~f:helper)
+    in
+    helper
+  ;;
+
   let free_vars =
     let rec helper acc { typ_desc } =
       match typ_desc with
-      | Prim _ -> acc
+      | Prim _ | Weak _ -> acc
       | V { binder; _ } -> Var_set.add binder acc
       | TLink t -> helper acc t
-      | TPoly _ -> failwith "unimpl freevars for poly type"
+      | TPoly (a, _) -> helper acc a
       | Arrow (l, r) -> helper (helper acc l) r
       | TProd (a, b, ts) -> List.fold_left ts ~init:(helper (helper acc a) b) ~f:helper
     in
@@ -361,7 +381,8 @@ let unify l r =
     | TProd _, Prim _
     | Prim _, TProd _
     | Arrow _, Prim _
-    | Prim _, Arrow _ -> fail (`UnificationFailed (l, r))
+    | Prim _, Arrow _
+    | _ -> fail (`UnificationFailed (l, r))
   in
   helper l r
 ;;
@@ -390,7 +411,7 @@ let generalize : level:int -> Type.t -> Scheme.t =
     | TPoly (a, _) -> helper acc a
     | Arrow (l, r) -> helper (helper acc l) r
     | TProd (a, b, tl) -> List.fold_left ~f:helper tl ~init:(helper (helper acc a) b)
-    | Prim _ -> acc
+    | Prim _ | Weak _ -> acc
   in
   fun ty ->
     (* log "generalize: @[%a@]" pp_ty ty; *)
@@ -486,6 +507,7 @@ let infer env expr =
                r
            in
            let exprs = List.rev exprs in
+           let ty = Type.make_weak ty in
            return (array_typ ty, TArray (exprs, ty)))
       (* lambda abstraction *)
       | ELam (PVar x, e1) ->
@@ -504,6 +526,7 @@ let infer env expr =
         let* t1, te1 = helper env e1 in
         let* t2, te2 = helper env e2 in
         let* tv = fresh_var ~level:0 in
+        (* let tv = Type.make_weak tv in *)
         let* () = unify t1 (tarrow t2 tv) in
         (* log "t1 = %a" pp_ty t1; *)
         (* log "t2 = %a" pp_ty t2; *)

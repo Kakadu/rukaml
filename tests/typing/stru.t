@@ -181,7 +181,7 @@ tuples
   > let f = [||]
   Parsed.
   let f = [||]
-  let f: unit array =
+  let f: '_1 array =
     [||]
 
   $ cat << EOF | ./REPL.exe -stru -
@@ -196,3 +196,15 @@ tuples
   Parsed.
   let f = [|1; true; 2; 3; 4|]
   Error: unification failed on int and bool
+
+
+  $ cat << EOF | ./REPL.exe -stru -
+  > let f = [|[||]|]
+  > let f = [|[||]|]
+  Parsed.
+  let f = [|[||]|]
+  let f = [|[||]|]
+  let f: '_weak1 array =
+    [|[||]|]
+  let f: '_weak2 array =
+    [|[||]|]
