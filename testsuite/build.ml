@@ -42,13 +42,13 @@ module Target = struct
  (deps %s)
  (mode %s)
  (action
-  (run %%{project_root}/back/%s/%s_compiler.exe %%{deps} -o %%{target})))
+  (run %%{project_root}/back/%s/%s_compiler.exe %%{deps} %s -o %%{target})))
 |}
   ;;
 
   (** Compile input file to target's IL.
       Artifact's name is derived from input path - prefix path *)
-  let compile (tgt : t) ~name ~(input : Path.t) ~promote : [ `Compile ] art =
+  let compile (tgt : t) ~name ~(input : Path.t) ~flags ~promote : [ `Compile ] art =
     let tgt_name = show_name tgt.name in
     let name = String.concat [ name; "."; tgt_name; ".out" ] in
     let rule =
@@ -59,6 +59,7 @@ module Target = struct
         (if promote then "promote" else "standard")
         tgt_name
         tgt_name
+        (String.concat ~sep:" " flags)
     in
     { name; rule }
   ;;
@@ -226,6 +227,7 @@ module TestSpec = struct
   type t =
     { src : Path.t option
     ; targets : target list
+    ; flags : string list list
     ; run : run option
     }
 
@@ -268,22 +270,22 @@ module TestSpec = struct
     return { exit; stdout }
   ;;
 
-  let psrc =
-    let* () = string "src" in
-    let* path = atom in
-    return (Path.of_string path)
-  ;;
-
   let pspec =
     let* () = string "test" in
+    let psrc = string "src" *> atom >>| Path.of_string in
+    let pflags = string "flags" *> many1 (list (many atom)) in
+
     let* src = option None (list psrc >>| Option.some) in
     let* targets = list (string "targets" *> many1 ptarget) in
+    let* flags = option [ [] ] (list pflags) in
     let* run = option None (list prun >>| Option.some) in
-    return { src; targets; run }
+    return { src; targets; flags; run }
   ;;
 
   let of_file (path : Path.t) =
-    let ( let* ), return, fail = Result.( >>= ), Result.return, Result.fail in
+    let ( let* ), return = Result.( >>= ), Result.return in
+    let fail msg = Result.fail @@ msg ^ spf " in %s" (Path.to_string path) in
+
     let rec parse_next parse file =
       let* line = In_channel.input_line file |> Result.of_option ~error:"eof" in
       match parse (`String line) with
@@ -360,10 +362,12 @@ module Test = struct
         ~f:(Path.append (Path.dirname_defaulting_to_dot input))
     in
 
-    let f acc (tgt_spec : TestSpec.target) =
-      let tgt = target_of_name tgt_spec.name ~root in
+    let gen_tgt (spec : TestSpec.target) ~suffix acc flags =
+      let tgt = target_of_name spec.name ~root in
 
-      let compiled = Target.compile tgt ~name ~input ~promote:tgt_spec.promote in
+      let compiled =
+        Target.compile tgt ~name:(name ^ suffix) ~input ~flags ~promote:spec.promote
+      in
       let expected = compiled.rule :: acc.expected in
 
       let assembled =
@@ -393,7 +397,10 @@ module Test = struct
 
       { expected; artifacts; cram }
     in
-    List.fold test.spec.targets ~init:rules_empty ~f
+
+    List.fold test.spec.targets ~init:rules_empty ~f:(fun acc tgt ->
+      List.foldi test.spec.flags ~init:acc ~f:(fun idx ->
+        gen_tgt tgt ~suffix:(".fl" ^ Int.to_string idx)))
   ;;
 end
 
