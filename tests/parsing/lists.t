@@ -64,7 +64,7 @@
   Parsed: (f x :: (a :: (b :: [])))
 #
 
-# lib
+# structures
   $ cat << EOF | ./REPL.exe -stru -
   > let rec length items =
   >   match items with
