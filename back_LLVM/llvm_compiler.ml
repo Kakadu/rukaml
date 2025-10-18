@@ -21,7 +21,8 @@ module ToLLVM = struct
     in
     let ( let* ) x f = Result.bind x f in
     let* stru = Parsing.parse_structure text |> promote_error in
-    (* TODO (psi) : fix here
+    (* (psi) Temporarily commented out — incompatible with ADT
+
        let ( let+ ) x f = Result.map f x in
     let* stru =
       if not cfg.cps_on
@@ -34,7 +35,8 @@ module ToLLVM = struct
         if not cfg.call_arity
         then [ OneACPS.cps_vb_to_parsetree_vb cps_vb ]
         else [ CAA.call_arity_anal cps_vb |> MACPS.cps_vb_to_parsetree_vb ]
-    in *)
+    in
+    *)
     let stru =
       let init = CConv.standart_globals, [] in
       Stdlib.ListLabels.fold_left
