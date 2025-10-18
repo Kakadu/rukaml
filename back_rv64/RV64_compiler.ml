@@ -14,7 +14,8 @@ let frontend cfg =
   in
   let ( let* ) x f = Result.bind x f in
   let* stru = Parsing.parse_structure text |> promote_error in
-  (* TODO (psi)  : fix
+  (* (psi) Temporarily commented out — incompatible with ADT
+
   let ( let+ ) x f = Result.map f x in
   let* stru =
     if not cfg.cps_on
@@ -38,7 +39,8 @@ let frontend cfg =
       else
         let open CPSLang.OneACPS in
         hndl_cps cps_vb_to_parsetree_vb pp_vb cps_vb
-  in *)
+  in
+  *)
   if cfg.stop_after = SA_CPS then exit 0;
   let stru =
     let init = CConv.standart_globals, [] in

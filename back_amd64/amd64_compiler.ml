@@ -15,8 +15,8 @@ let frontend cfg =
   let ( let* ) x f = Result.bind x f in
   let* stru = Parsing.parse_structure text |> promote_error in
   let () = if cfg.dsource then Format.printf "%a\n%!" Pprint.pp_stru stru in
-  (* TODO (psi) : fix this
-  
+  (* (psi) Temporarily commented out — incompatible with ADT
+
   let ( let+ ) x f = Result.map f x in
   let* stru =
     if not cfg.cps_on
@@ -40,7 +40,8 @@ let frontend cfg =
       else
         let open CPSLang.OneACPS in
         hndl_cps cps_vb_to_parsetree_vb pp_vb cps_vb
-  in *)
+  in
+  *)
   let stru =
     let init = CConv.standart_globals, [] in
     Stdlib.ListLabels.fold_left
