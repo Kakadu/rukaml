@@ -9,8 +9,9 @@ let spf = Printf.sprintf
 (** Compilation target *)
 module Target = struct
   type name =
-    | Amd64
-    | Rv64
+    | AMD64
+    | RV64
+    | LLVM
   [@@deriving show { with_path = false }]
 
   type t =
@@ -46,8 +47,7 @@ module Target = struct
 |}
   ;;
 
-  (** Compile input file to target's IL.
-      Artifact's name is derived from input path - prefix path *)
+  (** Compile input file to target's IL *)
   let compile (tgt : t) ~name ~(input : Path.t) ~flags ~promote : [ `Compile ] art =
     let tgt_name = show_name tgt.name in
     let name = String.concat [ name; "."; tgt_name; ".out" ] in
@@ -238,8 +238,9 @@ module TestSpec = struct
     let pname =
       atom
       >>= function
-      | "amd64" -> return Target.Amd64
-      | "rv64" -> return Target.Rv64
+      | "amd64" -> return Target.AMD64
+      | "rv64" -> return Target.RV64
+      | "llvm" -> return Target.LLVM
       | _ -> fail "invalid target"
     in
     let pdefault =

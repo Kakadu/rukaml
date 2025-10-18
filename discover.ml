@@ -124,5 +124,17 @@ let () =
     }
   in
   let toolchain_rv64 = discover_toolchain cfg defaults_rv64 ~suffix:"rv64" in
-  export_toolchain toolchain_rv64 ~suffix:"rv64"
+  export_toolchain toolchain_rv64 ~suffix:"rv64";
+  log "";
+
+  let clang = "clang" in
+  let defaults_llvm =
+    { cc = { defaults_amd64.cc with path = clang }
+    ; as_ = { path = clang; flags = "-x ir -c" }
+    ; ld = { path = clang; flags = "" }
+    ; run = { path = ""; flags = "" }
+    }
+  in
+  let toolchain_llvm = discover_toolchain cfg defaults_llvm ~suffix:"llvm" in
+  export_toolchain toolchain_llvm ~suffix:"llvm"
 ;;

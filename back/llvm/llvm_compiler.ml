@@ -58,8 +58,6 @@ module ToLLVM = struct
     (* TODO(Kakadu): fix LLVM backend to make optimization applicable *)
     Compile_lib.ANF.disable_arity_inline ();
     let anf = Compile_lib.ANF.(anf_stru typedtree |> simplify_stru) in
-    Format.printf "After ANF transformation.\n%!";
-    Format.printf "%a\n%!" Compile_lib.ANF.pp_stru anf;
     LLVM_impl.codegen anf cfg.out_file |> promote_error
   ;;
 end

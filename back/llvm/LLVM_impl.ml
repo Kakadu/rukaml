@@ -264,13 +264,10 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
 
 let codegen : ANF.vb list -> _ =
   fun anf out_file ->
-  Format.printf "%a\n%!" Compile_lib.ANF.pp_stru anf;
   let context = Llvm.global_context () in
   let builder = Llvm.builder context in
   let () = assert (Llvm_executionengine.initialize ()) in
   let the_module = Llvm.create_module context "main" in
-  Llvm.set_target_triple "x86_64-pc-linux-gnu" the_module;
-  (* TODO: experiment with other targets. *)
   let _the_execution_engine = Llvm_executionengine.create the_module in
   let module LL = (val LL.make context builder the_module) in
   let i64_type = Llvm.i64_type context in

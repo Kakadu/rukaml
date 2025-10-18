@@ -31,12 +31,18 @@
  (modules llvm_compiler)
  (libraries stdio LL Frontend cconv compile_lib LLVM_impl))
 
-(cram
- (deps ./llvm_compiler.exe))
-
 (library
  (name llvm_backend)
  (modules back_llvm)
  (flags
   (:standard -linkall))
  (libraries cconv compile_lib llvm LL))
+
+(rule
+ (target rukaml_stdlib.o)
+ (enabled_if
+  (not
+   (= none %{read:../../cc_llvm})))
+ (deps rukaml_stdlib.c)
+ (action
+  (system "%{read:../../cc_llvm} -c %{deps} -o %{target}")))

@@ -19,17 +19,3 @@
  (name compiler)
  (modules compiler)
  (libraries stdio base Frontend compile_lib))
-
-(rule
- (targets rukaml_stdlib.o)
- (deps rukaml_stdlib.c)
- (action
-  (run
-   gcc
-   -g
-   %{deps}
-   -c
-   -o
-   %{targets}
-   ;
-   )))

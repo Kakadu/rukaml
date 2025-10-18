@@ -16,7 +16,11 @@
   cc_rv64
   as_rv64
   ld_rv64
-  run_rv64)
+  run_rv64
+  cc_llvm
+  as_llvm
+  ld_llvm
+  run_llvm)
  (action
   (run ./discover.exe)))
 
