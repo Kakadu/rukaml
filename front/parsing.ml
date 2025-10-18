@@ -101,7 +101,7 @@ let keyword kwd =
      else ws *> return (log "keyword '%s' parsed" kwd)
 ;;
 
-let name_fabric regexp error_message =
+let parse_name regexp error_message =
   let* chs = ws *> take_while1 is_char_valid_for_name in
   if is_keyword chs
   then fail "unexpected keyword"
@@ -113,31 +113,31 @@ let name_fabric regexp error_message =
 let var_name =
   let regexp = "^[a-z_][a-zA-Z0-9_]*$" in
   let message = "not a variable name" in
-  name_fabric regexp message
+  parse_name regexp message
 ;;
 
 let constructor_name =
   let regexp = "^[A-Z][a-zA-Z0-9_]*$" in
   let message = "not a constructor name" in
-  name_fabric regexp message
+  parse_name regexp message
 ;;
 
 let type_name =
   let regexp = "^[a-z_][a-zA-Z0-9_]*$" in
   let message = "not a type name" in
-  name_fabric regexp message
+  parse_name regexp message
 ;;
 
 let type_param_name =
   let regexp = "^'[a-zA-Z][a-zA-Z0-9_]*$" in
   let message = "not a type param name" in
-  name_fabric regexp message
+  parse_name regexp message
 ;;
 
 let constructor_name =
   let regexp = "^[A-Z][a-zA-Z0-9_]*$" in
   let message = "not a constructor name" in
-  name_fabric regexp message
+  parse_name regexp message
 ;;
 
 let ident = var_name
@@ -157,8 +157,7 @@ let econs hd tl = EConstruct ("Cons", Some (ETuple (hd, tl, [])))
 let patt_basic d =
   ws
   *> fix (fun _self ->
-    fail ""
-    <|> parens (d.patt d)
+    parens (d.patt d)
     <|> char '_' *> return PAny
     <|> (var_name >>= fun v -> return (pvar v) <* trace_pos v)
     <|> string "[]" *> return pnil
@@ -439,7 +438,6 @@ let type_definition =
 ;;
 
 let value_binding = letdef (pack.expr pack) <* ws
-let value_bindings = many1 value_binding
 
 let structure =
   many1
@@ -448,11 +446,6 @@ let structure =
 
 let parse_structure str =
   parse_string ~consume:All structure str
-  |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
-;;
-
-let parse_value_bindings str =
-  parse_string ~consume:All (many1 value_binding) str
   |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
 ;;
 
@@ -473,4 +466,11 @@ let parse_vb_exn str =
     Format.eprintf "Error: %s\n" e;
     failwith "Error during parsing"
   | Ok r -> r
+;;
+
+let value_bindings = many1 value_binding
+
+let parse_value_bindings str =
+  parse_string ~consume:All value_bindings str
+  |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
 ;;

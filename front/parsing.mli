@@ -18,7 +18,10 @@ val pattern : Parsetree.pattern Angstrom.t
 val core_type : Parsetree.core_type Angstrom.t
 val keyword : string -> unit Angstrom.t
 
-(** [ ^[a-zA-Z][a-zA-Z0-9_]*$ ] *)
+(** [ ^[a-z_][a-zA-Z0-9_]*$ ] *)
+val var_name : string Angstrom.t
+
+(** Alias of [ var_name ] *)
 val ident : string Angstrom.t
 
 (**[ ^[A-Z][a-zA-Z0-9_]*$ ]*)
