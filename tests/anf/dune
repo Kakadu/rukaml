@@ -1,13 +1,7 @@
 (executable
- (name REPL)
- (modules REPL)
- (libraries stdio compile_lib Frontend base))
+ (name run)
+ (modules run)
+ (libraries base stdio compile_lib Frontend))
 
 (cram
- (deps ./REPL.exe))
-
-(cram
- (deps
-  %{project_root}/back_amd64/amd64_compiler.exe
-  %{project_root}/back_amd64/rukaml_stdlib.o)
- (applies_to large))
+ (deps run.exe))

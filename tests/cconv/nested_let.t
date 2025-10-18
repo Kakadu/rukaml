@@ -1,4 +1,4 @@
-  $ cat << EOF | ./REPL.exe -
+  $ cat << EOF | ./run.exe -
   > let main =
   >   let id x = x in
   >   id 0
@@ -8,7 +8,7 @@
   let id x = x
   let main = id 0
 
-  $ cat << EOF | ./REPL.exe -
+  $ cat << EOF | ./run.exe -
   > let f x =
   > let rec aux n y =
   >    let m = aux (n - 1) in

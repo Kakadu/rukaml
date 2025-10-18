@@ -1,5 +1,5 @@
 Discovered by @ns-58
-  $ cat << EOF | ./REPL.exe -
+  $ cat << EOF | ./run.exe -
   > let main =
   >  let k1 x = x in
   >  let k2 x = x in

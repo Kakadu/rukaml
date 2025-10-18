@@ -7,7 +7,7 @@ let run_single parser pp pp_err text =
   let ast = Angstrom.parse_string ~consume:All parser text in
   match ast with
   | Error s -> printf "Error: %a\n%!" pp_err s
-  | Result.Ok ast -> printf "@[<v>Parsed.@ @[%a@]@]" pp ast
+  | Result.Ok ast -> pp std_formatter ast
 ;;
 
 type mode =
@@ -41,7 +41,6 @@ let () =
   Parsing.set_logging opts.log;
   Parsing.set_logging false;
   let s = Stdio.In_channel.(input_all stdin) |> String.rstrip in
-  (* Format.printf "%S\n%!" s; *)
   (match opts.mode with
    | ELong -> run_single Parsing.(pack.expr_long pack) Pprint.pp_expr pp_print_string
    | E -> run_single Parsing.(pack.expr pack) Pprint.pp_expr pp_print_string
@@ -51,8 +50,6 @@ let () =
      run_single
        Parsing.structure
        (fun ppf stru ->
-          Format.fprintf ppf "@[<v>@[%a@]@," Pprint.structure stru;
-          (* Format.printf "Parsed: %S\n%!" (Parsetree.show_structure stru); *)
           match Inferencer.structure stru with
           | Result.Ok ty -> fprintf ppf "@[%a@]@ @]" Pprinttyped.pp_stru ty
           | Result.Error e -> fprintf ppf "Error: %a@]" Inferencer.pp_error e)

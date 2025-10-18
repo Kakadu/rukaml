@@ -1,5 +1,5 @@
-# Polyvariadic uncurrying
-  $ cat << EOF | ./REPL.exe -
+Polyvariadic uncurrying
+  $ cat << EOF | ./run.exe -
   > let two f (a,b) = f a b
   > let succ prev f (a,rest) = prev (f a) rest
   > let three = succ two
@@ -35,8 +35,8 @@
   let four =
     succ three 
 
-# let (_,_) = ...
-  $ cat << EOF | ./REPL.exe -
+let (_,_) = ...
+  $ cat << EOF | ./run.exe -
   > let mydiv a b = (a+b, a)
   > let f a b = 
   >    let (u,v) = mydiv a b in 

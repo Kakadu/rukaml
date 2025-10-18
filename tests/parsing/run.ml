@@ -53,7 +53,6 @@ let () =
     "TODO";
   Parsing.set_logging opts.log;
   let s = Stdio.In_channel.(input_all stdin) |> String.rstrip in
-  Format.printf "%S\n%!" s;
   (match opts.mode with
    | ELong ->
      run_single Parsing.(pack.expr_long pack) Pprint.pp_expr Format.pp_print_string

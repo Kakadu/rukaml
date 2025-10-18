@@ -1,4 +1,4 @@
-  $ cat << EOF | ./REPL.exe -
+  $ cat << EOF | ./run.exe -
   > let rec s f g x = f x (g x)
   > EOF
   Parsed: let rec s f g x = f x (g x)
@@ -10,7 +10,8 @@
     let temp1 = f x  in
       let temp2 = g x  in
         temp1 temp2 
-  $ cat << EOF | ./REPL.exe -
+
+  $ cat << EOF | ./run.exe -
   > let sum x = let (a, b) = x in a+b
   > EOF
   Parsed: let sum x = let (a, b) = x in a + b
@@ -25,7 +26,7 @@
         let b = field 1 temp1 in
           (a + b)
 
-  $ cat << EOF | ./REPL.exe -
+  $ cat << EOF | ./run.exe -
   > let small n =
   >   let half = n  in
   >   (if half then 0 else 1)+1123
@@ -42,8 +43,9 @@
                   then 0
                   else 1) in
         (temp1 + 1123)
-# CPS Factorial
-  $ cat << EOF | ./REPL.exe -
+
+CPS Factorial
+  $ cat << EOF | ./run.exe -
   > let rec fack n k =
   >  if n=1 then k 1 else fack (n-1) (fun m -> k (n*m))
   > EOF
@@ -65,8 +67,8 @@
            let temp8 = fresh_1 n k in
              fack temp5 temp8)
 
-# CPS Fibonacci
-  $ cat << EOF | ./REPL.exe -
+CPS Fibonacci
+  $ cat << EOF | ./run.exe -
   > let rec fibk n k =
   >  if n<1 then k 1 else fibk (n-1) (fun p -> fibk (n-2) (fun q -> k (p + q)))
   > EOF
@@ -100,8 +102,8 @@
            let temp14 = fresh_1 n k fibk in
              fibk temp10 temp14)
 
-# Polyvariadic uncurrying
-  $ cat << EOF | ./REPL.exe  -
+Polyvariadic uncurrying
+  $ cat << EOF | ./run.exe  -
   > let two f (a,b) = f a b
   > let succ prev f (a,rest) = prev (f a) rest
   > let three = succ two
@@ -137,8 +139,8 @@
   let four =
     succ three 
 
-# Polyvariadic currying
-  $ cat << EOF | ./REPL.exe -
+Polyvariadic currying
+  $ cat << EOF | ./run.exe -
   > let fresh f arg rest = f (arg, rest)
   > EOF
   Parsed: let fresh f arg rest = f (arg, rest)
@@ -150,8 +152,8 @@
     let temp1 = (arg, rest) in
       f temp1 
 
-# Polyvariadic currying
-  $ cat << EOF | ./REPL.exe -
+Polyvariadic currying
+  $ cat << EOF | ./run.exe -
   > let two f a b = f (a, b)
   > let succ prev f arg = prev (fun rest -> f (arg,rest))
   > let three = succ two
@@ -186,8 +188,8 @@
   let four =
     succ three 
 
-# Polyvariadic map
-  $ cat << EOF | ./REPL.exe -
+Polyvariadic map
+  $ cat << EOF | ./run.exe -
   > let two f (a,b) = (f a, f b)
   > let succ prev f (a, rest) = (f a, prev f rest)
   > let three = succ two
@@ -239,7 +241,7 @@
     let temp13 = (1, 2) in
       two fresh_1 temp13
 
-  $ cat << EOF | ./REPL.exe - #-vcc -vanf
+  $ cat << EOF | ./run.exe - #-vcc -vanf
   > let foo f x = x
   > EOF
   Parsed: let foo f x = x
