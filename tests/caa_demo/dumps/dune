@@ -1,4 +1,6 @@
 (cram
+ (enabled_if
+  (= %{env:DISABLE_CAA_TESTS=true} "false"))
  (deps
   (package rukaml)
   (package MiniML_rv64)

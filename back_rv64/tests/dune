@@ -49,5 +49,7 @@
    (run riscv64-linux-gnu-gcc-13 -g %{stdlib} fac_cps.o -o %{targets}))))
 
 (cram
+ (enabled_if
+  (= %{env:DISABLE_CPS_TESTS=true} "false"))
  (applies_to fac_cps)
  (deps ../rukaml_stdlib.o ./fac_cps.exe fac_cps.s))
