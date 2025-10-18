@@ -15,4 +15,4 @@ $ file `readlink tests.exe`
                  tests      1      1      1      0        0
                asserts      1      1      1      0      n/a
   
-  Elapsed time =    0.000 seconds
+  Elapsed time =    0.001 seconds
