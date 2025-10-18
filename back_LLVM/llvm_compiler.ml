@@ -1,3 +1,5 @@
+[@@@warning "-69"] (* warning: record field cps_on is never read *)
+
 type cfg =
   { mutable out_file : string
   ; mutable input_file : string option (* mutable dump_ir : bool; *)
