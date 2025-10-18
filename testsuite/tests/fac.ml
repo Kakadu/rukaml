@@ -1,7 +1,7 @@
 (*
 test
   (targets rv64 amd64)
-  (run (exit 0) (stdout "rukaml_print_int 120"))
+  (run (stdout "rukaml_print_int 120"))
 *)
 let rec fac n =
   if (n=1)

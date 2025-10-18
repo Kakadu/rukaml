@@ -11,7 +11,7 @@ module Target = struct
   type name =
     | Amd64
     | Rv64
-  [@@deriving sexp, show { with_path = false }]
+  [@@deriving show { with_path = false }]
 
   type t =
     { name : name
@@ -40,7 +40,7 @@ module Target = struct
 (rule
  (target %s)
  (deps %s)
- (mode promote)
+ (mode %s)
  (action
   (run %%{project_root}/back/%s/%s_compiler.exe %%{deps} -o %%{target})))
 |}
@@ -48,7 +48,7 @@ module Target = struct
 
   (** Compile input file to target's IL.
       Artifact's name is derived from input path - prefix path *)
-  let compile (tgt : t) ~(input : Path.t) ~(prefix : Path.t) : [ `Compile ] art =
+  let compile (tgt : t) ~(input : Path.t) ~(prefix : Path.t) ~promote : [ `Compile ] art =
     let tgt_name = show_name tgt.name in
     let name =
       Path.chop_prefix_if_exists input ~prefix
@@ -58,7 +58,15 @@ module Target = struct
       |> String.chop_suffix_if_exists ~suffix:".ml"
       |> fun x -> String.concat [ x; "."; tgt_name; ".out" ]
     in
-    let rule = spf compile_rule name (Path.to_string input) tgt_name tgt_name in
+    let rule =
+      spf
+        compile_rule
+        name
+        (Path.to_string input)
+        (if promote then "promote" else "standard")
+        tgt_name
+        tgt_name
+    in
     { name; rule }
   ;;
 
@@ -113,7 +121,7 @@ module Target = struct
   (mode (promote (until-clean) (into cram)))
   (enabled_if (not (= none %%{read:%s})))
   (action (with-stdout-to %s
-    (echo "  $ %%{read:%s} %s\n  %s\n%s"))))
+    (echo "  $ %%{read:%s} %s%s\n%s"))))
 |}
   ;;
 
@@ -125,32 +133,153 @@ module Target = struct
     let name = String.chop_suffix_if_exists input.art.name ~suffix:".exe" ^ ".t" in
     let input = Path.append_part input.dir (PPart.of_string input.art.name) in
     let cmd = Path.to_string tgt.run_cmd in
-    let stdout = String.concat ~sep:"\n  " stdout in
+    let stdout = List.map stdout ~f:(String.append "\n  ") |> String.concat in
     let exit = if exit = 0 then "" else spf "  [%d]\n" exit in
     let rule = spf run_rule cmd name cmd (Path.to_string input) stdout exit in
     { name; rule }
   ;;
 end
 
+module SexpParser = struct
+  type 'a result =
+    | Failed of string
+    | Parsed of 'a * Sexp.t list
+
+  type 'a t = Sexp.t list -> 'a result
+
+  let fail msg _ = Failed msg
+  let return x inp = Parsed (x, inp)
+
+  let ( >>= ) : 'a t -> ('a -> 'b t) -> 'b t =
+    fun p f inp ->
+    match p inp with
+    | Parsed (r, rest) -> f r rest
+    | Failed _ as err -> err
+  ;;
+  let ( let* ) = ( >>= )
+
+  let ( >>| ) p f = p >>= fun x -> return (f x)
+
+  let ( *> ) p1 p2 = p1 >>= fun _ -> p2
+
+  let ( <|> ) p1 p2 inp =
+    match p1 inp with
+    | Failed _ -> p2 inp
+    | Parsed _ as ok -> ok
+  ;;
+
+  let choice : 'a t list -> 'a t = function
+    | hd :: tl -> List.fold_left ~f:( <|> ) ~init:hd tl
+    | [] -> fail "empty choice"
+  ;;
+
+  let option default p inp =
+    match p inp with
+    | Failed _ -> return default inp
+    | Parsed _ as ok -> ok
+  ;;
+
+  let rec many p inp =
+    match p inp with
+    | Failed _ -> return [] inp
+    | Parsed (r, rest) -> (many p >>= fun rest -> return (r :: rest)) rest
+  ;;
+
+  let many1 p =
+    let* r = p in
+    let* rest = many p in
+    return (r :: rest)
+  ;;
+
+  (** Parse single sexp atom *)
+  let atom : string t = function
+    | Sexp.Atom x :: tl -> return x tl
+    | _ :: _ -> Failed "not an atom"
+    | [] -> Failed "end of input"
+  ;;
+
+  (** Parse expected string in sexp atom *)
+  let string expected : unit t =
+    atom
+    >>= function
+    | actual when String.equal expected actual -> return ()
+    | actual -> fail (spf "wrong string: expected '%s', actual '%s'" expected actual)
+  ;;
+
+  (** Parse sexp list with provided parser *)
+  let list (p : 'a t) : 'a t = function
+    | Sexp.List hd :: tl ->
+      (match p hd with
+       | Parsed (r, []) -> Parsed (r, tl)
+       | Parsed (_, _) -> Failed "list not consumed"
+       | Failed _ as err -> err)
+    | _ :: _ -> Failed "not a list"
+    | [] -> Failed "end of input"
+  ;;
+end
+
 (** Test specification parsed from user comments *)
 module TestSpec = struct
-  (* Records are specifically avoided in spec because
-     deriving sexp produces too many brackets on them.
-     Sum types look cleaner in comparison though require
-     all the parameters to be present in specific order.
+  type target =
+    { name : Target.name
+    ; promote : bool
+    }
 
-     XXX: Move from deriving sexp to custom parser *)
+  type run =
+    { exit : int
+    ; stdout : string list
+    }
 
-  type targets = Targets of Target.name list [@sexp.list] [@@deriving sexp]
+  type t =
+    { targets : target list
+    ; run : run option
+    }
 
-  type stdout = Stdout of string list [@sexp.list] [@@deriving sexp]
-  type exit = Exit of int [@@deriving sexp]
-  type run_spec =
-    | Norun
-    | Run of exit * stdout
-  [@@deriving sexp]
+  open SexpParser
 
-  type t = Test of targets * run_spec [@@deriving sexp]
+  (** name | (name promote) *)
+  let ptarget =
+    let pname =
+      atom
+      >>= function
+      | "amd64" -> return Target.Amd64
+      | "rv64" -> return Target.Rv64
+      | _ -> fail "invalid target"
+    in
+    let pdefault =
+      let* name = pname in
+      return { name; promote = false }
+    in
+    let ppromoted =
+      let* name = pname in
+      let* () = string "promote" in
+      return { name; promote = true }
+    in
+    choice [ pdefault; list ppromoted ]
+  ;;
+
+  let prun =
+    let pexit =
+      string "exit" *> atom
+      >>| Int.of_string_opt
+      >>= function
+      | Some code -> return code
+      | None -> fail "invalid code"
+    in
+    let pstdout = string "stdout" *> many atom in
+
+    let* () = string "run" in
+    let* exit = option 0 (list pexit) in
+    let* stdout = option [] (list pstdout) in
+    return { exit; stdout }
+  ;;
+
+  let pspec =
+    let* () = string "test" in
+    let* targets = list (string "targets" *> many1 ptarget) in
+    let* run = option None (list prun >>| Option.some) in
+    return { targets; run }
+  ;;
 
   let of_file (path : Path.t) =
     let ( let* ), return, fail = Result.( >>= ), Result.return, Result.fail in
@@ -175,10 +304,12 @@ module TestSpec = struct
       match Parsexp.Many.parse_string comment with
       | Error err -> fail (Parsexp.Parse_error.message err)
       | Ok [] -> fail "test spec not found"
-      | Ok list -> return (Sexp.List list)
+      | Ok list -> return list
     in
-    try return (t_of_sexp sexp) with
-    | Sexplib.Conv_error.Of_sexp_error (Failure msg, _) -> fail msg
+    match pspec sexp with
+    | Parsed (r, []) -> return r
+    | Parsed _ -> fail "invalid spec"
+    | Failed msg -> fail msg
   ;;
 end
 
@@ -213,12 +344,17 @@ module Test = struct
   (** Generate dune rules for the test. Requires project root path *)
   let gen test ~root : dune_rules =
     let input = Path.append Path.dot_dot test.path in
-    let (Test (Targets tgt_names, run_spec)) = test.spec in
 
-    let f acc tgt_name =
-      let tgt = target_of_name tgt_name ~root in
+    let f acc (tgt_spec : TestSpec.target) =
+      let tgt = target_of_name tgt_spec.name ~root in
 
-      let compiled = Target.compile tgt ~input ~prefix:(Path.of_string "../tests") in
+      let compiled =
+        Target.compile
+          tgt
+          ~input
+          ~prefix:(Path.of_string "../tests")
+          ~promote:tgt_spec.promote
+      in
       let expected = compiled.rule :: acc.expected in
 
       let assembled =
@@ -234,10 +370,10 @@ module Test = struct
       let artifacts = assembled.rule :: linked.rule :: acc.artifacts in
 
       let artifacts, cram =
-        match run_spec with
-        | Norun -> artifacts, acc.cram
-        | Run (Exit exit, Stdout stdout) ->
-          let art = Target.run tgt { dir = Path.dot_dot; art = linked } ~stdout ~exit in
+        match test.spec.run with
+        | None -> artifacts, acc.cram
+        | Some { exit; stdout } ->
+          let art = Target.run tgt { dir = Path.dot_dot; art = linked } ~exit ~stdout in
           let cram_rule =
             spf
               {|(cram (applies_to %s) (deps ../%s))|}
@@ -249,7 +385,7 @@ module Test = struct
 
       { expected; artifacts; cram }
     in
-    List.fold tgt_names ~init:rules_empty ~f
+    List.fold test.spec.targets ~init:rules_empty ~f
   ;;
 end
 
