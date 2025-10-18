@@ -11,7 +11,6 @@ type pattern =
   | PVar of string
   | PTuple of pattern * pattern * pattern list
   | PConstruct of string * pattern option
-(* | PRecord of (string * pattern) list *)
 
 val pp_pattern : Format.formatter -> pattern -> unit
 val show_pattern : pattern -> string
@@ -25,8 +24,6 @@ type rec_flag =
 val pp_rec_flag : Format.formatter -> rec_flag -> unit
 val show_rec_flag : rec_flag -> string
 
-type 'a list1 = 'a * 'a list
-
 type expr =
   | EUnit
   | EConst of const (** Constant *)
@@ -39,29 +36,35 @@ type expr =
   | EConstruct of string * expr option (** ConstructorName(expr) *)
   | EMatch of expr * (pattern * expr) list1 (** match expr with ... *)
 
-type value_binding = rec_flag * pattern * expr (* let rec? .. = ... *)
+and 'a list1 = 'a * 'a list
+
+type value_binding = rec_flag * pattern * expr [@@deriving show { with_path = false }]
 
 type type_declaration =
   { typedef_params : string list (** ['a] is param in [type 'a list = ...]  *)
   ; typedef_name : string (** [list] is name in [type 'a list = ...]  *)
   ; typedef_kind : type_kind
   }
+[@@deriving show { with_path = false }]
 
 and type_kind =
-  | KAbstract of core_type option (** [type t] or [type t = x]. *)
-  | KVariants of (string * core_type option) list1 (** [type t = Some of int | None]  *)
+  | KAbstract of core_type option (** [ type t ], [ type t = x ] *)
+  | KVariants of (string * core_type option) list1 (** [ type t = Some of int | None ]  *)
+[@@deriving show { with_path = false }]
 
 and core_type =
-  | CTVar of string (** ['a, 'b] are type variables in [type ('a, 'b) ty = ... ] *)
+  | CTVar of string (** [ 'a, 'b ] are type variables in [ type ('a, 'b) ty = ... ] *)
   | CTArrow of core_type * core_type (** ['a -> 'b] *)
-  | CTTuple of core_type * core_type * core_type list (** [('a * 'b * 'c)] *)
-  | CTConstr of string * core_type list (** [int], [('t, int) list], ['a option] etc. *)
+  | CTTuple of core_type * core_type * core_type list (** [ 'a * 'b * 'c ] *)
+  | CTConstr of string * core_type list (** [ int ], ['a option], [ ('a, 'b) list ] *)
+[@@deriving show { with_path = false }]
 
 type structure_item =
-  | SValue of value_binding (** [let x = ...] *)
-  | SType of type_declaration list1 (** [type x = ...] *)
+  | SValue of value_binding (** [ let x = ... ] *)
+  | SType of type_declaration list1 (** [ type x = ... ] *)
+[@@deriving show { with_path = false }]
 
-type structure = structure_item list
+type structure = structure_item list [@@deriving show { with_path = false }]
 
 val show_structure : structure -> string
 val const_int : int -> const
