@@ -30,3 +30,11 @@
   (alias_rec front/all)
   (alias_rec middle/all)
   (alias_rec back/all)))
+
+(alias
+ (name runtest)
+ (deps
+  (alias_rec front/runtest)
+  (alias_rec middle/runtest)
+  (alias_rec back/runtest)
+  (alias_rec tests/runtest)))
