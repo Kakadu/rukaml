@@ -8,20 +8,12 @@ let spf = Printf.sprintf
 
 (** Compilation target *)
 module Target = struct
-  type name =
-    | AMD64
-    | RV64
-    | LLVM
-  [@@deriving show { with_path = false }]
-
   type t =
-    { name : name
+    { name : string
     ; assemble_cmd : Path.t
     ; link_cmd : Path.t
     ; run_cmd : Path.t
     }
-
-  let show_name = Fn.compose String.lowercase show_name
 
   (** Artifact compiled/linked/assembled etc. for the target *)
   type _ art =
@@ -49,16 +41,15 @@ module Target = struct
 
   (** Compile input file to target's IL *)
   let compile (tgt : t) ~name ~(input : Path.t) ~flags ~promote : [ `Compile ] art =
-    let tgt_name = show_name tgt.name in
-    let name = String.concat [ name; "."; tgt_name; ".out" ] in
+    let name = String.concat [ name; "."; tgt.name; ".out" ] in
     let rule =
       spf
         compile_rule
         name
         (Path.to_string input)
         (if promote then "promote" else "standard")
-        tgt_name
-        tgt_name
+        tgt.name
+        tgt.name
         (String.concat ~sep:" " flags)
     in
     { name; rule }
@@ -215,7 +206,7 @@ end
 (** Test specification parsed from user comments *)
 module TestSpec = struct
   type target =
-    { name : Target.name
+    { name : string
     ; promote : bool
     }
 
@@ -235,20 +226,12 @@ module TestSpec = struct
 
   (** name | (name promote) *)
   let ptarget =
-    let pname =
-      atom
-      >>= function
-      | "amd64" -> return Target.AMD64
-      | "rv64" -> return Target.RV64
-      | "llvm" -> return Target.LLVM
-      | _ -> fail "invalid target"
-    in
     let pdefault =
-      let* name = pname in
+      let* name = atom in
       return { name; promote = false }
     in
     let ppromoted =
-      let* name = pname in
+      let* name = atom in
       let* () = string "promote" in
       return { name; promote = true }
     in
@@ -332,13 +315,12 @@ module Test = struct
 
   let rules_empty = { expected = []; artifacts = []; cram = [] }
 
-  let target_of_name tgt_name ~root =
-    let name = Target.show_name tgt_name in
+  let target_of_name name ~root =
     let cmd ~prefix =
       Path.append_part (Path.append Path.dot_dot root) @@ PPart.of_string (prefix ^ name)
     in
     Target.
-      { name = tgt_name
+      { name
       ; assemble_cmd = cmd ~prefix:"as_"
       ; link_cmd = cmd ~prefix:"ld_"
       ; run_cmd = cmd ~prefix:"run_"
@@ -375,9 +357,7 @@ module Test = struct
         Target.assemble tgt { dir = Path.of_string "../expected"; art = compiled }
       in
 
-      let runtime =
-        Path.of_string (spf "back/%s/rukaml_stdlib.o" (Target.show_name tgt.name))
-      in
+      let runtime = Path.of_string (spf "back/%s/rukaml_stdlib.o" tgt.name) in
       let runtime = Path.append Path.dot_dot @@ Path.append root runtime in
       let linked = Target.link tgt { dir = Path.dot; art = assembled } ~runtime in
 
@@ -389,7 +369,7 @@ module Test = struct
           let art = Target.run tgt { dir = Path.dot_dot; art = linked } ~exit ~stdout in
           let cram_rule =
             spf
-              {|(cram (applies_to %s) (deps ../%s))|}
+              "(cram (applies_to %s) (deps ../%s))"
               (String.chop_suffix_if_exists art.name ~suffix:".t")
               linked.name
           in

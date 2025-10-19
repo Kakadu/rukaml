@@ -1,7 +1,5 @@
 (executable
  (name build)
- (preprocess
-  (pps ppx_deriving.show))
  (libraries base stdio file_path parsexp angstrom))
 
 (rule
