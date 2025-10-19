@@ -5,7 +5,7 @@ open Base
 module Format = Stdlib.Format (* silencing a warning *)
 
 let use_logging = false
-let use_logging = true
+(* let use_logging = true *)
 
 let log fmt =
   if use_logging
@@ -481,32 +481,40 @@ type restriction_state =
   | MakeWeak
   | DoNothing
 
-let restrict table t =
-  let rec helper { typ_desc } xs state =
+type arrow_state =
+  | OnTheRightOfArrow
+  | OnTheLeftOfArrow
+
+let restrict_mut table t =
+  let rec helper { typ_desc } xs state arrow =
     match typ_desc with
     | V { binder; _ } ->
-      (match state with
-       | DoNothing -> xs
-       | MakeWeak ->
-         if IntMap.mem binder xs
-         then xs
-         else (
-           table.last <- table.last + 1;
-           log "table.last counter number: %d" table.last;
-           IntMap.add binder table.last xs))
-    | TLink t -> helper t xs state
+      (match arrow with
+       | OnTheRightOfArrow -> xs
+       | OnTheLeftOfArrow ->
+         (match state with
+          | DoNothing -> xs
+          | MakeWeak ->
+            if IntMap.mem binder xs
+            then xs
+            else (
+              table.last <- table.last + 1;
+              log "table.last counter number: %d" table.last;
+              IntMap.add binder table.last xs)))
+    | TLink t -> helper t xs state arrow
     | TPoly (a, t) ->
       log "tpoly: %s" t;
-      helper a xs (if is_mutable t then MakeWeak else state)
+      helper a xs (if is_mutable t then MakeWeak else state) arrow
     | Prim _ | Weak _ -> xs
-    | Arrow (l, r) -> helper l (helper r xs state) state
+    | Arrow (l, r) ->
+      helper l (helper r xs state OnTheRightOfArrow) state OnTheLeftOfArrow
     | TProd (f, s, ts) ->
       List.fold_left
         ts
-        ~init:(helper f (helper s xs state) state)
-        ~f:(fun acc x -> helper x acc state)
+        ~init:(helper f (helper s xs state arrow) state arrow)
+        ~f:(fun acc x -> helper x acc state arrow)
   in
-  let weak_map = helper t IntMap.empty DoNothing in
+  let weak_map = helper t IntMap.empty DoNothing OnTheLeftOfArrow in
   let rec helper t =
     match t.typ_desc with
     | TLink _ | Prim _ | Weak _ -> t
@@ -558,7 +566,6 @@ let infer env weak expr =
                  return (t1 :: typs, e1 :: exprs))
                r
            in
-           let exprs = List.rev exprs in
            let ty = array_typ ty in
            let ty = elim weak ty in
            return (ty, TArray (exprs, ty)))
@@ -582,11 +589,9 @@ let infer env weak expr =
         let* t2, te2 = helper env e2 in
         let* tv = fresh_var ~level:0 in
         let* () = unify weak t1 (tarrow t2 tv) in
-        let tv = elim weak tv in
-        (* let tv = make_weak weak tv in *)
-        (* log "t1 = %a" pp_ty t1; *)
-        (* log "t2 = %a" pp_ty t2; *)
-        (* log "tv = %a" pp_ty tv; *)
+        log "t1 = %a" pp_ty t1;
+        log "t2 = %a" pp_ty t2;
+        log "tv = %a" pp_ty tv;
         return (tv, TApp (te1, te2, tv))
       | EConst (PConst_int _n as c) -> return (int_typ, TConst c)
       | EConst (PConst_bool _b as c) -> return (bool_typ, TConst c)
@@ -609,8 +614,6 @@ let infer env weak expr =
               return (t1 :: typs, e1 :: exprs))
             es
         in
-        let typs = List.rev typs in
-        let exprs = List.rev exprs in
         let tup_typ = tprod ta tb typs in
         let tup_typ = elim weak tup_typ in
         return (tup_typ, TTuple (ea, eb, exprs, tup_typ))
@@ -658,7 +661,7 @@ let infer env weak expr =
         failwith "TODO (psi) : not implemented"
   in
   let* ty, expr = helper env expr in
-  let* ty = restrict weak ty in
+  let* ty = restrict_mut weak ty in
   return (ty, expr)
 ;;
 
