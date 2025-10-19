@@ -5,7 +5,7 @@ open Base
 module Format = Stdlib.Format (* silencing a warning *)
 
 let use_logging = false
-(* let use_logging = true *)
+let use_logging = true
 
 let log fmt =
   if use_logging
@@ -472,33 +472,51 @@ let elim weak =
   helper
 ;;
 
-let make_weak weak t =
-  let rec helper { typ_desc } xs =
+let is_mutable = function
+  | "array" (* | "ref" *) -> true
+  | _ -> false
+;;
+
+type restriction_state =
+  | MakeWeak
+  | DoNothing
+
+let restrict table t =
+  let rec helper { typ_desc } xs state =
     match typ_desc with
     | V { binder; _ } ->
-      if IntMap.mem binder xs
-      then xs
-      else (
-        weak.last <- weak.last + 1;
-        (* log "weak.last counter number: %d" weak.last; *)
-        IntMap.add binder weak.last xs)
-    | TLink t -> helper t xs
-    | TPoly (a, _) -> helper a xs
+      (match state with
+       | DoNothing -> xs
+       | MakeWeak ->
+         if IntMap.mem binder xs
+         then xs
+         else (
+           table.last <- table.last + 1;
+           log "table.last counter number: %d" table.last;
+           IntMap.add binder table.last xs))
+    | TLink t -> helper t xs state
+    | TPoly (a, t) ->
+      log "tpoly: %s" t;
+      helper a xs (if is_mutable t then MakeWeak else state)
     | Prim _ | Weak _ -> xs
-    | Arrow (l, r) -> helper l (helper r xs)
-    | TProd (a, b, ts) ->
-      List.fold_left ts ~init:(helper a (helper b xs)) ~f:(fun acc x -> helper x acc)
+    | Arrow (l, r) -> helper l (helper r xs state) state
+    | TProd (f, s, ts) ->
+      List.fold_left
+        ts
+        ~init:(helper f (helper s xs state) state)
+        ~f:(fun acc x -> helper x acc state)
   in
-  let poly_map = helper t IntMap.empty in
+  let weak_map = helper t IntMap.empty DoNothing in
   let rec helper t =
     match t.typ_desc with
     | TLink _ | Prim _ | Weak _ -> t
-    | V { binder; _ } -> tweak (IntMap.find binder poly_map)
+    | V { binder; _ } ->
+      if IntMap.mem binder weak_map then tweak (IntMap.find binder weak_map) else t
     | TPoly (a, t) -> tpoly (helper a) t
     | Arrow (l, r) -> tarrow (helper l) (helper r)
     | TProd (a, b, ts) -> tprod (helper a) (helper b) (List.map ts ~f:helper)
   in
-  helper t
+  return (helper t)
 ;;
 
 let infer env weak expr =
@@ -527,7 +545,6 @@ let infer env weak expr =
         (match r with
          | [] ->
            let* ty = fresh_var ~level:!current_level in
-           let ty = make_weak weak ty in
            let ty = array_typ ty in
            return (ty, TArray ([], ty))
          | h :: _ ->
@@ -543,7 +560,6 @@ let infer env weak expr =
            in
            let exprs = List.rev exprs in
            let ty = array_typ ty in
-           let ty = make_weak weak ty in
            let ty = elim weak ty in
            return (ty, TArray (exprs, ty)))
       (* lambda abstraction *)
@@ -641,7 +657,9 @@ let infer env weak expr =
       | Parsetree.EMatch _ | Parsetree.EConstruct _ ->
         failwith "TODO (psi) : not implemented"
   in
-  helper env expr
+  let* ty, expr = helper env expr in
+  let* ty = restrict weak ty in
+  return (ty, expr)
 ;;
 
 let start_env =
