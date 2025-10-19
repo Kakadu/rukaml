@@ -112,12 +112,12 @@ let export_toolchain toolchain ~suffix =
 let () =
   let cfg = C.create "rukaml" in
 
-  let gcc_amd64 = "x86_64-unknown-linux-gnu-gcc" in
+  let gcc_amd64 = "gcc" in
   let defaults_amd64 =
     { cc = { path = gcc_amd64; flags = "-g -fPIC -Wall -Wpedantic" }
     ; as_ = { path = "nasm"; flags = "-f elf64" }
     ; ld = { path = gcc_amd64; flags = "" }
-    ; run = { path = "qemu-x86_64"; flags = "-L /opt/amd64/sysroot" }
+    ; run = { path = ""; flags = "" }
     }
   in
   let toolchain_amd64 = discover_toolchain cfg defaults_amd64 ~suffix:"amd64" in
