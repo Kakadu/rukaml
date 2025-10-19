@@ -1,7 +1,7 @@
 (*
 test
   (targets rv64 amd64)
-  (flags () (-cps) (-cps -call_arity))
+  (flags () (--cps) (--cps --caa))
   (run (stdout "rukaml_print_int 255"))
 *)
 

@@ -1,10 +1,3 @@
-(env
- (dev
-  (flags
-   (:standard -warn-error -26-27-39))
-  (ocamlopt_flags
-   (:standard -S))))
-
 (library
  (name amd64_impl)
  (modules amd64_impl)
@@ -12,11 +5,6 @@
  (libraries cconv compile_lib)
  (preprocess
   (pps bisect_ppx)))
-
-(executable
- (name amd64_compiler)
- (modules amd64_compiler)
- (libraries stdio amd64_impl))
 
 (rule
  (target rukaml_stdlib.o)

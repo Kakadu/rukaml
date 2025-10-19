@@ -9,8 +9,9 @@
   (pps ppx_inline_test bisect_ppx)))
 
 (library
- (name LLVM_impl)
+ (name llvm_impl)
  (modules LLVM_impl)
+ (wrapped false)
  (libraries
   llvm
   llvm.analysis
@@ -25,18 +26,6 @@
   (:standard -linkall))
  (preprocess
   (pps ppx_inline_test bisect_ppx)))
-
-(executable
- (name llvm_compiler)
- (modules llvm_compiler)
- (libraries stdio LL Frontend cconv compile_lib LLVM_impl))
-
-(library
- (name llvm_backend)
- (modules back_llvm)
- (flags
-  (:standard -linkall))
- (libraries cconv compile_lib llvm LL))
 
 (rule
  (target rukaml_stdlib.o)

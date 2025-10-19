@@ -35,7 +35,7 @@ module Target = struct
  (deps %s)
  (mode %s)
  (action
-  (run %%{project_root}/back/%s/%s_compiler.exe %%{deps} %s -o %%{target})))
+  (run %%{project_root}/driver/driver.exe %%{deps} --target %s %s -o %%{target})))
 |}
   ;;
 
@@ -48,7 +48,6 @@ module Target = struct
         name
         (Path.to_string input)
         (if promote then "promote" else "standard")
-        tgt.name
         tgt.name
         (String.concat ~sep:" " flags)
     in

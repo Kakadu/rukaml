@@ -1,7 +1,7 @@
 (*
 test
   (targets amd64)
-  (flags (-cps))
+  (flags (--cps))
   (run
     (stdout
       "rukaml_print_int 89"
