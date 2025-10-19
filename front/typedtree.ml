@@ -30,6 +30,15 @@ and type_desc =
   | TProd of ty * ty * ty list
 [@@deriving show { with_path = false }]
 
+module IntMap = Map.Make (Int) [@@deriving show { with_path = false }]
+
+type weak_table =
+  { mutable map : ty Map.Make(Int).t
+  ; mutable last : int
+  }
+
+let empty_table = { map = IntMap.empty; last = 0 }
+
 type scheme = S of binder_set * ty [@@deriving show { with_path = false }]
 
 let tarrow l r = { typ_desc = Arrow (l, r) }

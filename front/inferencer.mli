@@ -29,10 +29,12 @@ val start_env : Type_env.t
 
 val vb
   :  ?env:Type_env.t
+  -> Typedtree.weak_table
   -> Parsetree.value_binding
   -> (Type_env.t * Typedtree.value_binding, [> error ]) Result.t
 
 val structure
   :  ?env:Type_env.t
+  -> Typedtree.weak_table
   -> Parsetree.structure
   -> (Typedtree.structure, [> error ]) Result.t

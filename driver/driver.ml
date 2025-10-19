@@ -78,7 +78,9 @@ module Compiler = struct
 
   (** Infer parsetree to typedtree *)
   let infer (Parsetree stru) =
-    match Inferencer.structure (List.map ~f:(fun vb -> Parsetree.SValue vb) stru) with
+    match
+      Inferencer.structure table (List.map ~f:(fun vb -> Parsetree.SValue vb) stru)
+    with
     | Ok x -> k (Typedtree x)
     | Error err -> error "infer error: %a" Inferencer.pp_error err
   ;;
@@ -147,27 +149,27 @@ module Target = struct
     let parsetree (p : params) = parse p.text
     let cpstree p = (parsetree p) (if p.cps then cps ~caa:p.caa else ( |> ))
     let cconvtree p = (cpstree p) cconv
-    let typedtree p = (cconvtree p) infer
-    let anftree p = (typedtree p) anf
+    let typedtree table p = (cconvtree p) (infer table)
+    let anftree table p = (typedtree table p) anf
   end
 
-  let rv64 p = (Intermediate.anftree p) rv64
-  let amd64 p = (Intermediate.anftree p) amd64
-  let llvm p = (Intermediate.anftree p) llvm
+  let rv64 table p = (Intermediate.anftree table p) rv64
+  let amd64 table p = (Intermediate.anftree table p) amd64
+  let llvm table p = (Intermediate.anftree table p) llvm
 
   let finish target p = (target p) (to_file p.out_path)
 
-  let targets =
+  let targets table =
     Map.of_alist_exn
       (module String)
-      [ "rv64", finish rv64
-      ; "amd64", finish amd64
-      ; "llvm", finish llvm
+      [ "rv64", finish (rv64 table)
+      ; "amd64", finish (amd64 table)
+      ; "llvm", finish (llvm table)
       ; "parsetree", finish Intermediate.parsetree
       ; ("cps", fun p -> finish Intermediate.cpstree { p with cps = true })
       ; "cconv", finish Intermediate.cconvtree
-      ; "typedtree", finish Intermediate.typedtree
-      ; "anf", finish Intermediate.anftree
+      ; "typedtree", finish Intermediate.(typedtree table)
+      ; "anf", finish Intermediate.(anftree table)
       ]
   ;;
 end
@@ -177,7 +179,7 @@ let print_targets () =
   printf
     "supported targets:@ %a@."
     (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp_print_string)
-    (Map.keys Target.targets);
+    (Map.keys (Target.targets Typedtree.empty_table));
   Stdlib.exit 0
 ;;
 
@@ -217,7 +219,7 @@ let () =
   in
 
   let params = Target.{ text; out_path = !out_path; cps = !cps; caa = !caa } in
-  match Map.find Target.targets !target with
+  match Map.find (Target.targets Typedtree.empty_table) !target with
   | Some target -> target params
   | None -> error "invalid target %S" !target
 ;;

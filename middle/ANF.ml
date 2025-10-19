@@ -649,7 +649,7 @@ let test_anf ?(print_before = false) text =
   match
     let stru = Frontend.Parsing.parse_vb_exn text in
     let vbs = CConv.structure [ Parsetree.SValue stru ] in
-    let* vbs_typed = Inferencer.structure vbs in
+    let* vbs_typed = Inferencer.structure Typedtree.empty_table vbs in
     (* Format.printf "%s %d\n%!" __FILE__ __LINE__; *)
     let anf = anf_stru vbs_typed in
     if print_before
@@ -678,7 +678,8 @@ let%expect_test "CPS factorial" =
       then k 1
       else let temp5 = (n - 1) in
              let temp8 = fresh_1 n k in
-               fack temp5 temp8) |}]
+               fack temp5 temp8)
+    |}]
 ;;
 
 let%expect_test _ =
@@ -687,7 +688,8 @@ let%expect_test _ =
     {|
     let double =
       let b = 1 in
-        (b, 2) |}]
+        (b, 2)
+    |}]
 ;;
 
 let%expect_test _ =
@@ -700,5 +702,5 @@ let%expect_test _ =
       y
     let foo =
       (fresh_2, fresh_3)
-     |}]
+    |}]
 ;;

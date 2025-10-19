@@ -24,6 +24,14 @@ and type_desc =
   | TLink of ty
   | TProd of ty * ty * ty list
 
+module IntMap : Map.S with type key = int
+
+type weak_table =
+  { mutable map : ty IntMap.t
+  ; mutable last : int
+  }
+
+val empty_table : weak_table
 val pp_ty : Format.formatter -> ty -> unit
 val pp_type_desc : Format.formatter -> type_desc -> unit
 val show_ty : ty -> string

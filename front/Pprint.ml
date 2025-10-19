@@ -178,6 +178,7 @@ open Typedtree
 let rec pp_typ ppf { typ_desc } =
   match typ_desc with
   | V { binder; _ } -> fprintf ppf "'_%d" binder
+  | Weak n -> fprintf ppf "'_weak%d" n
   | Prim s -> pp_print_string ppf s
   | Arrow (l, r) -> fprintf ppf "(%a -> %a)" pp_typ l pp_typ r
   | TLink t -> pp_typ ppf t

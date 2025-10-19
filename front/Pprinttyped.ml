@@ -13,6 +13,7 @@ let pp_typ_hum =
     match t.typ_desc with
     | Prim s -> fprintf ppf "%s" s
     | V { binder; _ } -> fprintf ppf "'_%d" binder
+    | Weak n -> fprintf ppf "'_weak%d" n
     | TLink ty -> pp_typ ctx ppf ty
     | TPoly (a, t) ->
       pp_typ ctx ppf a;
