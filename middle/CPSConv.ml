@@ -17,6 +17,7 @@ type ds_expr =
   | DELam of ds_pattern * ds_expr
   | DEApp of ds_expr * ds_expr
   | DETuple of ds_expr * ds_expr * ds_expr list
+  | DEArray of ds_expr list
   | DELet of rec_flag * ds_pattern * ds_expr * ds_expr
 
 type ds_vb = rec_flag * ds_pattern * ds_expr
@@ -174,6 +175,11 @@ let preconv_chore ?(with_printing = false) (rec_flag, ptrn, e) k glob_vars free_
       let k de1 de2 des = k (DETuple (de1, de2, des)) in
       let helper_e e k = helper_e e vars k in
       tuple_fold_map_k helper_e e1 e2 ee k free_vars
+    | EArray l ->
+      (* TODO(nikita): Test this*)
+      let k l = k (DEArray l) in
+      let helper_e e k = helper_e e vars k in
+      list_fold_map_k helper_e l k free_vars
     | ELet (NonRecursive, ptrn, e1, e2) ->
       let k1 de1 free_vars =
         let k2 dp vars =
@@ -337,6 +343,7 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
   let rec cps env exp c counts =
     match exp with
     | DEVar y -> ret c (IMap.find y.id env) counts
+    | DEArray _ -> failwith "unimplemented in cps"
     | DEConst z -> ret c (AConst z) counts
     | DEUnit -> ret c AUnit counts
     | DELam (ds_pat, e) -> ret c (AClo (ds_pat, e, env)) counts
@@ -582,6 +589,9 @@ let ds_expr_to_expr ds_expr =
     match de with
     | DEUnit -> k EUnit
     | DEConst c -> k (EConst c)
+    | DEArray l ->
+      (* TODO(nikita): Test this*)
+      list_fold_map_k helper l (fun l -> k (EArray l))
     | DEVar { hum_name = n; _ } -> k (EVar n)
     | DEIf (de1, de2, de3) ->
       helper de1 (fun e1 ->

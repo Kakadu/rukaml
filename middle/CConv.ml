@@ -31,6 +31,7 @@ let simplify =
     | ELam (p, body) -> ELam (p, helper body)
     | (EVar _ as e) | (EConst _ as e) -> e
     | EIf (a, b, c) -> eite (helper a) (helper b) (helper c)
+    | EArray l -> earray (List.map helper l)
     | EApp (l, r) -> eapp (helper l) [ helper r ]
     | ETuple (a, b, es) -> etuple (helper a) (helper b) (List.map helper es)
     | ELet (isrec, pat, rhs, wher) -> elet ~isrec pat (helper rhs) (helper wher)
@@ -64,6 +65,8 @@ let free_vars_of_expr =
     | EVar s -> String_set.add s acc
     | EIf (c, th, el) -> helper (helper (helper acc c) th) el
     | EApp (l, r) -> helper (helper acc l) r
+    | EArray (h :: tl) -> List.fold_left helper (helper acc h) tl
+    | EArray [] -> acc
     | ELet (_, pat, rhs, wher) ->
       String_set.diff (helper (helper acc rhs) wher) (vars_from_pattern pat)
     | ETuple (a, b, es) -> List.fold_left helper (helper (helper acc a) b) es
@@ -86,6 +89,7 @@ let rec subst x ~by:v =
     | EApp (l, r) -> eapp (helper l) [ helper r ]
     | EConst _ -> e
     | ETuple (a, b, es) -> etuple (helper a) (helper b) (List.map helper es)
+    | EArray l -> earray (List.map helper l)
     | ELam (PVar y, b) when Stdlib.(y = x) -> elam (PVar y) b
     | ELam (PVar y, t) when is_free_in y v ->
       let frees = String_set.union (free_vars_of_expr v) (free_vars_of_expr t) in
@@ -176,6 +180,7 @@ let conv ?(standart_globals = standart_globals)
        (* fusion with simplifier *)
        helper globals body *)
     | EApp (l, r) -> return eapp1 <*> helper globals l <*> helper globals r
+    | EArray _ -> failwith "unimplemented in conv for arrays"
     | ELam (_, _) ->
       log "Got ELam _: globals = %a" SS.pp globals;
       (match sugarize_let root_expr with

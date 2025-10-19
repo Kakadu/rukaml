@@ -567,6 +567,7 @@ let anf =
        , Tpat_var name
        , CApp (AVar "fresh", arg1, [ arg2 ])
        , k (AVar name) ))) *)
+    | TArray _ -> failwith "not implemented in anf for arrays"
     | TApp (f, arg1, _) ->
       helper f (fun f ->
         helper arg1 (fun arg1 ->
