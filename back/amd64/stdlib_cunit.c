@@ -6,7 +6,7 @@ static void test_print_int(void) {
     rukaml_initialize(0L);
     void* clos = rukaml_alloc_closure(rukaml_print_int, 1);
     rukaml_applyN(clos, 1, 541);
-    rukaml_apply1((void*)rukaml_print_int, 542);
+    rukaml_apply1((void*)rukaml_print_int, (void*)542);
     CU_ASSERT(1);
 }
 

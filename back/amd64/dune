@@ -36,8 +36,6 @@
    (= %{architecture} amd64)
    (not
     (= none %{read:../../cc_amd64}))))
- (mode
-  (promote (until-clean)))
  (deps
   (:src stdlib_cunit.c)
   (:stdlib rukaml_stdlib.o)
