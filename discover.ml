@@ -51,31 +51,40 @@ let discover_toolchain cfg defaults ~suffix =
       String.concat ~sep:" " [ bin; flags ])
   in
 
-  let suffix = String.uppercase suffix in
+  (* bind is used to make every next step run
+     only if the previous one is successful *)
+  let ( >>= ) = Option.( >>= ) in
 
-  log "discovering %s compiler" suffix;
+  let suffix = String.uppercase suffix in
   let compile =
+    log "discovering %s compiler" suffix;
     discover_tool
       ~env:{ path = spf "CC_%s" suffix; flags = spf "CFLAGS_%s" suffix }
       ~default:defaults.cc
   in
 
-  log "discovering %s assembler" suffix;
   let assemble =
+    compile
+    >>= fun _ ->
+    log "discovering %s assembler" suffix;
     discover_tool
       ~env:{ path = spf "AS_%s" suffix; flags = spf "AS_FLAGS_%s" suffix }
       ~default:defaults.as_
   in
 
-  log "discovering %s linker" suffix;
   let link =
+    assemble
+    >>= fun _ ->
+    log "discovering %s linker" suffix;
     discover_tool
       ~env:{ path = spf "LD_%s" suffix; flags = spf "LD_FLAGS_%s" suffix }
       ~default:defaults.ld
   in
 
-  log "discovering %s runner" suffix;
   let run =
+    link
+    >>= fun _ ->
+    log "discovering %s runner" suffix;
     discover_tool
       ~env:{ path = spf "RUN_%s" suffix; flags = spf "RUN_FLAGS_%s" suffix }
       ~default:defaults.run
