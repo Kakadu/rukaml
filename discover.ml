@@ -21,6 +21,7 @@ type toolchain =
   ; link : string option
   ; run : string option
   }
+[@@deriving sexp_of]
 
 let spf = Printf.sprintf
 
@@ -29,25 +30,17 @@ let log fmt = Printf.ksprintf (fun msg -> printf "discover: %s\n" msg) fmt
 let discover_bin cfg path : string option =
   match C.which cfg path with
   | None ->
-    log {|"%s" is not available|} path;
+    log "%S is not available" path;
     None
   | Some _ -> Some path
 ;;
 
-let discover_env var ~default : string =
-  match Sys.getenv var with
-  | None ->
-    log {|%s env variable is not present. falling back to "%s"|} var default;
-    default
-  | Some x -> x
-;;
-
 let discover_toolchain cfg defaults ~suffix =
   let discover_tool ~(env : cmd) ~(default : cmd) =
-    discover_env env.path ~default:default.path
+    Option.value (Sys.getenv env.path) ~default:default.path
     |> discover_bin cfg
     |> Option.map ~f:(fun bin ->
-      let flags = discover_env env.flags ~default:default.flags in
+      let flags = Option.value (Sys.getenv env.flags) ~default:default.flags in
       String.concat ~sep:" " [ bin; flags ])
   in
 
@@ -111,6 +104,9 @@ let export_toolchain toolchain ~suffix =
 
 let () =
   let cfg = C.create "rukaml" in
+  let print_toolchain toolchain =
+    sexp_of_toolchain toolchain |> Sexp.to_string_hum ~indent:10 |> log "%s\n"
+  in
 
   let gcc_amd64 = "gcc" in
   let defaults_amd64 =
@@ -122,7 +118,7 @@ let () =
   in
   let toolchain_amd64 = discover_toolchain cfg defaults_amd64 ~suffix:"amd64" in
   export_toolchain toolchain_amd64 ~suffix:"amd64";
-  log "";
+  print_toolchain toolchain_amd64;
 
   let gcc_rv64 = "riscv64-unknown-linux-gnu-gcc" in
   let defaults_rv64 =
@@ -134,7 +130,7 @@ let () =
   in
   let toolchain_rv64 = discover_toolchain cfg defaults_rv64 ~suffix:"rv64" in
   export_toolchain toolchain_rv64 ~suffix:"rv64";
-  log "";
+  print_toolchain toolchain_rv64;
 
   let clang = "clang" in
   let defaults_llvm =
@@ -145,5 +141,6 @@ let () =
     }
   in
   let toolchain_llvm = discover_toolchain cfg defaults_llvm ~suffix:"llvm" in
-  export_toolchain toolchain_llvm ~suffix:"llvm"
+  export_toolchain toolchain_llvm ~suffix:"llvm";
+  print_toolchain toolchain_llvm
 ;;

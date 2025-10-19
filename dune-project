@@ -25,6 +25,7 @@
   stdio
 
   ppx_deriving
+  ppx_sexp_conv
   bisect_ppx
   file_path
   parsexp
