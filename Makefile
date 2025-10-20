@@ -20,6 +20,9 @@ ifdef CLEAN
 	git clean -fxdq testsuite/artifacts
 	rm -rf testsuite/expected/*.out
 endif
+ifdef VERBOSE
+	dune b testsuite --display verbose
+endif
 	dune b testsuite
 	dune runt testsuite
 
