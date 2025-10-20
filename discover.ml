@@ -108,7 +108,7 @@ let () =
     sexp_of_toolchain toolchain |> Sexp.to_string_hum ~indent:10 |> log "%s\n"
   in
 
-  let gcc_amd64 = "gcc" in
+  let gcc_amd64 = "gcc-13" in
   let defaults_amd64 =
     { cc = { path = gcc_amd64; flags = "-g -fPIC -Wall -Wpedantic" }
     ; as_ = { path = "nasm"; flags = "-f elf64" }
@@ -120,19 +120,19 @@ let () =
   export_toolchain toolchain_amd64 ~suffix:"amd64";
   print_toolchain toolchain_amd64;
 
-  let gcc_rv64 = "riscv64-unknown-linux-gnu-gcc" in
+  let gcc_rv64 = "riscv64-linux-gnu-gcc-13" in
   let defaults_rv64 =
     { cc = { defaults_amd64.cc with path = gcc_rv64 }
     ; as_ = { path = gcc_rv64; flags = "-x assembler -c" }
     ; ld = { path = gcc_rv64; flags = "" }
-    ; run = { path = "qemu-riscv64"; flags = "-L /opt/rv64/sysroot" }
+    ; run = { path = "qemu-riscv64-static"; flags = "-L /usr/riscv64-linux-gnu" }
     }
   in
   let toolchain_rv64 = discover_toolchain cfg defaults_rv64 ~suffix:"rv64" in
   export_toolchain toolchain_rv64 ~suffix:"rv64";
   print_toolchain toolchain_rv64;
 
-  let clang = "clang" in
+  let clang = "clang-16" in
   let defaults_llvm =
     { cc = { defaults_amd64.cc with path = clang }
     ; as_ = { path = clang; flags = "-x ir -c" }
