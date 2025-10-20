@@ -157,7 +157,7 @@ module Target = struct
       ; "amd64", finish amd64
       ; "llvm", finish llvm
       ; "parsetree", finish Intermediate.parsetree
-      ; "cps", finish Intermediate.cpstree
+      ; ("cps", fun p -> finish Intermediate.cpstree { p with cps = true })
       ; "cconv", finish Intermediate.cconvtree
       ; "typedtree", finish Intermediate.typedtree
       ; "anf", finish Intermediate.anftree
