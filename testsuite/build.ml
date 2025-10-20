@@ -124,6 +124,7 @@ module Target = struct
   ;;
 end
 
+(** Some combinators to parse S-expressions *)
 module SexpParser = struct
   type 'a result =
     | Failed of string
@@ -237,6 +238,7 @@ module TestSpec = struct
     choice [ pdefault; list ppromoted ]
   ;;
 
+  (** run (exit ..) (stdout ..) *)
   let prun =
     let pexit =
       string "exit" *> atom
@@ -265,6 +267,7 @@ module TestSpec = struct
     return { src; targets; flags; run }
   ;;
 
+  (** Parse test spec from the file *)
   let of_file (path : Path.t) =
     let ( let* ), return = Result.( >>= ), Result.return in
     let fail msg = Result.fail @@ msg ^ spf " in %s" (Path.to_string path) in
@@ -283,6 +286,8 @@ module TestSpec = struct
       >>| String.of_char_list
     in
 
+    (* goes through the file line by line until
+       it fully parses the first comment *)
     let parse = Angstrom.Buffered.feed @@ Angstrom.Buffered.parse pcomment in
     let* comment = In_channel.with_file (Path.to_string path) ~f:(parse_next parse) in
 
@@ -328,6 +333,8 @@ module Test = struct
 
   (** Generate dune rules for the test. Requires project root path *)
   let gen test ~root : dune_rules =
+    (* the name for build artifacts is derrived from
+       the location of the input file and its name *)
     let name =
       Path.chop_prefix_if_exists test.path ~prefix:(Path.of_string "tests")
       |> Path.to_parts
