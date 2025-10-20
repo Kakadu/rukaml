@@ -143,6 +143,6 @@ let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
 
 let pp_stru ppf stru =
   open_vbox 0;
-  pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "@,") pp_vb_hum ppf stru;
+  pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "@\n") pp_vb_hum ppf stru;
   close_box ()
 ;;

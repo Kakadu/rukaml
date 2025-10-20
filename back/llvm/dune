@@ -1,0 +1,41 @@
+(library
+ (name LL)
+ (modules LL)
+ (libraries llvm)
+ (inline_tests)
+ (flags
+  (:standard -linkall))
+ (preprocess
+  (pps ppx_inline_test))
+ (instrumentation
+  (backend bisect_ppx)))
+
+(library
+ (name llvm_impl)
+ (modules LLVM_impl)
+ (wrapped false)
+ (libraries
+  llvm
+  llvm.analysis
+  llvm.executionengine
+  llvm.target
+  llvm.all_backends
+  LL
+  compile_lib
+  cconv)
+ (inline_tests)
+ (flags
+  (:standard -linkall))
+ (preprocess
+  (pps ppx_inline_test))
+ (instrumentation
+  (backend bisect_ppx)))
+
+(rule
+ (target rukaml_stdlib.o)
+ (enabled_if
+  (not
+   (= none %{read:../../cc_llvm})))
+ (deps rukaml_stdlib.c)
+ (action
+  (system "%{read:../../cc_llvm} -c %{deps} -o %{target}")))

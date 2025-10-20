@@ -12,13 +12,13 @@ env:
   OPAMROOT: /home/opam/.opam
   OPAMYES: true
   OPAMCONFIRMLEVEL: unsafe-yes
+  DUNE_PROFILE: release
 
 jobs:
   build:
     runs-on: ubuntu-latest
     container:
       image: kakadu18/ocaml:llvm16
-      #options: --user root
 
     # The below probably could be used instead of styfle/cancel-workflow-action
     concurrency:
@@ -29,6 +29,7 @@ jobs:
       - run: opam --version
       - run: opam exec -- ocamlopt --version
       - run: opam list
+      - run: opam update
       - run: sudo apt update
 
       # checking out the code seems to be important because local switch is used
@@ -37,12 +38,16 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install OPAM dependencies via Makefile
-        #continue-on-error: true
-        run: |
-          make debs
-          opam install . --deps-only --with-test
-        #opam install . --depext-only --with-test
+      - name: Install dependencies via Makefile
+        run: make deps
 
-      - run: opam exec -- dune build @default --profile=release
-      - run: opam exec -- dune build @runtest @check
+      - name: Build and test
+        run: |
+          eval $(opam env)
+          dune build
+          dune runtest
+
+      - name: Run the testsuite
+        run: |
+          eval $(opam env)
+          make testsuite VERBOSE=1

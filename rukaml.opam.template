@@ -3,5 +3,5 @@ depexts: [
     "llvm-16-dev" "clang-16"
     "qemu-user-static" "binutils-riscv64-linux-gnu" "gcc-13-riscv64-linux-gnu"
     "libcunit1-dev"
-  ] {os-distribution = "debian"}
+  ] {os-distribution = "ubuntu"}
 ]

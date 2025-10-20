@@ -1,0 +1,12 @@
+(executable
+ (name build)
+ (libraries base stdio file_path parsexp angstrom))
+
+(rule
+ (targets expected.dune artifacts.dune cram.dune)
+ (deps
+  ../as_rv64 ; to enfore order of rules execution
+  (:tests
+   (glob_files_rec tests/*.ml)))
+ (action
+  (run ./build.exe %{project_root} %{tests})))

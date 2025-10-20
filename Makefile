@@ -1,5 +1,6 @@
-.PHONY: debs deps clean
-all:
+MAKEFLAGS += --always-make
+
+build:
 	dune build
 
 test:
@@ -14,22 +15,32 @@ promote:
 clean:
 	dune clean
 
-DEBS += nasm clang-16 gcc-13 pkg-config
-DEBS += gcc-13-riscv64-linux-gnu libc6-dev-riscv64-cross qemu-user binutils-riscv64-linux-gnu libcunit1-dev
+ifdef VERBOSE
+VERBOSE_FLAG = --display verbose
+endif
 
-debs:
-	sudo apt install --yes --no-install-recommends $(DEBS)
+ifdef WATCH
+WATCH_FLAG = -w
+endif
 
-deps: debs
-	opam install --confirm-level=yes \
-		dune-site angstrom.0.16.0 ppx_blob ppx_deriving.6.0.3 ppx_expect llvm.16.0.6+nnp ctypes-foreign
+testsuite:
+ifdef CLEAN
+	git clean -fxdq testsuite/artifacts
+	rm -rf testsuite/expected/*.out
+endif
+	dune b testsuite $(VERBOSE_FLAG)
+	dune b testsuite @testsuite/cram $(VERBOSE_FLAG) $(WATCH_FLAG)
 
-.PHONY: coverage
+deps:
+	opam install --depext-only .
+	opam install --deps-only --with-doc .
+
 TEST_COV_D ?= /tmp/rukaml
 coverage:
 	if [ -d $(TEST_COV_D) ]; then $(RM) -r $(TEST_COV_D); fi
 	mkdir -p $(TEST_COV_D)
-	BISECT_FILE=$(TEST_COV_D)/GT dune runtest --no-print-directory \
+	dune b @default @testsuite/all
+	BISECT_FILE=$(TEST_COV_D)/GT dune b @runtest @testsuite/runtest --no-print-directory \
 			--instrument-with bisect_ppx --force
 	bisect-ppx-report html --coverage-path $(TEST_COV_D) #--expect src/
 	bisect-ppx-report summary --coverage-path $(TEST_COV_D) #--expect src/

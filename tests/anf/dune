@@ -1,13 +1,2 @@
-(executable
- (name REPL)
- (modules REPL)
- (libraries stdio compile_lib rukaml.frontend base))
-
 (cram
- (deps ./REPL.exe))
-
-(cram
- (deps
-  %{project_root}/back_amd64/amd64_compiler.exe
-  %{project_root}/back_amd64/rukaml_stdlib.o)
- (applies_to large))
+ (deps %{project_root}/driver/driver.exe))

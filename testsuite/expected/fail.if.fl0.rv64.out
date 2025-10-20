@@ -1,0 +1,21 @@
+
+.globl main
+main:
+# this is main
+  addi sp, sp, -16 # allocate for RA, and 1 locals temp2
+  sd ra, 8(sp)
+# ;;; TODO RV64_impl.generate_body.helper_c 697
+  addi sp, sp, -16
+  sd ra, 8(sp)
+  ld t0, 16(sp)
+  sd t0, (sp)
+  call rukaml_print_int
+  ld ra, 8(sp)
+  mv a0, a0
+  addi sp, sp, 16
+  ld ra, 8(sp)
+  addi sp, sp, 16 # DEallocate for RA, and 1 locals temp2
+#  fin
+  addi a0, x0, 0 # Use 0 return code
+  addi a7, x0, 93 # Service command code 93 terminates
+  ecall # Call linux to terminate the program

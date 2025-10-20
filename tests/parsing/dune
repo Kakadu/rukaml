@@ -1,7 +1,6 @@
 (executable
- (name REPL)
- (modules REPL)
+ (name run)
  (libraries stdio Frontend))
 
 (cram
- (deps ./REPL.exe))
+ (deps run.exe))

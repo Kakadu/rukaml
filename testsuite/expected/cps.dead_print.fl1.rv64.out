@@ -1,0 +1,146 @@
+
+.globl fresh_1
+fresh_1:
+  addi sp, sp, -16 # allocate for RA, and 1 locals temp5
+  sd ra, 8(sp)
+  ld t0, 16(sp)
+  li t1, 0
+  add  t2, t0, t1
+  sd t2, (sp)
+  addi sp, sp, -16 # pad and 1st arg of function k2
+  ld t5, 16(sp)
+  sd t5, (sp) # access a var "temp5"
+  ld a0, 40(sp)
+  li a1, 1
+  ld a2, (sp)
+  call rukaml_applyN
+  addi sp, sp, 16 # DEalloc for pad and arg 1 of function "k2"
+  ld ra, 8(sp)
+  addi sp, sp, 16 # DEallocate for RA, and 1 locals temp5
+  ret # fresh_1
+
+.globl fresh_3
+fresh_3:
+  addi sp, sp, -16 # allocate for RA, and 1 locals y
+  sd ra, 8(sp)
+  ld t5, 16(sp)
+  sd t5, (sp) # access a var "t4"
+  li a0, 0
+  ld ra, 8(sp)
+  addi sp, sp, 16 # DEallocate for RA, and 1 locals y
+  ret # fresh_3
+
+.globl fresh_2
+fresh_2:
+  addi sp, sp, -32 # allocate for RA, and 3 locals temp8, temp7, x
+  sd ra, 24(sp)
+  ld t5, 48(sp)
+  sd t5, 16(sp) # access a var "t3"
+  addi sp, sp, -16 # pad and 1st arg of function f
+  ld t5, 48(sp)
+  sd t5, (sp) # access a var "print"
+  ld a0, 56(sp)
+  li a1, 1
+  ld a2, (sp)
+  call rukaml_applyN
+  addi sp, sp, 16 # DEalloc for pad and arg 1 of function "f"
+  sd a0, 8(sp)
+  addi sp, sp, -16 # pad and 1st arg of function temp7
+  li t0, 1
+  sd t0, (sp)
+  ld a0, 24(sp)
+  li a1, 1
+  ld a2, (sp)
+  call rukaml_applyN
+  addi sp, sp, 16 # DEalloc for pad and arg 1 of function "temp7"
+  sd a0, (sp)
+  addi sp, sp, -16 # pad and 1st arg of function temp8
+  lla a0, fresh_3
+  li a1, 1
+  call rukaml_alloc_closure
+  sd a0, (sp)
+  ld a0, 16(sp)
+  li a1, 1
+  ld a2, (sp)
+  call rukaml_applyN
+  addi sp, sp, 16 # DEalloc for pad and arg 1 of function "temp8"
+  ld ra, 24(sp)
+  addi sp, sp, 32 # DEallocate for RA, and 3 locals temp8, temp7, x
+  ret # fresh_2
+
+.globl f
+f:
+  addi sp, sp, -16 # allocate for RA, and 1 locals y
+  sd ra, 8(sp)
+  addi sp, sp, -16 # pad and 1st arg of function print
+  ld t5, 40(sp)
+  sd t5, (sp) # access a var "x"
+  ld a0, 32(sp)
+  li a1, 1
+  ld a2, (sp)
+  call rukaml_applyN
+  addi sp, sp, 16 # DEalloc for pad and arg 1 of function "print"
+  sd a0, (sp)
+  addi sp, sp, -16 # pad and 1st arg of function k1
+  lla a0, fresh_1
+  li a1, 2
+  call rukaml_alloc_closure
+  sd a0, (sp)
+  ld a0, 48(sp)
+  li a1, 1
+  ld a2, (sp)
+  call rukaml_applyN
+  addi sp, sp, 16 # DEalloc for pad and arg 1 of function "k1"
+  ld ra, 8(sp)
+  addi sp, sp, 16 # DEallocate for RA, and 1 locals y
+  ret # f
+
+.globl main
+main:
+# this is main
+  addi sp, sp, -16 # allocate for RA, and 1 locals temp15
+  sd ra, 8(sp)
+  addi sp, sp, -16 #  RA + closure
+  sd ra, 8(sp)
+  lla a0, fresh_2
+  li a1, 3
+  call rukaml_alloc_closure
+  sd a0, (sp)
+# Allocate args to call fun "fresh_2" with args
+  addi sp, sp, -16 # last_pos = 6
+  lla a0, rukaml_print_int
+  li a1, 1
+  call rukaml_alloc_closure
+  sd a0, (sp)
+  lla a0, f
+  li a1, 3
+  call rukaml_alloc_closure
+  sd a0, 8(sp)
+  ld a0, 16(sp)
+  li a1, 2
+  ld a2, (sp) # arg 0
+  ld a3, 8(sp) # arg 1
+  call rukaml_applyN
+  sd a0, 32(sp)
+  addi sp, sp, 16 # deallocate 2 args
+  ld ra, 8(sp)
+  addi sp, sp, 16 # deallocate RA + closure
+# Allocate args to call fun "f" with args
+  addi sp, sp, -32 # last_pos = 6
+  lla a0, rukaml_print_int
+  li a1, 1
+  call rukaml_alloc_closure
+  sd a0, (sp)
+  li t0, 1
+  sd t0, 8(sp) # constant
+  ld t0, 32(sp) # arg "temp15"
+  sd t0, 16(sp)
+  call f
+  addi sp, sp, 32 # deallocate 3 args
+  mv a0, a0
+  ld ra, 8(sp)
+  addi sp, sp, 16 # DEallocate for RA, and 1 locals temp15
+#  fin
+  addi a0, x0, 0 # Use 0 return code
+  addi a7, x0, 93 # Service command code 93 terminates
+  ecall # Call linux to terminate the program

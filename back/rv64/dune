@@ -1,0 +1,16 @@
+(library
+ (name rv64_impl)
+ (modules RV64_impl Machine)
+ (wrapped false)
+ (libraries cconv compile_lib)
+ (instrumentation
+  (backend bisect_ppx)))
+
+(rule
+ (target rukaml_stdlib.o)
+ (enabled_if
+  (not
+   (= none %{read:../../cc_rv64})))
+ (deps rukaml_stdlib.c)
+ (action
+  (system "%{read:../../cc_rv64} -c %{deps} -o %{target}")))

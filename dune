@@ -4,28 +4,33 @@
    (:standard -w -32-33 -warn-error -8-9-26-27-34-37-39-69))))
 
 (executable
- (name REPL)
- (modules REPL)
- (libraries stdio Frontend))
+ (name discover)
+ (preprocess
+  (pps ppx_sexp_conv))
+ (libraries dune-configurator base stdio))
 
-(cram
- (deps ./REPL.exe))
+(rule
+ (targets
+  cc_amd64
+  as_amd64
+  ld_amd64
+  run_amd64
+  cc_rv64
+  as_rv64
+  ld_rv64
+  run_rv64
+  cc_llvm
+  as_llvm
+  ld_llvm
+  run_llvm)
+ (action
+  (run ./discover.exe)))
 
-; Compiler executable and plugins
-
-(library
- (public_name rukaml.register)
- (name registration)
- (modules registration)
- (libraries Frontend))
-
-(executable
- (public_name minimlc)
- (name compiler)
- (modules sites compiler)
- (libraries registration dune-site dune-site.plugins))
-
-(generate_sites_module
- (module sites)
- (plugins
-  (rukaml plugins)))
+(alias
+ (name default)
+ (deps
+  (alias all)
+  (alias_rec front/all)
+  (alias_rec middle/all)
+  (alias_rec back/all)
+  (alias_rec driver/all)))

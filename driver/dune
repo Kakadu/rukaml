@@ -1,0 +1,4 @@
+(executable
+ (name driver)
+ (public_name driver)
+ (libraries base stdio Frontend compile_lib rv64_impl amd64_impl llvm_impl))

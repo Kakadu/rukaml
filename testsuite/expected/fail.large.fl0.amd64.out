@@ -1,0 +1,76 @@
+section .note.GNU-stack noalloc noexec nowrite progbits
+section .text
+extern rukaml_alloc_closure
+extern rukaml_print_int
+extern rukaml_applyN
+extern rukaml_field
+extern rukaml_alloc_pair
+extern rukaml_initialize
+extern rukaml_gc_compact
+extern rukaml_gc_print_stats
+extern rukaml_print_alloc_closure_count
+
+_start:
+              push    rbp
+              mov     rbp, rsp   ; prologue
+              call main
+              mov rdi, rax    ; rdi stores return code
+              mov rax, 60     ; exit syscall
+              syscall
+GLOBAL large
+
+large:
+  push rbp
+  mov  rbp, rsp
+  mov qword rdx, [rbp+2*8]
+  cmp rdx, 0
+  je lab_then_9
+  add rsp, -8*2
+  mov qword [rbp-2*8], 0
+  call rukaml_print_int
+  add rsp, 8*2
+  mov rax, rax
+  jmp lab_endif_10
+lab_then_9:
+  add rsp, -8*2
+  mov qword [rbp-2*8], 1
+  call rukaml_print_int
+  add rsp, 8*2
+  mov rax, rax
+lab_endif_10:
+  pop rbp
+  ret  ;;;; large
+GLOBAL main
+main:
+  push rbp
+  mov  rbp, rsp
+  mov rdi, rsp
+  call rukaml_initialize
+  sub rsp, 8*4 ; allocate for local variables x, temp5, t42, temp4
+  mov qword [rbp-1*8], 1
+  mov qword rdx, [rbp-1*8]
+  cmp rdx, 0
+  je lab_then_15
+  mov qword [rbp-3*8], 1
+  jmp lab_endif_16
+lab_then_15:
+  mov qword [rbp-3*8], 1
+lab_endif_16:
+  mov qword rdx, [rbp-3*8]
+  cmp rdx, 0
+  je lab_then_17
+  mov qword [rbp-4*8], 1
+  jmp lab_endif_18
+lab_then_17:
+  mov qword [rbp-4*8], 1
+lab_endif_18:
+  sub rsp, 8 ; trying to save alignment 16 bytes
+  sub rsp, 8*1 ; fun arguments
+  mov qword r8, [rbp-4*8]  ; arg "x"
+  mov qword [rsp+0*8], r8
+  call large
+  add rsp, 8*2 ; dealloc args
+  mov rax, rax
+  add rsp, 8*4 ; deallocate local variables x, temp5, t42, temp4
+  pop rbp
+  ret  ;;;; main

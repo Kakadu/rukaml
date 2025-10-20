@@ -1,7 +1,2 @@
-(executable
- (name REPL)
- (modules REPL)
- (libraries stdio Frontend))
-
 (cram
- (deps ./REPL.exe))
+ (deps %{project_root}/driver/driver.exe))

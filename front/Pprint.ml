@@ -96,6 +96,7 @@ let rec pp_expr_helper ?(ps = true) ppf = function
     fprintf ppf ")@]"
 
 and no_pars ppf = pp_expr_helper ~ps:false ppf
+
 and maybe_pars ppf = pp_expr_helper ~ps:true ppf
 
 let pp_expr = pp_expr_helper ~ps:true
@@ -136,7 +137,7 @@ let pp_stru ppf vbs =
   let open Format in
   open_vbox 0;
   pp_print_list
-    ~pp_sep:(fun ppf () -> fprintf ppf "@ ")
+    ~pp_sep:(fun ppf () -> fprintf ppf "@\n")
     (fun ppf -> fprintf ppf "@[%a@]" pp_value_binding)
     ppf
     vbs;

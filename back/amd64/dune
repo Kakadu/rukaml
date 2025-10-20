@@ -1,0 +1,41 @@
+(library
+ (name amd64_impl)
+ (modules amd64_impl)
+ (wrapped false)
+ (libraries cconv compile_lib)
+ (instrumentation
+  (backend bisect_ppx)))
+
+(rule
+ (target rukaml_stdlib.o)
+ (enabled_if
+  (not
+   (= none %{read:../../cc_amd64})))
+ (deps
+  (:src rukaml_stdlib.c)
+  rukaml_stdlib.h)
+ (action
+  (system "%{read:../../cc_amd64} -c %{src} -o %{target}")))
+
+(rule
+ (target stdlib_cunit.exe)
+ (enabled_if
+  (and
+   (= %{architecture} amd64)
+   (not
+    (= none %{read:../../cc_amd64}))))
+ (deps
+  (:src stdlib_cunit.c)
+  (:stdlib rukaml_stdlib.o)
+  rukaml_stdlib.h)
+ (action
+  (system "%{read:../../cc_amd64} %{stdlib} %{src} -lcunit -o %{target}")))
+
+(cram
+ (enabled_if
+  (and
+   (= %{architecture} amd64)
+   (not
+    (= none %{read:../../cc_amd64}))))
+ (applies_to stdlib_cunit)
+ (deps stdlib_cunit.exe))
