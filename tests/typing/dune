@@ -1,6 +1,2 @@
-(executable
- (name run)
- (libraries stdio Frontend))
-
 (cram
- (deps run.exe))
+ (deps %{project_root}/driver/driver.exe))

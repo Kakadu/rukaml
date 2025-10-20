@@ -1,4 +1,5 @@
 open! Base
+open Stdio
 
 open Frontend
 open Compile_lib
@@ -113,8 +114,11 @@ module Compiler = struct
   let to_file : type a. string -> a t -> unit =
     fun path ->
     let with_ppf f =
-      Out_channel.with_open_text path (fun ch ->
-        f (Stdlib.Format.formatter_of_out_channel ch))
+      (* for some reason pprint struggles with writing
+         directly to file so i'm doing it the ugly way *)
+      let open Stdlib.Format in
+      f str_formatter;
+      Out_channel.write_all path ~data:(flush_str_formatter ())
     in
     function
     | Parsetree stru -> with_ppf (fun ppf -> Pprint.pp_stru ppf stru)
@@ -205,8 +209,8 @@ let () =
 
   let text =
     match !inp_path with
-    | Some path -> In_channel.with_open_text path In_channel.input_all
-    | None -> In_channel.input_all In_channel.stdin
+    | Some path -> In_channel.with_file path ~f:In_channel.input_all
+    | None -> In_channel.input_all stdin
   in
 
   let params = Target.{ text; out_path = !out_path; cps = !cps; caa = !caa } in

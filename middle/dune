@@ -18,8 +18,3 @@
  (instrumentation
   (backend bisect_ppx))
  (inline_tests))
-
-(executable
- (name compiler)
- (modules compiler)
- (libraries stdio base Frontend compile_lib))
