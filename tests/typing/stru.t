@@ -225,6 +225,11 @@ tuples
   $ run << EOF
   > let f x y = x
   > let g = f 1
+  > let h = g 2
+  > let h = g
+  Parsed.
+  let f x y = x
+  let g = f 1
   let f: '_1 -> '_2 -> '_1 =
     fun x y -> x
   let g: '_weak1 -> int =
@@ -233,6 +238,11 @@ tuples
   $ run << EOF
   > let pair x y = (x, y)
   > let g = pair 1
+  > let temp = g 2
+  > let f = g
+  Parsed.
+  let pair x y = (x, y)
+  let g = pair 1
   let pair: '_1 -> '_2 -> '_1 * '_2 =
     fun x y -> (x, y)
   let g: '_weak1 -> int * '_weak1 =
