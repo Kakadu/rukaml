@@ -5,6 +5,8 @@
 (rule
  (targets expected.dune artifacts.dune cram.dune)
  (deps
-  (glob_files_rec tests/*.ml))
+  ../as_rv64 ; to enfore order of rules execution
+  (:tests
+   (glob_files_rec tests/*.ml)))
  (action
-  (run ./build.exe %{project_root} %{deps})))
+  (run ./build.exe %{project_root} %{tests})))

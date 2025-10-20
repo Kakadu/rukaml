@@ -10,9 +10,9 @@ let spf = Printf.sprintf
 module Target = struct
   type t =
     { name : string
-    ; assemble_cmd : Path.t
-    ; link_cmd : Path.t
-    ; run_cmd : Path.t
+    ; assemble_cmd : string option
+    ; link_cmd : string option
+    ; run_cmd : string option
     }
 
   (** Artifact compiled/linked/assembled etc. for the target *)
@@ -61,18 +61,20 @@ module Target = struct
   (target %s)
   (deps %s)
   (mode (promote (until-clean) (into obj)))
-  (enabled_if (not (= none %%{read:%s})))
-  (action (system "%%{read:%s} %%{deps} -o %%{target}")))
+  (action (system "%s %%{deps} -o %%{target}")))
 |}
   ;;
 
+  open Option
+  let ( let* ) = ( >>= )
+
   (** Assemble target's IL to arch-specific object file *)
-  let assemble tgt (input : [ `Compile ] art_located) : [ `Assemble ] art =
+  let assemble tgt (input : [ `Compile ] art_located) : [ `Assemble ] art option =
+    let* cmd = tgt.assemble_cmd in
     let name = String.chop_suffix_if_exists input.art.name ~suffix:".out" ^ ".o" in
     let input = Path.append_part input.dir (PPart.of_string input.art.name) in
-    let cmd = Path.to_string tgt.assemble_cmd in
-    let rule = spf assemble_rule name (Path.to_string input) cmd cmd in
-    { name; rule }
+    let rule = spf assemble_rule name (Path.to_string input) cmd in
+    return { name; rule }
   ;;
 
   let link_rule =
@@ -82,20 +84,19 @@ module Target = struct
   (target %s)
   (deps %s %s)
   (mode (promote (until-clean) (into exe)))
-  (enabled_if (not (= none %%{read:%s})))
-  (action (system "%%{read:%s} %%{deps} -o %%{target}")))
+  (action (system "%s %%{deps} -o %%{target}")))
 |}
   ;;
 
   (** Link object file with runtime to produce executable *)
-  let link tgt (input : [ `Assemble ] art_located) ~(runtime : Path.t) : [ `Link ] art =
+  let link tgt (input : [ `Assemble ] art_located) ~(runtime : Path.t)
+    : [ `Link ] art option
+    =
+    let* cmd = tgt.link_cmd in
     let name = String.chop_suffix_if_exists input.art.name ~suffix:".o" ^ ".exe" in
     let input = Path.append_part input.dir (PPart.of_string input.art.name) in
-    let cmd = Path.to_string tgt.link_cmd in
-    let rule =
-      spf link_rule name (Path.to_string runtime) (Path.to_string input) cmd cmd
-    in
-    { name; rule }
+    let rule = spf link_rule name (Path.to_string runtime) (Path.to_string input) cmd in
+    return { name; rule }
   ;;
 
   let run_rule =
@@ -103,24 +104,23 @@ module Target = struct
       {|
 (rule
   (mode (promote (until-clean) (into cram)))
-  (enabled_if (not (= none %%{read:%s})))
   (action (with-stdout-to %s
-    (echo "  $ %%{read:%s} %s%s\n%s"))))
+    (echo "  $ %s %s%s\n%s"))))
 |}
   ;;
 
   (** Run (or rather generate cram test to run) executable
       with expected stdout and exit code *)
   let run tgt (input : [ `Link ] art_located) ~(stdout : string list) ~(exit : int)
-    : [ `Run ] art
+    : [ `Run ] art option
     =
+    let* cmd = tgt.run_cmd in
     let name = String.chop_suffix_if_exists input.art.name ~suffix:".exe" ^ ".t" in
     let input = Path.append_part input.dir (PPart.of_string input.art.name) in
-    let cmd = Path.to_string tgt.run_cmd in
     let stdout = List.map stdout ~f:(String.append "\n  ") |> String.concat in
     let exit = if exit = 0 then "" else spf "  [%d]\n" exit in
-    let rule = spf run_rule cmd name cmd (Path.to_string input) stdout exit in
-    { name; rule }
+    let rule = spf run_rule name cmd (Path.to_string input) stdout exit in
+    return { name; rule }
   ;;
 end
 
@@ -319,21 +319,32 @@ module Test = struct
 
   let rules_empty = { expected = []; artifacts = []; cram = [] }
 
-  let target_of_name name ~root =
-    let cmd ~prefix =
-      Path.append_part (Path.append Path.dot_dot root) @@ PPart.of_string (prefix ^ name)
+  let build_target name ~root =
+    let read_cmd ~prefix =
+      let path = Path.append_part root @@ PPart.of_string (prefix ^ name) in
+      let text =
+        try
+          In_channel.with_file
+            (Path.to_string path)
+            ~f:(Fn.compose Option.some In_channel.input_all)
+        with
+        | Sys_error _ -> None
+      in
+      match text with
+      | Some "none" -> None
+      | _ -> text
     in
     Target.
       { name
-      ; assemble_cmd = cmd ~prefix:"as_"
-      ; link_cmd = cmd ~prefix:"ld_"
-      ; run_cmd = cmd ~prefix:"run_"
+      ; assemble_cmd = read_cmd ~prefix:"as_"
+      ; link_cmd = read_cmd ~prefix:"ld_"
+      ; run_cmd = read_cmd ~prefix:"run_"
       }
   ;;
 
   (** Generate dune rules for the test. Requires project root path *)
   let gen test ~root : dune_rules =
-    (* the name for build artifacts is derrived from
+    (* the name for build artifact is derrived from
        the location of the input file and its name *)
     let name =
       Path.chop_prefix_if_exists test.path ~prefix:(Path.of_string "tests")
@@ -351,35 +362,59 @@ module Test = struct
         ~f:(Path.append (Path.dirname_defaulting_to_dot input))
     in
 
-    let gen_tgt (spec : TestSpec.target) ~suffix acc flags =
-      let tgt = target_of_name spec.name ~root in
+    let ( >>= ) = Option.( >>= ) in
+
+    let gen_tgt (spec : TestSpec.target) ~suffix { expected; artifacts; cram } flags =
+      let tgt = build_target spec.name ~root in
 
       let compiled =
         Target.compile tgt ~name:(name ^ suffix) ~input ~flags ~promote:spec.promote
       in
-      let expected = compiled.rule :: acc.expected in
+      let expected = compiled.rule :: expected in
 
       let assembled =
         Target.assemble tgt { dir = Path.of_string "../expected"; art = compiled }
       in
+      let artifacts =
+        Option.value_map assembled ~default:artifacts ~f:(fun art ->
+          art.rule :: artifacts)
+      in
 
       let runtime = Path.of_string (spf "back/%s/rukaml_stdlib.o" tgt.name) in
       let runtime = Path.append Path.dot_dot @@ Path.append root runtime in
-      let linked = Target.link tgt { dir = Path.dot; art = assembled } ~runtime in
+      (* link only if assemble succeeded *)
+      let linked =
+        assembled >>= fun art -> Target.link tgt { dir = Path.dot; art } ~runtime
+      in
+      let artifacts =
+        Option.value_map linked ~default:artifacts ~f:(fun art -> art.rule :: artifacts)
+      in
 
-      let artifacts = assembled.rule :: linked.rule :: acc.artifacts in
+      let gen_run (spec : TestSpec.run) =
+        linked
+        >>= fun linked ->
+        Target.run
+          tgt
+          { dir = Path.dot_dot; art = linked }
+          ~exit:spec.exit
+          ~stdout:spec.stdout
+        >>= fun art ->
+        let cram_rule =
+          spf
+            "(cram (applies_to %s) (deps ../%s))"
+            (String.chop_suffix_if_exists art.name ~suffix:".t")
+            linked.name
+        in
+        Some (art.rule, cram_rule)
+      in
+
       let artifacts, cram =
+        let default = artifacts, cram in
         match test.spec.run with
-        | None -> artifacts, acc.cram
-        | Some { exit; stdout } ->
-          let art = Target.run tgt { dir = Path.dot_dot; art = linked } ~exit ~stdout in
-          let cram_rule =
-            spf
-              "(cram (applies_to %s) (deps ../%s))"
-              (String.chop_suffix_if_exists art.name ~suffix:".t")
-              linked.name
-          in
-          art.rule :: artifacts, cram_rule :: acc.cram
+        | None -> default
+        | Some spec ->
+          Option.value_map (gen_run spec) ~default ~f:(fun (rule, cram_rule) ->
+            rule :: artifacts, cram_rule :: cram)
       in
 
       { expected; artifacts; cram }
