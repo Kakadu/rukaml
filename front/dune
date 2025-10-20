@@ -3,7 +3,9 @@
  (modules Ident inferencer parsetree parsing Pprinttyped Pprint typedtree)
  (libraries ppx_deriving.runtime angstrom base)
  (preprocess
-  (pps ppx_deriving.show bisect_ppx ppx_expect)))
+  (pps ppx_deriving.show ppx_expect))
+ (instrumentation
+  (backend bisect_ppx)))
 
 (library
  (name frontend_tests)

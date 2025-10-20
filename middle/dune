@@ -3,7 +3,9 @@
  (libraries stdio Frontend cconv ppxlib.stdppx ocamlgraph)
  (modules ANF CPSLang CPSConv CAA CFlags compile_tests CAA_tests)
  (preprocess
-  (pps ppx_deriving.show ppx_expect bisect_ppx))
+  (pps ppx_deriving.show ppx_expect))
+ (instrumentation
+  (backend bisect_ppx))
  (inline_tests))
 
 (library
@@ -12,7 +14,9 @@
  (modules CConv monads)
  (wrapped false)
  (preprocess
-  (pps ppx_expect bisect_ppx))
+  (pps ppx_expect))
+ (instrumentation
+  (backend bisect_ppx))
  (inline_tests))
 
 (executable

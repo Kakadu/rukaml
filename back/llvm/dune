@@ -6,7 +6,9 @@
  (flags
   (:standard -linkall))
  (preprocess
-  (pps ppx_inline_test bisect_ppx)))
+  (pps ppx_inline_test))
+ (instrumentation
+  (backend bisect_ppx)))
 
 (library
  (name llvm_impl)
@@ -25,7 +27,9 @@
  (flags
   (:standard -linkall))
  (preprocess
-  (pps ppx_inline_test bisect_ppx)))
+  (pps ppx_inline_test))
+ (instrumentation
+  (backend bisect_ppx)))
 
 (rule
  (target rukaml_stdlib.o)
