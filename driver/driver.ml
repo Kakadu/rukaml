@@ -170,7 +170,8 @@ let print_targets () =
   printf
     "supported targets:@ %a@."
     (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp_print_string)
-    (Map.keys Target.targets)
+    (Map.keys Target.targets);
+  Stdlib.exit 0
 ;;
 
 (* TODO: fix backends so this is not needed *)
