@@ -24,19 +24,24 @@ Backends:
 
 
 ## Getting started
-Install dependencies using `opam`:
+Install dependencies using `opam`
 ```fish
 opam install --deps-only --with-doc --with-dev-setup .
 ```
 
-Build the project and run some tests:
+Build the project and run some tests
 ```fish
 dune build
 dune runtest
 ```
 
+Use the `driver` to compile some examples
+```fish
+dune exec driver -- testsuite/tests/fac.ml --target rv64 -o fac.s
+```
+
 ### `discover` the environment and run the testsuite
-On the first run of `dune build` rukaml `discover`s your environment:
+On the first run of `dune build` rukaml `discover`s your environment
 ```
 discover: discovering AMD64 compiler
 discover: "x86_64-unknown-linux-gnu-gcc" is not available
