@@ -90,7 +90,8 @@ Polyvariadic currying
   > EOF
   Parsed: let two f a b = f (a, b)
           let succ prev f arg = prev (fun rest -> f (arg, rest))
-          let three = succ two let four = succ three
+          let three = succ two
+          let four = succ three
   After CCovv.
   let two f a b = f (a, b)
   let fresh_1 f arg rest = f (arg, rest)
