@@ -16,6 +16,7 @@ Make sure the environment is configured with `discover` beforehand (see [README]
 To run all tests from the testsuite execute one of the following in the project root:
 ```bash
 make testsuite
+make testsuite WATCH=1
 make testsuite CLEAN=1
 make testsuite VERBOSE=1
 ```
@@ -61,10 +62,10 @@ If ommited completely the test is not executed but is still compiled and linked
 ## General pipeline
 `make testsuite` runs:
 
-1. `dune build testsuite`<br>
+1. `dune build testsuite`
     - Iterates through all the test files in [`tests`](tests) parsing specifications and generating dune rules
     - Executes generated dune rules by building all the tests for all targets
-    - Generates cram files for each test with expected stdout and exit code
 
-2. `dune runtest testsuite`<br>
-    Runs all generate cram tests asserting stdout and exit code
+2. `dune build @testsuite/cram`
+    - Generates cram files for each test with expected stdout and exit code
+    - Runs all generate cram tests asserting stdout and exit code

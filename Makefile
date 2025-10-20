@@ -15,17 +15,21 @@ promote:
 clean:
 	dune clean
 
+ifdef VERBOSE
+VERBOSE_FLAG = --display verbose
+endif
+
+ifdef WATCH
+WATCH_FLAG = -w
+endif
+
 testsuite:
 ifdef CLEAN
 	git clean -fxdq testsuite/artifacts
 	rm -rf testsuite/expected/*.out
 endif
-ifdef VERBOSE
-	dune b testsuite --display verbose
-else
-	dune b testsuite
-endif
-	dune runt testsuite
+	dune b testsuite $(VERBOSE_FLAG)
+	dune b testsuite @testsuite/cram $(VERBOSE_FLAG) $(WATCH_FLAG)
 
 deps:
 	opam install --depext-only .

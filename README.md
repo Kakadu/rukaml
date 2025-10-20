@@ -72,7 +72,7 @@ export RUN_FLAGS_AMD64=""
 
 Once the environment is properly discovered run the [testsuite](testsuite):
 ```fish
-make testsuite
+make testsuite WATCH=1
 ```
 
 For more information on the testsuite see its [README](testsuite/README.md)

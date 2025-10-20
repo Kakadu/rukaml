@@ -104,6 +104,7 @@ module Target = struct
       {|
 (rule
   (mode (promote (until-clean) (into cram)))
+  (alias cram)
   (action (with-stdout-to %s
     (echo "  $ %s %s%s\n%s"))))
 |}
@@ -401,7 +402,7 @@ module Test = struct
         >>= fun art ->
         let cram_rule =
           spf
-            "(cram (applies_to %s) (deps ../%s))"
+            "(cram (applies_to %s) (deps ../%s) (alias cram) (runtest_alias false))"
             (String.chop_suffix_if_exists art.name ~suffix:".t")
             linked.name
         in
