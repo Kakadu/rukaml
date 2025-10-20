@@ -174,7 +174,7 @@ tuples
     (1, 2, true, 2)
 
   $ run << EOF
-  > let f = [|1; 2; 3; 4|]
+  > let f = [||]
   Fatal error: exception Failure("unimplemented in conv for arrays")
   Raised at Stdlib.failwith in file "stdlib.ml", line 29, characters 17-33
   Called from CConv.conv.(fun) in file "middle/CConv.ml", line 306, characters 43-72
@@ -222,8 +222,18 @@ tuples
   Called from Dune__exe__Driver in file "driver/driver.ml", line 218, characters 19-32
   [2]
 
-  $ cat << EOF | ./REPL.exe -stru -
+  $ run << EOF
   > let f x y = x
   > let g = f 1
-  /tmp/dune_cram_844288_.cram.sh/main.sh: 1: /tmp/dune_cram_844288_.cram.sh/26.sh: ./REPL.exe: not found
-  [127]
+  let f: '_1 -> '_2 -> '_1 =
+    fun x y -> x
+  let g: '_weak1 -> int =
+    f 1
+
+  $ run << EOF
+  > let pair x y = (x, y)
+  > let g = pair 1
+  let pair: '_1 -> '_2 -> '_1 * '_2 =
+    fun x y -> (x, y)
+  let g: '_weak1 -> int * '_weak1 =
+    pair 1
