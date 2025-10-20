@@ -29,7 +29,7 @@
   (:stdlib rukaml_stdlib.o)
   rukaml_stdlib.h)
  (action
-  (system "%{read:../../cc_amd64} -lcunit %{stdlib} %{src} -o %{target}")))
+  (system "%{read:../../cc_amd64} %{stdlib} %{src} -lcunit -o %{target}")))
 
 (cram
  (enabled_if
