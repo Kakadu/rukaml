@@ -49,13 +49,17 @@ Zed combinator should trigger occurs check
   let rec fix: ('_3 -> '_3) -> '_3 =
     fun f -> f (fix f)
 
-  $ cat << EOF | ./run.exe -stru  -
+  $ run << EOF
   > let rec fix f = f (fix f)
   > let fac = fun self -> fun n -> if n=1 then 1 else n * (self (n-1))
   > let main = fix fac
   > EOF
-  ./run.exe: No such file or directory
-  [127]
+  let rec fix: ((int -> int) -> int -> int) -> int -> int =
+    fun f -> f (fix f)
+  let fac: (int -> int) -> int -> int =
+    fun self n -> (if n = 1 then 1 else n * (self (n - 1)))
+  let main: int -> int =
+    fix fac
 
   $ run << EOF
   > let rec zed f x = f (zed f) x
