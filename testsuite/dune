@@ -1,6 +1,7 @@
 (executable
  (name build)
- (libraries base stdio file_path parsexp angstrom))
+ (modules build build_utils)
+ (libraries base parsexp angstrom))
 
 (rule
  (targets expected.dune artifacts.dune cram.dune)

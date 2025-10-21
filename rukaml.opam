@@ -15,7 +15,6 @@ depends: [
   "ppx_deriving"
   "ppx_sexp_conv"
   "bisect_ppx"
-  "file_path"
   "parsexp"
   "angstrom" {= "0.16.0"}
   "llvm" {>= "16.0.0"}

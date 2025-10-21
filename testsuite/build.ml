@@ -1,8 +1,5 @@
 open! Base
-open Stdio
-
-module Path = File_path.Relative
-module PPart = File_path.Part
+open Build_utils
 
 let spf = Printf.sprintf
 
@@ -72,7 +69,7 @@ module Target = struct
   let assemble tgt (input : [ `Compile ] art_located) : [ `Assemble ] art option =
     let* cmd = tgt.assemble_cmd in
     let name = String.chop_suffix_if_exists input.art.name ~suffix:".out" ^ ".o" in
-    let input = Path.append_part input.dir (PPart.of_string input.art.name) in
+    let input = Path.append_part input.dir input.art.name in
     let rule = spf assemble_rule name (Path.to_string input) cmd in
     return { name; rule }
   ;;
@@ -94,7 +91,7 @@ module Target = struct
     =
     let* cmd = tgt.link_cmd in
     let name = String.chop_suffix_if_exists input.art.name ~suffix:".o" ^ ".exe" in
-    let input = Path.append_part input.dir (PPart.of_string input.art.name) in
+    let input = Path.append_part input.dir input.art.name in
     let rule = spf link_rule name (Path.to_string runtime) (Path.to_string input) cmd in
     return { name; rule }
   ;;
@@ -117,8 +114,8 @@ module Target = struct
     =
     let* cmd = tgt.run_cmd in
     let name = String.chop_suffix_if_exists input.art.name ~suffix:".exe" ^ ".t" in
-    let input = Path.append_part input.dir (PPart.of_string input.art.name) in
-    let stdout = List.map stdout ~f:(String.append "\n  ") |> String.concat in
+    let input = Path.append_part input.dir input.art.name in
+    let stdout = List.map stdout ~f:(( ^ ) "\n  ") |> String.concat in
     let exit = if exit = 0 then "" else spf "  [%d]\n" exit in
     let rule = spf run_rule name cmd (Path.to_string input) stdout exit in
     return { name; rule }
@@ -243,7 +240,7 @@ module TestSpec = struct
   let prun =
     let pexit =
       string "exit" *> atom
-      >>| Int.of_string_opt
+      >>| Stdlib.int_of_string_opt
       >>= function
       | Some code -> return code
       | None -> fail "invalid code"
@@ -290,7 +287,7 @@ module TestSpec = struct
     (* goes through the file line by line until
        it fully parses the first comment *)
     let parse = Angstrom.Buffered.feed @@ Angstrom.Buffered.parse pcomment in
-    let* comment = In_channel.with_file (Path.to_string path) ~f:(parse_next parse) in
+    let* comment = In_channel.with_open_text (Path.to_string path) (parse_next parse) in
 
     let* sexp =
       match Parsexp.Many.parse_string comment with
@@ -322,12 +319,12 @@ module Test = struct
 
   let build_target name ~root =
     let read_cmd ~prefix =
-      let path = Path.append_part root @@ PPart.of_string (prefix ^ name) in
+      let path = Path.append_part root (prefix ^ name) in
       let text =
         try
-          In_channel.with_file
+          In_channel.with_open_text
             (Path.to_string path)
-            ~f:(Fn.compose Option.some In_channel.input_all)
+            (Fn.compose Option.some In_channel.input_all)
         with
         | Sys_error _ -> None
       in
@@ -350,7 +347,6 @@ module Test = struct
     let name =
       Path.chop_prefix_if_exists test.path ~prefix:(Path.of_string "tests")
       |> Path.to_parts
-      |> List.map ~f:PPart.to_string
       |> String.concat ~sep:"."
       |> String.chop_suffix_if_exists ~suffix:".ml"
     in
@@ -449,7 +445,11 @@ let () =
       })
   in
 
-  Out_channel.write_all "expected.dune" ~data:(String.concat_lines rules.expected);
-  Out_channel.write_all "artifacts.dune" ~data:(String.concat_lines rules.artifacts);
-  Out_channel.write_all "cram.dune" ~data:(String.concat_lines rules.cram)
+  let concat_lines lines = String.concat ~sep:"\n" lines in
+  let write_all file ~data =
+    Out_channel.with_open_text file (fun ch -> Stdlib.output_string ch data)
+  in
+  write_all "expected.dune" ~data:(concat_lines rules.expected);
+  write_all "artifacts.dune" ~data:(concat_lines rules.artifacts);
+  write_all "cram.dune" ~data:(concat_lines rules.cram)
 ;;
