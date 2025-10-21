@@ -478,30 +478,27 @@ let is_mutable = function
 ;;
 
 type restriction_state =
-  | MakeWeak
-  | DoNothing
+  | MakeWeak (** A State, in which restrict makes weak types*)
+  | DoNothing (** restrict function does not make weak types*)
 
 type arrow_state =
-  | OnTheRight
-  | OnTheLeft
+  | OnTheRight (** covariant position *)
+  | OnTheLeft (** contravariant position *)
 
 let restrict : restriction_state -> weak_table -> ty -> ty t =
   fun start table t ->
   let rec helper { typ_desc } xs state arrow =
     match typ_desc with
     | V { binder; _ } ->
-      (match state with
-       | DoNothing -> xs
-       | MakeWeak ->
-         (match arrow with
-          | OnTheRight -> xs
-          | OnTheLeft ->
-            if IntMap.mem binder xs
-            then xs
-            else (
-              table.last <- table.last + 1;
-              (* log "table.last counter number to binder %d: %d" binder table.last; *)
-              IntMap.add binder table.last xs)))
+      (match state, arrow with
+       | MakeWeak, OnTheRight | DoNothing, OnTheLeft | DoNothing, OnTheRight -> xs
+       | MakeWeak, OnTheLeft ->
+         if IntMap.mem binder xs
+         then xs
+         else (
+           table.last <- table.last + 1;
+           (* log "table.last counter number to binder %d: %d" binder table.last; *)
+           IntMap.add binder table.last xs))
     | TLink t -> helper t xs state arrow
     | TPoly (a, t) ->
       (* log "tpoly: %s" t; *)
@@ -526,7 +523,7 @@ let restrict : restriction_state -> weak_table -> ty -> ty t =
     | Arrow (l, r) -> tarrow (helper l) (helper r)
     | TProd (a, b, ts) -> tprod (helper a) (helper b) (List.map ts ~f:helper)
   in
-  return (helper t)
+  return @@ helper t
 ;;
 
 let infer env table expr =
@@ -539,8 +536,13 @@ let infer env table expr =
     (* log "== leave level %d" !current_level; *)
     Int.decr current_level
   in
-  let rec (helper : Type_env.t -> Parsetree.expr -> (ty * Typedtree.expr) R.t) =
-    fun env -> function
+  let rec (helper
+            : Type_env.t
+              -> restriction_state
+              -> Parsetree.expr
+              -> (ty * Typedtree.expr) R.t)
+    =
+    fun env state -> function
       (* | Parsetree.EVar "=" -> *)
       (*  (\* TODO: make equality predefined *\) *)
       (*  let typ = tarrow int_typ (tarrow int_typ bool_typ) in *)
@@ -558,63 +560,62 @@ let infer env table expr =
            let ty = array_typ ty in
            return (ty, TArray ([], ty))
          | h :: _ ->
-           let* ty, _ = helper env h in
+           let* ty, _ = helper env state h in
            let* _, exprs =
              list_foldm
                ~init:(return ([], []))
                ~f:(fun (typs, exprs) e ->
-                 let* t1, e1 = helper env e in
+                 let* t1, e1 = helper env state e in
                  let* () = unify table ty t1 in
                  return (t1 :: typs, e1 :: exprs))
                r
            in
            let ty = array_typ ty in
            let ty = elim table ty in
+           let* ty = restrict MakeWeak table ty in
            return (ty, TArray (exprs, ty)))
       (* lambda abstraction *)
       | ELam (PVar x, e1) ->
         let* tx = fresh_var ~level:!current_level in
         let xID = Ident.of_string x in
         let env = Type_env.extend ~varname:x xID (S (Var_set.empty, tx)) env in
-        let* ty, tbody = helper env e1 in
-        let trez = tarrow tx ty in
-        let trez = elim table trez in
+        let* ty, tbody = helper env DoNothing e1 in
+        let trez = elim table @@ tarrow tx ty in
         return (trez, TLam (Tpat_var xID, tbody, trez))
       | Parsetree.ELam ((PTuple _ as pat), body) ->
         let* env, pat, tp = check_pat ~level:!current_level env pat in
-        let* ty, tbody = helper env body in
-        let trez = tarrow tp ty in
-        let trez = elim table trez in
+        let* ty, tbody = helper env DoNothing body in
+        let trez = elim table @@ tarrow tp ty in
         return (trez, TLam (pat, tbody, trez))
       | EApp (e1, e2) ->
-        let* t1, te1 = helper env e1 in
-        let* t2, te2 = helper env e2 in
+        let* t1, te1 = helper env state e1 in
+        let* t2, te2 = helper env state e2 in
         let* tv = fresh_var ~level:0 in
         let* () = unify table t1 (tarrow t2 tv) in
-        let* tv = restrict MakeWeak table tv in
+        let* tv = restrict state table tv in
         let tv = elim table tv in
-        log "t1 = %a" pp_ty t1;
-        log "t2 = %a" pp_ty t2;
-        log "tv = %a" pp_ty tv;
+        (* log "t1 = %a" pp_ty t1; *)
+        (* log "t2 = %a" pp_ty t2; *)
+        (* log "tv = %a" pp_ty tv; *)
         return (tv, TApp (te1, te2, tv))
       | EConst (PConst_int _n as c) -> return (int_typ, TConst c)
       | EConst (PConst_bool _b as c) -> return (bool_typ, TConst c)
       | Parsetree.EIf (c, th, el) ->
-        let* t1, tc = helper env c in
-        let* t2, tth = helper env th in
-        let* t3, tel = helper env el in
+        let* t1, tc = helper env state c in
+        let* t2, tth = helper env state th in
+        let* t3, tel = helper env state el in
         let* () = unify table t1 bool_typ in
         let* () = unify table t2 t3 in
         let t2 = elim table t2 in
         return (t2, TIf (tc, tth, tel, t2))
       | ETuple (a, b, es) ->
-        let* ta, ea = helper env a in
-        let* tb, eb = helper env b in
+        let* ta, ea = helper env state a in
+        let* tb, eb = helper env state b in
         let* typs, exprs =
           list_foldm
             ~init:(return ([], []))
             ~f:(fun (typs, exprs) e ->
-              let* t1, e1 = helper env e in
+              let* t1, e1 = helper env state e in
               return (t1 :: typs, e1 :: exprs))
             es
         in
@@ -623,11 +624,11 @@ let infer env table expr =
         return (tup_typ, TTuple (ea, eb, exprs, tup_typ))
       | Parsetree.ELet (NonRecursive, PVar x, rhs, e2) ->
         enter_level ();
-        let* t1, typed_rhs = helper env rhs in
+        let* t1, typed_rhs = helper env state rhs in
         leave_level ();
         let t2 = generalize ~level:!current_level t1 in
         let x_ident = Ident.of_string x in
-        let* t3, typed_in = helper (Type_env.extend ~varname:x x_ident t2 env) e2 in
+        let* t3, typed_in = helper (Type_env.extend ~varname:x x_ident t2 env) state e2 in
         let t3 = elim table t3 in
         return (t3, TLet (NonRecursive, Tpat_var x_ident, t2, typed_rhs, typed_in))
       | Parsetree.ELet (Recursive, PVar f, erhs, wher) ->
@@ -637,7 +638,7 @@ let infer env table expr =
         let f_ident = Ident.of_string f in
         let* t1, typed_rhs =
           let env = Type_env.extend ~varname:f f_ident (S (Var_set.empty, tf)) env in
-          helper env erhs
+          helper env state erhs
         in
         leave_level ();
         let* () = unify table tf t1 in
@@ -645,16 +646,16 @@ let infer env table expr =
         let t2 = generalize ~level:!current_level tf in
         (* log "letrec  result = %a\n%!" pp_schepme t2; *)
         let* twher, typed_wher =
-          helper (Type_env.extend ~varname:f f_ident t2 env) wher
+          helper (Type_env.extend ~varname:f f_ident t2 env) state wher
         in
         let twher = elim table twher in
         return (twher, TLet (Recursive, Tpat_var f_ident, t2, typed_rhs, typed_wher))
       | ELet (Recursive, PTuple _, _, _) -> fail `Only_varibles_on_the_left_of_letrec
       | ELet (NonRecursive, (PTuple _ as pat), rhs, wher) ->
         let* env, pat, tp = check_pat ~level:!current_level env pat in
-        let* _ty, tbody = helper env rhs in
+        let* _ty, tbody = helper env state rhs in
         let* () = unify table tp _ty in
-        let* twher, typed_wher = helper env wher in
+        let* twher, typed_wher = helper env state wher in
         let twher = elim table twher in
         return (twher, TLet (NonRecursive, pat, Scheme.make_mono _ty, tbody, typed_wher))
       | Parsetree.ELet (_, PAny, _, _)
@@ -664,7 +665,7 @@ let infer env table expr =
       | Parsetree.EMatch _ | Parsetree.EConstruct _ ->
         failwith "TODO (psi) : not implemented"
   in
-  let* ty, expr = helper env expr in
+  let* ty, expr = helper env MakeWeak expr in
   let* ty = restrict DoNothing table ty in
   return (ty, expr)
 ;;

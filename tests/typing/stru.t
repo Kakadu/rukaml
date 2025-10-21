@@ -211,7 +211,8 @@ tuples
   [2]
 
   $ run << EOF
-  > let f x = [| x |]
+  > let pair x = (x, x)
+  > let g = [| pair |]
   Fatal error: exception Failure("unimplemented in conv for arrays")
   Raised at Stdlib.failwith in file "stdlib.ml", line 29, characters 17-33
   Called from CConv.conv.(fun) in file "middle/CConv.ml", line 306, characters 43-72
@@ -223,27 +224,48 @@ tuples
   [2]
 
   $ run << EOF
+  > let f x = [| x |]
+  Fatal error: exception Failure("unimplemented in conv for arrays")
+  Raised at Stdlib.failwith in file "stdlib.ml", line 29, characters 17-33
+  Called from CConv.conv.(fun) in file "middle/CConv.ml", line 306, characters 43-72
+  Called from Dune__exe__Driver.Compiler.cconv.f in file "driver/driver.ml", line 69, characters 17-56
+  Called from Base__List0.fold in file "src/list0.ml", line 43, characters 27-37
+  Called from Dune__exe__Driver.Compiler.cconv.(fun) in file "driver/driver.ml", line 74, characters 20-77
+  Called from Dune__exe__Driver.Target.Intermediate.typedtree in file "driver/driver.ml", line 147, characters 28-55
+  Called from Dune__exe__Driver in file "driver/driver.ml", line 218, characters 19-32
+  [2]
+Without eta-expansion
+  $ run << EOF
   > let f x y = x
   > let g = f 1
   > let h = g 2
   > let h = g
-  Parsed.
-  let f x y = x
-  let g = f 1
   let f: '_1 -> '_2 -> '_1 =
     fun x y -> x
   let g: '_weak1 -> int =
     f 1
+  let h: int =
+    g 2
+  let h: int -> int =
+    g
 
+With eta-expansion but we not use the passed argument
   $ run << EOF
   > let pair x y = (x, y)
-  > let g = pair 1
+  > let g x = pair 1
   > let temp = g 2
-  > let f = g
-  Parsed.
-  let pair x y = (x, y)
-  let g = pair 1
   let pair: '_1 -> '_2 -> '_1 * '_2 =
     fun x y -> (x, y)
-  let g: '_weak1 -> int * '_weak1 =
-    pair 1
+  let g: '_1 -> '_4 -> int * '_4 =
+    fun x -> pair 1
+  let temp: '_weak1 -> int * '_weak1 =
+    g 2
+
+With eta-expansion
+  $ run << EOF
+  > let pair x y = (x, y)
+  > let g x = pair 1 x
+  let pair: '_1 -> '_2 -> '_1 * '_2 =
+    fun x y -> (x, y)
+  let g: '_1 -> int * '_1 =
+    fun x -> (pair 1) x
