@@ -42,6 +42,7 @@ static uint64_t log_level = 0;
 
 int HEAP_SIZE = 160;
 const uint8_t Tuple_tag = 0;
+const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
 
 struct gc_stats
@@ -301,6 +302,26 @@ void *rukaml_alloc_pair(void *l, void *r)
   logGC("A pair %lX created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
   return rez + 1;
 }
+
+void *rukaml_alloc_array(int32_t size, void** arr)
+{
+  if (GC.allocated_words + size + 1 > HEAP_SIZE)
+  {
+    fprintf(stderr, "Not enough memory\n");
+    exit(1);
+  }
+  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
+  GC.allocated_words += size + 1;
+  GC.stats.gs_allocated_words += size + 1;
+  rez[0] = (uint64_t *)HEADER(size, Array_tag);
+  for (unsigned int i = 1; i < size + 1; i++) {
+    rez[size - i + 1] = arr[i-1];
+  }
+  assert(TAG(rez + 1) == Array_tag);
+  logGC("An array %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
+  return rez + 1;
+}
+
 
 void *rukaml_field(int n, void **r)
 {

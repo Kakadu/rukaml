@@ -559,6 +559,20 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  call rukaml_alloc_pair";
       printfn ppf "  mov %a, rax" pp_dest dest
     | AUnit -> printfn ppf "mov qword %a, 0" pp_dest dest
+    | AArray xs ->
+      let length = List.length xs in
+      printfn ppf "  mov rdi, %d" length;
+      printfn ppf "  sub rsp, 8*%d ; allocate space on stack for array elements" length;
+      (* List.iteri (fun i rname -> *)
+      (*   printfn ppf "  mov %s, [rsp+8*%d]" rname (formal_arity - i - 1)); *)
+      List.iteri
+        (fun i rname ->
+           printfn ppf "  mov qword [rsp+8*%d], %a" i Compile_lib.ANF.pp_a rname)
+        xs;
+      printfn ppf "  mov rsi, rsp";
+      printfn ppf "  call rukaml_alloc_array";
+      printfn ppf "  add rsp, 8*%d ; free space for array elements" length;
+      printfn ppf "  mov %a, rax" pp_dest dest
     | atom ->
       printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
       printfn ppf ";;; @[`%a`@]" ANF.pp_a atom
@@ -652,6 +666,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
       ; "rukaml_field"
       ; (* printfn ppf "extern rukaml_alloc_tuple"; *)
         "rukaml_alloc_pair"
+      ; "rukaml_alloc_array"
       ; "rukaml_initialize"
       ; "rukaml_gc_compact"
       ; "rukaml_gc_print_stats"

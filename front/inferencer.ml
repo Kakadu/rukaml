@@ -579,7 +579,6 @@ let infer env table expr =
                  return (t1 :: typs, e1 :: exprs))
                r
            in
-           let exprs = List.rev exprs in
            let ty = elim table @@ array_typ ty in
            (* log "ty = %a" pp_ty ty; *)
            return (ty, TArray (exprs, ty)))

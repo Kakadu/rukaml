@@ -32,7 +32,8 @@ void *rukaml_apply1(fun7 foo, void *arg1);
 void *rukaml_apply2(fun8 f, void *arg1, void *arg2);
 
 void *rukaml_alloc_pair(void *l, void *r);
-
+void *rukaml_alloc_array(int32_t size, void **arr);
+  
 void *rukaml_field(int n, void **r);
 void *rukaml_alloc_closure(void *func, int32_t argsc);
 
