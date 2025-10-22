@@ -197,7 +197,7 @@ let pack : dispatch =
           <|> (ws *> ident
                >>= function
                | "true" -> return @@ econst (const_bool true)
-               | "false" -> return @@ econst (const_bool true)
+               | "false" -> return @@ econst (const_bool false)
                | _ -> fail "Not a boolean constant")
           <|> parens
                 (return (fun a b xs -> etuple a b xs)
