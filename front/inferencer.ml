@@ -351,8 +351,6 @@ let unify weak l r =
           let* () = acc in
           helper l r)
       else fail (`UnificationFailed (l, r))
-    | TPoly _, Weak _ | Weak _, TPoly _ | Arrow _, Weak _ | Weak _, Arrow _ ->
-      fail (`UnificationFailed (l, r))
     | Weak n, x ->
       weak.map <- IntMap.add n { typ_desc = x } weak.map;
       return ()
@@ -479,7 +477,7 @@ let is_mutable = function
 
 type restriction_state =
   | MakeWeak (** A State, in which restrict makes weak types*)
-  | DoNothing (** restrict function does not make weak types*)
+  | DoNothing
 
 type arrow_state =
   | OnTheRight (** covariant position *)
@@ -491,7 +489,7 @@ let restrict : restriction_state -> weak_table -> ty -> ty t =
     match typ_desc with
     | V { binder; _ } ->
       (match state, arrow with
-       | MakeWeak, OnTheRight | DoNothing, OnTheLeft | DoNothing, OnTheRight -> xs
+       | MakeWeak, OnTheRight | DoNothing, _ -> xs
        | MakeWeak, OnTheLeft ->
          if IntMap.mem binder xs
          then xs
@@ -502,16 +500,26 @@ let restrict : restriction_state -> weak_table -> ty -> ty t =
     | TLink t -> helper t xs state arrow
     | TPoly (a, t) ->
       (* log "tpoly: %s" t; *)
-      helper a xs (if is_mutable t then MakeWeak else state) arrow
+      let not_poly =
+        match a.typ_desc with
+        | V _ -> false
+        | _ -> true
+      in
+      helper a xs (if is_mutable t && not_poly then MakeWeak else state) arrow
     | Prim _ | Weak _ -> xs
-    | Arrow (l, r) -> helper l (helper r xs state OnTheRight) state OnTheLeft
+    | Arrow (l, r) ->
+      (* log "%a" Pprint.pp_typ l; *)
+      (* log "%a" Pprint.pp_typ r; *)
+      let xs = helper r xs state OnTheRight in
+      let xs = helper l xs state OnTheLeft in
+      xs
     | TProd (f, s, ts) ->
       List.fold_left
         ts
         ~init:(helper f (helper s xs state arrow) state arrow)
         ~f:(fun acc x -> helper x acc state arrow)
   in
-  let weak_map = helper t IntMap.empty start OnTheRight in
+  let weak_map = helper t IntMap.empty start OnTheLeft in
   let rec helper t =
     match t.typ_desc with
     | Prim _ | Weak _ -> t
@@ -557,6 +565,7 @@ let infer env table expr =
         (match r with
          | [] ->
            let* ty = fresh_var ~level:!current_level in
+           log "ty = %a" pp_ty ty;
            let ty = array_typ ty in
            return (ty, TArray ([], ty))
          | h :: _ ->
@@ -570,9 +579,9 @@ let infer env table expr =
                  return (t1 :: typs, e1 :: exprs))
                r
            in
-           let ty = array_typ ty in
-           let ty = elim table ty in
-           let* ty = restrict MakeWeak table ty in
+           let exprs = List.rev exprs in
+           let ty = elim table @@ array_typ ty in
+           (* log "ty = %a" pp_ty ty; *)
            return (ty, TArray (exprs, ty)))
       (* lambda abstraction *)
       | ELam (PVar x, e1) ->
@@ -619,8 +628,7 @@ let infer env table expr =
               return (t1 :: typs, e1 :: exprs))
             es
         in
-        let tup_typ = tprod ta tb typs in
-        let tup_typ = elim table tup_typ in
+        let tup_typ = elim table @@ tprod ta tb typs in
         return (tup_typ, TTuple (ea, eb, exprs, tup_typ))
       | Parsetree.ELet (NonRecursive, PVar x, rhs, e2) ->
         enter_level ();

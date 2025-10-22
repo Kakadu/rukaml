@@ -132,7 +132,6 @@ Zed combinator should trigger occurs check
   let main: int =
     add 1
 
-
 tuples
   $ run << EOF
   > let twice = fun x -> (x,x)
@@ -269,3 +268,16 @@ With eta-expansion
     fun x y -> (x, y)
   let g: '_1 -> int * '_1 =
     fun x -> (pair 1) x
+
+  $ run << EOF
+  > let f = [|1; 2; 3; 4|]
+  Parsed.
+  let f = [|1; 2; 3; 4|]
+  let f: int array =
+    [|1; 2; 3; 4|]
+
+  $ run << EOF
+  > let f = [|1;true; 2; 3; 4|]
+  Parsed.
+  let f = [|1; true; 2; 3; 4|]
+  Error: unification failed on int and bool
