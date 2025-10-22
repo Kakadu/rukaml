@@ -1,7 +1,7 @@
 (*
 test
   (targets (anf promote) (amd64 promote))
-  (run (stdout "rukaml_print_int 0"))
+  (run (stdout "rukaml_print_int 42" "rukaml_print_int 0"))
 *)
 
 (* should print 42 then 0 *)
