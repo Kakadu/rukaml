@@ -526,6 +526,8 @@ let generate_body is_toplevel ppf body =
     match x with
     | AConst (Frontend.Parsetree.PConst_bool true) ->
       printfn ppf "  mov qword %a, 1" pp_dest dest
+    | AConst (Frontend.Parsetree.PConst_bool false) ->
+      printfn ppf "  mov qword %a, 0" pp_dest dest
     | AConst (Frontend.Parsetree.PConst_int n) ->
       printfn ppf "  mov qword %a,  %d" pp_dest dest n
     | AVar ({ Ident.hum_name = "print"; _ } as v) when None = is_toplevel v ->
