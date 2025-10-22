@@ -280,7 +280,8 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  mov qword [rsp%+d*8], r8" (count - 1 - i)
       | ALam _ -> failwith "Should it be representable in ANF?"
       | APrimitive _ -> assert false
-      | ATuple _ -> assert false);
+      | ATuple _ -> assert false
+      | AArray _ -> assert false);
     count + _stack_padding
   in
   let rec helper dest = function
@@ -344,6 +345,7 @@ let generate_body is_toplevel ppf body =
        | AConst (PConst_bool _)
        | AVar _ | APrimitive _
        | ATuple (_, _, _)
+       | AArray _
        | ALam (_, _)
        | AUnit -> failwith "Should not happen")
     | CApp (APrimitive "=", AConst (PConst_int l), [ AConst (PConst_int r) ]) ->

@@ -27,6 +27,7 @@ type imm_expr =
   | AVar of Ident.t
   | APrimitive of string
   | ATuple of imm_expr * imm_expr * imm_expr list
+  | AArray of imm_expr list
   | ALam of apat * expr
 
 and c_expr =
@@ -149,6 +150,7 @@ include struct
     | APrimitive s -> fprintf ppf "%s" s
     | AVar s -> Ident.pp ppf s
     | ATuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
+    | AArray xs -> fprintf ppf "@[[|%a|]@]" (pp_comma_list helper_a) xs
     | AUnit -> fprintf ppf "()"
   ;;
 
@@ -198,6 +200,7 @@ let used_once_as_function ~where name =
     | AVar id when Ident.equal id name -> incr used
     | APrimitive _ | AUnit | AConst _ | AVar _ -> ()
     | ALam (_, e) -> helper e
+    | AArray xs -> List.iter helper_i xs
     | ATuple (a, b, cs) ->
       helper_i a;
       helper_i b;
@@ -236,6 +239,7 @@ let used_once_in_if ~where name =
     | AVar id when Ident.equal id name -> incr used
     | APrimitive _ | AUnit | AConst _ | AVar _ -> ()
     | ALam (_, e) -> helper e
+    | AArray xs -> List.iter helper_i xs
     | ATuple (a, b, cs) ->
       helper_i a;
       helper_i b;
@@ -567,7 +571,6 @@ let anf =
        , Tpat_var name
        , CApp (AVar "fresh", arg1, [ arg2 ])
        , k (AVar name) ))) *)
-    | TArray _ -> failwith "not implemented in anf for arrays"
     | TApp (f, arg1, _) ->
       helper f (fun f ->
         helper arg1 (fun arg1 ->
@@ -619,6 +622,14 @@ let anf =
         helper eb (fun bimm ->
           let name = gensym_id () in
           make_let_nonrec name (CAtom (ATuple (aimm, bimm, []))) (k (AVar name))))
+    | TArray (xs, _) ->
+      let name = gensym_id () in
+      let rec helper_fold xs ys =
+        match xs with
+        | h :: tl -> helper h (fun x -> helper_fold tl (x :: ys))
+        | [] -> make_let_nonrec name (CAtom (AArray ys)) (k (AVar name))
+      in
+      helper_fold xs []
     | TTuple (_, _, _ :: _, _) as m ->
       Format.eprintf "%a\n%!" Typedtree.pp_expr m;
       Format.kasprintf

@@ -378,6 +378,7 @@ let generate_body is_toplevel body =
       | ALam _ -> failwith "Should it be representable in ANF?"
       | APrimitive _ -> assert false
       | ATuple _ -> assert false
+      | AArray _ -> assert false
     in
     ListLabels.iteri args ~f:on_arg;
     (* printfn ppf "  addi sp, sp, -8*%d # fun %S arguments" count (Option.get f); *)
@@ -468,7 +469,7 @@ let generate_body is_toplevel body =
            emit sd_dest a0 dest;
            emit addi SP SP 16)
        | AConst (PConst_bool _)
-       | AVar _ | APrimitive _
+       | AArray _ | AVar _ | APrimitive _
        | ATuple (_, _, _)
        | ALam (_, _)
        | AUnit -> failwith "Should not happen")

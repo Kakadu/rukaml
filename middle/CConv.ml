@@ -180,7 +180,9 @@ let conv ?(standart_globals = standart_globals)
        (* fusion with simplifier *)
        helper globals body *)
     | EApp (l, r) -> return eapp1 <*> helper globals l <*> helper globals r
-    | EArray _ -> failwith "unimplemented in conv for arrays"
+    | EArray xs ->
+      let* xs = helper_list globals xs in
+      return (earray xs)
     | ELam (_, _) ->
       log "Got ELam _: globals = %a" SS.pp globals;
       (match sugarize_let root_expr with
