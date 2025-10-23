@@ -229,13 +229,27 @@ uint64_t rukaml_array_length(int a0, int a1, int a2, int a3, int a4, int a5, voi
   return SIZE(arr);
 }
 
-uint64_t *rukaml_array_get(int a0, int a1, int a2, int a3, int a4, int a5, void **arr, uint64_t n)
+void *rukaml_array_get(int a0, int a1, int a2, int a3, int a4, int a5,
+                           void **arr, uint64_t n)
 {
-  return FIELD(arr, n);
+  assert(TAG(arr) == Array_tag);
+  if (n >= SIZE(arr))
+  {
+    fprintf(stderr, "Index out of bounds");
+    exit(1);
+  }
+  return arr[n];
 }
 
-void rukaml_array_set(int a0, int a1, int a2, int a3, int a4, int a5, void **arr, uint64_t n, void *a)
+void rukaml_array_set(int a0, int a1, int a2, int a3, int a4, int a5,
+                      void **arr, uint64_t n, void *a)
 {
+  assert(TAG(arr) == Array_tag);
+  if (n >= SIZE(arr))
+  {
+    fprintf(stderr, "Index out of bounds");
+    exit(1);
+  }
   arr[n] = a;
   return;
 }
@@ -331,11 +345,11 @@ void *rukaml_alloc_array(int32_t size, void** arr)
   GC.allocated_words += size + 1;
   GC.stats.gs_allocated_words += size + 1;
   rez[0] = (uint64_t *)HEADER(size, Array_tag);
+  assert(TAG(rez + 1) == Array_tag);
+  assert(SIZE(rez + 1) == size);
   for (unsigned int i = 1; i < size + 1; i++) {
     rez[size - i + 1] = arr[i-1];
   }
-  assert(TAG(rez + 1) == Array_tag);
-  assert(SIZE(rez + 1) == size);
   logGC("An array %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
   return rez + 1;
 }

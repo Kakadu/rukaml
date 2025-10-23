@@ -338,7 +338,38 @@ let generate_body is_toplevel ppf body =
          printfn ppf "  add rsp, 8*2";
          Addr_of_local.remove_local name2;
          Addr_of_local.remove_local name1
-       | AArray r -> printfn ppf "  mov %a, %d" pp_dest dest (List.length r)
+       | _ -> failwith "Should not happen")
+    | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "get"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar arr when Addr_of_local.has_key arr ->
+         printfn ppf "  mov rdi, rukaml_array_get";
+         printfn ppf "  mov rsi, 2";
+         printfn ppf "  call rukaml_alloc_closure";
+         printfn ppf "  mov rdi, rax";
+         printfn ppf "  mov rsi, 1";
+         printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arr;
+         printfn ppf "  mov al, 0";
+         printfn ppf "  call rukaml_applyN";
+         printfn ppf "  mov %a, rax" pp_dest dest
+       | _ -> failwith "Should not happen")
+    | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "set"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar arr when Addr_of_local.has_key arr ->
+         printfn ppf "  mov rdi, rukaml_array_set";
+         printfn ppf "  mov rsi, 3";
+         printfn ppf "  call rukaml_alloc_closure";
+         printfn ppf "  mov rdi, rax";
+         printfn ppf "  mov rsi, 1";
+         printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arr;
+         printfn ppf "  mov al, 0";
+         printfn ppf "  call rukaml_applyN";
+         printfn ppf "  mov %a, rax" pp_dest dest
        | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
       when f.Ident.hum_name = "print"
@@ -696,6 +727,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
         "rukaml_alloc_pair"
       ; "rukaml_alloc_array"
       ; "rukaml_array_length"
+      ; "rukaml_array_get"
+      ; "rukaml_array_set"
       ; "rukaml_initialize"
       ; "rukaml_gc_compact"
       ; "rukaml_gc_print_stats"

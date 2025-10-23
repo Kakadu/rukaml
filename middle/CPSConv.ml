@@ -61,6 +61,7 @@ type c =
   | ACont of a * c
   | ICont of ds_expr * ds_expr * env * c
   | TupleBldCont of ds_expr list * a list * env * c
+  | ArrayBldCont of ds_expr list * a list * env * c
   | LetRecCont of pat * ds_expr * env * c * potent_not_allowed_expr
   | ToplevelLetRecCont of pat * ds_vb list * main_id * potent_not_allowed_expr
   | LetNonRecCont of ds_pattern * ds_expr * env * c
@@ -85,7 +86,7 @@ let start_glob_envs =
     let ident = Frontend.Ident.of_string v in
     SMap.add ident.hum_name ident.id
   in
-  let idents = [ "print"; "length"; "closure_count" ] in
+  let idents = [ "print"; "closure_count"; "length"; "get"; "set" ] in
   let idents = List.map (fun x -> Frontend.Ident.of_string x) idents in
   let imap =
     List.fold_right
@@ -353,7 +354,7 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
   let rec cps env exp c counts =
     match exp with
     | DEVar y -> ret c (IMap.find y.id env) counts
-    | DEArray r -> failwith "unimple in cps"
+    | DEArray _ -> failwith "unimplemented"
     | DEConst z -> ret c (AConst z) counts
     | DEUnit -> ret c AUnit counts
     | DELam (ds_pat, e) -> ret c (AClo (ds_pat, e, env)) counts
