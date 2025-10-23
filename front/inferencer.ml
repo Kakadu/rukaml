@@ -683,6 +683,9 @@ let start_env =
   let extend_s varname = Type_env.extend ~varname (Ident.of_string varname) in
   Type_env.empty
   |> extend_s "print" (Scheme.make_mono (tarrow int_typ unit_typ))
+  (* |> extend_s "get" (Scheme.make_mono (tarrow int_typ unit_typ)) *)
+  (* |> extend_s "set" (Scheme.make_mono (tarrow int_typ unit_typ)) *)
+  |> extend_s "length" (Scheme.make_mono (tarrow (array_typ @@ tv 1 ~level:0) int_typ))
   |> extend_s "<" cmp_scheme
   |> extend_s ">" cmp_scheme
   |> extend_s "<=" cmp_scheme

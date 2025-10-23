@@ -85,11 +85,23 @@ let start_glob_envs =
     let ident = Frontend.Ident.of_string v in
     SMap.add ident.hum_name ident.id
   in
-  let printi = Frontend.Ident.of_string "print" in
-  let closure_count = Frontend.Ident.of_string "closure_count" in
-  ( IMap.(add printi.id (AVar printi) (add closure_count.id (AVar closure_count) empty))
+  let idents = [ "print"; "length"; "closure_count" ] in
+  let idents = List.map (fun x -> Frontend.Ident.of_string x) idents in
+  let imap =
+    List.fold_right
+      (fun x acc -> IMap.add x.id (AVar x) acc)
+      (List.tl idents)
+      IMap.(add (List.hd idents).id (AVar (List.hd idents)) empty)
+  in
+  let smap =
+    List.fold_right (fun x acc -> SMap.add x.hum_name x.id acc) idents SMap.empty
+  in
+  ( imap
   , SMap.(
-      empty
+      (* empty *)
+      (* |> add printi.hum_name printi.id *)
+      (* |> add closure_count.hum_name closure_count.id) *)
+      smap
       |> extend "<"
       |> extend ">"
       |> extend "<="
@@ -98,9 +110,7 @@ let start_glob_envs =
       |> extend "+"
       |> extend "-"
       |> extend "*"
-      |> extend "/"
-      |> add printi.hum_name printi.id
-      |> add closure_count.hum_name closure_count.id) )
+      |> extend "/") )
 ;;
 
 let upd id k counts no_refs ref_once =
@@ -343,7 +353,7 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
   let rec cps env exp c counts =
     match exp with
     | DEVar y -> ret c (IMap.find y.id env) counts
-    | DEArray _ -> failwith "unimplemented in cps"
+    | DEArray r -> failwith "unimple in cps"
     | DEConst z -> ret c (AConst z) counts
     | DEUnit -> ret c AUnit counts
     | DELam (ds_pat, e) -> ret c (AClo (ds_pat, e, env)) counts
@@ -747,6 +757,13 @@ let%expect_test "cps print" =
     {|
     let main =
       let x1 = print 0 in (fun z -> (fun x -> x) 1) x1
+    |}]
+;;
+
+let%expect_test "cps length" =
+  test_cps_vb {|let main  = let r = [|1; 2|] in length r |};
+  [%expect
+    {|
     |}]
 ;;
 

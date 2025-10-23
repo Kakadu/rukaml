@@ -269,6 +269,15 @@ let generate_body is_toplevel ppf body =
       | AVar { Ident.hum_name = "print"; _ } ->
         emit_alloc_closure ppf (Ident.of_string "rukaml_print_int") 1;
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar { Ident.hum_name = "length"; _ } ->
+        emit_alloc_closure ppf (Ident.of_string "rukaml_array_length") 1;
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar { Ident.hum_name = "get"; _ } ->
+        emit_alloc_closure ppf (Ident.of_string "rukaml_array_get") 2;
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar { Ident.hum_name = "set"; _ } ->
+        emit_alloc_closure ppf (Ident.of_string "rukaml_array_set") 3;
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar vname ->
         printfn
           ppf
@@ -312,6 +321,25 @@ let generate_body is_toplevel ppf body =
       printfn ppf "%s:" el_lab;
       helper dest bel;
       printfn ppf "%s:" fin_lab
+    | CApp (AVar f, arg, [])
+      when f.Ident.hum_name = "length"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg with
+       | AVar v when Addr_of_local.has_key v ->
+         let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+         let name2 = Ident.of_string @@ gen_name ~prefix:"array" () in
+         Addr_of_local.extend name1;
+         Addr_of_local.extend name2;
+         printfn ppf "  add rsp, -8*2";
+         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+         printfn ppf "  mov qword [rsp], r11";
+         printfn ppf "  call rukaml_array_length";
+         printfn ppf "  add rsp, 8*2";
+         Addr_of_local.remove_local name2;
+         Addr_of_local.remove_local name1
+       | AArray r -> printfn ppf "  mov %a, %d" pp_dest dest (List.length r)
+       | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
       when f.Ident.hum_name = "print"
            && is_toplevel f = None
@@ -667,6 +695,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
       ; (* printfn ppf "extern rukaml_alloc_tuple"; *)
         "rukaml_alloc_pair"
       ; "rukaml_alloc_array"
+      ; "rukaml_array_length"
       ; "rukaml_initialize"
       ; "rukaml_gc_compact"
       ; "rukaml_gc_print_stats"

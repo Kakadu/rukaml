@@ -224,6 +224,23 @@ void rukaml_print_int(int a0, int a1, int a2, int a3, int a4, int a5, int x)
   fflush(stdout);
 }
 
+uint64_t rukaml_array_length(int a0, int a1, int a2, int a3, int a4, int a5, void **arr)
+{
+  return SIZE(arr);
+}
+
+uint64_t *rukaml_array_get(int a0, int a1, int a2, int a3, int a4, int a5, void **arr, uint64_t n)
+{
+  return FIELD(arr, n);
+}
+
+void rukaml_array_set(int a0, int a1, int a2, int a3, int a4, int a5, void **arr, uint64_t n, void *a)
+{
+  arr[n] = a;
+  return;
+}
+
+
 void *rukaml_apply0(fun0 f)
 {
   // TODO: I'm not sure that zero-argument call is needed
@@ -318,6 +335,7 @@ void *rukaml_alloc_array(int32_t size, void** arr)
     rez[size - i + 1] = arr[i-1];
   }
   assert(TAG(rez + 1) == Array_tag);
+  assert(SIZE(rez + 1) == size);
   logGC("An array %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
   return rez + 1;
 }

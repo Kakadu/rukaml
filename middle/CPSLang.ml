@@ -25,6 +25,7 @@ module Lang (Args : sig
 struct
   type var = ident
   type 'a tuple = 'a * 'a * 'a list
+  type 'a array = 'a list
   type 'a safe_binop = var * 'a * 'a (* invarint:  division by zero isn't possible *)
 
   type pat =
