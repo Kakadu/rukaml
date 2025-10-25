@@ -246,6 +246,8 @@ module Scheme = struct
 
   let make_mono ty = S (Var_set.empty, ty)
 
+  (* let make_poly ty *)
+
   let occurs_in info = function
     | S (xs, t) -> (not (Var_set.mem info.binder xs)) && Type.occurs_in info t
   ;;
@@ -555,6 +557,29 @@ let infer env table expr =
       (*  (\* TODO: make equality predefined *\) *)
       (*  let typ = tarrow int_typ (tarrow int_typ bool_typ) in *)
       (*  return (typ, TVar ("=", typ)) *)
+      (*       |> extend_s *)
+      (*      "get" *)
+      (*      (Scheme.make_mono *)
+      (*         (tarrow (array_typ @@ tv 1 ~level:1) (tarrow int_typ (tv 1 ~level:2)))) *)
+      (* |> extend_s *)
+      (*      "set" *)
+      (*      (Scheme.make_mono *)
+      (*         (tarrow *)
+      (*            (array_typ @@ tv 1 ~level:1) *)
+      (*            (tarrow int_typ (tarrow (tv 1 ~level:3) unit_typ)))) *)
+      (* |> extend_s "length" (Scheme.make_mono (tarrow (array_typ @@ tv 1 ~level:1) int_typ)) *)
+      | Parsetree.EVar "length" ->
+        let* fresh = fresh_var ~level:!current_level in
+        let typ = tarrow (tpoly fresh "array") int_typ in
+        return (typ, TVar ("length", Ident.of_string "length", typ))
+      | Parsetree.EVar "get" ->
+        let* fresh = fresh_var ~level:!current_level in
+        let typ = tarrow (tpoly fresh "array") (tarrow int_typ fresh) in
+        return (typ, TVar ("get", Ident.of_string "get", typ))
+      | Parsetree.EVar "set" ->
+        let* fresh = fresh_var ~level:!current_level in
+        let typ = tarrow (tpoly fresh "array") (tarrow int_typ (tarrow fresh unit_typ)) in
+        return (typ, TVar ("set", Ident.of_string "set", typ))
       | Parsetree.EVar x ->
         let* scheme = lookup_scheme_by_string x env in
         let* typ = instantiate ~level:!current_level scheme in
@@ -588,6 +613,7 @@ let infer env table expr =
         let xID = Ident.of_string x in
         let env = Type_env.extend ~varname:x xID (S (Var_set.empty, tx)) env in
         let* ty, tbody = helper env DoNothing e1 in
+        (* log "ta = %a" pp_ty ta; *)
         let trez = elim table @@ tarrow tx ty in
         return (trez, TLam (Tpat_var xID, tbody, trez))
       | Parsetree.ELam ((PTuple _ as pat), body) ->
@@ -599,12 +625,14 @@ let infer env table expr =
         let* t1, te1 = helper env state e1 in
         let* t2, te2 = helper env state e2 in
         let* tv = fresh_var ~level:0 in
-        let* () = unify table t1 (tarrow t2 tv) in
-        let* tv = restrict state table tv in
-        let tv = elim table tv in
         (* log "t1 = %a" pp_ty t1; *)
         (* log "t2 = %a" pp_ty t2; *)
         (* log "tv = %a" pp_ty tv; *)
+        let* () = unify table t1 (tarrow t2 tv) in
+        (* log "t1 = %a" pp_ty t1; *)
+        (* log "t2 = %a" pp_ty t2; *)
+        (* log "tv = %a" pp_ty tv; *)
+        let tv = elim table tv in
         return (tv, TApp (te1, te2, tv))
       | EConst (PConst_int _n as c) -> return (int_typ, TConst c)
       | EConst (PConst_bool _b as c) -> return (bool_typ, TConst c)
@@ -683,17 +711,6 @@ let start_env =
   let extend_s varname = Type_env.extend ~varname (Ident.of_string varname) in
   Type_env.empty
   |> extend_s "print" (Scheme.make_mono (tarrow int_typ unit_typ))
-  |> extend_s
-       "get"
-       (Scheme.make_mono
-          (tarrow (array_typ @@ tv 1 ~level:0) (tarrow int_typ (tv 1 ~level:0))))
-  |> extend_s
-       "set"
-       (Scheme.make_mono
-          (tarrow
-             (array_typ @@ tv 1 ~level:0)
-             (tarrow int_typ (tarrow (tv 1 ~level:0) unit_typ))))
-  |> extend_s "length" (Scheme.make_mono (tarrow (array_typ @@ tv 1 ~level:0) int_typ))
   |> extend_s "<" cmp_scheme
   |> extend_s ">" cmp_scheme
   |> extend_s "<=" cmp_scheme
