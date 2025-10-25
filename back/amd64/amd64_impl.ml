@@ -624,12 +624,21 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  sub rsp, 8*%d ; allocate space on stack for array elements" length;
       (* List.iteri (fun i rname -> *)
       (*   printfn ppf "  mov %s, [rsp+8*%d]" rname (formal_arity - i - 1)); *)
-      List.iteri
-        (fun i rname ->
-           printfn ppf "  mov qword [rsp+8*%d], %a" i Compile_lib.ANF.pp_a rname)
-        xs;
+      let idents =
+        List.mapi
+          (fun i rname ->
+             let name =
+               Ident.of_string @@ gen_name ~prefix:("element" ^ string_of_int i) ()
+             in
+             Addr_of_local.extend name;
+             helper_a (DStack_var name) rname;
+             (* printfn ppf "  mov qword [rsp+8*%d], %a" i Compile_lib.ANF.pp_a rname; *)
+             name)
+          xs
+      in
       printfn ppf "  mov rsi, rsp";
       printfn ppf "  call rukaml_alloc_array";
+      List.iter Addr_of_local.remove_local (List.rev idents);
       printfn ppf "  add rsp, 8*%d ; free space for array elements" length;
       printfn ppf "  mov %a, rax" pp_dest dest
     | atom ->

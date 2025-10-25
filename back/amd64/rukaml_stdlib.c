@@ -254,7 +254,6 @@ void rukaml_array_set(int a0, int a1, int a2, int a3, int a4, int a5,
   return;
 }
 
-
 void *rukaml_apply0(fun0 f)
 {
   // TODO: I'm not sure that zero-argument call is needed
