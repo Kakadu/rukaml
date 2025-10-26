@@ -1,6 +1,4 @@
-$ ls -ls
-$ file `readlink tests.exe`
-  $ ./tests.exe --help | grep -v 'Elapsed time'
+  $ ./stdlib_cunit.exe --help | grep -v 'Elapsed time'
   
   
        CUnit - A unit testing framework for C - Version 2.1-3
@@ -15,5 +13,3 @@ $ file `readlink tests.exe`
                  tests      1      1      1      0        0
                asserts      1      1      1      0      n/a
   
-
-
