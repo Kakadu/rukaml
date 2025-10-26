@@ -91,7 +91,6 @@ value binding
   > match (x, y) with
   > | (x, y) -> (x, y)
   > | _ -> (y, x)
-  "match (x, y) with\n| (x, y) -> (x, y)\n| _ -> (y, x)"
   Parsed: match (x, y) with
             | (x, y) -> (x, y)
             | _ -> (y, x)
@@ -104,7 +103,6 @@ value binding
   > | (f, (f, s)) -> 2
   > | (f, s) -> 1
   > | s -> 0
-  "match e with\n| (f, (f, (f, (f, s)))) -> 4\n| (f, (f, (f, s))) -> 3\n| (f, (f, s)) -> 2\n| (f, s) -> 1\n| s -> 0"
   Parsed: match e with
             | (f, (f, (f, (f, s)))) -> 4
             | (f, (f, (f, s))) -> 3
@@ -117,7 +115,6 @@ value binding
   > | One x -> 1
   > | Two (x, y) -> 2
   > | Three (x, y, z) -> 3
-  "match x with\n| One x -> 1\n| Two (x, y) -> 2\n| Three (x, y, z) -> 3"
   Parsed: match x with
             | One (x) -> 1
             | Two ((x, y)) -> 2
@@ -127,7 +124,6 @@ value binding
   $ cat << EOF | ./run.exe -e -
   > match x with
   > | _ -> if x then y else z
-  "match x with\n| _ -> if x then y else z"
   Parsed: match x with
             | _ -> if x then y else z
             
@@ -139,7 +135,6 @@ value binding
   > else 
   >   match z with
   >   | _ -> Z
-  "if x then \n  match y with\n  | _ -> y\nelse \n  match z with\n  | _ -> Z"
   Parsed: (if x then match y with
                        | _ -> y
                         else match z with
@@ -150,7 +145,6 @@ value binding
   > match f x with
   > | Some x -> g x
   > | None -> a b c
-  "match f x with\n| Some x -> g x\n| None -> a b c"
   Parsed: match f x with
             | Some (x) -> g x
             | None -> a b c
