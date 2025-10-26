@@ -223,7 +223,7 @@ let pp_stru ppf vbs =
   let open Format in
   open_vbox 0;
   pp_print_list
-    ~pp_sep:(fun ppf () -> fprintf ppf "@ ")
+    ~pp_sep:(fun ppf () -> fprintf ppf "@\n")
     (fun ppf -> fprintf ppf "@[%a@]" pp_structure_item)
     ppf
     vbs;
