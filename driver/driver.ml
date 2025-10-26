@@ -25,7 +25,7 @@ module Compiler = struct
   type code = path:string -> unit
 
   type _ t =
-    | Parsetree : Parsetree.structure -> Parsetree.structure t
+    | Parsetree : Parsetree.value_binding list -> Parsetree.value_binding t
     | Typedtree : Typedtree.structure -> Typedtree.structure t
     | ANF : ANF.vb list -> ANF.vb list t
     | Code : code -> code t
@@ -34,7 +34,7 @@ module Compiler = struct
 
   (** Parse text to parsetree *)
   let parse (text : string) =
-    match Parsing.parse_structure text with
+    match Parsing.parse_value_bindings text with
     | Ok x -> k (Parsetree x)
     | Error (`Parse_error msg) -> error "parse error: %s" msg
   ;;
@@ -63,7 +63,8 @@ module Compiler = struct
     let collect_globals =
       List.fold_left ~f:(fun acc -> function
         | _, Parsetree.PVar s, _ -> CConv.String_set.add s acc
-        | _, PTuple _, _ -> acc)
+        | _, PTuple _, _ -> acc
+        | _ -> failwith "not implemented")
     in
     let f (globals, acc) vb =
       let stru = CConv.conv ~standart_globals:globals vb in
@@ -77,7 +78,7 @@ module Compiler = struct
 
   (** Infer parsetree to typedtree *)
   let infer (Parsetree stru) =
-    match Inferencer.structure stru with
+    match Inferencer.structure (List.map ~f:(fun vb -> Parsetree.SValue vb) stru) with
     | Ok x -> k (Typedtree x)
     | Error err -> error "infer error: %a" Inferencer.pp_error err
   ;;
@@ -121,7 +122,9 @@ module Compiler = struct
       Out_channel.write_all path ~data:(flush_str_formatter ())
     in
     function
-    | Parsetree stru -> with_ppf (fun ppf -> Pprint.pp_stru ppf stru)
+    | Parsetree stru ->
+      with_ppf (fun ppf ->
+        Pprint.pp_stru ppf (List.map ~f:(fun vb -> Parsetree.SValue vb) stru))
     | Typedtree stru -> with_ppf (fun ppf -> Pprinttyped.pp_stru ppf stru)
     | ANF stru -> with_ppf (fun ppf -> ANF.pp_stru ppf stru)
     | Code f -> f ~path
