@@ -24,9 +24,21 @@ let rec pp_pattern ppf = function
     List.iter (fprintf ppf ", %a" pp_pattern) (pb :: ps);
     fprintf ppf ")@]"
   | PAny -> fprintf ppf "@[_@]"
-  | PConstruct ("Cons", Some (PTuple (head, tail, []))) ->
-    fprintf ppf "@[(%a :: %a)@]" pp_pattern head pp_pattern tail
-  | PConstruct ("Nil", None) -> fprintf ppf "[]"
+  | PConstruct ("[]", None) -> fprintf ppf "[]"
+  | PConstruct ("::", Some (PTuple (head, tail, []))) ->
+    let rec helper acc = function
+      | PConstruct ("::", Some (PTuple (hd, tl, []))) -> helper (hd :: acc) tl
+      | PConstruct ("[]", None) ->
+        fprintf ppf "@[[ %a" pp_pattern head;
+        List.iter (fun item -> fprintf ppf "; %a" pp_pattern item) (List.rev acc);
+        fprintf ppf " ]@]"
+      | _ as exp ->
+        fprintf ppf "%a" pp_pattern head;
+        List.iter
+          (fun item -> fprintf ppf " :: %a" pp_pattern item)
+          (List.rev (exp :: acc))
+    in
+    helper [] tail
   | PConstruct (name, None) -> fprintf ppf "@[%s@]" name
   | PConstruct (name, Some arg) -> fprintf ppf "@[%s (%a)@]" name pp_pattern arg
 ;;
@@ -107,9 +119,21 @@ let rec pp_expr_helper ?(ps = true) ppf = function
       (fun (p, e) -> fprintf ppf "@[| %a -> %a@]@ " pp_pattern p no_pars e)
       (pe :: pes);
     fprintf ppf "@]"
-  | EConstruct ("Cons", Some (ETuple (head, tail, []))) ->
-    fprintf ppf "@[(%a :: %a)@]" no_pars head maybe_pars tail
-  | EConstruct ("Nil", None) -> fprintf ppf "[]"
+  | EConstruct ("[]", None) -> fprintf ppf "[]"
+  | EConstruct ("::", Some (ETuple (head, tail, []))) ->
+    let rec helper acc = function
+      | EConstruct ("::", Some (ETuple (hd, tl, []))) -> helper (hd :: acc) tl
+      | EConstruct ("[]", None) ->
+        fprintf ppf "[@[ %a" no_pars head;
+        List.iter (fun item -> fprintf ppf "; %a" no_pars item) (List.rev acc);
+        fprintf ppf " ]@]"
+      | _ as exp ->
+        fprintf ppf "%a" no_pars head;
+        List.iter
+          (fun item -> fprintf ppf " :: %a" maybe_pars item)
+          (List.rev (exp :: acc))
+    in
+    helper [] tail
   | EConstruct (name, None) -> fprintf ppf "%s" name
   | EConstruct (name, Some arg) -> fprintf ppf "@[%s %a@]" name maybe_pars arg
 
