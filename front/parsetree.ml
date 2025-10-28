@@ -49,10 +49,10 @@ let eapp f ?(is_right_assoc = false) args =
   | true, args -> List.fold_right eapp1 args f
 ;;
 
-let pnil = PConstruct ("Nil", None)
-let enil = EConstruct ("Nil", None)
-let pcons hd tl = PConstruct ("Cons", Some (PTuple (hd, tl, [])))
-let econs hd tl = EConstruct ("Cons", Some (ETuple (hd, tl, [])))
+let pnil = PConstruct ("[]", None)
+let enil = EConstruct ("[]", None)
+let pcons hd tl = PConstruct ("::", Some (PTuple (hd, tl, [])))
+let econs hd tl = EConstruct ("::", Some (ETuple (hd, tl, [])))
 let elet ?(isrec = NonRecursive) p b wher = ELet (isrec, p, b, wher)
 let eite c t e = EIf (c, t, e)
 let emul a b = eapp (evar "*") [ a; b ]
