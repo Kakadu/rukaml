@@ -149,10 +149,10 @@ type dispatch_patt =
   ; patt : dispatch_patt -> pattern t
   }
 
-let pnil = PConstruct ("Nil", None)
-let enil = EConstruct ("Nil", None)
-let pcons hd tl = PConstruct ("Cons", Some (PTuple (hd, tl, [])))
-let econs hd tl = EConstruct ("Cons", Some (ETuple (hd, tl, [])))
+let pnil = PConstruct ("[]", None)
+let enil = EConstruct ("[]", None)
+let pcons hd tl = PConstruct ("::", Some (PTuple (hd, tl, [])))
+let econs hd tl = EConstruct ("::", Some (ETuple (hd, tl, [])))
 
 let patt_basic d =
   ws
