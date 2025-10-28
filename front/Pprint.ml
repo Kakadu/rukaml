@@ -113,12 +113,20 @@ let rec pp_expr_helper ?(ps = true) ppf = function
       (h2 :: hs);
     fprintf ppf ")@]"
   | EMatch (e, (pe, pes)) ->
-    fprintf ppf "@[<v 2>";
-    fprintf ppf "match %a with@ " no_pars e;
-    List.iter
-      (fun (p, e) -> fprintf ppf "@[| %a -> %a@]@ " pp_pattern p no_pars e)
-      (pe :: pes);
-    fprintf ppf "@]"
+    let helper ppf () =
+      fprintf
+        ppf
+        "match %a with@ %a"
+        no_pars
+        e
+        (pp_print_list
+           ~pp_sep:(fun ppf () -> fprintf ppf "@ ")
+           (fun ppf (p, e) -> fprintf ppf "@[| %a -> %a@]" pp_pattern p maybe_pars e))
+        (pe :: pes)
+    in
+    if ps
+    then fprintf ppf "@[<v 2>(%a)@]" helper ()
+    else fprintf ppf "@[<v 2>%a@]" helper ()
   | EConstruct ("[]", None) -> fprintf ppf "[]"
   | EConstruct ("::", Some (ETuple (head, tail, []))) ->
     let rec helper acc = function
@@ -247,7 +255,7 @@ let pp_stru ppf vbs =
   let open Format in
   open_vbox 0;
   pp_print_list
-    ~pp_sep:(fun ppf () -> fprintf ppf "@\n")
+    ~pp_sep:(fun ppf () -> fprintf ppf "@ ")
     (fun ppf -> fprintf ppf "@[%a@]" pp_structure_item)
     ppf
     vbs;
