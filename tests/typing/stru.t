@@ -76,7 +76,7 @@ Zed combinator should trigger occurs check
   $ run << EOF
   > (fun fix -> fun f -> f (fix f))
   > EOF
-  parse error: : end_of_input
+  parse error: : string
   [1]
 
   $ run << EOF
@@ -97,13 +97,13 @@ Zed combinator should trigger occurs check
   $ run << EOF
   > fun f -> fun x -> f (f x)
   > EOF
-  parse error: : end_of_input
+  parse error: : string
   [1]
 
   $ run << EOF
   > fun x -> let v = x in v
   > EOF
-  parse error: : end_of_input
+  parse error: : string
   [1]
 
   $ run << EOF
