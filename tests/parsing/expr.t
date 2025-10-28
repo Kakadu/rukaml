@@ -84,3 +84,13 @@ value binding
   > if 1 then 2 else x * fac (y-1)
   > EOF
   Parsed: (if 1 then 2 else x * (fac (y - 1)))
+
+# TODO: negative numbers are complicated
+  $ echo '-1234' | ./run.exe -e -
+  Error: : can't parse many expressions
+
+
+  $ cat << EOF | ./run.exe -e -
+  > (fun Dep -> let Mab = true arw in 3234964472276681775 ())
+  > EOF
+  Parsed: (fun Dep -> let Mab = true arw in 3234964472276681775 ())
