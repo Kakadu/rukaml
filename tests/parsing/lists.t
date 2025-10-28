@@ -60,8 +60,7 @@
   >   | _ :: xs -> 1 + length xs
   Parsed: let rec length items = match items with
                                    | [] -> 0
-                                   | _ :: xs -> 1 + (length xs)
-                                   
+                                   | _ :: xs -> (1 + (length xs))
 
   $ cat << EOF | ./run.exe -stru -
   > let rec map f items =
@@ -71,7 +70,6 @@
   Parsed: let rec map f items = match items with
                                   | [] -> []
                                   | hd :: tl -> f hd :: (map f tl)
-                                  
 
   $ cat << EOF | ./run.exe -stru -
   > let rec filter p items = 
@@ -80,10 +78,9 @@
   >   | hd :: tl -> if p hd then hd :: filter p tl else filter p tl
   Parsed: let rec filter p items = match items with
                                      | [] -> []
-                                     | hd :: tl -> if p hd then hd :: (
-                                                           filter p tl) 
-                                                   else filter p tl
-                                     
+                                     | hd :: tl -> (if p hd then hd :: (
+                                                            filter p tl) 
+                                                    else filter p tl)
 
   $ cat << EOF | ./run.exe -stru -
   > let rec filter p items acc = 
@@ -100,7 +97,6 @@
                                                                   then hd :: acc
                                                                   else acc 
                                                        in filter p tl acc2
-                                         
           let filter p items = filter p items []
 
   $ cat << EOF | ./run.exe -stru -
@@ -111,7 +107,6 @@
   Parsed: let rec rev items = match items with
                                 | [] -> []
                                 | hd :: tl -> hd :: (rev items)
-                                
 
   $ cat << EOF | ./run.exe -stru -
   > let fold_left f init items =
@@ -123,10 +118,9 @@
   Parsed: let fold_left f init items = let rec helper items acc = match items with
                                                                     | [] -> acc
                                                                     | x :: 
-                                                                    xs -> 
+                                                                    xs -> (
                                                                     helper 
                                                                     xs 
-                                                                    (f x acc)
-                                                                     in 
-                                       helper items init
+                                                                    (f x acc)) 
+                                       in helper items init
 #
