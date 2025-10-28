@@ -38,6 +38,8 @@
    (>= 16.0.0))
   (ocamlgraph
    (>= 2.1.0))
+  (qcheck :with-test)
+  (ppx_deriving_qcheck :with-test)
   (odoc :with-doc)
   (ocamlformat
    (and
