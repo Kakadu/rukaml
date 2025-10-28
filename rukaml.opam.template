@@ -7,3 +7,7 @@ depexts: [
   [ "qemu-user-static" ] { os-distribution = "ubuntu" & os-version <= "25.04" }
   [ "qemu-user" ] { os-distribution = "ubuntu" & os-version >= "25.10" }
 ]
+
+pin-depends: [
+  ["ppx_deriving_qcheck.0.6" "git+https://github.com/c-cube/qcheck.git#42429bf06ba12373cad02b1404f50d0ad6238af5"]
+]
