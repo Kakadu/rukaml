@@ -299,16 +299,21 @@ let pack : dispatch =
                 return (EConstruct (name, Some patt)))
                <|> return (EConstruct (name, None)))
           <|> (let parse_case =
-                 ws *> char '|' *> ws *> pattern
-                 >>= fun p ->
-                 ws *> string "->" *> ws *> d.prio d >>= fun e -> return (p, e)
+                 let* p = char '|' *> ws *> pattern in
+                 let* e = ws *> string "->" *> ws *> d.prio d in
+                 return (p, e)
                in
-               keyword "match" *> ws *> d.prio d
-               >>= fun e ->
-               ws *> keyword "with" *> many parse_case
-               >>= function
-               | pe :: pes -> return (ematch e pe pes)
-               | _ -> fail "Pattern matching cases expected")
+               let first =
+                 parse_case
+                 <|>
+                 let* p = pattern in
+                 let* e = ws *> string "->" *> ws *> d.prio d in
+                 return (p, e)
+               in
+               let* subject = keyword "match" *> ws *> d.prio d <* ws <* keyword "with" in
+               let* case = first in
+               let* cases = many parse_case in
+               return (ematch subject case cases))
           <|> (keyword "fun" *> pattern
                >>= fun p ->
                (* let () = log "Got a abstraction over %a" Pprint.pp_pattern p in *)
