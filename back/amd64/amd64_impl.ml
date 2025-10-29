@@ -335,6 +335,7 @@ let generate_body is_toplevel ppf body =
          printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
          printfn ppf "  mov qword [rsp], r11";
          printfn ppf "  call rukaml_array_length";
+         printfn ppf "  mov %a, rax" pp_dest dest;
          printfn ppf "  add rsp, 8*2";
          Addr_of_local.remove_local name2;
          Addr_of_local.remove_local name1
@@ -618,8 +619,8 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  call rukaml_alloc_pair";
       printfn ppf "  mov %a, rax" pp_dest dest
     | AUnit -> printfn ppf "mov qword %a, 0" pp_dest dest
-    | AArray xs ->
-      let length = List.length xs in
+    | AArray r ->
+      let length = List.length r in
       printfn ppf "  mov rdi, %d" length;
       printfn ppf "  sub rsp, 8*%d ; allocate space on stack for array elements" length;
       (* List.iteri (fun i rname -> *)
@@ -634,7 +635,7 @@ let generate_body is_toplevel ppf body =
              helper_a (DStack_var name) rname;
              (* printfn ppf "  mov qword [rsp+8*%d], %a" i Compile_lib.ANF.pp_a rname; *)
              name)
-          xs
+          r
       in
       printfn ppf "  mov rsi, rsp";
       printfn ppf "  call rukaml_alloc_array";

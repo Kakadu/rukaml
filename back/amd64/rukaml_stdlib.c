@@ -353,7 +353,6 @@ void *rukaml_alloc_array(int32_t size, void** arr)
   return rez + 1;
 }
 
-
 void *rukaml_field(int n, void **r)
 {
   return r[n];
