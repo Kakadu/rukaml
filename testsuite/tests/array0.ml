@@ -1,10 +1,10 @@
 (*
 test
-  (targets (amd64 promote))
-  (run (exit 0))
+  (targets (rv64 promote) (amd64 promote))
+  (run (stdout "rukaml_print_int 3"))
 
 *)
 let main =
-  let r2 = [|true; false; false; true|] in
-  length r2 = 4
-
+  let r = [|1; 2; 3|] in
+  let n = length r in
+  print n

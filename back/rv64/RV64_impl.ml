@@ -506,15 +506,24 @@ let generate_body is_toplevel body =
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
       (match arg1 with
-       | AVar v when Addr_of_local.has_key v ->
-         with_two_slots (fun ra_name arg_name ->
-           emit_alloc_closure "rukaml_array_get" 2;
-           emit li a1 1;
-           emit ld t0 (pp_to_mach v);
-           emit mv (pp_to_mach arg_name) t0;
-           emit call "rukaml_applyN";
-           emit sd_dest a0 dest;
-           emit addi SP SP (-16))
+       | AVar arr when Addr_of_local.has_key arr ->
+         emit_alloc_closure "rukaml_array_get" 2;
+         emit li a1 1;
+         emit ld a2 (pp_to_mach arr);
+         emit call "rukaml_applyN";
+         emit sd_dest a0 dest
+       | _ -> failwith "Should not happen")
+    | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "set"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar arr when Addr_of_local.has_key arr ->
+         emit_alloc_closure "rukaml_array_set" 3;
+         emit li a1 1;
+         emit ld a2 (pp_to_mach arr);
+         emit call "rukaml_applyN";
+         emit sd_dest a0 dest
        | _ -> failwith "Should not happen")
     | CApp (APrimitive "=", AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
       (* TODO: user Addr_of_local.pp_local_exn *)
