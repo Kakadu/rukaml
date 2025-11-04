@@ -1,7 +1,9 @@
 depexts: [
   [ "nasm" "gcc-13" "pkg-config"
     "llvm-16-dev" "clang-16"
-    "qemu-user-static" "binutils-riscv64-linux-gnu" "gcc-13-riscv64-linux-gnu"
+    "binutils-riscv64-linux-gnu" "gcc-13-riscv64-linux-gnu"
     "libcunit1-dev"
-  ] {os-distribution = "ubuntu"}
+  ] { os-distribution = "ubuntu" }
+  [ "qemu-user-static" ] { os-distribution = "ubuntu" & os-version <= "25.04" }
+  [ "qemu-user" ] { os-distribution = "ubuntu" & os-version >= "25.10" }
 ]
