@@ -182,7 +182,7 @@ let rec pp_typ ppf { typ_desc } =
   | Prim s -> pp_print_string ppf s
   | Arrow (l, r) -> fprintf ppf "(%a -> %a)" pp_typ l pp_typ r
   | TLink t -> pp_typ ppf t
-  | TPoly (a, t) ->
+  | TParam (a, t) ->
     pp_typ ppf a;
     fprintf ppf " %s" t
   | TProd (a, b, ts) ->

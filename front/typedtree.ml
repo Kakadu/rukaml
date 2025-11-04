@@ -25,7 +25,7 @@ and type_desc =
   | V of var_info
   | Weak of binder
   | Arrow of ty * ty
-  | TPoly of ty * string
+  | TParam of ty * string
   | TLink of ty
   | TProd of ty * ty * ty list
 [@@deriving show { with_path = false }]
@@ -46,12 +46,12 @@ let tweak t = { typ_desc = Weak t }
 let tprim s = { typ_desc = Prim s }
 let tv binder ~level = { typ_desc = V { binder; var_level = level } }
 let tlink t = { typ_desc = TLink t }
-let tpoly a t = { typ_desc = TPoly (a, t) }
+let tparam a t = { typ_desc = TParam (a, t) }
 let tprod a b ts = { typ_desc = TProd (a, b, ts) }
 let int_typ = tprim "int"
 let bool_typ = tprim "bool"
 let unit_typ = tprim "unit"
-let array_typ a = tpoly a "array"
+let array_typ a = tparam a "array"
 
 type pattern =
   | Tpat_var of Ident.t
@@ -99,7 +99,7 @@ let type_without_links =
     match t.typ_desc with
     | Prim _ | V _ | Weak _ -> t
     | Arrow (l, r) -> tarrow (helper l) (helper r)
-    | TPoly (a, t) -> tpoly (helper a) t
+    | TParam (a, t) -> tparam (helper a) t
     | TLink ty -> helper ty
     | TProd (a, b, ts) -> { typ_desc = TProd (helper a, helper b, List.map helper ts) }
   in

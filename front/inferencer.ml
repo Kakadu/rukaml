@@ -160,7 +160,7 @@ end = struct
          | exception Not_found_s _ -> typ
          | x -> x)
       | Arrow (l, r) -> tarrow (helper l) (helper r)
-      | TPoly (a, t) -> tpoly (helper a) t
+      | TParam (a, t) -> tparam (helper a) t
       | TProd (a, b, ts) -> tprod (helper a) (helper b) (List.map ~f:helper ts)
       | TLink ty -> helper ty
       | Prim _ | Weak _ -> typ
@@ -209,7 +209,7 @@ module Type = struct
       | Arrow (l, r) ->
         helper l;
         helper r
-      | TPoly (a, _) -> helper a
+      | TParam (a, _) -> helper a
       | TProd (a, b, ts) ->
         helper a;
         helper b;
@@ -231,7 +231,7 @@ module Type = struct
       | Prim _ | Weak _ -> acc
       | V { binder; _ } -> Var_set.add binder acc
       | TLink t -> helper acc t
-      | TPoly (a, _) -> helper acc a
+      | TParam (a, _) -> helper acc a
       | Arrow (l, r) -> helper (helper acc l) r
       | TProd (a, b, ts) -> List.fold_left ts ~init:(helper (helper acc a) b) ~f:helper
     in
@@ -340,7 +340,7 @@ let unify weak l r =
     | Arrow (l1, r1), Arrow (l2, r2) ->
       let* () = helper l1 l2 in
       helper r1 r2
-    | TPoly (a1, t1), TPoly (a2, t2) ->
+    | TParam (a1, t1), TParam (a2, t2) ->
       (* TODO: make tests *)
       let* () = helper a1 a2 in
       if String.equal t1 t2 then return () else fail (`UnificationFailed (l, r))
@@ -359,12 +359,12 @@ let unify weak l r =
     | x, Weak n ->
       weak.map <- IntMap.add n { typ_desc = x } weak.map;
       return ()
-    | TPoly _, Arrow _
-    | Arrow _, TPoly _
-    | TPoly _, Prim _
-    | Prim _, TPoly _
-    | TProd _, TPoly _
-    | TPoly _, TProd _
+    | TParam _, Arrow _
+    | Arrow _, TParam _
+    | TParam _, Prim _
+    | Prim _, TParam _
+    | TProd _, TParam _
+    | TParam _, TProd _
     | TProd _, Arrow _
     | Arrow _, TProd _
     | TProd _, Prim _
@@ -396,7 +396,7 @@ let generalize : level:int -> Type.t -> Scheme.t =
     match typ.typ_desc with
     | V { var_level; binder } -> if var_level > level then Var_set.add binder acc else acc
     | TLink t -> helper acc t
-    | TPoly (a, _) -> helper acc a
+    | TParam (a, _) -> helper acc a
     | Arrow (l, r) -> helper (helper acc l) r
     | TProd (a, b, tl) -> List.fold_left ~f:helper tl ~init:(helper (helper acc a) b)
     | Prim _ | Weak _ -> acc
@@ -462,7 +462,7 @@ let elim weak =
     match t.typ_desc with
     | Prim _ | V _ -> t
     | Arrow (l, r) -> tarrow (helper l) (helper r)
-    | TPoly (a, t) -> tpoly (helper a) t
+    | TParam (a, t) -> tparam (helper a) t
     | TProd (a, b, tl) -> tprod (helper a) (helper b) (List.map tl ~f:helper)
     | TLink ty -> tlink (helper ty)
     | Weak n ->
@@ -500,8 +500,8 @@ let restrict : restriction_state -> weak_table -> ty -> ty t =
            (* log "table.last counter number to binder %d: %d" binder table.last; *)
            IntMap.add binder table.last xs))
     | TLink t -> helper t xs state arrow
-    | TPoly (a, t) ->
-      (* log "tpoly: %s" t; *)
+    | TParam (a, t) ->
+      (* log "tparam: %s" t; *)
       let not_poly =
         match a.typ_desc with
         | V _ -> false
@@ -529,7 +529,7 @@ let restrict : restriction_state -> weak_table -> ty -> ty t =
     | V { binder; _ } ->
       (* log "introduce weak for binder: %d" binder; *)
       if IntMap.mem binder weak_map then tweak (IntMap.find binder weak_map) else t
-    | TPoly (a, t) -> tpoly (helper a) t
+    | TParam (a, t) -> tparam (helper a) t
     | Arrow (l, r) -> tarrow (helper l) (helper r)
     | TProd (a, b, ts) -> tprod (helper a) (helper b) (List.map ts ~f:helper)
   in
@@ -570,15 +570,17 @@ let infer env table expr =
       (* |> extend_s "length" (Scheme.make_mono (tarrow (array_typ @@ tv 1 ~level:1) int_typ)) *)
       | Parsetree.EVar "length" ->
         let* fresh = fresh_var ~level:!current_level in
-        let typ = tarrow (tpoly fresh "array") int_typ in
+        let typ = tarrow (tparam fresh "array") int_typ in
         return (typ, TVar ("length", Ident.of_string "length", typ))
       | Parsetree.EVar "get" ->
         let* fresh = fresh_var ~level:!current_level in
-        let typ = tarrow (tpoly fresh "array") (tarrow int_typ fresh) in
+        let typ = tarrow (tparam fresh "array") (tarrow int_typ fresh) in
         return (typ, TVar ("get", Ident.of_string "get", typ))
       | Parsetree.EVar "set" ->
         let* fresh = fresh_var ~level:!current_level in
-        let typ = tarrow (tpoly fresh "array") (tarrow int_typ (tarrow fresh unit_typ)) in
+        let typ =
+          tarrow (tparam fresh "array") (tarrow int_typ (tarrow fresh unit_typ))
+        in
         return (typ, TVar ("set", Ident.of_string "set", typ))
       | Parsetree.EVar x ->
         let* scheme = lookup_scheme_by_string x env in

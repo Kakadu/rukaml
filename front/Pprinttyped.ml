@@ -15,7 +15,7 @@ let pp_typ_hum =
     | V { binder; _ } -> fprintf ppf "'_%d" binder
     | Weak n -> fprintf ppf "'_weak%d" n
     | TLink ty -> pp_typ ctx ppf ty
-    | TPoly (a, t) ->
+    | TParam (a, t) ->
       pp_typ ctx ppf a;
       fprintf ppf " %s" t
     | Arrow (l, r) ->

@@ -20,7 +20,7 @@ and type_desc =
   | V of var_info
   | Weak of binder
   | Arrow of ty * ty
-  | TPoly of ty * string
+  | TParam of ty * string
   | TLink of ty
   | TProd of ty * ty * ty list
 
@@ -44,7 +44,7 @@ val show_scheme : scheme -> string
 val tarrow : ty -> ty -> ty
 val tprim : string -> ty
 val tweak : binder -> ty
-val tpoly : ty -> string -> ty
+val tparam : ty -> string -> ty
 val tv : binder -> level:int -> ty
 val tlink : ty -> ty
 val tprod : ty -> ty -> ty list -> ty

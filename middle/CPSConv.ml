@@ -61,7 +61,7 @@ type c =
   | ACont of a * c
   | ICont of ds_expr * ds_expr * env * c
   | TupleBldCont of ds_expr list * a list * env * c
-  | ArrayBldCont of ds_expr list * a list * env * c
+  (* | ArrayBldCont of ds_expr list * a list * env * c *)
   | LetRecCont of pat * ds_expr * env * c * potent_not_allowed_expr
   | ToplevelLetRecCont of pat * ds_vb list * main_id * potent_not_allowed_expr
   | LetNonRecCont of ds_pattern * ds_expr * env * c
