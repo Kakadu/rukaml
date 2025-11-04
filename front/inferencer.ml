@@ -629,10 +629,11 @@ let infer env table expr =
         (* log "t2 = %a" pp_ty t2; *)
         (* log "tv = %a" pp_ty tv; *)
         let* () = unify table t1 (tarrow t2 tv) in
+        let* tv = restrict state table tv in
+        let tv = elim table tv in
         (* log "t1 = %a" pp_ty t1; *)
         (* log "t2 = %a" pp_ty t2; *)
         (* log "tv = %a" pp_ty tv; *)
-        let tv = elim table tv in
         return (tv, TApp (te1, te2, tv))
       | EConst (PConst_int _n as c) -> return (int_typ, TConst c)
       | EConst (PConst_bool _b as c) -> return (bool_typ, TConst c)
