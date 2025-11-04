@@ -77,7 +77,7 @@ module Compiler = struct
   ;;
 
   (** Infer parsetree to typedtree *)
-  let infer (Parsetree stru) =
+  let infer table (Parsetree stru) =
     match
       Inferencer.structure table (List.map ~f:(fun vb -> Parsetree.SValue vb) stru)
     with

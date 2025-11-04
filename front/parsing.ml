@@ -299,6 +299,11 @@ let pack : dispatch =
                <|> return (econs first enil)
                <* ws
                <* char ']')
+          <|> brackets
+                (return (fun h tl -> earray (h :: tl))
+                 <*> (d.expr d <* ws)
+                 <*> many (string ";" *> d.expr d <* ws)
+                 <|> return @@ earray [])
           <|> parens
                 (return (fun a b xs -> etuple a b xs)
                  <*> (d.expr d <* ws)
@@ -325,12 +330,6 @@ let pack : dispatch =
                let* case = first in
                let* cases = many parse_case in
                return (ematch subject case cases))
-                 <*> many (string "," *> d.expr d <* ws))
-          <|> brackets
-                (return (fun h tl -> earray (h :: tl))
-                 <*> (d.expr d <* ws)
-                 <*> many (string ";" *> d.expr d <* ws)
-                 <|> return @@ earray [])
           <|> (keyword "fun" *> pattern
                >>= fun p ->
                (* let () = log "Got a abstraction over %a" Pprint.pp_pattern p in *)

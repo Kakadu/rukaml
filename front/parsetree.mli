@@ -26,9 +26,9 @@ val show_rec_flag : rec_flag -> string
 
 type expr =
   | EUnit
+  | EArray of expr list (** [| ...  expressions ... |] *)
   | EConst of const (** Constant *)
   | EVar of string (** Variable *)
-  | EArray of expr list (** [| ...  expressions ... |] *)
   | EIf of expr * expr * expr (** if ... then ... else ... *)
   | ELam of pattern * expr (** fun ... -> ... *)
   | EApp of expr * expr (** Application f x *)
