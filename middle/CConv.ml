@@ -31,10 +31,12 @@ let simplify =
     | ELam (p, body) -> ELam (p, helper body)
     | (EVar _ as e) | (EConst _ as e) -> e
     | EIf (a, b, c) -> eite (helper a) (helper b) (helper c)
+    | EArray l -> earray (List.map helper l)
     | EApp (l, r) -> eapp (helper l) [ helper r ]
     | ETuple (a, b, es) -> etuple (helper a) (helper b) (List.map helper es)
     | ELet (isrec, pat, rhs, wher) -> elet ~isrec pat (helper rhs) (helper wher)
     | EUnit -> EUnit
+    | EMatch _ | EConstruct _ -> failwith "not implemented"
   in
   helper
 ;;
@@ -52,6 +54,7 @@ let vars_from_pattern, vars_from_patterns =
     | Parsetree.PVar name -> SS.add name acc
     | PTuple (a, b, ps) ->
       ListLabels.fold_left ~f:helper ~init:(helper (helper acc a) b) ps
+    | Parsetree.PAny | PConstruct _ -> failwith "not implemented"
   in
   helper SS.empty, List.fold_left helper SS.empty
 ;;
@@ -62,11 +65,14 @@ let free_vars_of_expr =
     | EVar s -> String_set.add s acc
     | EIf (c, th, el) -> helper (helper (helper acc c) th) el
     | EApp (l, r) -> helper (helper acc l) r
+    | EArray (h :: tl) -> List.fold_left helper (helper acc h) tl
+    | EArray [] -> acc
     | ELet (_, pat, rhs, wher) ->
       String_set.diff (helper (helper acc rhs) wher) (vars_from_pattern pat)
     | ETuple (a, b, es) -> List.fold_left helper (helper (helper acc a) b) es
     | ELam (pat, rhs) -> SS.diff (helper acc rhs) (vars_from_pattern pat)
     | EUnit -> acc
+    | EMatch _ | EConstruct _ -> failwith "not implemented"
   in
   helper String_set.empty
 ;;
@@ -83,6 +89,7 @@ let rec subst x ~by:v =
     | EApp (l, r) -> eapp (helper l) [ helper r ]
     | EConst _ -> e
     | ETuple (a, b, es) -> etuple (helper a) (helper b) (List.map helper es)
+    | EArray l -> earray (List.map helper l)
     | ELam (PVar y, b) when Stdlib.(y = x) -> elam (PVar y) b
     | ELam (PVar y, t) when is_free_in y v ->
       let frees = String_set.union (free_vars_of_expr v) (free_vars_of_expr t) in
@@ -107,6 +114,8 @@ let rec subst x ~by:v =
       then elet ~isrec fpat body wher
       else elet ~isrec fpat (helper body) (helper wher)
     | EUnit -> EUnit
+    | EMatch _ | EConstruct _ | ELet (_, PAny, _, _) | ELet (_, PConstruct _, _, _) ->
+      failwith "not implemented"
   in
   helper
 ;;
@@ -171,6 +180,9 @@ let conv ?(standart_globals = standart_globals)
        (* fusion with simplifier *)
        helper globals body *)
     | EApp (l, r) -> return eapp1 <*> helper globals l <*> helper globals r
+    | EArray xs ->
+      let* xs = helper_list globals xs in
+      return (earray xs)
     | ELam (_, _) ->
       log "Got ELam _: globals = %a" SS.pp globals;
       (match sugarize_let root_expr with
@@ -284,6 +296,8 @@ let conv ?(standart_globals = standart_globals)
       let* rhs = helper new_env rhs in
       let* body = helper new_env wher in
       return (elet pat rhs body)
+    | EMatch _ | EConstruct _ | ELet (_, PAny, _, _) | ELet (_, PConstruct _, _, _) ->
+      failwith "not implemented"
   and helper_list globals : Parsetree.expr list -> (value_binding list, expr list) t =
     fun es ->
     List.fold_left
@@ -307,9 +321,16 @@ let conv ?(standart_globals = standart_globals)
         []
     in
     List.rev_append saved [ is_rec, pat, rhs ] |> List.map simplify_vb
+  | _, PAny, _ | _, PConstruct _, _ -> failwith "not implemented"
 ;;
 
 let value_binding = conv
+
+let structure_item ?(standart_globals = standart_globals) = function
+  | Parsetree.SValue (_ as vb) ->
+    conv ~standart_globals vb |> List.map (fun vb -> Parsetree.SValue vb)
+  | Parsetree.SType _ as td -> [ td ]
+;;
 
 let structure ?(standart_globals = standart_globals) stru =
   let init = standart_globals, [] in
@@ -317,14 +338,18 @@ let structure ?(standart_globals = standart_globals) stru =
     (stru : Parsetree.structure)
     ~init
     ~f:(fun (glob, ans) stru ->
-      let new_strus = conv ~standart_globals:glob stru in
-      let new_glob =
-        ListLabels.fold_left ~init:glob new_strus ~f:(fun acc -> function
-          | _, Parsetree.PVar s, _ -> String_set.add s acc
-          | _, PTuple _, _ ->
-            (* TODO(Kakadu): add other names too *)
-            acc)
-      in
-      new_glob, List.append ans new_strus)
+      match stru with
+      | Parsetree.SValue stru ->
+        let new_strus = conv ~standart_globals:glob stru in
+        let new_glob =
+          ListLabels.fold_left ~init:glob new_strus ~f:(fun acc -> function
+            | _, Parsetree.PVar s, _ -> String_set.add s acc
+            | _, PTuple _, _ ->
+              (* TODO(Kakadu): add other names too *)
+              acc
+            | _, PAny, _ | _, PConstruct _, _ -> failwith "not implemented")
+        in
+        new_glob, List.append ans (List.map (fun vb -> Parsetree.SValue vb) new_strus)
+      | Parsetree.SType _ as td -> glob, List.append ans [ td ])
   |> snd
 ;;

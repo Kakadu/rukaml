@@ -17,6 +17,7 @@ type ds_expr =
   | DELam of ds_pattern * ds_expr
   | DEApp of ds_expr * ds_expr
   | DETuple of ds_expr * ds_expr * ds_expr list
+  | DEArray of ds_expr list
   | DELet of rec_flag * ds_pattern * ds_expr * ds_expr
 
 type ds_vb = rec_flag * ds_pattern * ds_expr
@@ -60,6 +61,7 @@ type c =
   | ACont of a * c
   | ICont of ds_expr * ds_expr * env * c
   | TupleBldCont of ds_expr list * a list * env * c
+  (* | ArrayBldCont of ds_expr list * a list * env * c *)
   | LetRecCont of pat * ds_expr * env * c * potent_not_allowed_expr
   | ToplevelLetRecCont of pat * ds_vb list * main_id * potent_not_allowed_expr
   | LetNonRecCont of ds_pattern * ds_expr * env * c
@@ -84,11 +86,23 @@ let start_glob_envs =
     let ident = Frontend.Ident.of_string v in
     SMap.add ident.hum_name ident.id
   in
-  let printi = Frontend.Ident.of_string "print" in
-  let closure_count = Frontend.Ident.of_string "closure_count" in
-  ( IMap.(add printi.id (AVar printi) (add closure_count.id (AVar closure_count) empty))
+  let idents = [ "print"; "closure_count"; "length"; "get"; "set" ] in
+  let idents = List.map (fun x -> Frontend.Ident.of_string x) idents in
+  let imap =
+    List.fold_right
+      (fun x acc -> IMap.add x.id (AVar x) acc)
+      (List.tl idents)
+      IMap.(add (List.hd idents).id (AVar (List.hd idents)) empty)
+  in
+  let smap =
+    List.fold_right (fun x acc -> SMap.add x.hum_name x.id acc) idents SMap.empty
+  in
+  ( imap
   , SMap.(
-      empty
+      (* empty *)
+      (* |> add printi.hum_name printi.id *)
+      (* |> add closure_count.hum_name closure_count.id) *)
+      smap
       |> extend "<"
       |> extend ">"
       |> extend "<="
@@ -97,9 +111,7 @@ let start_glob_envs =
       |> extend "+"
       |> extend "-"
       |> extend "*"
-      |> extend "/"
-      |> add printi.hum_name printi.id
-      |> add closure_count.hum_name closure_count.id) )
+      |> extend "/") )
 ;;
 
 let upd id k counts no_refs ref_once =
@@ -131,6 +143,7 @@ let preconv_chore ?(with_printing = false) (rec_flag, ptrn, e) k glob_vars free_
       new_count name ident.id k
     | PTuple (p1, p2, pp) ->
       tuple_fold_map_k helper_p p1 p2 pp (fun dp1 dp2 dps -> k (DPTuple (dp1, dp2, dps)))
+    | PAny | PConstruct _ -> failwith "not implemented"
   in
   let rec helper_e e vars k free_vars =
     match e with
@@ -173,6 +186,11 @@ let preconv_chore ?(with_printing = false) (rec_flag, ptrn, e) k glob_vars free_
       let k de1 de2 des = k (DETuple (de1, de2, des)) in
       let helper_e e k = helper_e e vars k in
       tuple_fold_map_k helper_e e1 e2 ee k free_vars
+    | EArray l ->
+      (* TODO(nikita): Test this*)
+      let k l = k (DEArray l) in
+      let helper_e e k = helper_e e vars k in
+      list_fold_map_k helper_e l k free_vars
     | ELet (NonRecursive, ptrn, e1, e2) ->
       let k1 de1 free_vars =
         let k2 dp vars =
@@ -187,6 +205,7 @@ let preconv_chore ?(with_printing = false) (rec_flag, ptrn, e) k glob_vars free_
         helper_e e1 vars k2 free_vars
       in
       helper_p ptrn k1 vars
+    | EMatch _ | EConstruct _ -> failwith "not implemented"
   in
   match rec_flag with
   | Recursive ->
@@ -227,57 +246,57 @@ let%expect_test "counts simple" =
   test_count {| let m x y z = x y y|};
   [%expect
     {|
-  var x got id 25
-  var y got id 26
-  var z got id 27
-  var m got id 28
-  id: 25; counts 1
-  id: 26; counts 2
-  id: 27; counts 0
-  id: 28; counts 0
-  ids that ref_once:
-  25
-  ids that no_refs:
-  27
-  28
-|}]
+    var x got id 28
+    var y got id 29
+    var z got id 30
+    var m got id 31
+    id: 28; counts 1
+    id: 29; counts 2
+    id: 30; counts 0
+    id: 31; counts 0
+    ids that ref_once:
+    28
+    ids that no_refs:
+    30
+    31
+    |}]
 ;;
 
 let%expect_test "counts branching, shadowing" =
   test_count {| let m x y = if x then fun x -> x 1 else fun x -> (y , y x)|};
   [%expect
     {|
-    var x got id 29
-    var y got id 30
-    var x got id 31
     var x got id 32
-    var m got id 33
-    id: 29; counts 1
-    id: 30; counts 2
-    id: 31; counts 1
+    var y got id 33
+    var x got id 34
+    var x got id 35
+    var m got id 36
     id: 32; counts 1
-    id: 33; counts 0
+    id: 33; counts 2
+    id: 34; counts 1
+    id: 35; counts 1
+    id: 36; counts 0
     ids that ref_once:
-    29
-    31
     32
+    34
+    35
     ids that no_refs:
-    33
-|}]
+    36
+    |}]
 ;;
 
 let%expect_test "counts rec, ptuple" =
   test_count {| let rec (x,y) = x x y|};
   [%expect
     {|
-    var x got id 34
-    var y got id 35
-    id: 34; counts 2
-    id: 35; counts 1
+    var x got id 37
+    var y got id 38
+    id: 37; counts 2
+    id: 38; counts 1
     ids that ref_once:
-    35
+    38
     ids that no_refs:
-|}]
+    |}]
 ;;
 
 let atuple tt =
@@ -335,6 +354,7 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
   let rec cps env exp c counts =
     match exp with
     | DEVar y -> ret c (IMap.find y.id env) counts
+    | DEArray _ -> failwith "unimplemented"
     | DEConst z -> ret c (AConst z) counts
     | DEUnit -> ret c AUnit counts
     | DELam (ds_pat, e) -> ret c (AClo (ds_pat, e, env)) counts
@@ -580,6 +600,9 @@ let ds_expr_to_expr ds_expr =
     match de with
     | DEUnit -> k EUnit
     | DEConst c -> k (EConst c)
+    | DEArray l ->
+      (* TODO(nikita): Test this*)
+      list_fold_map_k helper l (fun l -> k (EArray l))
     | DEVar { hum_name = n; _ } -> k (EVar n)
     | DEIf (de1, de2, de3) ->
       helper de1 (fun e1 ->
@@ -613,7 +636,7 @@ let pp_error ppf : error -> _ = function
 
 let test_cps_program text =
   let open Frontend in
-  let stru = Result.get_ok @@ Parsing.parse_structure text in
+  let stru = Result.get_ok @@ Parsing.parse_value_bindings text in
   match cps_conv_program stru with
   | Ok cps_prog ->
     Format.printf "%a" pp_vb cps_prog;

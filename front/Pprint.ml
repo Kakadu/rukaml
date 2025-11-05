@@ -18,11 +18,29 @@ let group_applications l r =
 ;;
 
 let rec pp_pattern ppf = function
-  | Parsetree.PVar s -> fprintf ppf "@[%s@]" s
+  | PVar s -> fprintf ppf "@[%s@]" s
   | PTuple (pa, pb, ps) ->
     fprintf ppf "@[(%a" pp_pattern pa;
     List.iter (fprintf ppf ", %a" pp_pattern) (pb :: ps);
     fprintf ppf ")@]"
+  | PAny -> fprintf ppf "@[_@]"
+  | PConstruct ("[]", None) -> fprintf ppf "[]"
+  | PConstruct ("::", Some (PTuple (head, tail, []))) ->
+    let rec helper acc = function
+      | PConstruct ("::", Some (PTuple (hd, tl, []))) -> helper (hd :: acc) tl
+      | PConstruct ("[]", None) ->
+        fprintf ppf "@[[ %a" pp_pattern head;
+        List.iter (fun item -> fprintf ppf "; %a" pp_pattern item) (List.rev acc);
+        fprintf ppf " ]@]"
+      | _ as exp ->
+        fprintf ppf "%a" pp_pattern head;
+        List.iter
+          (fun item -> fprintf ppf " :: %a" pp_pattern item)
+          (List.rev (exp :: acc))
+    in
+    helper [] tail
+  | PConstruct (name, None) -> fprintf ppf "@[%s@]" name
+  | PConstruct (name, Some arg) -> fprintf ppf "@[%s (%a)@]" name pp_pattern arg
 ;;
 
 let pp_const ppf = function
@@ -86,6 +104,14 @@ let rec pp_expr_helper ?(ps = true) ppf = function
     Format.fprintf ppf "@[<2>%a @]@[in @]@]" no_pars body;
     fprintf ppf "@[%a@]" no_pars in_;
     fprintf ppf "@]"
+  | EArray r ->
+    fprintf ppf "[|";
+    Format.fprintf
+      ppf
+      "%a"
+      (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "; ") no_pars)
+      r;
+    fprintf ppf "|]"
   | ETuple (h1, h2, hs) ->
     fprintf ppf "@[(%a, " no_pars h1;
     Format.fprintf
@@ -94,6 +120,38 @@ let rec pp_expr_helper ?(ps = true) ppf = function
       (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") no_pars)
       (h2 :: hs);
     fprintf ppf ")@]"
+  | EMatch (e, (pe, pes)) ->
+    let helper ppf () =
+      fprintf
+        ppf
+        "match %a with@ %a"
+        no_pars
+        e
+        (pp_print_list
+           ~pp_sep:(fun ppf () -> fprintf ppf "@ ")
+           (fun ppf (p, e) -> fprintf ppf "@[| %a -> %a@]" pp_pattern p maybe_pars e))
+        (pe :: pes)
+    in
+    if ps
+    then fprintf ppf "@[<v 2>(%a)@]" helper ()
+    else fprintf ppf "@[<v 2>%a@]" helper ()
+  | EConstruct ("[]", None) -> fprintf ppf "[]"
+  | EConstruct ("::", Some (ETuple (head, tail, []))) ->
+    let rec helper acc = function
+      | EConstruct ("::", Some (ETuple (hd, tl, []))) -> helper (hd :: acc) tl
+      | EConstruct ("[]", None) ->
+        fprintf ppf "[@[ %a" no_pars head;
+        List.iter (fun item -> fprintf ppf "; %a" no_pars item) (List.rev acc);
+        fprintf ppf " ]@]"
+      | _ as exp ->
+        fprintf ppf "%a" no_pars head;
+        List.iter
+          (fun item -> fprintf ppf " :: %a" maybe_pars item)
+          (List.rev (exp :: acc))
+    in
+    helper [] tail
+  | EConstruct (name, None) -> fprintf ppf "%s" name
+  | EConstruct (name, Some arg) -> fprintf ppf "@[%s %a@]" name maybe_pars arg
 
 and no_pars ppf = pp_expr_helper ~ps:false ppf
 
@@ -120,9 +178,13 @@ open Typedtree
 let rec pp_typ ppf { typ_desc } =
   match typ_desc with
   | V { binder; _ } -> fprintf ppf "'_%d" binder
+  | Weak n -> fprintf ppf "'_weak%d" n
   | Prim s -> pp_print_string ppf s
   | Arrow (l, r) -> fprintf ppf "(%a -> %a)" pp_typ l pp_typ r
   | TLink t -> pp_typ ppf t
+  | TParam (a, t) ->
+    pp_typ ppf a;
+    fprintf ppf " %s" t
   | TProd (a, b, ts) ->
     fprintf ppf "@[(%a, %a" pp_typ a pp_typ b;
     List.iter (fprintf ppf ", %a" pp_typ) ts;
@@ -133,15 +195,84 @@ let pp_scheme ppf = function
   | S (xs, t) -> fprintf ppf "forall %a . %a" Var_set.pp xs pp_typ t
 ;;
 
+let rec pp_core_type ppf = function
+  | CTVar name -> fprintf ppf "%s" name
+  | CTArrow (ctl, ctr) -> fprintf ppf "(%a -> %a)" pp_core_type ctl pp_core_type ctr
+  | CTTuple (ct1, ct2, cts) ->
+    fprintf ppf "@[(%a * %a" pp_core_type ct1 pp_core_type ct2;
+    List.iter (fprintf ppf " * %a" pp_core_type) cts;
+    fprintf ppf ")@]"
+  | CTConstr (name, []) -> fprintf ppf "@[%s@]" name
+  | CTConstr (name, [ arg ]) -> fprintf ppf "@[(%a) %s@]" pp_core_type arg name
+  | CTConstr (name, arg :: args) ->
+    fprintf ppf "@[(%a" pp_core_type arg;
+    List.iter (fprintf ppf ", %a" pp_core_type) args;
+    fprintf ppf ") %s@]" name
+;;
+
+let pp_type_params ppf td =
+  match td.typedef_params with
+  | [] -> fprintf ppf " "
+  | [ x ] -> fprintf ppf " %s " x
+  | x :: xs ->
+    fprintf ppf "@[ (%s" x;
+    List.iter (fprintf ppf ", %s") xs;
+    fprintf ppf ") @]"
+;;
+
+let pp_type_kind ppf td =
+  match td.typedef_kind with
+  | KAbstract None -> ()
+  | KAbstract (Some ct) -> fprintf ppf "@[%a@]" pp_core_type ct
+  | KVariants (case, cases) ->
+    let pp_case ppf = function
+      | name, None -> fprintf ppf "| %s" name
+      | name, Some ct -> fprintf ppf "| %s of %a" name pp_core_type ct
+    in
+    fprintf ppf "@[<v>";
+    List.iter (fprintf ppf "@[%a@]@ " pp_case) (case :: cases);
+    fprintf ppf "@]"
+;;
+
+let pp_type_definition ppf (td, tds) =
+  fprintf ppf "@[<v>";
+  fprintf
+    ppf
+    "@[<v 2>@[type%a%s =@]@ @[%a@]@]@ "
+    pp_type_params
+    td
+    td.typedef_name
+    pp_type_kind
+    td;
+  List.iter
+    (fun td ->
+       fprintf
+         ppf
+         "@[<v 2>@[and%a%s =@]@ @[%a@]@]@ "
+         pp_type_params
+         td
+         td.typedef_name
+         pp_type_kind
+         td)
+    tds;
+  fprintf ppf "@]"
+;;
+
+let pp_structure_item ppf = function
+  | Parsetree.SValue vb -> pp_value_binding ppf vb
+  | Parsetree.SType tds -> pp_type_definition ppf tds
+;;
+
 let pp_stru ppf vbs =
   let open Format in
   open_vbox 0;
   pp_print_list
-    ~pp_sep:(fun ppf () -> fprintf ppf "@\n")
-    (fun ppf -> fprintf ppf "@[%a@]" pp_value_binding)
+    ~pp_sep:(fun ppf () -> fprintf ppf "@ ")
+    (fun ppf -> fprintf ppf "@[%a@]" pp_structure_item)
     ppf
     vbs;
   close_box ()
 ;;
 
+let value_bindings ppf = List.iter (fun vb -> pp_value_binding ppf vb)
 let structure = pp_stru

@@ -40,6 +40,7 @@ static uint64_t log_level = 0;
 
 int HEAP_SIZE = 160;
 const uint8_t Tuple_tag = 0;
+const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
 
 struct gc_stats
@@ -202,7 +203,9 @@ void rukaml_gc_print_stats(void)
 // TODO(Kakadu): All rukaml functions use CC RTL on stack,
 // and when we wrap function into closure, predefined functions should behave the same.
 // Because of that this dirty hack. Right thing to do is to switch Rukaml calling convention to default one
-void rukaml_print_int(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4 , uint64_t a5, uint64_t a6, uint64_t a7, int x)
+void rukaml_print_int(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
+                      uint64_t a4 , uint64_t a5, uint64_t a6, uint64_t a7, 
+                      int x)
 {
   // putchar(0x30 + x);
   // putchar('\n');
@@ -321,6 +324,62 @@ void *rukaml_alloc_pair(void *l, void *r)
   (rez)[2] = r;
   logGC("A pair %lX created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
   return rez + 1;
+}
+
+void *rukaml_alloc_array(int64_t size, void** arr)
+{
+  if (GC.allocated_words + size + 1 > HEAP_SIZE)
+  {
+    fprintf(stderr, "Not enough memory\n");
+    exit(1);
+  }
+  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
+  GC.allocated_words += size + 1;
+  GC.stats.gs_allocated_words += size + 1;
+  rez[0] = (uint64_t *)HEADER(size, Array_tag);
+  assert(TAG(rez + 1) == Array_tag);
+  assert(SIZE(rez + 1) == size);
+
+  for (unsigned int i = 1; i < size + 1; i++) {
+    rez[size - i + 1] = arr[i-1];
+  }
+  logGC("An array %lX is created. Allocated words = %lu\n",
+        (uint64_t)(rez + 1), GC.allocated_words);
+  return rez + 1;
+}
+
+uint64_t rukaml_array_length(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
+                             uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
+                             void **arr)
+{
+  return SIZE(arr);
+}
+
+void *rukaml_array_get(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
+                       uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
+                       void **arr, uint64_t n)
+{
+  assert(TAG(arr) == Array_tag);
+  if (n >= SIZE(arr))
+  {
+    fprintf(stderr, "Index out of bounds");
+    exit(1);
+  }
+  return arr[n];
+}
+
+void rukaml_array_set(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
+                      uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
+                      void **arr, uint64_t n, void *a)
+{
+  assert(TAG(arr) == Array_tag);
+  if (n >= SIZE(arr))
+  {
+    fprintf(stderr, "Index out of bounds");
+    exit(1);
+  }
+  arr[n] = a;
+  return;
 }
 
 void *rukaml_field(int n, void **r)

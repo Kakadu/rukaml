@@ -39,15 +39,19 @@ let trace_avai msg =
 ;;
 
 let lchar c = ws *> char c
-let parens p = char '(' *> trace_pos "after(" *> p <* trace_pos "before ')'" <* lchar ')'
-let const = char '0' >>= fun c -> return (Printf.sprintf "%c" c)
 
-type dispatch =
-  { prio : dispatch -> expr t
-  ; expr_basic : dispatch -> expr t
-  ; expr_long : dispatch -> expr t
-  ; expr : dispatch -> expr t
-  }
+let parens p =
+  char '(' *> trace_pos "after '('" *> p <* trace_pos "before ')'" <* lchar ')'
+;;
+
+let brackets p =
+  char '[' *> char '|' *> trace_pos "after '[|'" *> p
+  <* trace_pos "before '|]'"
+  <* lchar '|'
+  <* char ']'
+;;
+
+let const = char '0' >>= fun c -> return (Printf.sprintf "%c" c)
 
 let is_digit = function
   | '0' .. '9' -> true
@@ -69,50 +73,29 @@ let number =
   scan_state h (fun st c -> if is_digit c then Some ((10 * st) + to_digit c) else None)
 ;;
 
-let is_alpha = function
-  | 'a' .. 'z' | 'A' .. 'Z' -> true
+let is_char_valid_for_name = function
+  | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '\'' | '_' -> true
   | _ -> false
-;;
-
-let alpha_c =
-  any_char
-  >>= function
-  | c -> if is_alpha c then return c else fail (Format.sprintf "'%c' not a letter" c)
-;;
-
-let alpha_digit_c =
-  satisfy (fun c -> is_alpha c || is_digit c || c = '_') <?> "not a alpha or digit"
 ;;
 
 let is_keyword = function
-  | "fun" | "in" | "let" | "rec" | "if" | "then" | "else" -> true
+  | "fun"
+  | "in"
+  | "let"
+  | "rec"
+  | "if"
+  | "then"
+  | "else"
+  | "match"
+  | "with"
+  | "type"
+  | "and"
+  | "of"
+  | "_" -> true
   | _ -> false
 ;;
 
-let ident =
-  let* i =
-    let* h = ws *> alpha_c in
-    let* tl = many alpha_digit_c in
-    return (Base.String.of_char_list (h :: tl))
-  in
-  if is_keyword i
-  then fail "got a keyword"
-  else (* let () = log "got ident %S" i in *)
-    return i
-;;
-
 let string s = trace_pos (Format.sprintf "string `%s`" s) *> string s
-
-let pattern =
-  fix (fun pattern ->
-    fail ""
-    <|> parens
-          (return (fun a b ps -> PTuple (a, b, ps))
-           <*> pattern
-           <*> string "," *> ws *> pattern
-           <*> many (string "," *> ws *> pattern))
-    <|> (ws *> ident >>= fun v -> return (pvar v) <* trace_pos v))
-;;
 
 (* >>| fun x ->
   log "pattern %a parsed" Pprint.pp_pattern x;
@@ -122,11 +105,108 @@ let keyword kwd =
   ws
   *> string kwd
   *> let* c = peek_char_fail in
-     if is_alpha c || is_digit c
+     if is_char_valid_for_name c
      then
        let* p = pos in
        failf "input is not a keyword '%s', pos = %d" kwd p
      else ws *> return (log "keyword '%s' parsed" kwd)
+;;
+
+let parse_name regexp error_message =
+  let* chs = ws *> take_while1 is_char_valid_for_name in
+  if is_keyword chs
+  then fail "unexpected keyword"
+  else if Str.string_match (Str.regexp regexp) chs 0
+  then return chs
+  else fail error_message
+;;
+
+let var_name =
+  let regexp = "^[a-z_][a-zA-Z0-9_]*$" in
+  let message = "not a variable name" in
+  parse_name regexp message
+;;
+
+let constructor_name =
+  let regexp = "^[A-Z][a-zA-Z0-9_]*$" in
+  let message = "not a constructor name" in
+  parse_name regexp message
+;;
+
+let type_name =
+  let regexp = "^[a-z_][a-zA-Z0-9_]*$" in
+  let message = "not a type name" in
+  parse_name regexp message
+;;
+
+let type_param_name =
+  let regexp = "^'[a-zA-Z][a-zA-Z0-9_]*$" in
+  let message = "not a type param name" in
+  parse_name regexp message
+;;
+
+let constructor_name =
+  let regexp = "^[A-Z][a-zA-Z0-9_]*$" in
+  let message = "not a constructor name" in
+  parse_name regexp message
+;;
+
+let ident = var_name
+
+type dispatch_patt =
+  { patt_basic : dispatch_patt -> pattern t
+  ; patt_cons : dispatch_patt -> pattern t
+  ; patt_tuple : dispatch_patt -> pattern t
+  ; patt : dispatch_patt -> pattern t
+  }
+
+let pnil = PConstruct ("[]", None)
+let enil = EConstruct ("[]", None)
+let pcons hd tl = PConstruct ("::", Some (PTuple (hd, tl, [])))
+let econs hd tl = EConstruct ("::", Some (ETuple (hd, tl, [])))
+
+let patt_basic d =
+  ws
+  *> fix (fun _self ->
+    parens (d.patt d)
+    <|> char '_' *> return PAny
+    <|> (var_name >>= fun v -> return (pvar v) <* trace_pos v)
+    <|> string "[]" *> return pnil
+    <|> (char '['
+         *> ws
+         *>
+         let* first = d.patt d in
+         (let* rest = many (ws *> char ';' *> d.patt d) in
+          return (pcons first (List.fold_right pcons rest pnil)))
+         <* ws
+         <* char ']')
+    <|> let* name = ws *> constructor_name in
+        (let* patt = ws *> d.patt_basic d in
+         return (PConstruct (name, Some patt)))
+        <|> return (PConstruct (name, None)))
+;;
+
+let patt_cons d =
+  ws
+  *> fix (fun _self ->
+    return (fun head tail -> pcons head tail)
+    <*> d.patt_basic d
+    <*> ws *> string "::" *> ws *> d.patt_cons d
+    <|> d.patt_basic d)
+;;
+
+let patt_tuple d =
+  ws
+  *> fix (fun _self ->
+    return (fun a b xs -> PTuple (a, b, xs))
+    <*> (d.patt_cons d <* ws)
+    <*> (char ',' *> d.patt_cons d <* ws)
+    <*> many (char ',' *> d.patt_cons d <* ws))
+;;
+
+let pattern : pattern t =
+  let patt = fun d -> d.patt_tuple d <|> d.patt_cons d <|> d.patt_basic d in
+  patt { patt; patt_basic; patt_cons; patt_tuple }
 ;;
 
 let prio expr table =
@@ -164,7 +244,7 @@ let letdef erhs =
 (* The equivalent of [letdef] *)
 let letdef0 erhs =
   let+ isrec =
-    keyword "let" *> option NonRecursive (keyword "rec" >>| fun _ -> Recursive) <* ws
+    keyword "let" *> option NonRecursive (keyword "rec" *> return Recursive) <* ws
   in
   let+ name = pattern in
   (* TODO(Kakadu): not any pattern *)
@@ -173,19 +253,29 @@ let letdef0 erhs =
   isrec, name, List.fold_right elam ps rhs
 ;;
 
+type dispatch =
+  { prio : dispatch -> expr t
+  ; expr_basic : dispatch -> expr t
+  ; expr_long : dispatch -> expr t
+  ; expr : dispatch -> expr t
+  }
+
 let pack : dispatch =
   let open Format in
   let prio d =
-    prio
-      (d.expr_long d)
-      [| [ ws *> string "=", eeq
-         ; ws *> string "<=", ele
-         ; ws *> string "<", elt
-         ; ws *> string ">", egt
-         ]
-       ; [ ws *> string "+", eadd; ws *> string "-", esub ]
-       ; [ ws *> string "*", emul ]
-      |]
+    ws
+    *> fix (fun _self ->
+      prio
+        (d.expr_long d)
+        [| [ ws *> string "=", eeq
+           ; ws *> string "<=", ele
+           ; ws *> string "<", elt
+           ; ws *> string ">", egt
+           ]
+         ; [ ws *> string "::", econs ]
+         ; [ ws *> string "+", eadd; ws *> string "-", esub ]
+         ; [ ws *> string "*", emul ]
+        |])
   in
   let expr_basic d =
     trace_pos "expr_basic"
@@ -193,18 +283,53 @@ let pack : dispatch =
       ws
       *> (fail ""
           <|> ws *> (number >>| fun n -> econst (const_int n))
-          <|> (ws *> char '(' *> char ')' >>| fun _ -> eunit)
-          <|> (ws *> ident
+          <|> ws *> char '(' *> char ')' *> return eunit
+          <|> ws *> char '[' *> char ']' *> return enil
+          <|> (ws *> var_name
                >>= function
                | "true" -> return @@ econst (const_bool true)
                | "false" -> return @@ econst (const_bool false)
                | _ -> fail "Not a boolean constant")
+          <|> (char '['
+               *> ws
+               *>
+               let* first = d.prio d in
+               (let* rest = many (ws *> char ';' *> d.prio d) in
+                return (econs first (List.fold_right econs rest enil)))
+               <|> return (econs first enil)
+               <* ws
+               <* char ']')
+          <|> brackets
+                (return (fun h tl -> earray (h :: tl))
+                 <*> (d.expr d <* ws)
+                 <*> many (string ";" *> d.expr d <* ws)
+                 <|> return @@ earray [])
           <|> parens
                 (return (fun a b xs -> etuple a b xs)
                  <*> (d.expr d <* ws)
-                 <*> (string "," *> d.expr d <* ws)
-                 <*> many (string "," *> d.expr d <* ws))
-          <|> (ws *> ident >>| evar)
+                 <*> (char ',' *> d.expr d <* ws)
+                 <*> many (char ',' *> d.expr d <* ws))
+          <|> (ws *> var_name >>| evar)
+          <|> (let* name = ws *> constructor_name in
+               (let* patt = ws *> d.expr_basic d in
+                return (EConstruct (name, Some patt)))
+               <|> return (EConstruct (name, None)))
+          <|> (let parse_case =
+                 let* p = char '|' *> ws *> pattern in
+                 let* e = ws *> string "->" *> ws *> d.prio d in
+                 return (p, e)
+               in
+               let first =
+                 parse_case
+                 <|>
+                 let* p = pattern in
+                 let* e = ws *> string "->" *> ws *> d.prio d in
+                 return (p, e)
+               in
+               let* subject = keyword "match" *> ws *> d.prio d <* ws <* keyword "with" in
+               let* case = first in
+               let* cases = many parse_case in
+               return (ematch subject case cases))
           <|> (keyword "fun" *> pattern
                >>= fun p ->
                (* let () = log "Got a abstraction over %a" Pprint.pp_pattern p in *)
@@ -230,7 +355,6 @@ let pack : dispatch =
   { expr_basic; expr_long; prio; expr = prio }
 ;;
 
-let value_binding = letdef (pack.expr pack) <* ws
 let parse_pack p str = parse_string ~consume:All (p pack) str
 
 type error = [ `Parse_error of string ]
@@ -244,7 +368,102 @@ let parse str =
   Result.map_error (fun x -> `Parse_error x) (parse_pack pack.prio str)
 ;;
 
-let structure = many value_binding
+let type_param_tuple =
+  ws *> char '(' *> ws *> sep_by (ws *> char ',') (ws *> type_param_name)
+  >>= function
+  | frst :: scnd :: rest -> return (frst :: scnd :: rest) <* ws *> char ')'
+  | _ -> fail "tuple of param names expected"
+;;
+
+let core_type_var = ws *> (type_name <|> type_param_name >>| fun name -> CTVar name)
+
+let core_type_arrow core_type =
+  fix (fun self ->
+    let* operand = ws *> core_type in
+    ws *> string "->" *> ws *> self
+    >>| (fun operand2 -> CTArrow (operand, operand2))
+    <|> return operand)
+;;
+
+let core_type_tuple core_type =
+  let* first = ws *> core_type in
+  many (ws *> char '*' *> ws *> core_type)
+  >>= function
+  | [] -> return first
+  | second :: rest -> return (CTTuple (first, second, rest))
+;;
+
+let core_type =
+  ws
+  *> fix (fun self ->
+    let prims =
+      fail ""
+      <|> (type_name >>| fun v -> CTConstr (v, []))
+      <|> (type_param_name >>| fun v -> CTConstr (v, []))
+    in
+    let prims =
+      (let* arg = prims in
+       let* name = ws *> type_name in
+       return (CTConstr (name, [ arg ])))
+      <|> prims
+    in
+    let self = parens self <|> prims in
+    let self = core_type_tuple self <|> self in
+    let self = core_type_arrow self <|> self in
+    (let* ct = char '(' *> ws *> self in
+     let* cts = many (ws *> char ',' *> self) in
+     let* name = ws *> char ')' *> type_name in
+     return (CTConstr (name, ct :: cts)))
+    <|> self)
+;;
+
+let type_params =
+  ws
+  *> (type_param_name
+      >>| (fun param -> [ param ])
+      <|> parens (type_param_name >>| fun param -> [ param ])
+      <|> type_param_tuple
+      <|> return [])
+;;
+
+let type_kind_variants =
+  let parse_variant =
+    let* name = ws *> char '|' *> ws *> constructor_name in
+    (let* ct = ws *> keyword "of" *> ws *> core_type in
+     return (name, Some ct))
+    <|> return (name, None)
+  in
+  many parse_variant
+  >>= function
+  | var :: vars -> return (KVariants (var, vars))
+  | _ -> fail "is not variants"
+;;
+
+let type_kind_alias = ws *> core_type >>| fun core_type -> KAbstract (Some core_type)
+let type_kind = ws *> (type_kind_variants <|> type_kind_alias)
+
+let single_type_definition =
+  let* params = ws *> type_params in
+  let* name = ws *> type_name in
+  let* kind = ws *> char '=' *> ws *> type_kind in
+  return { typedef_params = params; typedef_name = name; typedef_kind = kind }
+;;
+
+let type_definition =
+  ws
+  *> string "type"
+  *>
+  let* frst = ws *> single_type_definition in
+  let* rest = many (ws *> string "and" *> single_type_definition) in
+  return (frst, rest)
+;;
+
+let value_binding = letdef (pack.expr pack) <* ws
+
+let structure =
+  many1
+    (value_binding >>| (fun vb -> SValue vb) <|> (type_definition >>| fun td -> SType td))
+;;
 
 let parse_structure str =
   parse_string ~consume:All structure str
@@ -268,4 +487,11 @@ let parse_vb_exn str =
     Format.eprintf "Error: %s\n" e;
     failwith "Error during parsing"
   | Ok r -> r
+;;
+
+let value_bindings = many1 value_binding
+
+let parse_value_bindings str =
+  parse_string ~consume:All value_bindings str
+  |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
 ;;

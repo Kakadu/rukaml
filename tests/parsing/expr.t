@@ -84,3 +84,106 @@ value binding
   > if 1 then 2 else x * fac (y-1)
   > EOF
   Parsed: (if 1 then 2 else x * (fac (y - 1)))
+#
+
+# match
+  $ cat << EOF | ./run.exe -e -
+  > match (x, y) with
+  > | (x, y) -> (x, y)
+  > | _ -> (y, x)
+  Parsed: (match (x, y) with
+            | (x, y) -> (x, y)
+            | _ -> (y, x))
+
+  $ cat << EOF | ./run.exe -e -
+  > match e with
+  > | (f, (f, (f, (f, s)))) -> 4
+  > | (f, (f, (f, s))) -> 3
+  > | (f, (f, s)) -> 2
+  > | (f, s) -> 1
+  > | s -> 0
+  Parsed: (match e with
+            | (f, (f, (f, (f, s)))) -> 4
+            | (f, (f, (f, s))) -> 3
+            | (f, (f, s)) -> 2
+            | (f, s) -> 1
+            | s -> 0)
+  $ cat << EOF | ./run.exe -e -
+  > match x with
+  > | One x -> 1
+  > | Two (x, y) -> 2
+  > | Three (x, y, z) -> 3
+  Parsed: (match x with
+            | One (x) -> 1
+            | Two ((x, y)) -> 2
+            | Three ((x, y, z)) -> 3)
+
+  $ cat << EOF | ./run.exe -e -
+  > match x with
+  > | _ -> if x then y else z
+  Parsed: (match x with
+            | _ -> (if x then y else z))
+
+  $ cat << EOF | ./run.exe -e -
+  > if x then 
+  >   match y with
+  >   | _ -> y
+  > else 
+  >   match z with
+  >   | _ -> Z
+  Parsed: (if x then match y with
+                       | _ -> y else match z with
+                                       | _ -> Z)
+
+  $ cat << EOF | ./run.exe -e -
+  > match f x with
+  > | Some x -> g x
+  > | None -> a b c
+  Parsed: (match f x with
+            | Some (x) -> (g x)
+            | None -> (a b c))
+
+  $ cat << EOF | ./run.exe -e -
+  > match x with
+  > | A -> a
+  > | B ->
+  >   match y with
+  >   | C -> c
+  >   | D -> d
+  Parsed: (match x with
+            | A -> a
+            | B -> (match y with
+                     | C -> c
+                     | D -> d))
+
+  $ cat << EOF | ./run.exe -e -
+  > match x with
+  > | A -> 
+  >   (match y with
+  >    | C -> c
+  >    | D -> d)
+  > | B -> b
+  Parsed: (match x with
+            | A -> (match y with
+                     | C -> c
+                     | D -> d)
+            | B -> b)
+
+
+  $ cat << EOF | ./run.exe -e -
+  > match (match () with _ -> ()) with
+  > | _ -> ()
+  Parsed: (match match () with
+                   | _ -> () with
+            | _ -> ())
+
+  $ cat << EOF | ./run.exe -e -
+  > match (if x then y else z) with
+  > | _ -> ()
+  Parsed: (match if x then y else z with
+            | _ -> ())
+
+  $ cat << EOF | ./run.exe -e -
+  > if (match x with _ -> ()) then 1 else 2
+  Parsed: (if match x with
+                | _ -> () then 1 else 2)

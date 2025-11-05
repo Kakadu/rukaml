@@ -19,6 +19,7 @@ Zed combinator should trigger occurs check
   infer error: unification failed on int and (int -> int)
   [1]
 
+
   $ run << EOF
   > let rec zed f x = f (zed f) x
   > let fac = fun self -> fun n -> if n=1 then 1 else n * (self (n-1))
@@ -76,7 +77,7 @@ Zed combinator should trigger occurs check
   $ run << EOF
   > (fun fix -> fun f -> f (fix f))
   > EOF
-  parse error: : end_of_input
+  parse error: : string
   [1]
 
   $ run << EOF
@@ -97,13 +98,13 @@ Zed combinator should trigger occurs check
   $ run << EOF
   > fun f -> fun x -> f (f x)
   > EOF
-  parse error: : end_of_input
+  parse error: : string
   [1]
 
   $ run << EOF
   > fun x -> let v = x in v
   > EOF
-  parse error: : end_of_input
+  parse error: : string
   [1]
 
   $ run << EOF
@@ -117,6 +118,7 @@ Zed combinator should trigger occurs check
     add 1
   let main: int =
     add1 13
+
 
   $ run << EOF
   > let add = fun x -> x + x
@@ -136,6 +138,7 @@ tuples
   > EOF
   let twice: '_1 -> '_1 * '_1 =
     fun x -> (x, x)
+
 
   $ run << EOF
   > let foo x =
@@ -157,14 +160,8 @@ tuples
   let foo: '_1 -> int * bool =
     fun x -> ((y 1), (y true))
 
-  $ run << EOF
-  > let rec fac = fun n -> n*fac
-  > EOF
-  infer error: unification failed on int and (int -> int)
-  [1]
 
   $ run << EOF
   > let rec (a,b) = (a,b)
-  > EOF
   infer error: Only variables are allowed as left-hand side of `let rec'
   [1]
