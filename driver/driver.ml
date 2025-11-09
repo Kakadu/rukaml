@@ -151,6 +151,7 @@ module Target = struct
     let cconvtree p = (cpstree p) cconv
     let typedtree table p = (cconvtree p) (infer table)
     let anftree table p = (typedtree table p) anf
+    let infer_parsetree table p = (parsetree p) (infer table)
   end
 
   let rv64 table p = (Intermediate.anftree table p) rv64
@@ -170,6 +171,7 @@ module Target = struct
       ; "cconv", finish Intermediate.cconvtree
       ; "typedtree", finish Intermediate.(typedtree table)
       ; "anf", finish Intermediate.(anftree table)
+      ; "infer-parsetree", finish Intermediate.(infer_parsetree table)
       ]
   ;;
 end
