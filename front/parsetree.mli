@@ -38,14 +38,14 @@ type expr =
   | EConstruct of string * expr option (** ConstructorName(expr) *)
   | EMatch of expr * (pattern * expr) list1 (** match expr with ... *)
 
-and 'a list1 = 'a * 'a list
+and 'a list1 = 'a * 'a list [@@deriving show { with_path = false }]
 
 type value_binding = rec_flag * pattern * expr [@@deriving show { with_path = false }]
 
 type type_declaration =
-  { typedef_params : string list (** ['a] is param in [type 'a list = ...]  *)
-  ; typedef_name : string (** [list] is name in [type 'a list = ...]  *)
-  ; typedef_kind : type_kind
+  { pty_params : string list (** ['a] is param in [type 'a list = ...]  *)
+  ; pty_name : string (** [list] is name in [type 'a list = ...]  *)
+  ; pty_kind : type_kind
   }
 [@@deriving show { with_path = false }]
 
@@ -98,3 +98,7 @@ val e_cons : expr -> expr -> expr
 val etuple : expr -> expr -> expr list -> expr
 val earray : expr list -> expr
 val group_lams : expr -> pattern list * expr
+val pnil : pattern
+val enil : expr
+val pcons : pattern -> pattern -> pattern
+val econs : expr -> expr -> expr

@@ -71,9 +71,9 @@ let e_cons a b = eapp ~is_right_assoc:true (evar "::") [ a; b ]
 type value_binding = rec_flag * pattern * expr [@@deriving show { with_path = false }]
 
 type type_declaration =
-  { typedef_params : string list (** ['a] is param in [type 'a list = ...]  *)
-  ; typedef_name : string (** [list] is name in [type 'a list = ...]  *)
-  ; typedef_kind : type_kind
+  { pty_params : string list (** ['a] is param in [type 'a list = ...]  *)
+  ; pty_name : string (** [list] is name in [type 'a list = ...]  *)
+  ; pty_kind : type_kind
   }
 [@@deriving show { with_path = false }]
 
