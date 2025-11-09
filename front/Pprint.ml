@@ -180,7 +180,6 @@ let rec pp_typ ppf { typ_desc } =
   match typ_desc with
   | V { binder; _ } -> fprintf ppf "'_%d" binder
   | Weak n -> fprintf ppf "'_weak%d" n
-  | Prim s -> pp_print_string ppf s
   | Arrow (l, r) -> fprintf ppf "(%a -> %a)" pp_typ l pp_typ r
   | TLink t -> pp_typ ppf t
   | TParam (a, t) ->
@@ -190,6 +189,15 @@ let rec pp_typ ppf { typ_desc } =
     fprintf ppf "@[(%a, %a" pp_typ a pp_typ b;
     List.iter (fprintf ppf ", %a" pp_typ) ts;
     fprintf ppf ")@]"
+  | TConstr (name, []) -> fprintf ppf "%s" name
+  | TConstr (name, [ ty ]) -> fprintf ppf "@[%a %s@]" pp_typ ty name
+  | TConstr (name, tys) ->
+    fprintf
+      ppf
+      "(%a) %s"
+      (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp_typ)
+      tys
+      name
 ;;
 
 let pp_scheme ppf = function
@@ -212,7 +220,7 @@ let rec pp_core_type ppf = function
 ;;
 
 let pp_type_params ppf td =
-  match td.typedef_params with
+  match td.pty_params with
   | [] -> fprintf ppf " "
   | [ x ] -> fprintf ppf " %s " x
   | x :: xs ->
@@ -222,7 +230,7 @@ let pp_type_params ppf td =
 ;;
 
 let pp_type_kind ppf td =
-  match td.typedef_kind with
+  match td.pty_kind with
   | KAbstract None -> ()
   | KAbstract (Some ct) -> fprintf ppf "@[%a@]" pp_core_type ct
   | KVariants (case, cases) ->
@@ -242,7 +250,7 @@ let pp_type_definition ppf (td, tds) =
     "@[<v 2>@[type%a%s =@]@ @[%a@]@]@ "
     pp_type_params
     td
-    td.typedef_name
+    td.pty_name
     pp_type_kind
     td;
   List.iter
@@ -252,7 +260,7 @@ let pp_type_definition ppf (td, tds) =
          "@[<v 2>@[and%a%s =@]@ @[%a@]@]@ "
          pp_type_params
          td
-         td.typedef_name
+         td.pty_name
          pp_type_kind
          td)
     tds;

@@ -11,7 +11,6 @@ let pp_typ_hum =
   let open Format in
   let rec pp_typ ctx ppf t =
     match t.typ_desc with
-    | Prim s -> fprintf ppf "%s" s
     | V { binder; _ } -> fprintf ppf "'_%d" binder
     | Weak n -> fprintf ppf "'_weak%d" n
     | TLink ty -> pp_typ ctx ppf ty
@@ -39,6 +38,8 @@ let pp_typ_hum =
            List.iter (fprintf ppf " * %a" (pp_typ CTuple)) ts;
            fprintf ppf "@]")
         ()
+    | TConstr (name, []) -> fprintf ppf "%s" name
+    | TConstr _ -> failwith "not implemented: TConstr in pp_typ_hum"
   in
   pp_typ CArrow_right
 ;;
@@ -157,8 +158,12 @@ let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
     tvb_body
 ;;
 
-let pp_stru ppf stru =
+let pp_stru ppf (stru : Typedtree.structure) =
   open_vbox 0;
-  pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "@\n") pp_vb_hum ppf stru;
+  pp_print_list
+    ~pp_sep:(fun ppf () -> fprintf ppf "@\n")
+    pp_vb_hum
+    ppf
+    (List.map (fun (vb, _env) -> vb) stru);
   close_box ()
 ;;
