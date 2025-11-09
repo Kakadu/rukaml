@@ -43,7 +43,9 @@ module Ident_map : sig
   val add : string -> ident -> 'a -> 'a t -> 'a t
   val ident_of_string_exn : string -> _ t -> ident
   val find_by_string_exn : string -> 'a t -> 'a
+  val find_by_string_opt : string -> 'a t -> 'a option
   val find_by_ident : ident -> 'a t -> 'a
+  val find_by_ident_opt : ident -> 'a t -> 'a option
   val fold_idents : f:('acc -> ident * 'b -> 'acc) -> init:'acc -> 'b t -> 'acc
   val iter_idents : f:(ident -> 'a -> unit) -> 'a t -> unit
   val map : f:('a -> 'b) -> 'a t -> 'b t
@@ -59,9 +61,17 @@ end = struct
 
   let find_by_ident id (left, _) = Id_map.find id left
 
+  let find_by_ident_opt id (left, _) = Id_map.find_opt id left
+
   let find_by_string_exn str (left, s_to_i) =
     let id = String_map.find str s_to_i in
     Id_map.find id left
+  ;;
+
+  let find_by_string_opt str (left, s_to_i) =
+    match String_map.find_opt str s_to_i with
+    | None -> None
+    | Some id -> Id_map.find_opt id left
   ;;
 
   let fold_idents ~f ~init (left, _) = Id_map.fold (fun k v acc -> f acc (k, v)) left init
