@@ -171,11 +171,6 @@ type dispatch_patt =
   ; patt : dispatch_patt -> pattern t
   }
 
-let pnil = PConstruct ("[]", None)
-let enil = EConstruct ("[]", None)
-let pcons hd tl = PConstruct ("::", Some (PTuple (hd, tl, [])))
-let econs hd tl = EConstruct ("::", Some (ETuple (hd, tl, [])))
-
 let patt_basic d =
   ws
   *> fix (fun _self ->
@@ -472,7 +467,7 @@ let single_type_definition =
   let* params = ws *> type_params in
   let* name = ws *> type_name in
   let* kind = ws *> char '=' *> ws *> type_kind in
-  return { typedef_params = params; typedef_name = name; typedef_kind = kind }
+  return { pty_params = params; pty_name = name; pty_kind = kind }
 ;;
 
 let type_definition =
