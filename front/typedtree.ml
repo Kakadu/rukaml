@@ -21,13 +21,13 @@ type var_info =
 type ty = { mutable typ_desc : type_desc }
 
 and type_desc =
-  | Prim of string
   | V of var_info
   | Weak of binder
   | Arrow of ty * ty
   | TParam of ty * string
   | TLink of ty
   | TProd of ty * ty * ty list
+  | TConstr of string * ty list
 [@@deriving show { with_path = false }]
 
 module IntMap = Map.Make (Int) [@@deriving show { with_path = false }]
@@ -43,11 +43,12 @@ type scheme = S of binder_set * ty [@@deriving show { with_path = false }]
 
 let tarrow l r = { typ_desc = Arrow (l, r) }
 let tweak t = { typ_desc = Weak t }
-let tprim s = { typ_desc = Prim s }
+let tprim s = { typ_desc = TConstr (s, []) }
 let tv binder ~level = { typ_desc = V { binder; var_level = level } }
 let tlink t = { typ_desc = TLink t }
 let tparam a t = { typ_desc = TParam (a, t) }
 let tprod a b ts = { typ_desc = TProd (a, b, ts) }
+let tconstr name tys = { typ_desc = TConstr (name, tys) }
 let int_typ = tprim "int"
 let char_typ = tprim "char"
 let bool_typ = tprim "bool"
@@ -57,6 +58,8 @@ let array_typ a = tparam a "array"
 type pattern =
   | Tpat_var of Ident.t
   | Tpat_tuple of pattern * pattern * pattern list
+  | Tpat_any
+  | Tpat_constr of Ident.t * pattern option
 [@@deriving show { with_path = false }]
 
 let of_untyped_pattern =
@@ -79,6 +82,8 @@ type expr =
   | TArray of expr list * ty
   | TTuple of expr * expr * expr list * ty
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
+  | TMatch of expr * (pattern * expr) Parsetree.list1 * ty
+  | TConstruct of string * Ident.t * ty option * ty
 [@@deriving show { with_path = false }]
 
 let rec type_of_expr = function
@@ -91,6 +96,8 @@ let rec type_of_expr = function
   | TLam (_, _, t)
   | TApp (_, _, t) -> t
   | TLet (_, _, _, _, wher) -> type_of_expr wher
+  | TMatch (_, _, t) -> t
+  | TConstruct (_, _, _, t) -> t
 ;;
 
 (** Compaction of the tree *)
@@ -98,11 +105,12 @@ let rec type_of_expr = function
 let type_without_links =
   let rec helper t =
     match t.typ_desc with
-    | Prim _ | V _ | Weak _ -> t
+    | V _ | Weak _ -> t
     | Arrow (l, r) -> tarrow (helper l) (helper r)
     | TParam (a, t) -> tparam (helper a) t
     | TLink ty -> helper ty
     | TProd (a, b, ts) -> { typ_desc = TProd (helper a, helper b, List.map helper ts) }
+    | TConstr (name, tys) -> { typ_desc = TConstr (name, List.map helper tys) }
   in
   helper
 ;;
@@ -119,6 +127,14 @@ let compact_expr =
     | TLet (flg, pat, S (vars, ty), e1, e2) ->
       TLet (flg, pat, S (vars, type_without_links ty), helper e1, helper e2)
     | TTuple (a, b, ts, ty) -> TTuple (helper a, helper b, List.map helper ts, ty)
+    | TMatch (e, ((p1, e1), cases), ty) ->
+      TMatch
+        ( helper e
+        , ((p1, helper e1), List.map (fun (p, e) -> p, helper e) cases)
+        , type_without_links ty )
+    | TConstruct (name, id, arg_ty_opt, ty) ->
+      TConstruct
+        (name, id, Option.map type_without_links arg_ty_opt, type_without_links ty)
   in
   helper
 ;;
@@ -130,9 +146,42 @@ type value_binding =
   ; tvb_typ : scheme
   }
 
-type structure_item = value_binding
-type structure = structure_item list
-
 let value_binding tvb_flag tvb_pat tvb_body tvb_typ =
   { tvb_flag; tvb_pat; tvb_body; tvb_typ }
 ;;
+
+type type_kind =
+  | Tty_abstract of ty option
+  | Tty_variants of (string * ty option) list
+
+module TypeEnv = struct
+  type constructor_entry =
+    { constr_ident : Ident.t
+    ; constr_name : string
+    ; constr_type_ident : Ident.t
+    ; constr_arg_ty : ty option
+    ; constr_arity : int
+    }
+
+  type type_entry =
+    { type_ident : Ident.t
+    ; type_name : string
+    ; type_params : binder_set
+    ; type_kind : type_kind
+    }
+
+  type t =
+    { env_constructors : constructor_entry Ident.Ident_map.t
+    ; env_types : type_entry Ident.Ident_map.t
+    ; env_values : scheme Ident.Ident_map.t
+    }
+
+  let empty =
+    { env_values = Ident.Ident_map.empty
+    ; env_types = Ident.Ident_map.empty
+    ; env_constructors = Ident.Ident_map.empty
+    }
+  ;;
+end
+
+type structure = (value_binding * TypeEnv.t) list
