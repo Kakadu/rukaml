@@ -57,6 +57,7 @@ let rec pp_pattern ppf = function
       h2
       (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " ") pp_pattern)
       rest
+  | Tpat_any -> fprintf ppf "_"
 ;;
 
 let pp_expr =
@@ -133,6 +134,15 @@ let pp_expr =
       fprintf ppf "@[(%a, %a" expr a expr b;
       List.iter (fprintf ppf ", %a" expr_no) es;
       fprintf ppf ")@]"
+    | TMatch (e, (case, cases), _) ->
+      let pp_match ppf () =
+        let pp_case ppf (patt, expr) =
+          fprintf ppf "| %a -> %a@ " pp_pattern patt expr_no expr
+        in
+        fprintf ppf "match %a with@ " expr_no e;
+        fprintf ppf "%a" (fun ppf -> pp_print_list pp_case ppf) (case :: cases)
+      in
+      fprintf ppf "@[<v 2>%a@]" pp_match ()
   and pp_typ = pp_typ_hum
   and pp_pat ppf s = fprintf ppf "%a" pp_pattern s
   and expr ppf = expr_gen ~pars:true ppf
