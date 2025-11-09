@@ -535,11 +535,16 @@ let rec check_pat ~level env table = function
     let xident = Ident.of_string x in
     let env = Type_env.extend ~varname:x xident (Scheme.make_mono tx) env in
     return (env, Typedtree.Tpat_var xident, tx)
-  | Parsetree.PTuple (p1, p2, []) ->
+  | Parsetree.PTuple (p1, p2, ps) ->
+    let check_many acc p =
+      let* env, ps, ts = acc in
+      let* env, p, t = check_pat ~level env table p in
+      return (env, p :: ps, t :: ts)
+    in
     let* env, p1, t1 = check_pat ~level env table p1 in
     let* env, p2, t2 = check_pat ~level env table p2 in
-    return (env, Tpat_tuple (p1, p2, []), tprod t1 t2 [])
-  | Parsetree.PTuple (_p1, _p2, _ps) -> failwith "Not implemented"
+    let* env, ps, ts = List.fold ps ~init:(return (env, [], [])) ~f:check_many in
+    return (env, Tpat_tuple (p1, p2, ps), tprod t1 t2 ts)
   | Parsetree.PAny ->
     let* ty = fresh_var ~level in
     return (env, Tpat_any, ty)
@@ -807,8 +812,9 @@ let infer env table expr =
         let twher = elim table twher in
         return (twher, TLet (NonRecursive, pat, Scheme.make_mono _ty, tbody, typed_wher))
       | EMatch (expr, ((p1, e1), cases)) ->
-        let* _expr_ty, expr = helper env state expr in
+        let* expr_ty, expr = helper env state expr in
         let* env1, p1, pty = check_pat ~level:!current_level env table p1 in
+        let* () = unify table pty expr_ty in
         let* ety, e1 = helper env1 state e1 in
         let infer_case acc (patt, expr) =
           let* pty_acc, ety_acc, cases = acc in
