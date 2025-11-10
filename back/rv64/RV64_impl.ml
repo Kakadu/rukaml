@@ -970,13 +970,14 @@ let codegen ?(wrap_main_into_start = true) anf file =
             | ANF.APname name -> name)
           pats
       in
-      let _ = if argc mod 2 = 0 then argc else argc + 1 in
+      (* let _ = if argc mod 2 = 0 then argc else argc + 1 in *)
       let () =
         if name.Ident.hum_name = "main"
         then (
           emit mv a0 sp;
           emit call "rukaml_initialize";
-          emit comment "this is main")
+          emit comment "this is main";
+          emit li a0 0)
         else
           List.rev pats
           |> ListLabels.iteri ~f:(fun i -> function
