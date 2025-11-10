@@ -332,8 +332,11 @@ let pack : dispatch =
                <|> return @@ eapp (evar "get") [ evar v; econst (const_int i) ])
                <|> return (evar v))
           <|> (let* name = ws *> constructor_name in
-               (let* patt = ws *> d.expr_basic d in
-                return (EConstruct (name, Some patt)))
+               fail ""
+               <|> (let* expr = ws *> d.expr_basic d in
+                    return (EConstruct (name, Some expr)))
+               <|> (let* expr = ws *> parens (d.expr d) in
+                    return (EConstruct (name, Some expr)))
                <|> return (EConstruct (name, None)))
           <|> (let parse_case =
                  let* p = char '|' *> ws *> pattern in
@@ -396,8 +399,6 @@ let type_param_tuple =
   | _ -> fail "tuple of param names expected"
 ;;
 
-let core_type_var = ws *> (type_name <|> type_param_name >>| fun name -> CTVar name)
-
 let core_type_arrow core_type =
   fix (fun self ->
     let* operand = ws *> core_type in
@@ -420,7 +421,7 @@ let core_type =
     let prims =
       fail ""
       <|> (type_name >>| fun v -> CTConstr (v, []))
-      <|> (type_param_name >>| fun v -> CTConstr (v, []))
+      <|> (type_param_name >>| fun name -> CTVar name)
     in
     let prims =
       (let* arg = prims in
