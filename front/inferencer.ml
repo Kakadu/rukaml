@@ -246,8 +246,6 @@ module Scheme = struct
 
   let make_mono ty = S (Var_set.empty, ty)
 
-  (* let make_poly ty *)
-
   let occurs_in info = function
     | S (xs, t) -> (not (Var_set.mem info.binder xs)) && Type.occurs_in info t
   ;;
@@ -341,7 +339,6 @@ let unify weak l r =
       let* () = helper l1 l2 in
       helper r1 r2
     | TParam (a1, t1), TParam (a2, t2) ->
-      (* TODO: make tests *)
       let* () = helper a1 a2 in
       if String.equal t1 t2 then return () else fail (`UnificationFailed (l, r))
     | TProd (a1, b1, ts1), TProd (a2, b2, ts2) ->
