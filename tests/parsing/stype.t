@@ -87,6 +87,15 @@
             | None
             
           
+  $ cat << EOF | ./run.exe -stru -
+  > type ('a, 'b) arrows =
+  >   | Normal of 'a -> 'b
+  >   | Reversed of 'b -> 'a
+  Parsed: type ('a, 'b) arrows =
+            | Normal of ('a -> 'b)
+            | Reversed of ('b -> 'a)
+            
+          
 
   $ cat << EOF | ./run.exe -stru -
   > type 'a list =
