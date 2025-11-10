@@ -24,10 +24,9 @@ and type_desc =
   | V of var_info
   | Weak of binder
   | Arrow of ty * ty
-  | TParam of ty * string
   | TLink of ty
   | TProd of ty * ty * ty list
-  | TConstr of string * ty list
+  | TConstr of ty list * string
 [@@deriving show { with_path = false }]
 
 module IntMap = Map.Make (Int) [@@deriving show { with_path = false }]
@@ -43,23 +42,30 @@ type scheme = S of binder_set * ty [@@deriving show { with_path = false }]
 
 let tarrow l r = { typ_desc = Arrow (l, r) }
 let tweak t = { typ_desc = Weak t }
-let tprim s = { typ_desc = TConstr (s, []) }
+
 let tv binder ~level = { typ_desc = V { binder; var_level = level } }
 let tlink t = { typ_desc = TLink t }
-let tparam a t = { typ_desc = TParam (a, t) }
 let tprod a b ts = { typ_desc = TProd (a, b, ts) }
-let tconstr name tys = { typ_desc = TConstr (name, tys) }
+let tconstr tys name = { typ_desc = TConstr (tys, name) }
+
+(* /// *)
+(* should?? be replaced with tconstr *)
+let tprim s = tconstr [] s
+let tparam param name = tconstr [ param ] name
+
+(* /// *)
+
 let int_typ = tprim "int"
 let char_typ = tprim "char"
 let bool_typ = tprim "bool"
 let unit_typ = tprim "unit"
-let array_typ a = tparam a "array"
+let array_typ param = tparam param "array"
 
 type pattern =
   | Tpat_var of Ident.t
   | Tpat_tuple of pattern * pattern * pattern list
   | Tpat_any
-  | Tpat_constr of Ident.t * pattern option
+  | Tpat_constr of string * Ident.t * pattern option
 [@@deriving show { with_path = false }]
 
 let of_untyped_pattern =
@@ -83,7 +89,7 @@ type expr =
   | TTuple of expr * expr * expr list * ty
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
   | TMatch of expr * (pattern * expr) Parsetree.list1 * ty
-  | TConstruct of string * Ident.t * ty option * ty
+  | TConstruct of string * Ident.t * expr option * ty
 [@@deriving show { with_path = false }]
 
 let rec type_of_expr = function
@@ -107,10 +113,9 @@ let type_without_links =
     match t.typ_desc with
     | V _ | Weak _ -> t
     | Arrow (l, r) -> tarrow (helper l) (helper r)
-    | TParam (a, t) -> tparam (helper a) t
     | TLink ty -> helper ty
     | TProd (a, b, ts) -> { typ_desc = TProd (helper a, helper b, List.map helper ts) }
-    | TConstr (name, tys) -> { typ_desc = TConstr (name, List.map helper tys) }
+    | TConstr (tys, name) -> { typ_desc = TConstr (List.map helper tys, name) }
   in
   helper
 ;;
@@ -132,9 +137,9 @@ let compact_expr =
         ( helper e
         , ((p1, helper e1), List.map (fun (p, e) -> p, helper e) cases)
         , type_without_links ty )
-    | TConstruct (name, id, arg_ty_opt, ty) ->
-      TConstruct
-        (name, id, Option.map type_without_links arg_ty_opt, type_without_links ty)
+    | TConstruct (name, id, None, ty) -> TConstruct (name, id, None, type_without_links ty)
+    | TConstruct (name, id, Some expr, ty) ->
+      TConstruct (name, id, Some (helper expr), type_without_links ty)
   in
   helper
 ;;
@@ -146,13 +151,16 @@ type value_binding =
   ; tvb_typ : scheme
   }
 
-let value_binding tvb_flag tvb_pat tvb_body tvb_typ =
-  { tvb_flag; tvb_pat; tvb_body; tvb_typ }
-;;
-
 type type_kind =
   | Tty_abstract of ty option
   | Tty_variants of (string * ty option) list
+
+type type_declaration =
+  { tty_name : string
+  ; tty_ident : Ident.t
+  ; tty_params : binder_set
+  ; tty_kind : type_kind
+  }
 
 module TypeEnv = struct
   type constructor_entry =
@@ -163,25 +171,66 @@ module TypeEnv = struct
     ; constr_arity : int
     }
 
-  type type_entry =
-    { type_ident : Ident.t
-    ; type_name : string
-    ; type_params : binder_set
-    ; type_kind : type_kind
-    }
-
   type t =
     { env_constructors : constructor_entry Ident.Ident_map.t
-    ; env_types : type_entry Ident.Ident_map.t
+    ; env_types : type_declaration Ident.Ident_map.t
     ; env_values : scheme Ident.Ident_map.t
     }
-
   let empty =
     { env_values = Ident.Ident_map.empty
     ; env_types = Ident.Ident_map.empty
     ; env_constructors = Ident.Ident_map.empty
     }
   ;;
+
+  let typ_unit : type_declaration =
+    { tty_name = "unit"
+    ; tty_ident = Ident.of_string "unit"
+    ; tty_params = Var_set.empty
+    ; tty_kind = Tty_abstract None
+    }
+  ;;
+
+  let typ_int : type_declaration =
+    { tty_name = "int"
+    ; tty_ident = Ident.of_string "int"
+    ; tty_params = Var_set.empty
+    ; tty_kind = Tty_abstract None
+    }
+  ;;
+
+  let typ_bool : type_declaration =
+    { tty_name = "bool"
+    ; tty_ident = Ident.of_string "bool"
+    ; tty_params = Var_set.empty
+    ; tty_kind = Tty_abstract None
+    }
+  ;;
+
+  (* IT DEFINETELY NEEDS TO BE FIXED  *)
+  let typ_array : type_declaration =
+    { tty_name = "array"
+    ; tty_ident = Ident.of_string "array"
+    ; tty_params = Var_set.singleton (-1)
+    ; tty_kind = Tty_abstract None
+    }
+  ;;
+
+  let add (env : t) (td : type_declaration) =
+    { env with env_types = Ident.Ident_map.add td.tty_name td.tty_ident td env.env_types }
+  ;;
+
+  let base_types_env =
+    Base.List.fold ~init:empty ~f:add [ typ_unit; typ_int; typ_bool; typ_array ]
+  ;;
 end
 
-type structure = (value_binding * TypeEnv.t) list
+type structure_item =
+  | Tstr_value of value_binding
+  | Tstr_type of type_declaration
+
+type structure = (TypeEnv.t * structure_item) list
+
+let value_binding tvb_flag tvb_pat tvb_body tvb_typ =
+  { tvb_flag; tvb_pat; tvb_body; tvb_typ }
+;;

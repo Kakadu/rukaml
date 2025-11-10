@@ -19,10 +19,10 @@ and type_desc =
   | V of var_info
   | Weak of binder
   | Arrow of ty * ty
-  | TParam of ty * string
   | TLink of ty
   | TProd of ty * ty * ty list
-  | TConstr of string * ty list
+  | TConstr of ty list * string
+  (** [ int ] is [ TConstr ([], "int") ] ;; [ int array ] is [ TConstr ([ TConst ("int", []) ], "array") ] etc. *)
 module IntMap : Map.S with type key = int
 
 type weak_table =
@@ -47,7 +47,7 @@ val tparam : ty -> string -> ty
 val tv : binder -> level:int -> ty
 val tlink : ty -> ty
 val tprod : ty -> ty -> ty list -> ty
-val tconstr : string -> ty list -> ty
+val tconstr : ty list -> string -> ty
 val int_typ : ty
 val char_typ : ty
 val bool_typ : ty
@@ -58,7 +58,7 @@ type pattern =
   | Tpat_var of Ident.t
   | Tpat_tuple of pattern * pattern * pattern list
   | Tpat_any
-  | Tpat_constr of Ident.t * pattern option
+  | Tpat_constr of string * Ident.t * pattern option
 
 val show_pattern : pattern -> string
 val of_untyped_pattern : Parsetree.pattern -> pattern
@@ -75,11 +75,18 @@ type expr =
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
   (** let rec? .. = ... in ... *)
   | TMatch of expr * (pattern * expr) Parsetree.list1 * ty
-  | TConstruct of string * Ident.t * ty option * ty
+  | TConstruct of string * Ident.t * expr option * ty
 
 val type_of_expr : expr -> ty
 val type_without_links : ty -> ty
 val compact_expr : expr -> expr
+
+val pp_expr : Format.formatter -> expr -> unit
+val show_expr : expr -> string
+val pp_binder_set : Format.formatter -> binder_set -> unit
+val show_binder_set : binder_set -> string
+val pp_binder : Format.formatter -> binder -> unit
+val show_binder : binder -> string
 
 type value_binding =
   { tvb_flag : Parsetree.rec_flag
@@ -88,17 +95,16 @@ type value_binding =
   ; tvb_typ : scheme
   }
 
-val pp_expr : Format.formatter -> expr -> unit
-val show_expr : expr -> string
-val pp_binder_set : Format.formatter -> binder_set -> unit
-val show_binder_set : binder_set -> string
-val pp_binder : Format.formatter -> binder -> unit
-val show_binder : binder -> string
-val value_binding : Parsetree.rec_flag -> pattern -> expr -> scheme -> value_binding
-
 type type_kind =
   | Tty_abstract of ty option
   | Tty_variants of (string * ty option) list
+
+type type_declaration =
+  { tty_name : string
+  ; tty_ident : Ident.t
+  ; tty_params : binder_set
+  ; tty_kind : type_kind
+  }
 
 module TypeEnv : sig
   type constructor_entry =
@@ -109,20 +115,25 @@ module TypeEnv : sig
     ; constr_arity : int
     }
 
-  type type_entry =
-    { type_ident : Ident.t
-    ; type_name : string
-    ; type_params : binder_set
-    ; type_kind : type_kind
-    }
-
   type t =
     { env_constructors : constructor_entry Ident.Ident_map.t
-    ; env_types : type_entry Ident.Ident_map.t
+    ; env_types : type_declaration Ident.Ident_map.t
     ; env_values : scheme Ident.Ident_map.t
     }
 
   val empty : t
+
+  val typ_unit : type_declaration
+  val typ_int : type_declaration
+  val typ_bool : type_declaration
+  val typ_array : type_declaration
+  val base_types_env : t
 end
 
-type structure = (value_binding * TypeEnv.t) list
+type structure_item =
+  | Tstr_value of value_binding
+  | Tstr_type of type_declaration
+
+type structure = (TypeEnv.t * structure_item) list
+
+val value_binding : Parsetree.rec_flag -> pattern -> expr -> scheme -> value_binding
