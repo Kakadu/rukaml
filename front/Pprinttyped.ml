@@ -14,9 +14,6 @@ let pp_typ_hum =
     | V { binder; _ } -> fprintf ppf "'_%d" binder
     | Weak n -> fprintf ppf "'_weak%d" n
     | TLink ty -> pp_typ ctx ppf ty
-    | TParam (a, t) ->
-      pp_typ ctx ppf a;
-      fprintf ppf " %s" t
     | Arrow (l, r) ->
       let fmt : _ format =
         match ctx with
@@ -38,8 +35,15 @@ let pp_typ_hum =
            List.iter (fprintf ppf " * %a" (pp_typ CTuple)) ts;
            fprintf ppf "@]")
         ()
-    | TConstr (name, []) -> fprintf ppf "%s" name
-    | TConstr _ -> failwith "not implemented: TConstr in pp_typ_hum"
+    | TConstr ([], name) -> fprintf ppf "%s" name
+    | TConstr (params, name) ->
+      (* TODO : fix this *)
+      fprintf
+        ppf
+        "(%a) %s"
+        (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") (pp_typ CTuple))
+        params
+        name
   in
   pp_typ CArrow_right
 ;;
@@ -58,6 +62,8 @@ let rec pp_pattern ppf = function
       (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " ") pp_pattern)
       rest
   | Tpat_any -> fprintf ppf "_"
+  | Tpat_constr (name, _id, None) -> fprintf ppf "%s" name
+  | Tpat_constr (name, _id, Some patt) -> fprintf ppf "%s %a" name pp_pattern patt
 ;;
 
 let pp_expr =
@@ -143,6 +149,8 @@ let pp_expr =
         fprintf ppf "%a" (fun ppf -> pp_print_list pp_case ppf) (case :: cases)
       in
       fprintf ppf "@[<v 2>%a@]" pp_match ()
+    | TConstruct (name, _id, None, _ty) -> fprintf ppf "%s" name
+    | TConstruct (name, _id, Some arg, _ty) -> fprintf ppf "%s %a" name expr arg
   and pp_typ = pp_typ_hum
   and pp_pat ppf s = fprintf ppf "%a" pp_pattern s
   and expr ppf = expr_gen ~pars:true ppf
@@ -168,12 +176,61 @@ let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
     tvb_body
 ;;
 
-let pp_stru ppf (stru : Typedtree.structure) =
+let pp_td_hum ppf td =
+  fprintf ppf "type (%a) %s" pp_binder_set td.tty_params td.tty_name;
+  match td.tty_kind with
+  | Tty_abstract None -> ()
+  | Tty_abstract (Some ty) -> fprintf ppf " = %a@ " pp_typ_hum ty
+  | Tty_variants variants ->
+    let pp_variant ppf = function
+      | name, None -> fprintf ppf "| %s" name
+      | name, Some ty -> fprintf ppf "| %s of %a" name pp_typ_hum ty
+    in
+    fprintf ppf " =@ ";
+    pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "@ ") pp_variant ppf variants
+;;
+
+let pp_constructor_entry ppf (entry : TypeEnv.constructor_entry) =
+  fprintf ppf "%s" entry.constr_name;
+  match entry.constr_arg_ty with
+  | None -> ()
+  | Some ty -> fprintf ppf " (%a)" pp_ty ty
+;;
+
+let iter_idents = Ident.Ident_map.iter_idents
+
+let pp_stru_item ppf = function
+  | Tstr_type td -> pp_td_hum ppf td
+  | Tstr_value vb -> pp_vb_hum ppf vb
+;;
+
+let pp_stru ppf stru =
   open_vbox 0;
   pp_print_list
-    ~pp_sep:(fun ppf () -> fprintf ppf "@\n")
-    pp_vb_hum
+    ~pp_sep:(fun ppf () -> fprintf ppf "@ ")
+    (fun ppf (_env, item) -> fprintf ppf "%a@ " pp_stru_item item)
     ppf
-    (List.map (fun (vb, _env) -> vb) stru);
+    stru;
+  close_box ()
+;;
+
+(* inferencer testing stuff *)
+
+let pp_env_hum ppf (env : Typedtree.TypeEnv.t) =
+  fprintf ppf "values:@ ";
+  iter_idents ~f:(fun _id scheme -> fprintf ppf "%a" pp_scheme scheme) env.env_values;
+  fprintf ppf "types:@ ";
+  iter_idents ~f:(fun _id td -> pp_td_hum ppf td) env.env_types;
+  fprintf ppf "constructors:@ ";
+  iter_idents ~f:(fun _id constr -> pp_constructor_entry ppf constr) env.env_constructors
+;;
+
+let pp_stru_verbose_env ppf (stru : Typedtree.structure) =
+  open_vbox 0;
+  pp_print_list
+    ~pp_sep:(fun ppf () -> fprintf ppf "@ ")
+    (fun ppf (env, item) -> fprintf ppf "%a@ %a@ " pp_env_hum env pp_stru_item item)
+    ppf
+    stru;
   close_box ()
 ;;

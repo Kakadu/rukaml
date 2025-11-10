@@ -182,16 +182,13 @@ let rec pp_typ ppf { typ_desc } =
   | Weak n -> fprintf ppf "'_weak%d" n
   | Arrow (l, r) -> fprintf ppf "(%a -> %a)" pp_typ l pp_typ r
   | TLink t -> pp_typ ppf t
-  | TParam (a, t) ->
-    pp_typ ppf a;
-    fprintf ppf " %s" t
   | TProd (a, b, ts) ->
     fprintf ppf "@[(%a, %a" pp_typ a pp_typ b;
     List.iter (fprintf ppf ", %a" pp_typ) ts;
     fprintf ppf ")@]"
-  | TConstr (name, []) -> fprintf ppf "%s" name
-  | TConstr (name, [ ty ]) -> fprintf ppf "@[%a %s@]" pp_typ ty name
-  | TConstr (name, tys) ->
+  | TConstr ([], name) -> fprintf ppf "%s" name
+  | TConstr ([ ty ], name) -> fprintf ppf "@[%a %s@]" pp_typ ty name
+  | TConstr (tys, name) ->
     fprintf
       ppf
       "(%a) %s"
