@@ -93,7 +93,7 @@ type expr =
   | TTuple of expr * expr * expr list * ty
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
   | TMatch of expr * (pattern * expr) Parsetree.list1 * ty
-  | TConstruct of string * Ident.t * expr option * ty
+  | TConstruct of Ident.t * expr option * ty
 [@@deriving show { with_path = false }]
 
 let rec type_of_expr = function
@@ -108,7 +108,7 @@ let rec type_of_expr = function
   | TApp (_, _, t) -> t
   | TLet (_, _, _, _, wher) -> type_of_expr wher
   | TMatch (_, _, t) -> t
-  | TConstruct (_, _, _, t) -> t
+  | TConstruct (_, _, t) -> t
 ;;
 
 (** Compaction of the tree *)
@@ -142,9 +142,9 @@ let compact_expr =
         ( helper e
         , ((p1, helper e1), List.map (fun (p, e) -> p, helper e) cases)
         , type_without_links ty )
-    | TConstruct (name, id, None, ty) -> TConstruct (name, id, None, type_without_links ty)
-    | TConstruct (name, id, Some expr, ty) ->
-      TConstruct (name, id, Some (helper expr), type_without_links ty)
+    | TConstruct (ident, None, ty) -> TConstruct (ident, None, type_without_links ty)
+    | TConstruct (ident, Some expr, ty) ->
+      TConstruct (ident, Some (helper expr), type_without_links ty)
   in
   helper
 ;;
@@ -161,8 +161,7 @@ type type_kind =
   | Tty_variants of (string * ty option) list
 
 type type_declaration =
-  { tty_name : string
-  ; tty_ident : Ident.t
+  { tty_ident : Ident.t
   ; tty_params : binder_set
   ; tty_kind : type_kind
   }
@@ -170,7 +169,6 @@ type type_declaration =
 module TypeEnv = struct
   type constructor_entry =
     { constr_ident : Ident.t
-    ; constr_name : string
     ; constr_type_ident : Ident.t
     ; constr_arg_ty : ty option
     ; constr_arity : int
@@ -189,24 +187,21 @@ module TypeEnv = struct
   ;;
 
   let typ_unit : type_declaration =
-    { tty_name = "unit"
-    ; tty_ident = Ident.of_string "unit"
+    { tty_ident = Ident.of_string "unit"
     ; tty_params = Var_set.empty
     ; tty_kind = Tty_abstract None
     }
   ;;
 
   let typ_int : type_declaration =
-    { tty_name = "int"
-    ; tty_ident = Ident.of_string "int"
+    { tty_ident = Ident.of_string "int"
     ; tty_params = Var_set.empty
     ; tty_kind = Tty_abstract None
     }
   ;;
 
   let typ_bool : type_declaration =
-    { tty_name = "bool"
-    ; tty_ident = Ident.of_string "bool"
+    { tty_ident = Ident.of_string "bool"
     ; tty_params = Var_set.empty
     ; tty_kind = Tty_abstract None
     }
@@ -214,15 +209,15 @@ module TypeEnv = struct
 
   (* IT DEFINETELY NEEDS TO BE FIXED  *)
   let typ_array : type_declaration =
-    { tty_name = "array"
-    ; tty_ident = Ident.of_string "array"
+    { tty_ident = Ident.of_string "array"
     ; tty_params = Var_set.singleton (-1)
     ; tty_kind = Tty_abstract None
     }
   ;;
 
   let add (env : t) (td : type_declaration) =
-    { env with env_types = Ident.Ident_map.add td.tty_name td.tty_ident td env.env_types }
+    let ident = td.tty_ident in
+    { env with env_types = Ident.Ident_map.add ident.hum_name ident td env.env_types }
   ;;
 
   let base_types_env =

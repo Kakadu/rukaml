@@ -152,8 +152,8 @@ let pp_expr =
         fprintf ppf "%a" (fun ppf -> pp_print_list pp_case ppf) (case :: cases)
       in
       fprintf ppf "@[<v 2>%a@]" pp_match ()
-    | TConstruct (name, _id, None, _ty) -> fprintf ppf "%s" name
-    | TConstruct (name, _id, Some arg, _ty) -> fprintf ppf "%s %a" name expr arg
+    | TConstruct (ident, None, _ty) -> fprintf ppf "%s" ident.hum_name
+    | TConstruct (ident, Some arg, _ty) -> fprintf ppf "%s %a" ident.hum_name expr arg
   and pp_typ = pp_typ_hum
   and pp_pat ppf s = fprintf ppf "%a" pp_pattern s
   and expr ppf = expr_gen ~pars:true ppf
@@ -180,7 +180,7 @@ let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
 ;;
 
 let pp_td_hum ppf td =
-  fprintf ppf "type (%a) %s" pp_binder_set td.tty_params td.tty_name;
+  fprintf ppf "type (%a) %s" pp_binder_set td.tty_params td.tty_ident.hum_name;
   match td.tty_kind with
   | Tty_abstract None -> ()
   | Tty_abstract (Some ty) -> fprintf ppf " = %a@ " pp_typ_hum ty
@@ -194,7 +194,7 @@ let pp_td_hum ppf td =
 ;;
 
 let pp_constructor_entry ppf (entry : TypeEnv.constructor_entry) =
-  fprintf ppf "%s" entry.constr_name;
+  fprintf ppf "%s" entry.constr_ident.hum_name;
   match entry.constr_arg_ty with
   | None -> ()
   | Some ty -> fprintf ppf " (%a)" pp_ty ty

@@ -77,7 +77,7 @@ type expr =
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
   (** let rec? .. = ... in ... *)
   | TMatch of expr * (pattern * expr) Parsetree.list1 * ty
-  | TConstruct of string * Ident.t * expr option * ty
+  | TConstruct of Ident.t * expr option * ty
 
 val type_of_expr : expr -> ty
 val type_without_links : ty -> ty
@@ -102,8 +102,7 @@ type type_kind =
   | Tty_variants of (string * ty option) list
 
 type type_declaration =
-  { tty_name : string
-  ; tty_ident : Ident.t
+  { tty_ident : Ident.t
   ; tty_params : binder_set
   ; tty_kind : type_kind
   }
@@ -111,7 +110,6 @@ type type_declaration =
 module TypeEnv : sig
   type constructor_entry =
     { constr_ident : Ident.t
-    ; constr_name : string
     ; constr_type_ident : Ident.t
     ; constr_arg_ty : ty option
     ; constr_arity : int
