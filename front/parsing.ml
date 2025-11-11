@@ -171,11 +171,23 @@ type dispatch_patt =
   ; patt : dispatch_patt -> pattern t
   }
 
+let patt_const =
+  ws *> fail ""
+  <|> string "()" *> return (PConst PConst_unit)
+  <|> (take_while1 is_digit >>| fun chs -> PConst (const_int (int_of_string chs)))
+  <|> (var_name
+       >>= function
+       | "true" -> return @@ PConst (const_bool true)
+       | "false" -> return @@ PConst (const_bool false)
+       | _ -> fail "Not a boolean constant")
+;;
+
 let patt_basic d =
   ws
   *> fix (fun _self ->
     parens (d.patt d)
     <|> char '_' *> return PAny
+    <|> patt_const
     <|> (var_name >>= fun v -> return (pvar v) <* trace_pos v)
     <|> string "[]" *> return pnil
     <|> (char '['

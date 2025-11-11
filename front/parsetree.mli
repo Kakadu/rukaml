@@ -1,6 +1,7 @@
 (** Abstract syntax tree for MiniML, helper functions. *)
 
 type const =
+  | PConst_unit
   | PConst_int of int
   | PConst_char of char
   (* | PConst_string of string *)
@@ -8,6 +9,7 @@ type const =
 [@@deriving show { with_path = false }]
 
 type pattern =
+  | PConst of const
   | PAny
   | PVar of string
   | PTuple of pattern * pattern * pattern list

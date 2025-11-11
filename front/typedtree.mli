@@ -55,6 +55,8 @@ val unit_typ : ty
 val array_typ : ty -> ty
 
 type pattern =
+  | Tpat_const of Parsetree.const
+    (* to optimize pattern matching. allows destruct constructrors matching to int matching *)
   | Tpat_var of Ident.t
   | Tpat_tuple of pattern * pattern * pattern list
   | Tpat_any

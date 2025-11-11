@@ -1,4 +1,13 @@
+type const =
+  | PConst_unit
+  | PConst_int of int
+  (* | PConst_string of string *)
+  | PConst_bool of bool
+  | PConst_char of char
+[@@deriving show { with_path = false }]
+
 type pattern =
+  | PConst of const
   | PAny
   | PVar of string
   | PTuple of pattern * pattern * pattern list
@@ -8,13 +17,6 @@ type pattern =
 type rec_flag =
   | Recursive
   | NonRecursive
-[@@deriving show { with_path = false }]
-
-type const =
-  | PConst_int of int
-  | PConst_char of char
-  (* | PConst_string of string *)
-  | PConst_bool of bool
 [@@deriving show { with_path = false }]
 
 type expr =
