@@ -62,6 +62,7 @@ let unit_typ = tprim "unit"
 let array_typ param = tparam param "array"
 
 type pattern =
+  | Tpat_unit
   | Tpat_const of Parsetree.const
   | Tpat_var of Ident.t
   | Tpat_tuple of pattern * pattern * pattern list
@@ -71,11 +72,12 @@ type pattern =
 
 let of_untyped_pattern =
   let rec helper = function
+    | Parsetree.PUnit -> Tpat_unit
     | Parsetree.PConst x -> Tpat_const x
     | Parsetree.PVar v -> Tpat_var (Ident.of_string v)
     | Parsetree.PTuple (a, b, xs) -> Tpat_tuple (helper a, helper b, List.map helper xs)
-    | Parsetree.PAny -> failwith "TODO (psi) : not implemented"
-    | Parsetree.PConstruct _ -> failwith "TODO (psi) : not implemented"
+    | Parsetree.PAny -> failwith "not implemented"
+    | Parsetree.PConstruct _ -> failwith "not implemented"
   in
   helper
 ;;
@@ -96,7 +98,8 @@ type expr =
 
 let rec type_of_expr = function
   | TUnit -> unit_typ
-  | TConst _ -> int_typ
+  | TConst (Parsetree.PConst_int _) -> int_typ
+  | TConst (Parsetree.PConst_bool _) -> bool_typ
   | TVar (_, _, t)
   | TTuple (_, _, _, t)
   | TIf (_, _, _, t)

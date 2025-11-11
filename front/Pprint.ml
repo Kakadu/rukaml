@@ -18,9 +18,8 @@ let group_applications l r =
 ;;
 
 let rec pp_pattern ppf = function
-  | PConst PConst_unit -> fprintf ppf "()"
-  | PConst (PConst_int n) -> fprintf ppf "%d" n
-  | PConst (PConst_bool b) -> fprintf ppf "%b" b
+  | PUnit -> fprintf ppf "()"
+  | PConst x -> pp_const ppf x
   | PVar s -> fprintf ppf "@[%s@]" s
   | PTuple (pa, pb, ps) ->
     fprintf ppf "@[(%a" pp_pattern pa;

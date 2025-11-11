@@ -49,7 +49,7 @@ let pp_typ_hum =
 ;;
 
 let rec pp_pattern ppf = function
-  | Tpat_const PConst_unit -> fprintf ppf "()"
+  | Tpat_unit -> fprintf ppf "()"
   | Tpat_const (PConst_int n) -> fprintf ppf "%d" n
   | Tpat_const (PConst_bool b) -> fprintf ppf "%b" b
   | Tpat_var id -> Ident.pp ppf id

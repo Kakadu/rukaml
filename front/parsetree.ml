@@ -1,5 +1,4 @@
 type const =
-  | PConst_unit
   | PConst_int of int
   (* | PConst_string of string *)
   | PConst_bool of bool
@@ -7,6 +6,7 @@ type const =
 [@@deriving show { with_path = false }]
 
 type pattern =
+  | PUnit
   | PConst of const
   | PAny
   | PVar of string

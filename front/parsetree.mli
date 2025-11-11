@@ -1,7 +1,6 @@
 (** Abstract syntax tree for MiniML, helper functions. *)
 
 type const =
-  | PConst_unit
   | PConst_int of int
   | PConst_char of char
   (* | PConst_string of string *)
@@ -9,11 +8,13 @@ type const =
 [@@deriving show { with_path = false }]
 
 type pattern =
+  | PUnit
   | PConst of const
   | PAny
   | PVar of string
   | PTuple of pattern * pattern * pattern list
   | PConstruct of string * pattern option
+[@@deriving show { with_path = false }]
 
 val pp_pattern : Format.formatter -> pattern -> unit
 val show_pattern : pattern -> string

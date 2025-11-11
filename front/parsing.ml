@@ -173,7 +173,7 @@ type dispatch_patt =
 
 let patt_const =
   ws *> fail ""
-  <|> string "()" *> return (PConst PConst_unit)
+  <|> string "()" *> return PUnit
   <|> (take_while1 is_digit >>| fun chs -> PConst (const_int (int_of_string chs)))
   <|> (var_name
        >>= function

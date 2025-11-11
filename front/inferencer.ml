@@ -504,15 +504,14 @@ let find_constructor name (env : Type_env.t) =
      | Some type_entry -> return (constr_entry, type_entry))
 ;;
 
-let tpat_const_int x = Tpat_const (PConst_int x)
 let tpat_const_bool x = Tpat_const (PConst_bool x)
-let tpat_const_unit = Tpat_const PConst_unit
+let tpat_const_unit = Tpat_unit
 
 (** Introduce many fresh variables using in the for of a pattern *)
 let rec check_pat ~level env table = function
-  | Parsetree.PConst PConst_unit -> return (env, tpat_const_unit, unit_typ)
-  | Parsetree.PConst (PConst_int x) -> return (env, tpat_const_int x, int_typ)
-  | Parsetree.PConst (PConst_bool x) -> return (env, tpat_const_bool x, bool_typ)
+  | Parsetree.PUnit -> return (env, Tpat_unit, unit_typ)
+  | Parsetree.PConst (PConst_int n) -> return (env, Tpat_const (PConst_int n), int_typ)
+  | Parsetree.PConst (PConst_bool b) -> return (env, Tpat_const (PConst_bool b), int_typ)
   | Parsetree.PVar x ->
     let* tx = fresh_var ~level in
     let xident = Ident.of_string x in
