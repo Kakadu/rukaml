@@ -18,6 +18,8 @@
   } */
 
 // #define DEBUG
+const uint8_t Tuple_tag = 0;
+const uint8_t Array_tag = 1;
 
 void myputc(int x)
 {
@@ -76,9 +78,21 @@ rukaml_closure *copy_closure(rukaml_closure *src)
 void *rukaml_alloc_pair(void* l, void *r)
 {
   size_t *rez = malloc(3 * sizeof(void*));
-  (rez)[0] = 0; // tag
+  (rez)[0] = Tuple_tag; // tag
   (rez)[1] = (size_t)l;
   (rez)[2] = (size_t)r;
+  return rez+1;
+}
+
+void *rukaml_alloc_array(size_t* arr, uint64_t len)
+{
+  size_t *rez = malloc((len + 1) * sizeof(void *));
+  if (!rez)
+    return NULL;
+  (rez)[0] = Array_tag; // tag
+  for (int i = 1; i < len; i++) {
+    (rez)[i] = (size_t)arr[i];
+  }
   return rez+1;
 }
 

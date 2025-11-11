@@ -72,6 +72,17 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
         [ ptr; LL.const_int i64_typ formal_params_count ]
       in
       LL.build_call typ alloc_closure final_args
+    | AArray [] -> LL.const_int i64_typ 0
+    | AArray r ->
+      let l = List.map gen_a (List.rev r) in
+      let arr = LL.stack_array i64_typ (Array.of_seq @@ List.to_seq l) in
+      let arr_typ = Llvm.array_type i64_typ (List.length l) in
+      let alloca = LL.build_alloca arr_typ in
+      let _ = LL.build_store arr alloca in
+      let ptr = LL.build_pointercast alloca i64_typ in
+      let len = LL.const_int i64_typ (List.length l) in
+      let alloc, typ = top_look_exn "rukaml_alloc_array" in
+      LL.build_call typ alloc [ ptr; len ]
     | ATuple (a, b, []) ->
       let a = gen_a a in
       let b = gen_a b in
@@ -337,6 +348,11 @@ let codegen : ANF.vb list -> _ =
   let _ =
     declare_primitive
       "rukaml_alloc_pair"
+      (Llvm.function_type i64_type [| i64_type; i64_type |])
+  in
+  let _ =
+    declare_primitive
+      "rukaml_alloc_array"
       (Llvm.function_type i64_type [| i64_type; i64_type |])
   in
   let _ =
