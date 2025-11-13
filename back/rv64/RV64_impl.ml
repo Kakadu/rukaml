@@ -300,7 +300,7 @@ let print_epilogue ppf fname =
 ;;
 
 let sd_dest k a = function
-  | DReg s -> mv k a (RU s)
+  | DReg s -> mv k (RU s) a
   | DStack_var name -> sd k a (Addr_of_local.pp_to_mach name)
 ;;
 
@@ -600,18 +600,6 @@ let generate_body is_toplevel body =
            printfn ppf "%s:" exit_lab;
            dealloc_var ppf right_name;
            dealloc_var ppf left_name *)
-    | CApp (APrimitive "-", AVar vname, [ AConst (PConst_int 1) ]) ->
-      (match is_toplevel vname with
-       | None ->
-         emit ld t0 (pp_to_mach vname);
-         (* printfn ppf "  ld t0, %a" Addr_of_local.pp_local_exn vname; *)
-         emit addi t0 t0 (-1);
-         (* printfn ppf "  addi t0, t0, -1"; *)
-         emit sd_dest t0 dest
-         (* printfn ppf "  sd t0, %a" Addr_of_local.pp_dest dest *)
-       | Some _ ->
-         (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
-         failwiths "not implemented %d" __LINE__)
     | CApp (APrimitive "-", AVar vname, [ AConst (PConst_int n) ]) ->
       (match is_toplevel vname with
        | None ->
@@ -619,8 +607,8 @@ let generate_body is_toplevel body =
          (* printfn ppf "  ld t5, %a #" Addr_of_local.pp_local_exn vname; *)
          emit addi t5 t5 (-n);
          (* printfn ppf "  addi t5, t5, -%d" n; *)
-         emit sd_dest t5 dest
          (* printfn ppf "  sd t5, %a" Addr_of_local.pp_dest dest *)
+         emit sd_dest t5 dest
        | Some _ ->
          (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
          failwiths "not implemented %d" __LINE__)
@@ -630,6 +618,7 @@ let generate_body is_toplevel body =
        | None ->
          emit ld t0 (Addr_of_local.pp_to_mach vname);
          emit li t1 n;
+         emit comment "going to do some arithmetic";
          emit
            (match prim with
             | "+" -> add
@@ -657,13 +646,7 @@ let generate_body is_toplevel body =
         t5
         t3
         t4;
-      (match dest with
-       | DReg _ ->
-         emit addi1dest dest t5 0
-         (* printfn ppf "  addi %a, t5, 0" Addr_of_local.pp_dest dest *)
-       | DStack_var _ ->
-         (* printfn ppf "  sd t5, %a" Addr_of_local.pp_dest dest *)
-         emit sd_dest t5 dest)
+      emit sd_dest t5 dest
     | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
       (* Callig a rukaml function uses custom calling convention.
            Pascal convention: all arguments on stack, LTR *)
@@ -796,11 +779,11 @@ let generate_body is_toplevel body =
       let idents = List.rev idents in
       List.iter (fun (i, x) -> helper_a (DStack_var i) x) idents;
       emit li a0 length;
-      emit sd_dest a1 (DReg "sp");
+      emit mv a1 sp;
       emit call "rukaml_alloc_array";
       List.iter (fun (i, _) -> Addr_of_local.remove_local i) idents;
       emit addi SP SP (8 * (length + 1));
-      emit sd_dest (RU "a0") dest
+      emit sd_dest a0 dest
     | ATuple (_a, _b, []) ->
       failwiths "not implemented %s %d" __FILE__ __LINE__
       (* store_ra_temp ppf (fun ra_name -> *)

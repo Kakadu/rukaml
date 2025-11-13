@@ -102,6 +102,10 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
     in
     match anf with
     | CAtom a -> gen_a a
+    | CApp (APrimitive "print", AConst (PConst_int n), []) ->
+      let accessor, accessor_typ = top_look_exn "rukaml_print_int" in
+      LL.build_call accessor_typ accessor [ LL.const_int i64_typ n ]
+    (* | CApp (APrimitive "length", AArray r, []) ->  *)
     | CApp (APrimitive "field", AConst (PConst_int n), [ what ]) ->
       let source = gen_a what in
       (* let accessor = LL.lookup_func_exn "rukaml_field" in
@@ -354,6 +358,9 @@ let codegen : ANF.vb list -> _ =
     declare_primitive
       "rukaml_alloc_array"
       (Llvm.function_type i64_type [| i64_type; i64_type |])
+  in
+  let _ =
+    declare_primitive "rukaml_array_length" (Llvm.function_type i64_type [| i64_type |])
   in
   let _ =
     declare_primitive
