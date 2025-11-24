@@ -81,7 +81,7 @@ module Compiler = struct
     match
       Inferencer.structure table (List.map ~f:(fun vb -> Parsetree.SValue vb) stru)
     with
-    | Ok x -> k (Typedtree x)
+    | Ok (_env, x) -> k (Typedtree x)
     | Error err -> error "infer error: %a" Inferencer.pp_error err
   ;;
 

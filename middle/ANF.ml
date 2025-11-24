@@ -653,7 +653,15 @@ let anf_vb vb : vb =
   vb.tvb_flag, name, anf_body
 ;;
 
-let anf_stru = List.map anf_vb
+(* TODO : handle type_declarations here *)
+let anf_stru stru =
+  let open Typedtree in
+  let aux = function
+    | Tstr_type _ -> failwith "not implemented"
+    | Tstr_value vb -> anf_vb vb
+  in
+  List.map aux stru
+;;
 
 let test_anf ?(print_before = false) text =
   reset_gensym ();
@@ -661,9 +669,9 @@ let test_anf ?(print_before = false) text =
   match
     let stru = Frontend.Parsing.parse_vb_exn text in
     let vbs = CConv.structure [ Parsetree.SValue stru ] in
-    let* vbs_typed = Inferencer.structure Typedtree.empty_table vbs in
+    let* _env, stru_typed = Inferencer.structure Typedtree.empty_table vbs in
     (* Format.printf "%s %d\n%!" __FILE__ __LINE__; *)
-    let anf = anf_stru vbs_typed in
+    let anf = anf_stru stru_typed in
     if print_before
     then (
       Format.printf "Before simplify:\n%!";
