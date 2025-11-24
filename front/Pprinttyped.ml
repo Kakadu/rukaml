@@ -36,8 +36,8 @@ let pp_typ_hum =
            fprintf ppf "@]")
         ()
     | TConstr ([], name) -> fprintf ppf "%s" name
+    | TConstr ([ param ], name) -> fprintf ppf "%a %s" (pp_typ ctx) param name
     | TConstr (params, name) ->
-      (* TODO : fix this *)
       fprintf
         ppf
         "(%a) %s"
@@ -146,14 +146,18 @@ let pp_expr =
     | TMatch (e, (case, cases), _) ->
       let pp_match ppf () =
         let pp_case ppf (patt, expr) =
-          fprintf ppf "| %a -> %a@ " pp_pattern patt expr_no expr
+          fprintf ppf "| %a -> %a" pp_pattern patt expr_no expr
         in
+        let pp_sep ppf () = fprintf ppf "@ " in
         fprintf ppf "match %a with@ " expr_no e;
-        fprintf ppf "%a" (fun ppf -> pp_print_list pp_case ppf) (case :: cases)
+        fprintf ppf "%a" (fun ppf -> pp_print_list ~pp_sep pp_case ppf) (case :: cases)
       in
-      fprintf ppf "@[<v 2>%a@]" pp_match ()
+      if pars
+      then fprintf ppf "(@[<v 2>%a@])" pp_match ()
+      else fprintf ppf "@[<v 2>%a@]" pp_match ()
     | TConstruct (ident, None, _ty) -> fprintf ppf "%s" ident.hum_name
-    | TConstruct (ident, Some arg, _ty) -> fprintf ppf "%s %a" ident.hum_name expr arg
+    | TConstruct (ident, Some arg, _ty) ->
+      fprintf ppf (if pars then "(%s %a)" else "%s %a") ident.hum_name expr arg
   and pp_typ = pp_typ_hum
   and pp_pat ppf s = fprintf ppf "%a" pp_pattern s
   and expr ppf = expr_gen ~pars:true ppf
@@ -179,25 +183,35 @@ let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
     tvb_body
 ;;
 
-let pp_td_hum ppf td =
-  fprintf ppf "type (%a) %s" pp_binder_set td.tty_params td.tty_ident.hum_name;
-  match td.tty_kind with
-  | Tty_abstract None -> ()
-  | Tty_abstract (Some ty) -> fprintf ppf " = %a@ " pp_typ_hum ty
-  | Tty_variants variants ->
-    let pp_variant ppf = function
-      | name, None -> fprintf ppf "| %s" name
-      | name, Some ty -> fprintf ppf "| %s of %a" name pp_typ_hum ty
-    in
-    fprintf ppf " =@ ";
-    pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "@ ") pp_variant ppf variants
+let pp_tuple ppf pp_item items =
+  fprintf
+    ppf
+    "(%a)"
+    (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp_item)
+    items
 ;;
 
-let pp_constructor_entry ppf (entry : TypeEnv.constructor_entry) =
-  fprintf ppf "%s" entry.constr_ident.hum_name;
-  match entry.constr_arg_ty with
-  | None -> ()
-  | Some ty -> fprintf ppf " (%a)" pp_ty ty
+let pp_td_hum ppf td =
+  let pp_binder ppf binder = fprintf ppf "'_%d" binder in
+  let pp_params ppf params =
+    match List.of_seq (Var_set.to_seq params) with
+    | [] -> ()
+    | [ x ] -> fprintf ppf " %a " pp_binder x
+    | xs -> fprintf ppf " %a " (fun ppf -> pp_tuple ppf pp_binder) xs
+  in
+  fprintf ppf "@[<v 2>";
+  fprintf ppf "type%a%s" pp_params td.tty_params td.tty_ident.hum_name;
+  (match td.tty_kind with
+   | Tty_abstract None -> ()
+   | Tty_abstract (Some ty) -> fprintf ppf " = %a@ " pp_typ_hum ty
+   | Tty_variants variants ->
+     let pp_variant ppf = function
+       | name, None -> fprintf ppf "| %s" name
+       | name, Some ty -> fprintf ppf "| %s of %a" name pp_typ_hum ty
+     in
+     fprintf ppf " =@ ";
+     pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "@ ") pp_variant ppf variants);
+  fprintf ppf "@]"
 ;;
 
 let iter_idents = Ident.Ident_map.iter_idents
@@ -210,29 +224,8 @@ let pp_stru_item ppf = function
 let pp_stru ppf stru =
   open_vbox 0;
   pp_print_list
-    ~pp_sep:(fun ppf () -> fprintf ppf "@ ")
-    (fun ppf (_env, item) -> fprintf ppf "%a@ " pp_stru_item item)
-    ppf
-    stru;
-  close_box ()
-;;
-
-(* inferencer testing stuff *)
-
-let pp_env_hum ppf (env : Typedtree.TypeEnv.t) =
-  fprintf ppf "values:@ ";
-  iter_idents ~f:(fun _id scheme -> fprintf ppf "%a" pp_scheme scheme) env.env_values;
-  fprintf ppf "types:@ ";
-  iter_idents ~f:(fun _id td -> pp_td_hum ppf td) env.env_types;
-  fprintf ppf "constructors:@ ";
-  iter_idents ~f:(fun _id constr -> pp_constructor_entry ppf constr) env.env_constructors
-;;
-
-let pp_stru_verbose_env ppf (stru : Typedtree.structure) =
-  open_vbox 0;
-  pp_print_list
-    ~pp_sep:(fun ppf () -> fprintf ppf "@ ")
-    (fun ppf (env, item) -> fprintf ppf "%a@ %a@ " pp_env_hum env pp_stru_item item)
+    ~pp_sep:(fun ppf () -> fprintf ppf "@.")
+    (fun ppf item -> fprintf ppf "%a" pp_stru_item item)
     ppf
     stru;
   close_box ()
