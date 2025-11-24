@@ -1,7 +1,9 @@
-open Base
+open Frontend
+
+(* == disables warning: Error (alert deprecated): module Base.Format == *)
 module Format = Stdlib.Format
 open Format
-open Frontend
+(* ==================================================================== *)
 
 let run_structure text =
   match Parsing.parse_structure text with
@@ -17,4 +19,4 @@ let run_structure text =
     ()
 ;;
 
-let () = Stdio.In_channel.(input_all stdin) |> String.rstrip |> run_structure
+let () = Stdio.In_channel.(input_all stdin) |> Base.String.rstrip |> run_structure

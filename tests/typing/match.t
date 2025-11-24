@@ -7,7 +7,6 @@
   let main: bool =
     match 1 with
       | x -> true
-      
 
   $ run << EOF
   > let main =
@@ -16,7 +15,6 @@
   let main: int =
     match (0, 1) with
       | (x, y) -> x + y
-      
 
   $ run << EOF
   > let main =
@@ -25,7 +23,6 @@
   let main: int * bool =
     match (1, 2) with
       | _ -> (1, true)
-      
   $ run << EOF
   > let main =
   >   match (5, true) with
@@ -33,7 +30,6 @@
   let main: int * bool =
     match (5, true) with
       | (a, b) -> (a, b)
-      
   $ run << EOF
   > let main =
   >   let f x = x + 1 in
@@ -45,7 +41,6 @@
     let x : int = 1 in
     match (f, x) with
       | (f, x) -> f x
-      
 
   $ run << EOF
   > let main =
@@ -56,7 +51,6 @@
     let swap : '_1 * '_2 -> '_2 * '_1 = fun (x, y) -> (y, x) in
     match swap (true, 1) with
       | (a, b) -> b
-      
 
   $ run << EOF
   > let main =
@@ -67,9 +61,27 @@
     let scnd : '_1 * '_2 -> '_2 = fun (x, y) -> y in
     match scnd (1, true) with
       | x -> x
-      
+  $ run << EOF
+  > let main x =
+  >   match x with
+  >   | (a, b) -> a + b
+  let main: int * int -> int =
+    fun x -> match x with
+               | (a, b) -> a + b
 
-# matching should fail
+  $ run << EOF
+  > let main (x, y) =
+  >   match (x, y) with
+  >   | (a, b) -> a + b
+  >   | x -> 1
+  >   | _ -> 0
+  let main: int * int -> int =
+    fun (x, y) -> match (x, y) with
+                    | (a, b) -> a + b
+                    | _ -> 0
+                    | x -> 1
+
+# unification should fail
   $ run << EOF
   > let main =
   >   match 1 with
@@ -127,5 +139,13 @@
   >   | _ -> fun x -> x + 1
   >   | _ -> fun x -> fun y -> x + y
   infer error: unification failed on (int -> int) and int
+  [1]
+
+  $ run << EOF
+  > let main =
+  >     match (1, 2) with
+  >     | (a, b) -> a + b
+  >     | (a, b, c) -> a + b + c
+  infer error: unification failed on (int, int, int) and (int, int)
   [1]
 #

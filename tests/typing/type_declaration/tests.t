@@ -1,14 +1,14 @@
+# tests inferencer on simple type declarations
+
   $ cat << EOF | ./run.exe
   > type 'a box = | Box of 'a
   > 
   > let x = Box 1
   result:
-  type ([ 0; ]) box =
-  | Box of '_0
-  
-  let x: (int) box =
+  type '_0 box =
+    | Box of '_0
+  let x: int box =
     Box 1
-  
   
   $ cat << EOF | ./run.exe
   > type ('a, 'b) result = 
@@ -18,16 +18,13 @@
   > let x = Ok 1
   > let y = Error true
   result:
-  type ([ 0; 1; ]) result =
-  | Ok of '_0
-  | Error of '_1
-  
+  type ('_0, '_1) result =
+    | Ok of '_0
+    | Error of '_1
   let x: (int, '_2) result =
     Ok 1
-  
   let y: ('_1, bool) result =
     Error true
-  
   
 
   $ cat << EOF | ./run.exe
@@ -38,16 +35,13 @@
   > let x = Nil
   > let y = Cons (1, x)
   result:
-  type ([ 0; ]) list =
-  | Cons of '_0 * ('_0) list
-  | Nil
-  
-  let x: ('_1) list =
+  type '_0 list =
+    | Cons of '_0 * '_0 list
+    | Nil
+  let x: '_1 list =
     Nil
-  
-  let y: (int) list =
+  let y: int list =
     Cons (1, x)
-  
   
 
   $ cat << EOF | ./run.exe
@@ -58,16 +52,13 @@
   > let a = Normal (fun x -> x > 0)
   > let b = Reversed (fun x -> x > 0)
   result:
-  type ([ 0; 1; ]) arrows =
-  | Normal of '_0 -> '_1
-  | Reversed of '_1 -> '_0
-  
+  type ('_0, '_1) arrows =
+    | Normal of '_0 -> '_1
+    | Reversed of '_1 -> '_0
   let a: (int, bool) arrows =
     Normal (fun x -> (> x) 0)
-  
   let b: (bool, int) arrows =
     Reversed (fun x -> (> x) 0)
-  
   
   $ cat << EOF | ./run.exe
   > type 'a pair =
@@ -75,12 +66,10 @@
   > 
   > let x = Pair ((1, 2), (3, 4))
   result:
-  type ([ 0; ]) pair =
-  | Pair of '_0 * '_0
-  
-  let x: ((int * int)) pair =
+  type '_0 pair =
+    | Pair of '_0 * '_0
+  let x: int * int pair =
     Pair ((1, 2), (3, 4))
-  
   
 
   $ cat << EOF | ./run.exe
@@ -91,18 +80,15 @@
   > 
   > let y = Box x
   result:
-  type ([ 0; ]) box =
-  | Box of '_0
-  
-  let x: ((int -> int)) box =
+  type '_0 box =
+    | Box of '_0
+  let x: int -> int box =
     Box (fun a -> a + 1)
-  
-  let y: (((int -> int)) box) box =
+  let y: int -> int box box =
     Box x
   
-  
 
-# is_pair should have type ('a prod -> bool)
+# assert type of { is_pair } is { 'a prod -> bool }
   $ cat << EOF | ./run.exe
   > type 'a prod =
   >   | Pair of 'a * 'a
@@ -113,21 +99,17 @@
   >   | Pair (a, b) -> true
   >   | Triple (a, b, c) -> false
   result:
-  type ([ 0; ]) prod =
-  | Pair of '_0 * '_0
-  | Triple of '_0 * '_0 * '_0
-  
-  let is_pair: ('_4) prod -> bool =
+  type '_0 prod =
+    | Pair of '_0 * '_0
+    | Triple of '_0 * '_0 * '_0
+  let is_pair: '_4 prod -> bool =
     fun x -> match x with
                | Pair (a, b) -> true
-               
                | Triple (a, b, c) -> false
-               
-  
   
 #
 
-# sum_prod should have type (int prod -> int)
+# assert type of { sum_prod } is { int prod -> int }
   $ cat << EOF | ./run.exe
   > type 'a prod =
   >   | Pair of 'a * 'a
@@ -138,19 +120,16 @@
   >   | Pair (a, b) -> a + b
   >   | Triple (a, b, c) -> a + b + c
   result:
-  type ([ 0; ]) prod =
-  | Pair of '_0 * '_0
-  | Triple of '_0 * '_0 * '_0
-  
-  let sum_prod: (int) prod -> int =
+  type '_0 prod =
+    | Pair of '_0 * '_0
+    | Triple of '_0 * '_0 * '_0
+  let sum_prod: int prod -> int =
     fun x -> match x with
                | Pair (a, b) -> a + b
-               
                | Triple (a, b, c) -> (a + b) + c
-               
-  
   
 #
+
 # unification should fail
   $ cat << EOF | ./run.exe
   > type 'a pair =
