@@ -288,42 +288,31 @@ let%expect_test " " =
 
 module Type_env = struct
   include Typedtree.TypeEnv
-  open Ident
 
   let extend ~varname id scheme t =
-    { t with env_values = Ident_map.add varname id scheme t.env_values }
+    { t with env_values = Ident.Ident_map.add varname id scheme t.env_values }
   ;;
-  let extend_string varname = extend (of_string varname) ~varname
+  let extend_string varname = extend (Ident.of_string varname) ~varname
 
-  let extend_by_ident ident scheme t = extend ~varname:ident.hum_name ident scheme t
+  let extend_by_ident (ident : Ident.t) scheme t =
+    extend ~varname:ident.hum_name ident scheme t
+  ;;
 
-  let ident_of_string_exn s t = Ident_map.ident_of_string_exn s t.env_values
+  let ident_of_string_exn s t = Ident.Ident_map.ident_of_string_exn s t.env_values
 
   let free_vars t =
-    Ident_map.fold_idents
+    Ident.Ident_map.fold_idents
       ~init:Var_set.empty
       ~f:(fun acc (_, s) -> Var_set.union acc (Scheme.free_vars s))
       t.env_values
   ;;
 
   let find_exn s t = Ident.Ident_map.find_by_ident s t.env_values
-  let find_by_string_exn s t = Ident_map.find_by_string_exn s t.env_values
-
-  let get_arity = function
-    | None -> 0
-    | Some ty ->
-      (match ty.typ_desc with
-       | TProd (_, _, tys) -> List.length tys + 2
-       | _ -> 1)
-  ;;
+  let find_by_string_exn s t = Ident.Ident_map.find_by_string_exn s t.env_values
 
   let extend_constructors ~ident ~type_ident constr_arg_ty t =
     let constr =
-      { constr_type_ident = type_ident
-      ; constr_ident = ident
-      ; constr_arg_ty
-      ; constr_arity = get_arity constr_arg_ty
-      }
+      { constr_type_ident = type_ident; constr_ident = ident; constr_arg_ty }
     in
     { t with
       env_constructors =
@@ -336,7 +325,7 @@ module Type_env = struct
     { t with env_types = Ident.Ident_map.add ident.hum_name ident type_entry t.env_types }
   ;;
 
-  let apply_to_type_entry sub { tty_ident; tty_params; tty_kind } =
+  let apply_to_type_declaration sub { tty_ident; tty_params; tty_kind } =
     let helper sub = function
       | Some ty ->
         Some (Type.apply (Var_set.fold (fun k s -> Subst.remove s k) tty_params sub) ty)
@@ -352,22 +341,18 @@ module Type_env = struct
     }
   ;;
 
-  let apply_to_constructor_entry
-        sub
-        { constr_ident; constr_arg_ty; constr_type_ident; constr_arity }
-    =
+  let apply_to_constructor_info sub { constr_ident; constr_arg_ty; constr_type_ident } =
     { constr_arg_ty = Option.map ~f:(Type.apply sub) constr_arg_ty
     ; constr_type_ident
-    ; constr_arity
     ; constr_ident
     }
   ;;
 
   let apply s t =
-    let env_values = Ident_map.map t.env_values ~f:(Scheme.apply s) in
-    let env_types = Ident_map.map t.env_types ~f:(apply_to_type_entry s) in
+    let env_values = Ident.Ident_map.map t.env_values ~f:(Scheme.apply s) in
+    let env_types = Ident.Ident_map.map t.env_types ~f:(apply_to_type_declaration s) in
     let env_constructors =
-      Ident_map.map t.env_constructors ~f:(apply_to_constructor_entry s)
+      Ident.Ident_map.map t.env_constructors ~f:(apply_to_constructor_info s)
     in
     { env_values; env_types; env_constructors }
   ;;
@@ -842,7 +827,7 @@ let start_env =
   let cmp_scheme = Scheme.make_mono (tarrow int_typ (tarrow int_typ bool_typ)) in
   let int_arith_scheme = Scheme.make_mono (tarrow int_typ (tarrow int_typ int_typ)) in
   let extend_s varname = Type_env.extend ~varname (Ident.of_string varname) in
-  Type_env.base_types_env
+  Type_env.env_with_base_types
   |> extend_s "print" (Scheme.make_mono (tarrow int_typ unit_typ))
   |> extend_s "char_code" (Scheme.make_mono (tarrow char_typ int_typ))
   |> extend_s "stdin" (Scheme.make_mono (array_typ char_typ))
@@ -966,7 +951,9 @@ let check_params_uniqueness pty_name pty_params =
   else return ()
 ;;
 
-let td ?(env = start_env) { Parsetree.pty_name; pty_params; pty_kind } =
+let td ?(env = start_env) { Parsetree.pty_name; pty_params; pty_kind }
+  : (_, [> error ]) Result.t
+  =
   let comp =
     let* () = check_params_uniqueness pty_name pty_params in
     let* params_map, binder_set = init_params pty_params in
@@ -991,6 +978,7 @@ let td ?(env = start_env) { Parsetree.pty_name; pty_params; pty_kind } =
       let* variants = List.fold ~init:(return []) ~f:infer_variant (v1 :: vs) in
       let tty_kind = Tty_variants (List.rev variants) in
       let env = extend_types tty_kind env in
+      (* TODO : fix constructor ids *)
       let env =
         List.fold
           ~f:(fun env (name, ty_opt) ->
@@ -1020,16 +1008,16 @@ let structure_item ?(env = start_env) table pstru_item =
 let structure ?(env = start_env) table stru =
   let ( let* ) = Result.( >>= ) in
   let return = Result.return in
-  let* _env, items =
+  let* env, items =
     List.fold_left
       stru
       ~init:(return (env, []))
       ~f:(fun acc item ->
         let* env, items = acc in
         let* new_env, new_item = structure_item ~env table item in
-        return (new_env, (new_env, new_item) :: items))
+        return (new_env, new_item :: items))
   in
-  return (List.rev items)
+  return (env, List.rev items)
 ;;
 
 let%expect_test _ =

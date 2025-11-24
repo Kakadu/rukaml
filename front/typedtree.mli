@@ -107,33 +107,33 @@ type type_declaration =
   ; tty_kind : type_kind
   }
 
-module TypeEnv : sig
-  type constructor_entry =
-    { constr_ident : Ident.t
-    ; constr_type_ident : Ident.t
-    ; constr_arg_ty : ty option
-    ; constr_arity : int
-    }
-
-  type t =
-    { env_constructors : constructor_entry Ident.Ident_map.t
-    ; env_types : type_declaration Ident.Ident_map.t
-    ; env_values : scheme Ident.Ident_map.t
-    }
-
-  val empty : t
-
-  val typ_unit : type_declaration
-  val typ_int : type_declaration
-  val typ_bool : type_declaration
-  val typ_array : type_declaration
-  val base_types_env : t
-end
+type constructor_info =
+  { constr_ident : Ident.t
+  ; constr_type_ident : Ident.t
+  ; constr_arg_ty : ty option
+  }
 
 type structure_item =
   | Tstr_value of value_binding
   | Tstr_type of type_declaration
 
-type structure = (TypeEnv.t * structure_item) list
+type structure = structure_item list
 
 val value_binding : Parsetree.rec_flag -> pattern -> expr -> scheme -> value_binding
+
+module TypeEnv : sig
+  type t =
+    { env_constructors : constructor_info Ident.Ident_map.t
+    ; env_types : type_declaration Ident.Ident_map.t
+    ; env_values : scheme Ident.Ident_map.t
+    }
+
+  val empty : t
+  val add_type : t -> type_declaration -> t
+
+  val typ_unit : type_declaration
+  val typ_int : type_declaration
+  val typ_bool : type_declaration
+  val typ_array : type_declaration
+  val env_with_base_types : t
+end

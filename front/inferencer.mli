@@ -23,8 +23,13 @@ val vb
   -> Parsetree.value_binding
   -> (Typedtree.TypeEnv.t * Typedtree.value_binding, [> error ]) Result.t
 
+val td
+  :  ?env:Typedtree.TypeEnv.t
+  -> Parsetree.type_declaration
+  -> (Typedtree.TypeEnv.t * Typedtree.type_declaration, error) Result.t
+
 val structure
   :  ?env:Typedtree.TypeEnv.t
   -> Typedtree.weak_table
   -> Parsetree.structure
-  -> (Typedtree.structure, error) Result.t
+  -> (Typedtree.TypeEnv.t * Typedtree.structure, error) Result.t

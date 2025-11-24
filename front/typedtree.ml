@@ -42,18 +42,13 @@ type scheme = S of binder_set * ty [@@deriving show { with_path = false }]
 
 let tarrow l r = { typ_desc = Arrow (l, r) }
 let tweak t = { typ_desc = Weak t }
-
 let tv binder ~level = { typ_desc = V { binder; var_level = level } }
 let tlink t = { typ_desc = TLink t }
 let tprod a b ts = { typ_desc = TProd (a, b, ts) }
 let tconstr tys name = { typ_desc = TConstr (tys, name) }
 
-(* /// *)
-(* should?? be replaced with tconstr *)
 let tprim s = tconstr [] s
 let tparam param name = tconstr [ param ] name
-
-(* /// *)
 
 let int_typ = tprim "int"
 let char_typ = tprim "char"
@@ -166,19 +161,29 @@ type type_declaration =
   ; tty_kind : type_kind
   }
 
-module TypeEnv = struct
-  type constructor_entry =
-    { constr_ident : Ident.t
-    ; constr_type_ident : Ident.t
-    ; constr_arg_ty : ty option
-    ; constr_arity : int
-    }
+type constructor_info =
+  { constr_ident : Ident.t
+  ; constr_type_ident : Ident.t
+  ; constr_arg_ty : ty option
+  }
 
+type structure_item =
+  | Tstr_value of value_binding
+  | Tstr_type of type_declaration
+
+type structure = structure_item list
+
+let value_binding tvb_flag tvb_pat tvb_body tvb_typ =
+  { tvb_flag; tvb_pat; tvb_body; tvb_typ }
+;;
+
+module TypeEnv = struct
   type t =
-    { env_constructors : constructor_entry Ident.Ident_map.t
+    { env_constructors : constructor_info Ident.Ident_map.t
     ; env_types : type_declaration Ident.Ident_map.t
     ; env_values : scheme Ident.Ident_map.t
     }
+
   let empty =
     { env_values = Ident.Ident_map.empty
     ; env_types = Ident.Ident_map.empty
@@ -215,22 +220,12 @@ module TypeEnv = struct
     }
   ;;
 
-  let add (env : t) (td : type_declaration) =
+  let add_type (env : t) (td : type_declaration) =
     let ident = td.tty_ident in
     { env with env_types = Ident.Ident_map.add ident.hum_name ident td env.env_types }
   ;;
 
-  let base_types_env =
-    Base.List.fold ~init:empty ~f:add [ typ_unit; typ_int; typ_bool; typ_array ]
+  let env_with_base_types =
+    Base.List.fold ~init:empty ~f:add_type [ typ_unit; typ_int; typ_bool; typ_array ]
   ;;
 end
-
-type structure_item =
-  | Tstr_value of value_binding
-  | Tstr_type of type_declaration
-
-type structure = (TypeEnv.t * structure_item) list
-
-let value_binding tvb_flag tvb_pat tvb_body tvb_typ =
-  { tvb_flag; tvb_pat; tvb_body; tvb_typ }
-;;
