@@ -25,7 +25,7 @@ module Compiler = struct
   type code = path:string -> unit
 
   type _ t =
-    | Parsetree : Parsetree.value_binding list -> Parsetree.value_binding t
+    | Parsetree : Parsetree.structure -> Parsetree.structure t
     | Typedtree : Typedtree.structure -> Typedtree.structure t
     | ANF : ANF.vb list -> ANF.vb list t
     | Code : code -> code t
@@ -34,7 +34,7 @@ module Compiler = struct
 
   (** Parse text to parsetree *)
   let parse (text : string) =
-    match Parsing.parse_value_bindings text with
+    match Parsing.parse_structure text with
     | Ok x -> k (Parsetree x)
     | Error (`Parse_error msg) -> error "parse error: %s" msg
   ;;
@@ -58,6 +58,24 @@ module Compiler = struct
     k (Parsetree stru)
   ;;
 
+  (* TODO: type_declaration compatibility
+  let cps (Parsetree stru) ~(caa : bool) =
+    let aux = function
+      | Parsetree.SType _ as td -> td
+      | Parsetree.SValue vb ->
+        let vb =
+          (* TODO: replace cps_conv_vb with cps_conv_program. for now it is not compatible with type_declarations. *)
+          match CPSConv.cps_conv_vb vb with
+          | Error err -> error "cps error: %a" CPSConv.pp_error err
+          | Ok vb when caa ->
+            CPSLang.MACPS.cps_vb_to_parsetree_vb @@ CAA.call_arity_anal vb
+          | Ok vb -> CPSLang.OneACPS.cps_vb_to_parsetree_vb vb
+        in
+        Parsetree.SValue vb
+    in
+    k (Parsetree (Base.List.map ~f:aux stru))
+  ;; *)
+
   (** Perform closure conversion *)
   let cconv =
     let collect_globals =
@@ -66,10 +84,12 @@ module Compiler = struct
         | _, PTuple _, _ -> acc
         | _ -> failwith "not implemented")
     in
-    let f (globals, acc) vb =
-      let stru = CConv.conv ~standart_globals:globals vb in
-      let globals = collect_globals ~init:globals stru in
-      globals, List.append acc stru
+    let f (globals, acc) = function
+      | Parsetree.SValue vb ->
+        let stru = CConv.conv ~standart_globals:globals vb in
+        let globals = collect_globals ~init:globals stru in
+        globals, List.append acc (List.map ~f:(fun vb -> Parsetree.SValue vb) stru)
+      | Parsetree.SType _ as td -> globals, List.append acc [ td ]
     in
     fun (Parsetree stru) ->
       let _, stru = List.fold_left stru ~init:(CConv.standart_globals, []) ~f in
@@ -78,9 +98,7 @@ module Compiler = struct
 
   (** Infer parsetree to typedtree *)
   let infer table (Parsetree stru) =
-    match
-      Inferencer.structure table (List.map ~f:(fun vb -> Parsetree.SValue vb) stru)
-    with
+    match Inferencer.structure table stru with
     | Ok (_env, x) -> k (Typedtree x)
     | Error err -> error "infer error: %a" Inferencer.pp_error err
   ;;
@@ -124,9 +142,7 @@ module Compiler = struct
       Out_channel.write_all path ~data:(flush_str_formatter ())
     in
     function
-    | Parsetree stru ->
-      with_ppf (fun ppf ->
-        Pprint.pp_stru ppf (List.map ~f:(fun vb -> Parsetree.SValue vb) stru))
+    | Parsetree stru -> with_ppf (fun ppf -> Pprint.pp_stru ppf stru)
     | Typedtree stru -> with_ppf (fun ppf -> Pprinttyped.pp_stru ppf stru)
     | ANF stru -> with_ppf (fun ppf -> ANF.pp_stru ppf stru)
     | Code f -> f ~path

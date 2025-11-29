@@ -4,7 +4,7 @@ open Frontend
 open Frontend.Parsetree
 open Frontend.Ident
 
-(* ds_pattern, ds_expr, ds_vb --- that's parsetree but every var has id*)
+(* ds_pattern, ds_expr, ds_vb --- that's parsetree but every var has id *)
 type ds_pattern =
   | DPVar of ident
   | DPTuple of ds_pattern * ds_pattern * ds_pattern list
