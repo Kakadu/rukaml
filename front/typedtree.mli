@@ -60,7 +60,7 @@ type pattern =
   | Tpat_var of Ident.t
   | Tpat_tuple of pattern * pattern * pattern list
   | Tpat_any
-  | Tpat_constr of string * Ident.t * pattern option
+  | Tpat_constr of Ident.t * pattern option
 
 val show_pattern : pattern -> string
 val of_untyped_pattern : Parsetree.pattern -> pattern
@@ -103,14 +103,14 @@ type type_kind =
 
 type type_declaration =
   { tty_ident : Ident.t
-  ; tty_params : binder_set
+  ; tty_params : binder_set (* TODO:  replace it with Ident.t list or smth like that *)
   ; tty_kind : type_kind
   }
 
 type constructor_info =
   { constr_ident : Ident.t
   ; constr_type_ident : Ident.t
-  ; constr_arg_ty : ty option
+  ; constr_arg : scheme option
   }
 
 type structure_item =
@@ -136,4 +136,10 @@ module TypeEnv : sig
   val typ_bool : type_declaration
   val typ_array : type_declaration
   val env_with_base_types : t
+
+  module TypeList : sig
+    val typ_list : type_declaration
+    val constr_nil : constructor_info
+    val constr_cons : constructor_info
+  end
 end

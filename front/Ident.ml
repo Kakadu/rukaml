@@ -17,6 +17,9 @@ let of_string hum_name =
   { id = !id_counter; hum_name }
 ;;
 
+(* to create idents for constructors with the specified id *)
+let ident hum_name id = { hum_name; id }
+
 let equal left { id; _ } = left.id = id
 let compare left { id; _ } = Int.compare left.id id
 

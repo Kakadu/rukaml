@@ -310,10 +310,8 @@ module Type_env = struct
   let find_exn s t = Ident.Ident_map.find_by_ident s t.env_values
   let find_by_string_exn s t = Ident.Ident_map.find_by_string_exn s t.env_values
 
-  let extend_constructors ~ident ~type_ident constr_arg_ty t =
-    let constr =
-      { constr_type_ident = type_ident; constr_ident = ident; constr_arg_ty }
-    in
+  let extend_constructors ~ident ~type_ident constr_arg t =
+    let constr = { constr_type_ident = type_ident; constr_ident = ident; constr_arg } in
     { t with
       env_constructors =
         Ident.Ident_map.add ident.hum_name ident constr t.env_constructors
@@ -341,8 +339,8 @@ module Type_env = struct
     }
   ;;
 
-  let apply_to_constructor_info sub { constr_ident; constr_arg_ty; constr_type_ident } =
-    { constr_arg_ty = Option.map ~f:(Type.apply sub) constr_arg_ty
+  let apply_to_constructor_info sub { constr_ident; constr_arg; constr_type_ident } =
+    { constr_arg = Option.map ~f:(Scheme.apply sub) constr_arg
     ; constr_type_ident
     ; constr_ident
     }
@@ -519,14 +517,14 @@ let rec check_pat ~level env table = function
     let* constr_entry, type_declaration = find_constructor name env in
     let* sub, vars = instantiate_constr_params ~level type_declaration.tty_params in
     let ty = tconstr vars type_declaration.tty_ident.hum_name in
-    (match patt_opt, constr_entry.constr_arg_ty with
-     | Some patt, Some expected_ty ->
+    (match patt_opt, constr_entry.constr_arg with
+     | Some patt, Some (S (_, expected_ty)) ->
        let* env, arg_patt, arg_ty = check_pat ~level env table patt in
        let* () = unify table (Subst.apply sub expected_ty) (Subst.apply sub arg_ty) in
-       let patt = Tpat_constr (name, type_declaration.tty_ident, Some arg_patt) in
+       let patt = Tpat_constr (constr_entry.constr_ident, Some arg_patt) in
        return (env, patt, ty)
      | None, None ->
-       let patt = Tpat_constr (name, type_declaration.tty_ident, None) in
+       let patt = Tpat_constr (constr_entry.constr_ident, None) in
        return (env, patt, ty)
      | _ -> fail (`Constructor_arity_mismatch name))
 ;;
@@ -798,14 +796,12 @@ let infer env table expr =
         in
         return (ety, TMatch (expr, ((p1, e1), cases), ety))
       | EConstruct (name, arg_opt) ->
-        (* SOMEHOW IT WORKS AS EXPECTED ON TESTS *)
-        (* TODO : TEST IT BETTER *)
         let* constr_entry, type_declaration = find_constructor name env in
         let tty_params = type_declaration.tty_params in
         let* sub, tys = instantiate_constr_params ~level:!current_level tty_params in
         let ty = tconstr tys type_declaration.tty_ident.hum_name in
-        (match constr_entry.constr_arg_ty, arg_opt with
-         | Some expected_arg_ty, Some arg ->
+        (match constr_entry.constr_arg, arg_opt with
+         | Some (S (_, expected_arg_ty)), Some arg ->
            let* arg_ty, arg_expr = helper env state arg in
            let* () =
              unify table (Subst.apply sub expected_arg_ty) (Subst.apply sub arg_ty)
@@ -945,8 +941,8 @@ let init_params params_list =
 
 let check_params_uniqueness pty_name pty_params =
   if
-    List.length pty_params
-    <> List.length (List.dedup_and_sort pty_params ~compare:String.compare)
+    List.length (List.dedup_and_sort pty_params ~compare:String.compare)
+    <> List.length pty_params
   then fail (`Type_param_duplicates pty_name)
   else return ()
 ;;
@@ -978,15 +974,15 @@ let td ?(env = start_env) { Parsetree.pty_name; pty_params; pty_kind }
       let* variants = List.fold ~init:(return []) ~f:infer_variant (v1 :: vs) in
       let tty_kind = Tty_variants (List.rev variants) in
       let env = extend_types tty_kind env in
-      (* TODO : fix constructor ids *)
-      let env =
-        List.fold
-          ~f:(fun env (name, ty_opt) ->
-            let ident = Ident.of_string name in
-            Type_env.extend_constructors ~ident ~type_ident:tty_ident ty_opt env)
-          ~init:env
-          variants
+      let add_constructor (id_acc, env) (name, ty_opt) =
+        let ident = Ident.ident name id_acc in
+        let scheme_opt = Option.map ~f:(fun ty -> S (binder_set, ty)) ty_opt in
+        let env =
+          Type_env.extend_constructors ~ident ~type_ident:tty_ident scheme_opt env
+        in
+        id_acc + 1, env
       in
+      let _id_cnt, env = List.fold ~f:add_constructor ~init:(0, env) variants in
       return (env, type_declatation tty_kind)
   in
   run comp

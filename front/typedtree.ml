@@ -62,7 +62,7 @@ type pattern =
   | Tpat_var of Ident.t
   | Tpat_tuple of pattern * pattern * pattern list
   | Tpat_any
-  | Tpat_constr of string * Ident.t * pattern option
+  | Tpat_constr of Ident.t * pattern option
 [@@deriving show { with_path = false }]
 
 let of_untyped_pattern =
@@ -156,7 +156,7 @@ type type_kind =
   | Tty_variants of (string * ty option) list
 
 type type_declaration =
-  { tty_ident : Ident.t
+  { tty_ident : Ident.t (* is needed to distinguish types with the same name *)
   ; tty_params : binder_set
   ; tty_kind : type_kind
   }
@@ -164,7 +164,7 @@ type type_declaration =
 type constructor_info =
   { constr_ident : Ident.t
   ; constr_type_ident : Ident.t
-  ; constr_arg_ty : ty option
+  ; constr_arg : scheme option
   }
 
 type structure_item =
@@ -212,7 +212,6 @@ module TypeEnv = struct
     }
   ;;
 
-  (* IT DEFINETELY NEEDS TO BE FIXED  *)
   let typ_array : type_declaration =
     { tty_ident = Ident.of_string "array"
     ; tty_params = Var_set.singleton (-1)
@@ -220,12 +219,56 @@ module TypeEnv = struct
     }
   ;;
 
+  module TypeList = struct
+    let typ_list : type_declaration =
+      { tty_ident = Ident.of_string "list"
+      ; tty_params = Var_set.singleton (-1)
+      ; tty_kind = Tty_abstract None
+      }
+    ;;
+
+    let constr_nil : constructor_info =
+      { constr_arg = None
+      ; constr_type_ident = typ_list.tty_ident
+      ; constr_ident = Ident.of_string "[]"
+      }
+    ;;
+
+    let constr_cons : constructor_info =
+      let binder = -1 in
+      let param = tv ~level:(-1) binder in
+
+      { constr_arg =
+          Some (S (Var_set.singleton binder, tprod param (tconstr [ param ] "list") []))
+      ; constr_type_ident = typ_list.tty_ident
+      ; constr_ident = Ident.of_string "::"
+      }
+    ;;
+  end
+
   let add_type (env : t) (td : type_declaration) =
     let ident = td.tty_ident in
     { env with env_types = Ident.Ident_map.add ident.hum_name ident td env.env_types }
   ;;
 
+  let add_constructor (env : t) (constr : constructor_info) =
+    let ident = constr.constr_ident in
+    { env with
+      env_constructors =
+        Ident.Ident_map.add ident.hum_name ident constr env.env_constructors
+    }
+  ;;
+
   let env_with_base_types =
-    Base.List.fold ~init:empty ~f:add_type [ typ_unit; typ_int; typ_bool; typ_array ]
+    let env =
+      Base.List.fold
+        ~init:empty
+        ~f:add_type
+        [ typ_unit; typ_int; typ_bool; typ_array; TypeList.typ_list ]
+    in
+    Base.List.fold
+      ~init:env
+      ~f:add_constructor
+      [ TypeList.constr_nil; TypeList.constr_cons ]
   ;;
 end
