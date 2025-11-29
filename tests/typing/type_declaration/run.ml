@@ -1,9 +1,9 @@
 open Frontend
 
-(* == disables warning: Error (alert deprecated): module Base.Format == *)
+(* disables warning: Error (alert deprecated): module Base.Format *)
 module Format = Stdlib.Format
 open Format
-(* ==================================================================== *)
+(* ============================================================== *)
 
 let run_structure text =
   match Parsing.parse_structure text with
@@ -11,7 +11,7 @@ let run_structure text =
   | Result.Ok ast ->
     (match Inferencer.structure Typedtree.empty_table ast with
      | Result.Error e -> Format.printf "inferencer error: %a\n" Inferencer.pp_error e
-     | Result.Ok stru ->
+     | Result.Ok (_env, stru) ->
        Format.printf "result:%!";
        Format.printf "@[<v>@ ";
        Format.printf "@[%a@]@ " Pprinttyped.pp_stru stru;
