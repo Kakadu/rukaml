@@ -26,6 +26,7 @@ type error =
   | `Type_env_invariant_violation of string
   | `Unbound_type of string
   | `Constructor_arity_mismatch of string
+  | `Constructor_name_duplicates of string
   ]
 
 let pp_error ppf : error -> _ = function
@@ -45,6 +46,8 @@ let pp_error ppf : error -> _ = function
   | `Unbound_type name -> Format.fprintf ppf "type %s was not declared" name
   | `Constructor_arity_mismatch name ->
     Format.fprintf ppf "constructor arity mistmatch: %s" name
+  | `Constructor_name_duplicates name ->
+    Format.fprintf ppf "constructor name duplicates in declaration of type %s" name
 ;;
 
 type fresh_counter = int
@@ -324,7 +327,7 @@ module Type_env = struct
   ;;
 
   let apply_to_type_declaration sub { tty_ident; tty_params; tty_kind } =
-    let helper sub = function
+    let aux sub = function
       | Some ty ->
         Some (Type.apply (Var_set.fold (fun k s -> Subst.remove s k) tty_params sub) ty)
       | None -> None
@@ -333,14 +336,14 @@ module Type_env = struct
     ; tty_params
     ; tty_kind =
         (match tty_kind with
-         | Tty_abstract ty_opt -> Tty_abstract (helper sub ty_opt)
+         | Tty_abstract ty_opt -> Tty_abstract (aux sub ty_opt)
          | Tty_variants vs ->
-           Tty_variants (List.map vs ~f:(fun (name, ty_opt) -> name, helper sub ty_opt)))
+           Tty_variants (List.map vs ~f:(fun (name, ty_opt) -> name, aux sub ty_opt)))
     }
   ;;
 
   let apply_to_constructor_info sub { constr_ident; constr_arg; constr_type_ident } =
-    { constr_arg = Option.map ~f:(Scheme.apply sub) constr_arg
+    { constr_arg = Option.map ~f:(Type.apply sub) constr_arg
     ; constr_type_ident
     ; constr_ident
     }
@@ -461,7 +464,7 @@ let lookup_scheme_by_string : _ =
 
 let fresh_var ~level = fresh >>| fun n -> tv n ~level
 
-let instantiate_constr_params ?(level = 0) binder_set =
+let instantiate_tconstr ?(level = 0) name var_set =
   let* sub, vars =
     Var_set.fold_R
       (fun (sub, acc) name ->
@@ -469,10 +472,10 @@ let instantiate_constr_params ?(level = 0) binder_set =
          let tvar = tv fresh ~level in
          let sub = Subst.compose sub (Subst.singleton name tvar) in
          return (sub, tvar :: acc))
-      binder_set
+      var_set
       (return (Subst.empty, []))
   in
-  return (sub, List.rev vars)
+  return (sub, tconstr (List.rev vars) name)
 ;;
 
 let find_constructor name (env : Type_env.t) =
@@ -514,17 +517,17 @@ let rec check_pat ~level env table = function
     let* ty = fresh_var ~level in
     return (env, Tpat_any, ty)
   | Parsetree.PConstruct (name, patt_opt) ->
-    let* constr_entry, type_declaration = find_constructor name env in
-    let* sub, vars = instantiate_constr_params ~level type_declaration.tty_params in
-    let ty = tconstr vars type_declaration.tty_ident.hum_name in
-    (match patt_opt, constr_entry.constr_arg with
-     | Some patt, Some (S (_, expected_ty)) ->
+    let* constr_info, type_info = find_constructor name env in
+    let ty_name, ty_params = type_info.tty_ident.hum_name, type_info.tty_params in
+    let* sub, ty = instantiate_tconstr ~level ty_name ty_params in
+    (match patt_opt, constr_info.constr_arg with
+     | Some patt, Some expected_ty ->
        let* env, arg_patt, arg_ty = check_pat ~level env table patt in
        let* () = unify table (Subst.apply sub expected_ty) (Subst.apply sub arg_ty) in
-       let patt = Tpat_constr (constr_entry.constr_ident, Some arg_patt) in
+       let patt = Tpat_constr (constr_info.constr_ident, Some arg_patt) in
        return (env, patt, ty)
      | None, None ->
-       let patt = Tpat_constr (constr_entry.constr_ident, None) in
+       let patt = Tpat_constr (constr_info.constr_ident, None) in
        return (env, patt, ty)
      | _ -> fail (`Constructor_arity_mismatch name))
 ;;
@@ -796,20 +799,17 @@ let infer env table expr =
         in
         return (ety, TMatch (expr, ((p1, e1), cases), ety))
       | EConstruct (name, arg_opt) ->
-        let* constr_entry, type_declaration = find_constructor name env in
-        let tty_params = type_declaration.tty_params in
-        let* sub, tys = instantiate_constr_params ~level:!current_level tty_params in
-        let ty = tconstr tys type_declaration.tty_ident.hum_name in
-        (match constr_entry.constr_arg, arg_opt with
-         | Some (S (_, expected_arg_ty)), Some arg ->
+        let* constr_info, type_info = find_constructor name env in
+        let ty_name, ty_params = type_info.tty_ident.hum_name, type_info.tty_params in
+        let* sub, ty = instantiate_tconstr ~level:!current_level ty_name ty_params in
+        (match constr_info.constr_arg, arg_opt with
+         | Some expected_ty, Some arg ->
            let* arg_ty, arg_expr = helper env state arg in
-           let* () =
-             unify table (Subst.apply sub expected_arg_ty) (Subst.apply sub arg_ty)
-           in
-           let expr = TConstruct (constr_entry.constr_ident, Some arg_expr, ty) in
+           let* () = unify table (Subst.apply sub expected_ty) (Subst.apply sub arg_ty) in
+           let expr = TConstruct (constr_info.constr_ident, Some arg_expr, ty) in
            return (ty, expr)
          | None, None ->
-           let expr = TConstruct (constr_entry.constr_ident, None, ty) in
+           let expr = TConstruct (constr_info.constr_ident, None, ty) in
            return (ty, expr)
          | _ -> fail (`Constructor_arity_mismatch name))
       | _ -> failwith "not implemented"
@@ -947,6 +947,13 @@ let check_params_uniqueness pty_name pty_params =
   else return ()
 ;;
 
+let check_constructors_names_uniqueness pty_name variants =
+  let names = List.map ~f:(fun (name, _) -> name) variants in
+  if List.length (List.dedup_and_sort names ~compare:String.compare) <> List.length names
+  then fail (`Constructor_name_duplicates pty_name)
+  else return ()
+;;
+
 let td ?(env = start_env) { Parsetree.pty_name; pty_params; pty_kind }
   : (_, [> error ]) Result.t
   =
@@ -963,26 +970,20 @@ let td ?(env = start_env) { Parsetree.pty_name; pty_params; pty_kind }
       let env = extend_types tty_kind env in
       return (env, type_declatation tty_kind)
     | Parsetree.KVariants (v1, vs) ->
-      (* temporarily adds type to env to use it in recursive type declarations *)
+      let* () = check_constructors_names_uniqueness pty_name (v1 :: vs) in
+      (* > temporarily adds type to env to use it in recursive type declarations *)
       let env = extend_types (Tty_abstract None) env in
-      (* --- *)
-      let infer_variant acc (name, core_type_opt) =
-        let* acc = acc in
+      (* < *)
+      let aux acc (name, core_type_opt) =
+        let* env, variants, id_cnt = acc in
         let* ty_opt = infer_core_type_opt env params_map core_type_opt in
-        return ((name, ty_opt) :: acc)
+        let ident = Ident.ident name id_cnt in
+        let env = Type_env.extend_constructors ~ident ~type_ident:tty_ident ty_opt env in
+        return (env, (ident, ty_opt) :: variants, id_cnt + 1)
       in
-      let* variants = List.fold ~init:(return []) ~f:infer_variant (v1 :: vs) in
+      let* env, variants, _ = List.fold ~init:(return (env, [], 0)) ~f:aux (v1 :: vs) in
       let tty_kind = Tty_variants (List.rev variants) in
       let env = extend_types tty_kind env in
-      let add_constructor (id_acc, env) (name, ty_opt) =
-        let ident = Ident.ident name id_acc in
-        let scheme_opt = Option.map ~f:(fun ty -> S (binder_set, ty)) ty_opt in
-        let env =
-          Type_env.extend_constructors ~ident ~type_ident:tty_ident scheme_opt env
-        in
-        id_acc + 1, env
-      in
-      let _id_cnt, env = List.fold ~f:add_constructor ~init:(0, env) variants in
       return (env, type_declatation tty_kind)
   in
   run comp
@@ -998,7 +999,7 @@ let structure_item ?(env = start_env) table pstru_item =
   | Parsetree.SType (item, []) ->
     let* env, stru_item = td ~env item in
     return (env, Tstr_type stru_item)
-  | _ -> failwith "not implemented: and chain of type declaration"
+  | _ -> failwith "not implemented: \"and\" chain of type declarations"
 ;;
 
 let structure ?(env = start_env) table stru =

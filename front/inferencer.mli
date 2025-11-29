@@ -11,6 +11,7 @@ type error =
   | `Type_env_invariant_violation of string
   | `Unbound_type of string
   | `Constructor_arity_mismatch of string
+  | `Constructor_name_duplicates of string
   ]
 
 val pp_error : Format.formatter -> error -> unit
