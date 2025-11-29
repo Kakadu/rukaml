@@ -33,7 +33,7 @@
 
   $ cat << EOF | ./run.exe -core-type -
   > ('a) list
-  Parsed: ('a) list
+  Parsed: 'a list
 
   $ cat << EOF | ./run.exe -core-type -
   > ('a * 'b) list
@@ -55,25 +55,21 @@
 # type declaration
   $ cat << EOF | ./run.exe -stru -
   > type t = int
-  Parsed: type t =
-            int
+  Parsed: type t = int
           
   $ cat << EOF | ./run.exe -stru -
   > type 'a my_list = 'a list
-  Parsed: type 'a my_list =
-            ('a) list
+  Parsed: type 'a my_list = 'a list
           
 
   $ cat << EOF | ./run.exe -stru -
   > type ('a, 'b) pair = 'a * 'b
-  Parsed: type ('a, 'b) pair =
-            ('a * 'b)
+  Parsed: type ('a, 'b) pair = ('a * 'b)
           
 
   $ cat << EOF | ./run.exe -stru -
   > type ('a, 'b) arrow = 'a -> 'b
-  Parsed: type ('a, 'b) arrow =
-            ('a -> 'b)
+  Parsed: type ('a, 'b) arrow = ('a -> 'b)
           
 #
 
@@ -103,7 +99,7 @@
   > | Cons of 'a * 'a list
   Parsed: type 'a list =
             | Nil
-            | Cons of ('a * ('a) list)
+            | Cons of ('a * 'a list)
             
           
 
@@ -123,12 +119,9 @@
   > type a = int
   > and b = bool
   > and c = char
-  Parsed: type a =
-            int
-          and b =
-            bool
-          and c =
-            char
+  Parsed: type a = int
+          and b = bool
+          and c = char
           
 
   $ cat << EOF | ./run.exe -stru -
@@ -147,8 +140,7 @@
             | Just of 't
             | Nothing
             
-          and name =
-            string
+          and name = string
           
 
 # invalid input
@@ -210,31 +202,26 @@
 # unsorted
   $ cat << EOF | ./run.exe -stru -
   > type foo = 'a * 'b * 'c -> 'd * 'e -> 'f
-  Parsed: type foo =
-            (('a * 'b * 'c) -> (('d * 'e) -> 'f))
+  Parsed: type foo = (('a * 'b * 'c) -> (('d * 'e) -> 'f))
           
 
   $ cat << EOF | ./run.exe -stru -
   > type foo = (int -> int)
-  Parsed: type foo =
-            (int -> int)
+  Parsed: type foo = (int -> int)
           
 
   $ cat << EOF | ./run.exe -stru -
   > type foo = (a -> b) * (c -> d)
-  Parsed: type foo =
-            ((a -> b) * (c -> d))
+  Parsed: type foo = ((a -> b) * (c -> d))
           
 
   $ cat << EOF | ./run.exe -stru -
   > type foo = (a * b) * (c * d)
-  Parsed: type foo =
-            ((a * b) * (c * d))
+  Parsed: type foo = ((a * b) * (c * d))
           
 
   $ cat << EOF | ./run.exe -stru -
   > type foo = (a -> b) -> (c -> d)
-  Parsed: type foo =
-            ((a -> b) -> (c -> d))
+  Parsed: type foo = ((a -> b) -> (c -> d))
           
 #

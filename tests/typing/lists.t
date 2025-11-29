@@ -25,7 +25,7 @@
   let rec map: ('_3 -> '_4) -> '_3 list -> '_4 list =
     fun f ls -> match ls with
                   | [] -> []
-                  | hd :: tl -> f hd :: ((map f) tl)
+                  | hd :: tl -> (f hd) :: ((map f) tl)
   let rec fold: ('_2 -> '_4 -> '_2) -> '_2 -> '_4 list -> '_2 =
     fun f acc ls -> match ls with
                       | [] -> acc
@@ -67,7 +67,7 @@
     fun ls -> let rec aux : '_13 list -> '_13 list -> '_13 list = fun ls acc -> 
     match ls with
       | [] -> acc
-      | hd :: tl -> (aux tl) hd :: acc in (aux ls) []
+      | hd :: tl -> (aux tl) (hd :: acc) in (aux ls) []
   let rec join: '_3 list -> '_7 list -> '_3 * '_7 list =
     fun xs ys -> match (xs, ys) with
                    | ([], _) -> []
@@ -77,7 +77,7 @@
     fun xs ys -> let rec aux : '_15 list -> '_15 list -> '_15 list = fun xs ys -> 
     match (xs, ys) with
       | ([], acc) -> acc
-      | (hd :: tl, acc) -> (aux tl) hd :: acc in (aux (rev xs)) ys
+      | (hd :: tl, acc) -> (aux tl) (hd :: acc) in (aux (rev xs)) ys
 
 # assert type of is_empty is 'a list -> bool
 # assert type of exists is ('a -> bool) -> 'a list -> bool

@@ -69,7 +69,7 @@
   >   | hd :: tl -> f hd :: map f tl 
   Parsed: let rec map f items = match items with
                                   | [] -> []
-                                  | hd :: tl -> f hd :: (map f tl)
+                                  | hd :: tl -> ((f hd) :: (map f tl))
 
   $ cat << EOF | ./run.exe -stru -
   > let rec filter p items = 
@@ -106,7 +106,7 @@
   >   | hd :: tl -> hd :: rev items
   Parsed: let rec rev items = match items with
                                 | [] -> []
-                                | hd :: tl -> hd :: (rev items)
+                                | hd :: tl -> (hd :: (rev items))
 
   $ cat << EOF | ./run.exe -stru -
   > let fold_left f init items =
