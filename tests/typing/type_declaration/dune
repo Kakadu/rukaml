@@ -1,6 +1,0 @@
-(executable
- (name run)
- (libraries stdio Frontend))
-
-(cram
- (deps run.exe))
