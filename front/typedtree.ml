@@ -153,10 +153,10 @@ type value_binding =
 
 type type_kind =
   | Tty_abstract of ty option
-  | Tty_variants of (string * ty option) list
+  | Tty_variants of (Ident.t * ty option) list
 
 type type_declaration =
-  { tty_ident : Ident.t (* is needed to distinguish types with the same name *)
+  { tty_ident : Ident.t
   ; tty_params : binder_set
   ; tty_kind : type_kind
   }
@@ -164,7 +164,7 @@ type type_declaration =
 type constructor_info =
   { constr_ident : Ident.t
   ; constr_type_ident : Ident.t
-  ; constr_arg : scheme option
+  ; constr_arg : ty option
   }
 
 type structure_item =
@@ -219,29 +219,37 @@ module TypeEnv = struct
     }
   ;;
 
-  module TypeList = struct
+  module TypeList : sig
+    val typ_list : type_declaration
+    val constr_nil : constructor_info
+    val constr_cons : constructor_info
+  end = struct
+    let param_binder = -1
+    let param_ty = tv ~level:(-1) param_binder
+
+    let cons_ident = Ident.of_string "::"
+    let nil_ident = Ident.of_string "[]"
+
+    let cons_arg_ty = Some (tprod param_ty (tconstr [ param_ty ] "list") [])
+
     let typ_list : type_declaration =
       { tty_ident = Ident.of_string "list"
-      ; tty_params = Var_set.singleton (-1)
-      ; tty_kind = Tty_abstract None
+      ; tty_params = Var_set.singleton param_binder
+      ; tty_kind = Tty_variants [ nil_ident, None; cons_ident, cons_arg_ty ]
       }
     ;;
 
     let constr_nil : constructor_info =
       { constr_arg = None
       ; constr_type_ident = typ_list.tty_ident
-      ; constr_ident = Ident.of_string "[]"
+      ; constr_ident = nil_ident
       }
     ;;
 
     let constr_cons : constructor_info =
-      let binder = -1 in
-      let param = tv ~level:(-1) binder in
-
-      { constr_arg =
-          Some (S (Var_set.singleton binder, tprod param (tconstr [ param ] "list") []))
+      { constr_arg = cons_arg_ty
       ; constr_type_ident = typ_list.tty_ident
-      ; constr_ident = Ident.of_string "::"
+      ; constr_ident = cons_ident
       }
     ;;
   end

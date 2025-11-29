@@ -99,7 +99,7 @@ type value_binding =
 
 type type_kind =
   | Tty_abstract of ty option
-  | Tty_variants of (string * ty option) list
+  | Tty_variants of (Ident.t * ty option) list
 
 type type_declaration =
   { tty_ident : Ident.t
@@ -110,7 +110,7 @@ type type_declaration =
 type constructor_info =
   { constr_ident : Ident.t
   ; constr_type_ident : Ident.t
-  ; constr_arg : scheme option
+  ; constr_arg : ty option
   }
 
 type structure_item =
