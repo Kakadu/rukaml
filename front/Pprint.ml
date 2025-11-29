@@ -17,6 +17,25 @@ let group_applications l r =
   loop [ r ] l
 ;;
 
+let pp_const ppf = function
+  | PConst_bool b -> fprintf ppf "%b" b
+  | PConst_int n -> fprintf ppf "%d" n
+  | PConst_char c -> fprintf ppf "%c" c
+;;
+
+let pp_cons_brackets ppf ~pp_item hd tl =
+  fprintf ppf "[@[ %a" pp_item hd;
+  List.iter (fun item -> fprintf ppf "; %a" pp_item item) tl;
+  fprintf ppf " ]@]"
+;;
+
+let pp_cons_semicolons ppf ~pp_item ?(pars = false) hd tl =
+  if pars then fprintf ppf "(";
+  fprintf ppf "%a" pp_item hd;
+  List.iter (fun item -> fprintf ppf " :: %a" pp_item item) tl;
+  if pars then fprintf ppf ")"
+;;
+
 let rec pp_pattern ppf = function
   | PUnit -> fprintf ppf "()"
   | PConst x -> pp_const ppf x
@@ -28,19 +47,14 @@ let rec pp_pattern ppf = function
   | PAny -> fprintf ppf "@[_@]"
   | PConstruct ("[]", None) -> fprintf ppf "[]"
   | PConstruct ("::", Some (PTuple (head, tail, []))) ->
-    let rec helper acc = function
-      | PConstruct ("::", Some (PTuple (hd, tl, []))) -> helper (hd :: acc) tl
+    let rec aux acc = function
+      | PConstruct ("::", Some (PTuple (hd, tl, []))) -> aux (hd :: acc) tl
       | PConstruct ("[]", None) ->
-        fprintf ppf "@[[ %a" pp_pattern head;
-        List.iter (fun item -> fprintf ppf "; %a" pp_pattern item) (List.rev acc);
-        fprintf ppf " ]@]"
+        pp_cons_brackets ppf ~pp_item:pp_pattern head (List.rev acc)
       | _ as exp ->
-        fprintf ppf "%a" pp_pattern head;
-        List.iter
-          (fun item -> fprintf ppf " :: %a" pp_pattern item)
-          (List.rev (exp :: acc))
+        pp_cons_semicolons ppf ~pp_item:pp_pattern head (List.rev (exp :: acc))
     in
-    helper [] tail
+    aux [] tail
   | PConstruct (name, None) -> fprintf ppf "@[%s@]" name
   | PConstruct (name, Some arg) -> fprintf ppf "@[%s (%a)@]" name pp_pattern arg
 ;;
@@ -125,35 +139,23 @@ let rec pp_expr_helper ?(ps = true) ppf = function
       (h2 :: hs);
     fprintf ppf ")@]"
   | EMatch (e, (pe, pes)) ->
-    let helper ppf () =
-      fprintf
-        ppf
-        "match %a with@ %a"
-        no_pars
-        e
-        (pp_print_list
-           ~pp_sep:(fun ppf () -> fprintf ppf "@ ")
-           (fun ppf (p, e) -> fprintf ppf "@[| %a -> %a@]" pp_pattern p maybe_pars e))
-        (pe :: pes)
+    let pp_cases ppf () =
+      let pp_case ppf (p, e) = fprintf ppf "@[| %a -> %a@]" pp_pattern p maybe_pars e in
+      pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "@ ") pp_case ppf (pe :: pes)
     in
     if ps
-    then fprintf ppf "@[<v 2>(%a)@]" helper ()
-    else fprintf ppf "@[<v 2>%a@]" helper ()
+    then fprintf ppf "@[<v 2>(match %a with@ %a)@]" no_pars e pp_cases ()
+    else fprintf ppf "@[<v 2>match %a with@ %a@]" no_pars e pp_cases ()
   | EConstruct ("[]", None) -> fprintf ppf "[]"
   | EConstruct ("::", Some (ETuple (head, tail, []))) ->
-    let rec helper acc = function
-      | EConstruct ("::", Some (ETuple (hd, tl, []))) -> helper (hd :: acc) tl
+    let rec aux acc = function
+      | EConstruct ("::", Some (ETuple (hd, tl, []))) -> aux (hd :: acc) tl
       | EConstruct ("[]", None) ->
-        fprintf ppf "[@[ %a" no_pars head;
-        List.iter (fun item -> fprintf ppf "; %a" no_pars item) (List.rev acc);
-        fprintf ppf " ]@]"
+        pp_cons_brackets ppf ~pp_item:no_pars head (List.rev acc)
       | _ as exp ->
-        fprintf ppf "%a" no_pars head;
-        List.iter
-          (fun item -> fprintf ppf " :: %a" maybe_pars item)
-          (List.rev (exp :: acc))
+        pp_cons_semicolons ppf ~pars:ps ~pp_item:maybe_pars head (List.rev (exp :: acc))
     in
-    helper [] tail
+    aux [] tail
   | EConstruct (name, None) -> fprintf ppf "%s" name
   | EConstruct (name, Some arg) -> fprintf ppf "@[%s %a@]" name maybe_pars arg
 
@@ -192,12 +194,8 @@ let rec pp_typ ppf { typ_desc } =
   | TConstr ([], name) -> fprintf ppf "%s" name
   | TConstr ([ ty ], name) -> fprintf ppf "@[%a %s@]" pp_typ ty name
   | TConstr (tys, name) ->
-    fprintf
-      ppf
-      "(%a) %s"
-      (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp_typ)
-      tys
-      name
+    pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp_typ ppf tys;
+    fprintf ppf " %s" name
 ;;
 
 let pp_scheme ppf = function
@@ -212,7 +210,7 @@ let rec pp_core_type ppf = function
     List.iter (fprintf ppf " * %a" pp_core_type) cts;
     fprintf ppf ")@]"
   | CTConstr (name, []) -> fprintf ppf "@[%s@]" name
-  | CTConstr (name, [ arg ]) -> fprintf ppf "@[(%a) %s@]" pp_core_type arg name
+  | CTConstr (name, [ CTVar var_name ]) -> fprintf ppf "@[%s %s@]" var_name name
   | CTConstr (name, arg :: args) ->
     fprintf ppf "@[(%a" pp_core_type arg;
     List.iter (fprintf ppf ", %a" pp_core_type) args;
@@ -232,39 +230,29 @@ let pp_type_params ppf td =
 let pp_type_kind ppf td =
   match td.pty_kind with
   | KAbstract None -> ()
-  | KAbstract (Some ct) -> fprintf ppf "@[%a@]" pp_core_type ct
+  | KAbstract (Some ct) -> fprintf ppf " = %a" pp_core_type ct
   | KVariants (case, cases) ->
     let pp_case ppf = function
       | name, None -> fprintf ppf "| %s" name
       | name, Some ct -> fprintf ppf "| %s of %a" name pp_core_type ct
     in
-    fprintf ppf "@[<v>";
-    List.iter (fprintf ppf "@[%a@]@ " pp_case) (case :: cases);
-    fprintf ppf "@]"
+    fprintf ppf " =@ ";
+    List.iter (fprintf ppf "%a@ " pp_case) (case :: cases)
 ;;
 
 let pp_type_definition ppf (td, tds) =
-  fprintf ppf "@[<v>";
-  fprintf
-    ppf
-    "@[<v 2>@[type%a%s =@]@ @[%a@]@]@ "
-    pp_type_params
-    td
-    td.pty_name
-    pp_type_kind
-    td;
-  List.iter
-    (fun td ->
-       fprintf
-         ppf
-         "@[<v 2>@[and%a%s =@]@ @[%a@]@]@ "
-         pp_type_params
-         td
-         td.pty_name
-         pp_type_kind
-         td)
-    tds;
-  fprintf ppf "@]"
+  let aux ppf td ~keyword =
+    fprintf ppf "@[<v 2>";
+    fprintf ppf "%s" keyword;
+    pp_type_params ppf td;
+    fprintf ppf "%s" td.pty_name;
+    pp_type_kind ppf td;
+    fprintf ppf "@]@ "
+  in
+  open_vbox 0;
+  aux ppf ~keyword:"type" td;
+  Base.List.iter ~f:(aux ppf ~keyword:"and") tds;
+  close_box ()
 ;;
 
 let pp_structure_item ppf = function

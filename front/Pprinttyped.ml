@@ -38,12 +38,10 @@ let pp_typ_hum =
     | TConstr ([], name) -> fprintf ppf "%s" name
     | TConstr ([ param ], name) -> fprintf ppf "%a %s" (pp_typ ctx) param name
     | TConstr (params, name) ->
-      fprintf
-        ppf
-        "(%a) %s"
-        (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") (pp_typ CTuple))
-        params
-        name
+      fprintf ppf "(";
+      let pp_sep ppf () = fprintf ppf ", " in
+      pp_print_list (pp_typ CTuple) ~pp_sep ppf params;
+      fprintf ppf ") %s" name
   in
   pp_typ CArrow_right
 ;;
@@ -70,20 +68,15 @@ let rec pp_pattern ppf = function
   | Tpat_any -> fprintf ppf "_"
   | Tpat_constr (ident, None) -> fprintf ppf "%s" ident.hum_name
   | Tpat_constr (ident, Some (Tpat_tuple (head, tail, [])))
-  (* sugar lists. works like Pprint.ml version, but compares constructors using idents *)
+  (* syntactic sugar for lists *)
     when Ident.equal ident cons_ident ->
     let rec aux acc = function
       | Tpat_constr (ident, Some (Tpat_tuple (hd, tl, [])))
         when Ident.equal ident cons_ident -> aux (hd :: acc) tl
       | Tpat_constr (ident, None) when Ident.equal ident nil_ident ->
-        fprintf ppf "@[[ %a" pp_pattern head;
-        List.iter (fun item -> fprintf ppf "; %a" pp_pattern item) (List.rev acc);
-        fprintf ppf " ]@]"
+        Pprint.pp_cons_brackets ppf head ~pp_item:pp_pattern (List.rev acc)
       | _ as exp ->
-        fprintf ppf "%a" pp_pattern head;
-        List.iter
-          (fun item -> fprintf ppf " :: %a" pp_pattern item)
-          (List.rev (exp :: acc))
+        Pprint.pp_cons_semicolons ppf ~pp_item:pp_pattern head (List.rev (exp :: acc))
     in
     aux [] tail
   | Tpat_constr (ident, Some patt) -> fprintf ppf "%s %a" ident.hum_name pp_pattern patt
@@ -177,20 +170,17 @@ let pp_expr =
       else fprintf ppf "@[<v 2>%a@]" pp_match ()
     | TConstruct (ident, None, _ty) -> fprintf ppf "%s" ident.hum_name
     | TConstruct (ident, Some (TTuple (head, tail, [], _)), _ty)
-    (* sugar lists. works like Pprint.ml version, but compares constructors using idents *)
+    (* syntactic sugar for lists *)
       when Ident.equal ident cons_ident ->
-      let rec helper acc = function
+      let rec aux ppf acc = function
         | TConstruct (ident, Some (TTuple (hd, tl, [], _)), _)
-          when Ident.equal ident cons_ident -> helper (hd :: acc) tl
+          when Ident.equal ident cons_ident -> aux ppf (hd :: acc) tl
         | TConstruct (ident, None, _) when Ident.equal ident nil_ident ->
-          fprintf ppf "[@[ %a" expr_no head;
-          List.iter (fun item -> fprintf ppf "; %a" expr_no item) (List.rev acc);
-          fprintf ppf " ]@]"
+          Pprint.pp_cons_brackets ppf head ~pp_item:expr_no (List.rev acc)
         | _ as exp ->
-          fprintf ppf "%a" expr_no head;
-          List.iter (fun item -> fprintf ppf " :: %a" expr item) (List.rev (exp :: acc))
+          Pprint.pp_cons_semicolons ppf ~pp_item:expr ~pars head (List.rev (exp :: acc))
       in
-      helper [] tail
+      aux ppf [] tail
     | TConstruct (ident, Some arg, _ty) ->
       fprintf ppf (if pars then "(%s %a)" else "%s %a") ident.hum_name expr arg
   and pp_typ = pp_typ_hum
@@ -218,21 +208,15 @@ let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
     tvb_body
 ;;
 
-let pp_tuple ppf ?(sep = ", ") ~pp_item items =
-  fprintf
-    ppf
-    "(%a)"
-    (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "%s" sep) pp_item)
-    items
-;;
-
 let pp_td_hum ppf td =
   let pp_binder ppf binder = fprintf ppf "'_%d" binder in
   let pp_params ppf params =
     match List.of_seq (Var_set.to_seq params) with
     | [] -> ()
     | [ x ] -> fprintf ppf " %a " pp_binder x
-    | xs -> fprintf ppf " %a " (pp_tuple ~pp_item:pp_binder ~sep:", ") xs
+    | xs ->
+      let pp_sep ppf () = fprintf ppf ", " in
+      fprintf ppf " (%a) " (pp_print_list ~pp_sep pp_binder) xs
   in
   fprintf ppf "@[<v 2>";
   fprintf ppf "type%a%s" pp_params td.tty_params td.tty_ident.hum_name;
@@ -241,8 +225,9 @@ let pp_td_hum ppf td =
    | Tty_abstract (Some ty) -> fprintf ppf " = %a@ " pp_typ_hum ty
    | Tty_variants variants ->
      let pp_variant ppf = function
-       | name, None -> fprintf ppf "| %s" name
-       | name, Some ty -> fprintf ppf "| %s of %a" name pp_typ_hum ty
+       | (ident : Ident.t), None -> fprintf ppf "| %s" ident.hum_name
+       | (ident : Ident.t), Some ty ->
+         fprintf ppf "| %s of %a" ident.hum_name pp_typ_hum ty
      in
      fprintf ppf " =@ ";
      pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "@ ") pp_variant ppf variants);
@@ -258,10 +243,8 @@ let pp_stru_item ppf = function
 
 let pp_stru ppf stru =
   open_vbox 0;
-  pp_print_list
-    ~pp_sep:(fun ppf () -> fprintf ppf "@.")
-    (fun ppf item -> fprintf ppf "%a" pp_stru_item item)
-    ppf
-    stru;
+  let pp_sep ppf () = fprintf ppf "@." in
+  let pp_item ppf item = fprintf ppf "%a" pp_stru_item item in
+  pp_print_list ~pp_sep pp_item ppf stru;
   close_box ()
 ;;
