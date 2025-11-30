@@ -46,6 +46,7 @@ let elam v body = ELam (v, body)
 let eapp1 f x = EApp (f, x)
 let etuple a b xs = ETuple (a, b, xs)
 let ematch e pe pes = EMatch (e, (pe, pes))
+let econstruct name arg = EConstruct (name, arg)
 let earray xs = EArray xs
 
 let eapp f ?(is_right_assoc = false) args =

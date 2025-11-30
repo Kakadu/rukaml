@@ -87,6 +87,7 @@ val evar : string -> expr
 val elam : pattern -> expr -> expr
 val eapp : expr -> ?is_right_assoc:bool -> expr list -> expr
 val ematch : expr -> pattern * expr -> (pattern * expr) list -> expr
+val econstruct : string -> expr option -> expr
 val eapp1 : expr -> expr -> expr
 val elet : ?isrec:rec_flag -> pattern -> expr -> expr -> expr
 val eite : expr -> expr -> expr -> expr
