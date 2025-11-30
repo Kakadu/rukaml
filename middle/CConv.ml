@@ -36,7 +36,9 @@ let simplify =
     | ETuple (a, b, es) -> etuple (helper a) (helper b) (List.map helper es)
     | ELet (isrec, pat, rhs, wher) -> elet ~isrec pat (helper rhs) (helper wher)
     | EUnit -> EUnit
-    | EMatch _ | EConstruct _ -> failwith "not implemented"
+    | EConstruct (name, e) -> econstruct name (Option.map helper e)
+    | EMatch (e, ((p1, e1), pes)) ->
+      ematch (helper e) (p1, helper e1) (List.map (fun (p, e) -> p, helper e) pes)
   in
   helper
 ;;
@@ -50,18 +52,21 @@ let%expect_test " " =
 ;;
 
 let vars_from_pattern, vars_from_patterns =
+  let open Parsetree in
   let rec helper acc = function
-    | Parsetree.PVar name -> SS.add name acc
+    | PAny | PUnit | PConst _ | PConstruct (_, None) -> acc
+    | PVar name -> SS.add name acc
     | PTuple (a, b, ps) ->
       ListLabels.fold_left ~f:helper ~init:(helper (helper acc a) b) ps
-    | Parsetree.PAny | PConstruct _ -> failwith "not implemented"
+    | PConstruct (_, Some patt) -> helper acc patt
   in
   helper SS.empty, List.fold_left helper SS.empty
 ;;
 
 let free_vars_of_expr =
+  let open Parsetree in
   let rec helper acc = function
-    | Parsetree.EConst _ -> acc
+    | EUnit | EConst _ -> acc
     | EVar s -> String_set.add s acc
     | EIf (c, th, el) -> helper (helper (helper acc c) th) el
     | EApp (l, r) -> helper (helper acc l) r
@@ -71,9 +76,13 @@ let free_vars_of_expr =
       String_set.diff (helper (helper acc rhs) wher) (vars_from_pattern pat)
     | ETuple (a, b, es) -> List.fold_left helper (helper (helper acc a) b) es
     | ELam (pat, rhs) -> SS.diff (helper acc rhs) (vars_from_pattern pat)
-    | EUnit -> acc
-    | EMatch _ | EConstruct _ -> failwith "not implemented"
+    | EConstruct (_, None) -> acc
+    | EConstruct (_, Some e) -> helper acc e
+    | EMatch (expr, (pe1, pes)) ->
+      let aux acc (p, e) = SS.diff (helper acc e) (vars_from_pattern p) in
+      List.fold_left aux (helper acc expr) (pe1 :: pes)
   in
+
   helper String_set.empty
 ;;
 
@@ -114,8 +123,16 @@ let rec subst x ~by:v =
       then elet ~isrec fpat body wher
       else elet ~isrec fpat (helper body) (helper wher)
     | EUnit -> EUnit
-    | EMatch _ | EConstruct _ | ELet (_, PAny, _, _) | ELet (_, PConstruct _, _, _) ->
-      failwith "not implemented"
+    | EConstruct (name, arg) -> econstruct name (Option.map helper arg)
+    | EMatch (subject, (case, cases)) ->
+      let aux (patt, expr) =
+        if SS.mem x (vars_from_pattern patt) then patt, expr else patt, helper expr
+      in
+      ematch (helper subject) (aux case) (List.map aux cases)
+    | ELet (_, PAny, _, _)
+    | ELet (_, PConstruct _, _, _)
+    | ELet (_, PUnit, _, _)
+    | ELet (_, PConst _, _, _) -> failwith "not implemented"
   in
   helper
 ;;
@@ -173,7 +190,7 @@ let conv ?(standart_globals = standart_globals)
     fun root_expr ->
     log "Calling helper on @[%a@] and @[%a@]" SS.pp globals Pprint.pp_expr root_expr;
     match root_expr with
-    | (EVar _ | EUnit | EConst _) as e -> return e
+    | (EVar _ | EUnit | EConst _ | EConstruct (_, None)) as e -> return e
     | EIf (e1, e2, e3) ->
       return eite <*> helper globals e1 <*> helper globals e2 <*> helper globals e3
     (* | EApp (ELam (PVar arg, (ELam (_, _) as body)), EVar y) when arg = y ->
@@ -296,8 +313,28 @@ let conv ?(standart_globals = standart_globals)
       let* rhs = helper new_env rhs in
       let* body = helper new_env wher in
       return (elet pat rhs body)
-    | EMatch _ | EConstruct _ | ELet (_, PAny, _, _) | ELet (_, PConstruct _, _, _) ->
-      failwith "not implemented"
+    | EConstruct (name, Some arg) ->
+      let* arg = helper globals arg in
+      return (econstruct name (Some arg))
+    | EMatch (scrut, (case, cases)) ->
+      let conv_case (patt, expr) =
+        let new_env = String_set.union globals (vars_from_pattern patt) in
+        let* expr = helper new_env expr in
+        return (patt, expr)
+      in
+      let f acc case =
+        let* acc = acc in
+        let* case = conv_case case in
+        return (case :: acc)
+      in
+      let* scrut = helper globals scrut in
+      let* case = conv_case case in
+      let* cases = Base.List.fold ~f ~init:(return []) cases in
+      return (ematch scrut case (List.rev cases))
+    | ELet (_, PAny, _, _)
+    | ELet (_, PConstruct _, _, _)
+    | ELet (_, PUnit, _, _)
+    | ELet (_, PConst _, _, _) -> failwith "not implemented 3"
   and helper_list globals : Parsetree.expr list -> (value_binding list, expr list) t =
     fun es ->
     List.fold_left
@@ -321,7 +358,7 @@ let conv ?(standart_globals = standart_globals)
         []
     in
     List.rev_append saved [ is_rec, pat, rhs ] |> List.map simplify_vb
-  | _, PAny, _ | _, PConstruct _, _ -> failwith "not implemented"
+  | _ -> failwith "not implemented 4"
 ;;
 
 let value_binding = conv
@@ -347,7 +384,7 @@ let structure ?(standart_globals = standart_globals) stru =
             | _, PTuple _, _ ->
               (* TODO(Kakadu): add other names too *)
               acc
-            | _, PAny, _ | _, PConstruct _, _ -> failwith "not implemented")
+            | _ -> failwith "not implemented")
         in
         new_glob, List.append ans (List.map (fun vb -> Parsetree.SValue vb) new_strus)
       | Parsetree.SType _ as td -> glob, List.append ans [ td ])
