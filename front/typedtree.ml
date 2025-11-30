@@ -46,7 +46,6 @@ let tv binder ~level = { typ_desc = V { binder; var_level = level } }
 let tlink t = { typ_desc = TLink t }
 let tprod a b ts = { typ_desc = TProd (a, b, ts) }
 let tconstr tys name = { typ_desc = TConstr (tys, name) }
-
 let tprim s = tconstr [] s
 let tparam param name = tconstr [ param ] name
 

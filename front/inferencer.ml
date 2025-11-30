@@ -393,13 +393,15 @@ let unify weak l r =
     | x, Weak n ->
       weak.map <- IntMap.add n { typ_desc = x } weak.map;
       return ()
-    | TConstr (tys1, name1), TConstr (tys2, name2) ->
-      if String.equal name1 name2 && List.length tys1 = List.length tys2
-      then
-        List.fold2_exn tys1 tys2 ~init:(return ()) ~f:(fun acc l r ->
+    | TConstr (tys1, name1), TConstr (tys2, name2)
+      when String.equal name1 name2 && List.length tys1 = List.length tys2 ->
+      List.fold2_exn
+        ~f:(fun acc l r ->
           let* () = acc in
           helper l r)
-      else fail (`UnificationFailed (l, r))
+        ~init:(return ())
+        tys1
+        tys2
     | _ -> fail (`UnificationFailed (l, r))
   in
   helper l r
@@ -927,18 +929,6 @@ and infer_core_type_opt (env : Type_env.t) param_map = function
     return (Some ty)
 ;;
 
-let init_params params_list =
-  let helper acc name =
-    let* map, bs = acc in
-    let* binder = fresh in
-    let ty = tv binder ~level:(-1) in
-    let map = Ident.String_map.add name ty map in
-    let bs = Var_set.add binder bs in
-    return (map, bs)
-  in
-  List.fold ~init:(return (Ident.String_map.empty, Var_set.empty)) ~f:helper params_list
-;;
-
 let check_params_uniqueness pty_name pty_params =
   if
     List.length (List.dedup_and_sort pty_params ~compare:String.compare)
@@ -957,6 +947,17 @@ let check_constructors_names_uniqueness pty_name variants =
 let td ?(env = start_env) { Parsetree.pty_name; pty_params; pty_kind }
   : (_, [> error ]) Result.t
   =
+  let init_params params_list =
+    let helper acc name =
+      let* map, bs = acc in
+      let* binder = fresh in
+      let ty = tv binder ~level:(-1) in
+      let map = Ident.String_map.add name ty map in
+      let bs = Var_set.add binder bs in
+      return (map, bs)
+    in
+    List.fold ~init:(return (Ident.String_map.empty, Var_set.empty)) ~f:helper params_list
+  in
   let comp =
     let* () = check_params_uniqueness pty_name pty_params in
     let* params_map, binder_set = init_params pty_params in
