@@ -64,7 +64,7 @@ module Compiler = struct
       | Parsetree.SType _ as td -> td
       | Parsetree.SValue vb ->
         let vb =
-          (* TODO: replace cps_conv_vb with cps_conv_program. for now it is not compatible with type_declarations. *)
+          (* TODO: replace it with cps_conv_program. *)
           match CPSConv.cps_conv_vb vb with
           | Error err -> error "cps error: %a" CPSConv.pp_error err
           | Ok vb when caa ->
@@ -156,6 +156,7 @@ module Target = struct
     ; out_path : string
     ; cps : bool
     ; caa : bool
+    ; cconv : bool
     }
 
   open Compiler
@@ -164,10 +165,9 @@ module Target = struct
   module Intermediate = struct
     let parsetree (p : params) = parse p.text
     let cpstree p = (parsetree p) (if p.cps then cps ~caa:p.caa else ( |> ))
-    let cconvtree p = (cpstree p) cconv
+    let cconvtree p = (cpstree p) (if p.cconv then cconv else ( |> ))
     let typedtree table p = (cconvtree p) (infer table)
     let anftree table p = (typedtree table p) anf
-    let infer_parsetree table p = (parsetree p) (infer table)
   end
 
   let rv64 table p = (Intermediate.anftree table p) rv64
@@ -187,7 +187,6 @@ module Target = struct
       ; "cconv", finish Intermediate.cconvtree
       ; "typedtree", finish Intermediate.(typedtree table)
       ; "anf", finish Intermediate.(anftree table)
-      ; "infer-parsetree", finish Intermediate.(infer_parsetree table)
       ]
   ;;
 end
@@ -216,6 +215,7 @@ let () =
   let target = ref "" in
   let cps = ref false in
   let caa = ref false in
+  let cconv = ref true in
 
   let open Stdlib.Arg in
   let args =
@@ -224,6 +224,7 @@ let () =
     ; "--print-targets", Unit print_targets, " print all supported targets"
     ; "--cps", Set cps, " enable cps conversion"
     ; "--caa", Set caa, " enable call arity analysis"
+    ; "--no-cconv", Clear cconv, " disable closure conversion"
     ]
   in
   parse args (fun s -> inp_path := Some s) "rukaml";
@@ -236,7 +237,9 @@ let () =
     | None -> In_channel.input_all stdin
   in
 
-  let params = Target.{ text; out_path = !out_path; cps = !cps; caa = !caa } in
+  let params =
+    Target.{ text; out_path = !out_path; cps = !cps; caa = !caa; cconv = !cconv }
+  in
   match Map.find (Target.targets Typedtree.empty_table) !target with
   | Some target -> target params
   | None -> error "invalid target %S" !target
