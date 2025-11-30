@@ -1,6 +1,6 @@
 # let rec polymorphism does not work
 
-  $ run () { ../../driver/driver.exe $1 --target infer-parsetree -o a.ml && cat a.ml; }
+  $ run () { ../../driver/driver.exe $1 --target typedtree -o a.ml && cat a.ml; }
 
 # TODO (fix): exists should have type ('a -> bool) -> 'a list -> bool
   $ run << EOF
@@ -45,15 +45,30 @@
     (map not) [ true; false; true; false ]
 #
 
+# TODO (fix): type of apply_n must be ('a -> 'a) -> 'a -> int -> 'a
+  $ run << EOF
+  > let rec apply_n f x n = if n = 0 then x else apply_n f (f x) (n - 1)
+  > 
+  > let not x = if x then false else true
+  > 
+  > let main = apply_n not true 5
+  let rec apply_n: (bool -> bool) -> bool -> int -> bool =
+    fun f x n -> (if n = 0 then x else ((apply_n f) (f x)) (n - 1))
+  let not: bool -> bool =
+    fun x -> (if x then false else true)
+  let main: bool =
+    ((apply_n not) true) 5
+#
+
 # TODO (fix): unification should not fail here
   $ run << EOF
   > let rec apply_n f x n = if n = 0 then x else apply_n f (f x) (n - 1)
   > 
-  > let five = apply_n (fun x -> x + 1) 0 5
-  > 
   > let not x = if x then false else true
-  > let bool_id x = apply_n not x 2
-  infer error: unification failed on int and bool
+  > let inc x = x + 1
+  > 
+  > let main = (apply_n not true 2, apply_n inc 0 2)
+  infer error: unification failed on bool and int
   [1]
 #
 

@@ -1,7 +1,6 @@
 # tests inferencer on simple type declarations
 
-# TODO: get rid of infer-parsetree target (implement cconv of constructors and pattern matching)
-  $ run () { ../../driver/driver.exe $1 --target infer-parsetree -o a.ml && cat a.ml; }
+  $ run () { ../../driver/driver.exe $1 --target typedtree --no-cconv -o a.ml && cat a.ml; }
 
   $ run << EOF
   > type 'a box = | Box of 'a

@@ -1,4 +1,4 @@
-  $ run () { ../../driver/driver.exe $1 --target infer-parsetree -o a.ml && cat a.ml; }
+  $ run () { ../../driver/driver.exe $1 --target typedtree --no-cconv -o a.ml && cat a.ml; }
 
   $ run << EOF
   > let main =

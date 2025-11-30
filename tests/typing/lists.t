@@ -1,6 +1,6 @@
 # tests inferencer on built-in type { 'a list }
 
-  $ run () { ../../driver/driver.exe $1 --target infer-parsetree -o a.ml && cat a.ml; }
+  $ run () { ../../driver/driver.exe $1 --target typedtree -o a.ml && cat a.ml; }
 
 # assert type of map is ('a -> 'b) -> 'a list -> 'b list
 # assert type of fold is ('a -> 'b -> 'a) -> 'a -> 'b list -> 'a
@@ -63,21 +63,23 @@
   >     | hd :: tl, acc -> aux tl (hd :: acc)
   >    in
   >  aux (rev xs) ys   
-  let rev: '_13 list -> '_13 list =
-    fun ls -> let rec aux : '_13 list -> '_13 list -> '_13 list = fun ls acc -> 
-    match ls with
-      | [] -> acc
-      | hd :: tl -> (aux tl) (hd :: acc) in (aux ls) []
+  let aux: '_3 list -> '_3 list -> '_3 list =
+    fun ls acc -> match ls with
+                    | [] -> acc
+                    | hd :: tl -> (aux tl) (hd :: acc)
+  let rev: '_3 list -> '_3 list =
+    fun ls -> (aux ls) []
   let rec join: '_3 list -> '_7 list -> '_3 * '_7 list =
     fun xs ys -> match (xs, ys) with
                    | ([], _) -> []
                    | (xhd :: xtl, yhd :: ytl) -> (xhd, yhd) :: ((join xtl) ytl)
                    | (_, []) -> []
-  let cat: '_15 list -> '_15 list -> '_15 list =
-    fun xs ys -> let rec aux : '_15 list -> '_15 list -> '_15 list = fun xs ys -> 
-    match (xs, ys) with
-      | ([], acc) -> acc
-      | (hd :: tl, acc) -> (aux tl) (hd :: acc) in (aux (rev xs)) ys
+  let aux: '_3 list -> '_3 list -> '_3 list =
+    fun xs ys -> match (xs, ys) with
+                   | ([], acc) -> acc
+                   | (hd :: tl, acc) -> (aux tl) (hd :: acc)
+  let cat: '_3 list -> '_3 list -> '_3 list =
+    fun xs ys -> (aux (rev xs)) ys
 
 # assert type of is_empty is 'a list -> bool
 # assert type of exists is ('a -> bool) -> 'a list -> bool
