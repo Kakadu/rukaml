@@ -476,19 +476,19 @@ let type_kind_variants =
 let type_kind_alias = ws *> core_type >>| fun core_type -> KAbstract (Some core_type)
 let type_kind = ws *> (type_kind_variants <|> type_kind_alias)
 
-let single_type_definition =
+let single_type_declaration =
   let* params = ws *> type_params in
   let* name = ws *> type_name in
   let* kind = ws *> char '=' *> ws *> type_kind in
   return { pty_params = params; pty_name = name; pty_kind = kind }
 ;;
 
-let type_definition =
+let type_declaration =
   ws
   *> string "type"
   *>
-  let* frst = ws *> single_type_definition in
-  let* rest = many (ws *> string "and" *> single_type_definition) in
+  let* frst = ws *> single_type_declaration in
+  let* rest = many (ws *> string "and" *> single_type_declaration) in
   return (frst, rest)
 ;;
 
@@ -496,7 +496,7 @@ let value_binding = letdef (pack.expr pack) <* ws
 
 let structure =
   many1
-    (value_binding >>| (fun vb -> SValue vb) <|> (type_definition >>| fun td -> SType td))
+    (value_binding >>| (fun vb -> SValue vb) <|> (type_declaration >>| fun td -> SType td))
 ;;
 
 let parse_structure str =

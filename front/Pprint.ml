@@ -240,7 +240,7 @@ let pp_type_kind ppf td =
     List.iter (fprintf ppf "%a@ " pp_case) (case :: cases)
 ;;
 
-let pp_type_definition ppf (td, tds) =
+let pp_type_declaration ppf (td, tds) =
   let aux ppf td ~keyword =
     fprintf ppf "@[<v 2>";
     fprintf ppf "%s" keyword;
@@ -257,7 +257,7 @@ let pp_type_definition ppf (td, tds) =
 
 let pp_structure_item ppf = function
   | Parsetree.SValue vb -> pp_value_binding ppf vb
-  | Parsetree.SType tds -> pp_type_definition ppf tds
+  | Parsetree.SType tds -> pp_type_declaration ppf tds
 ;;
 
 let pp_stru ppf vbs =
