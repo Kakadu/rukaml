@@ -766,23 +766,13 @@ let generate_body is_toplevel body =
          emit sd_dest (RU "a0") dest
          (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *))
     | AArray r ->
-      let length = List.length r in
-      emit addi SP SP (-8 * (length + 1));
-      let idents =
-        List.map
-          (fun x ->
-             let ident = Ident.of_string @@ Printf.sprintf "r%d" (gensym ()) in
-             Addr_of_local.extend ident;
-             ident, x)
-          r
-      in
-      let idents = List.rev idents in
-      List.iter (fun (i, x) -> helper_a (DStack_var i) x) idents;
-      emit li a0 length;
-      emit mv a1 sp;
+      emit li a0 (List.length r);
       emit call "rukaml_alloc_array";
-      List.iter (fun (i, _) -> Addr_of_local.remove_local i) idents;
-      emit addi SP SP (8 * (length + 1));
+      List.iteri
+        (fun i x ->
+           helper_a (DReg "t0") x;
+           emit sd t0 (ROffset (a0, 8 * i)))
+        r;
       emit sd_dest a0 dest
     | ATuple (_a, _b, []) ->
       failwiths "not implemented %s %d" __FILE__ __LINE__

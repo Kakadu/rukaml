@@ -327,7 +327,7 @@ void *rukaml_alloc_pair(void *l, void *r)
   return rez + 1;
 }
 
-void *rukaml_alloc_array(int64_t size, void** arr)
+void *rukaml_alloc_array(int64_t size)
 {
   if (GC.allocated_words + size + 1 > HEAP_SIZE)
   {
@@ -340,10 +340,6 @@ void *rukaml_alloc_array(int64_t size, void** arr)
   rez[0] = (uint64_t *)HEADER(size, Array_tag);
   assert(TAG(rez + 1) == Array_tag);
   assert(SIZE(rez + 1) == size);
-
-  for (unsigned int i = 1; i < size + 1; i++) {
-    rez[size - i + 1] = arr[i-1];
-  }
   logGC("An array %lX is created. Allocated words = %lu\n",
         (uint64_t)(rez + 1), GC.allocated_words);
   return rez + 1;
