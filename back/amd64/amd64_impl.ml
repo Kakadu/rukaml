@@ -270,6 +270,9 @@ let generate_body is_toplevel ppf body =
       | AVar { Ident.hum_name = "print"; _ } ->
         emit_alloc_closure ppf (Ident.of_string "rukaml_print_int") 1;
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar { Ident.hum_name = "open_in"; _ } ->
+        emit_alloc_closure ppf (Ident.of_string "rukaml_array_read_in") 1;
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar { Ident.hum_name = "length"; _ } ->
         emit_alloc_closure ppf (Ident.of_string "rukaml_array_length") 1;
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
@@ -383,7 +386,31 @@ let generate_body is_toplevel ppf body =
          printfn ppf "  mov %a, r11" pp_dest dest
        | AConst (PConst_char c) ->
          printfn ppf "  mov qword %a, %d" pp_dest dest (Char.code c)
-       | _ -> failwith "Should not happen: Char_code")
+       | _ -> failwith "Should not happen")
+    | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "open_in"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar v when Addr_of_local.has_key v ->
+         let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+         let name2 = Ident.of_string @@ gen_name ~prefix:"open_in arg" () in
+         Addr_of_local.extend name1;
+         Addr_of_local.extend name2;
+         printfn ppf "  add rsp, -8*2";
+         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+         printfn ppf "  mov qword [rsp], r11";
+         printfn ppf "  call rukaml_array_read_in";
+         printfn ppf "  mov %a, rax" pp_dest dest;
+         printfn ppf "  add rsp, 8*2";
+         Addr_of_local.remove_local name2;
+         Addr_of_local.remove_local name1
+       | AArray _ ->
+         helper_a (DReg "r11") arg1;
+         printfn ppf "  mov qword [rsp], r11";
+         printfn ppf "  call rukaml_array_read_in";
+         printfn ppf "  mov %a, rax" pp_dest dest
+       | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
       when f.Ident.hum_name = "print"
            && is_toplevel f = None
@@ -740,6 +767,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
       ; "rukaml_array_length"
       ; "rukaml_array_get"
       ; "rukaml_array_set"
+      ; "rukaml_array_read_in"
       ; "rukaml_initialize"
       ; "rukaml_gc_compact"
       ; "rukaml_gc_print_stats"

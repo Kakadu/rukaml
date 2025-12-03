@@ -229,6 +229,26 @@ uint64_t rukaml_array_length(int a0, int a1, int a2, int a3, int a4, int a5, voi
   return SIZE(arr);
 }
 
+void **rukaml_array_read_in(int a0, int a1, int a2, int a3, int a4, int a5,
+                            void **str) {
+
+  FILE *fp = fopen((char *)str, "r");
+  if (!fp) {
+    return rukaml_alloc_array(0);
+  }
+  fseek(fp, 0, SEEK_END);
+  size_t size = ftell(fp);
+  fseek(fp, 0, SEEK_SET);
+  void **arr = rukaml_alloc_array(size);
+  for (int i = 0; i < size; i++) {
+    int c = fgetc(fp);
+    arr[i] = (void *)(c);
+  }
+  fread(arr, sizeof(void *), size, fp);
+  fclose(fp);
+  return arr;
+}
+
 void *rukaml_array_get(int a0, int a1, int a2, int a3, int a4, int a5,
                            void **arr, uint64_t n)
 {
