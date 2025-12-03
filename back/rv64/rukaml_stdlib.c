@@ -308,6 +308,10 @@ rukaml_closure *copy_closure(rukaml_closure *src)
   return memcpy(dst, src, size);
 }
 
+void *rukaml_identity(void *x) {
+  return x;
+}
+
 void *rukaml_alloc_pair(void *l, void *r)
 {
   if (GC.allocated_words + 3 > HEAP_SIZE)

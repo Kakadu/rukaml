@@ -12,6 +12,7 @@ type rec_flag =
 
 type const =
   | PConst_int of int
+  | PConst_char of char
   (* | PConst_string of string *)
   | PConst_bool of bool
 [@@deriving show { with_path = false }]
@@ -35,6 +36,7 @@ and 'a list1 = 'a * 'a list [@@deriving show { with_path = false }]
 let evar s = EVar s
 let pvar s = PVar s
 let const_int n = PConst_int n
+let const_char c = PConst_char c
 let const_bool b = PConst_bool b
 let eunit = EUnit
 let econst n = EConst n

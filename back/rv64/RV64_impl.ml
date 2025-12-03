@@ -361,12 +361,17 @@ let generate_body is_toplevel body =
       | Compile_lib.ANF.AUnit | AConst (PConst_bool false) -> pp_access 0 i
       | AConst (PConst_bool true) -> pp_access 1 i
       | AConst (PConst_int n) -> pp_access ~doc:"constant" n i
+      | AConst (PConst_char c) -> pp_access ~doc:"constant" (Char.code c) i
       | AVar vname when Option.is_some (is_toplevel vname) ->
         (match is_toplevel vname with
          | Some arity ->
            emit_alloc_closure vname.hum_name arity;
            emit sd a0 (ROffset (SP, 8 * i))
          | None -> assert false)
+      | AVar { Ident.hum_name = "char_code"; _ } ->
+        emit_alloc_closure "rukaml_identity" 1;
+        (* Result is in a0 *)
+        emit sd a0 (ROffset (SP, 8 * i))
       | AVar { Ident.hum_name = "print"; _ } ->
         emit_alloc_closure "rukaml_print_int" 1;
         (* Result is in a0 *)
@@ -449,6 +454,18 @@ let generate_body is_toplevel body =
       helper dest bthen;
       emit label lab_fin
     | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "char_code"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar v when Addr_of_local.has_key v ->
+         emit ld t0 (pp_to_mach v);
+         emit sd_dest t0 dest
+       | AConst (PConst_char c) ->
+         emit li t0 (Char.code c);
+         emit sd_dest t0 dest
+       | _ -> failwith "Should not happen: char_code")
+    | CApp (AVar f, arg1, [])
       when f.Ident.hum_name = "print"
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
@@ -481,10 +498,11 @@ let generate_body is_toplevel body =
            emit sd_dest a0 dest;
            emit addi SP SP 16)
        | AConst (PConst_bool _)
+       | AConst (PConst_char _)
        | AArray _ | AVar _ | APrimitive _
        | ATuple (_, _, _)
        | ALam (_, _)
-       | AUnit -> failwith "Should not happen")
+       | AUnit -> failwith "Should not happen: print_int")
     | CApp (AVar f, arg1, [])
       when f.Ident.hum_name = "length"
            && is_toplevel f = None
@@ -747,6 +765,13 @@ let generate_body is_toplevel body =
          (* printfn ppf "  li t0, %d" n; *)
          emit sd_dest t0 dest
          (* printfn ppf "  sd t0, %a" Addr_of_local.pp_dest dest *))
+    | AConst (Parsetree.PConst_char c) ->
+      let n = Char.code c in
+      (match dest with
+       | DReg r -> emit li (RU r) n
+       | DStack_var _ ->
+         emit li t0 n;
+         emit sd_dest t0 dest)
     | AVar vname ->
       (match is_toplevel vname with
        | None ->
@@ -772,7 +797,7 @@ let generate_body is_toplevel body =
         (fun i x ->
            helper_a (DReg "t0") x;
            emit sd t0 (ROffset (a0, 8 * i)))
-        r;
+        (List.rev r);
       emit sd_dest a0 dest
     | ATuple (_a, _b, []) ->
       failwiths "not implemented %s %d" __FILE__ __LINE__
@@ -876,6 +901,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
         (printfn ppf "extern %s")
         [ "rukaml_alloc_closure"
         ; "rukaml_print_int"
+        ; "rukaml_identity"
         ; "rukaml_alloc_array"
         ; "rukaml_array_length"
         ; "rukaml_array_get"

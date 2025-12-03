@@ -73,6 +73,14 @@ let number =
   scan_state h (fun st c -> if is_digit c then Some ((10 * st) + to_digit c) else None)
 ;;
 
+let distinguished_char =
+  trace_pos "distinguished_char" *> char '\'' *> any_char
+  <* char '\''
+  >>= function
+  | a when 0 <= Char.code a && Char.code a <= 127 -> return a
+  | _ -> fail "distinguished_char"
+;;
+
 let is_char_valid_for_name = function
   | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '\'' | '_' -> true
   | _ -> false
@@ -283,6 +291,7 @@ let pack : dispatch =
       ws
       *> (fail ""
           <|> ws *> (number >>| fun n -> econst (const_int n))
+          <|> ws *> (distinguished_char >>| fun c -> econst (const_char c))
           <|> ws *> char '(' *> char ')' *> return eunit
           <|> ws *> char '[' *> char ']' *> return enil
           <|> (ws *> var_name

@@ -2,6 +2,7 @@
 
 type const =
   | PConst_int of int
+  | PConst_char of char
   (* | PConst_string of string *)
   | PConst_bool of bool
 [@@deriving show { with_path = false }]
@@ -69,6 +70,7 @@ type structure = structure_item list [@@deriving show { with_path = false }]
 
 val show_structure : structure -> string
 val const_int : int -> const
+val const_char : char -> const
 val const_bool : bool -> const
 
 (* val pp_value_binding : Format.formatter -> value_binding -> unit *)

@@ -260,6 +260,7 @@ let generate_body is_toplevel ppf body =
       | Compile_lib.ANF.AUnit | AConst (PConst_bool false) -> pp_access 0
       | AConst (PConst_bool true) -> pp_access 1
       | AConst (PConst_int n) -> pp_access ~doc:"constant" n
+      | AConst (PConst_char c) -> pp_access ~doc:"constant" (Char.code c)
       | AVar vname when Option.is_some (is_toplevel vname) ->
         (match is_toplevel vname with
          | Some arity ->
@@ -373,6 +374,17 @@ let generate_body is_toplevel ppf body =
          printfn ppf "  mov %a, rax" pp_dest dest
        | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "char_code"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar v when Addr_of_local.has_key v ->
+         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+         printfn ppf "  mov %a, r11" pp_dest dest
+       | AConst (PConst_char c) ->
+         printfn ppf "  mov qword %a, %d" pp_dest dest (Char.code c)
+       | _ -> failwith "Should not happen: Char_code")
+    | CApp (AVar f, arg1, [])
       when f.Ident.hum_name = "print"
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
@@ -403,6 +415,7 @@ let generate_body is_toplevel ppf body =
          Addr_of_local.remove_local name1;
          printfn ppf "  mov %a, rax" pp_dest dest
        | AConst (PConst_bool _)
+       | AConst (PConst_char _)
        | AVar _ | APrimitive _
        | ATuple (_, _, _)
        | AArray _
@@ -592,6 +605,8 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov qword %a, 0" pp_dest dest
     | AConst (Frontend.Parsetree.PConst_int n) ->
       printfn ppf "  mov qword %a,  %d" pp_dest dest n
+    | AConst (Frontend.Parsetree.PConst_char c) ->
+      printfn ppf "  mov qword %a,  %d" pp_dest dest (Char.code c)
     | AVar ({ Ident.hum_name = "print"; _ } as v) when None = is_toplevel v ->
       alloc_closure ppf (Ident.of_string "rukaml_print_int") 1;
       printfn ppf "  mov %a, rax" pp_dest dest
@@ -620,14 +635,13 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov %a, rax" pp_dest dest
     | AUnit -> printfn ppf "mov qword %a, 0" pp_dest dest
     | AArray r ->
-      let length = List.length r in
-      printfn ppf "  mov rdi, %d" length;
+      printfn ppf "  mov rdi, %d" (List.length r);
       printfn ppf "  call rukaml_alloc_array";
       List.iteri
         (fun i x ->
            helper_a (DReg "rdi") x;
            printfn ppf "  mov [rax+8*%d], rdi" i)
-        r;
+        (List.rev r);
       printfn ppf "  mov %a, rax" pp_dest dest
     | atom ->
       printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;

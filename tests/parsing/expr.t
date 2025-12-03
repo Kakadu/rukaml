@@ -54,6 +54,12 @@ tuples
   > EOF
   Parsed: ((1, 2, 3) + (4, 5))
 
+chars
+  $ cat << EOF | ./run.exe -prio -
+  > (fun x -> 'a') 'x'
+  > EOF
+  Parsed: ((fun x -> 'a') 'x')
+
 value binding
   $ cat << EOF | ./run.exe -vb  -
   > let main = 9

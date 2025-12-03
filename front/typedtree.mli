@@ -49,6 +49,7 @@ val tv : binder -> level:int -> ty
 val tlink : ty -> ty
 val tprod : ty -> ty -> ty list -> ty
 val int_typ : ty
+val char_typ : ty
 val bool_typ : ty
 val unit_typ : ty
 val array_typ : ty -> ty
