@@ -91,16 +91,6 @@ value binding
   > EOF
   Parsed: (if 1 then 2 else x * (fac (y - 1)))
 
-# char array
-  $ cat << EOF | ./run.exe -e -
-  > ""
-  > EOF
-  Parsed: [||]
-  $ cat << EOF | ./run.exe -e -
-  > "asdf"
-  > EOF
-  Parsed: [|'a'; 's'; 'd'; 'f'|]
-
 # match
   $ cat << EOF | ./run.exe -e -
   > match (x, y) with

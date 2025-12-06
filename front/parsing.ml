@@ -326,7 +326,16 @@ let pack : dispatch =
                  <*> (d.expr d <* ws)
                  <*> (char ',' *> d.expr d <* ws)
                  <*> many (char ',' *> d.expr d <* ws))
-          <|> (ws *> var_name >>| evar)
+          <|> (ws *> var_name
+               >>= fun v ->
+               char '.' *> char '(' *> number
+               <* char ')'
+               >>= (fun i ->
+               string " <- " *> d.expr d
+               >>= (fun e ->
+               return @@ eapp (evar "set") [ evar v; econst (const_int i); e ])
+               <|> return @@ eapp (evar "get") [ evar v; econst (const_int i) ])
+               <|> return (evar v))
           <|> (let* name = ws *> constructor_name in
                (let* patt = ws *> d.expr_basic d in
                 return (EConstruct (name, Some patt)))
