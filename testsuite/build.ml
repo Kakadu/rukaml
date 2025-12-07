@@ -103,13 +103,18 @@ module Target = struct
   (mode (promote (until-clean) (into cram)))
   (alias cram)
   (action (with-stdout-to %s
-    (echo "  $ %s %s%s\n%s"))))
+    (echo "%s  $ %s %s%s\n%s"))))
 |}
   ;;
 
   (** Run (or rather generate cram test to run) executable
-      with expected stdout and exit code *)
-  let run tgt (input : [ `Link ] art_located) ~(stdout : string list) ~(exit : int)
+      with expected stdout, pre-run shell commands and exit code *)
+  let run
+        tgt
+        (input : [ `Link ] art_located)
+        ~(stdout : string list)
+        ~(exit : int)
+        ~(sh : string list)
     : [ `Run ] art option
     =
     let* cmd = tgt.run_cmd in
@@ -117,7 +122,8 @@ module Target = struct
     let input = Path.append_part input.dir input.art.name in
     let stdout = List.map stdout ~f:(( ^ ) "\n  ") |> String.concat in
     let exit = if exit = 0 then "" else spf "  [%d]\n" exit in
-    let rule = spf run_rule name cmd (Path.to_string input) stdout exit in
+    let sh = List.map sh ~f:(spf "  $ %s\n") |> String.concat in
+    let rule = spf run_rule name sh cmd (Path.to_string input) stdout exit in
     return { name; rule }
   ;;
 end
@@ -211,6 +217,7 @@ module TestSpec = struct
   type run =
     { exit : int
     ; stdout : string list
+    ; sh : string list
     }
 
   type t =
@@ -236,7 +243,7 @@ module TestSpec = struct
     choice [ pdefault; list ppromoted ]
   ;;
 
-  (** run (exit ..) (stdout ..) *)
+  (** run (exit ..) (stdout ..) (sh ..) *)
   let prun =
     let pexit =
       string "exit" *> atom
@@ -246,11 +253,13 @@ module TestSpec = struct
       | None -> fail "invalid code"
     in
     let pstdout = string "stdout" *> many atom in
+    let psh = string "sh" *> many atom in
 
     let* () = string "run" in
     let* exit = option 0 (list pexit) in
     let* stdout = option [] (list pstdout) in
-    return { exit; stdout }
+    let* sh = option [] (list psh) in
+    return { exit; stdout; sh }
   ;;
 
   let pspec =
@@ -395,6 +404,7 @@ module Test = struct
           { dir = Path.dot_dot; art = linked }
           ~exit:spec.exit
           ~stdout:spec.stdout
+          ~sh:spec.sh
         >>= fun art ->
         let cram_rule =
           spf
