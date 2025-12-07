@@ -1,0 +1,10 @@
+(*
+test
+  (targets (amd64 promote) )
+  (run (sh "echo test > foo"))
+*)
+
+let main =
+  let r = "foo" in
+  let file = open_in r in
+  print (length file)

@@ -231,8 +231,14 @@ uint64_t rukaml_array_length(int a0, int a1, int a2, int a3, int a4, int a5, voi
 
 void **rukaml_array_read_in(int a0, int a1, int a2, int a3, int a4, int a5,
                             void **str) {
-
-  FILE *fp = fopen((char *)str, "r");
+  int len = 0;
+  while (str[len++] != 0)
+    ;
+  char path[len];
+  for (int i = 0; i < len; i++) {
+    path[i] = (char)str[i];
+  }
+  FILE *fp = fopen(path, "r");
   if (!fp) {
     return rukaml_alloc_array(0);
   }
@@ -242,7 +248,7 @@ void **rukaml_array_read_in(int a0, int a1, int a2, int a3, int a4, int a5,
   void **arr = rukaml_alloc_array(size);
   for (int i = 0; i < size; i++) {
     int c = fgetc(fp);
-    arr[i] = (void *)(c);
+    arr[i] = (void *) (c);
   }
   fread(arr, sizeof(void *), size, fp);
   fclose(fp);
