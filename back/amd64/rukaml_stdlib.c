@@ -40,6 +40,8 @@ static uint64_t log_level = 0;
 #define MAKE_GRAY(ptr) (*ptr = (*ptr | (0b01 << 8)))
 #define MAKE_BLACK(ptr) (*ptr = (*ptr | (0b11 << 8)))
 
+#define MAX_STRING_FROM_STDIN (2 << 15)
+
 int HEAP_SIZE = 160;
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
@@ -229,6 +231,21 @@ uint64_t rukaml_array_length(int a0, int a1, int a2, int a3, int a4, int a5, voi
   return SIZE(arr);
 }
 
+void **rukaml_array_stdin(void) {
+  char buf[MAX_STRING_FROM_STDIN];
+  int code = scanf("%s", buf);
+  if (!code) {
+    return rukaml_alloc_array(0);
+  }
+  size_t size = strlen(buf);
+  void **arr = rukaml_alloc_array(size);
+  
+  for (int i = 0; i < size; i++) {
+    arr[i] = (void *) (buf[i]);
+  }
+  return arr;
+}
+
 void **rukaml_array_read_in(int a0, int a1, int a2, int a3, int a4, int a5,
                             void **str) {
   int len = 0;
@@ -238,14 +255,18 @@ void **rukaml_array_read_in(int a0, int a1, int a2, int a3, int a4, int a5,
   for (int i = 0; i < len; i++) {
     path[i] = (char)str[i];
   }
+  
   FILE *fp = fopen(path, "r");
   if (!fp) {
     return rukaml_alloc_array(0);
   }
+  
   fseek(fp, 0, SEEK_END);
   size_t size = ftell(fp);
   fseek(fp, 0, SEEK_SET);
+
   void **arr = rukaml_alloc_array(size);
+  
   for (int i = 0; i < size; i++) {
     int c = fgetc(fp);
     arr[i] = (void *) (c);

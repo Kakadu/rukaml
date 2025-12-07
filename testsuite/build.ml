@@ -103,7 +103,7 @@ module Target = struct
   (mode (promote (until-clean) (into cram)))
   (alias cram)
   (action (with-stdout-to %s
-    (echo "%s  $ %s %s%s\n%s"))))
+    (echo "%s  $ %s%s %s%s\n%s"))))
 |}
   ;;
 
@@ -115,6 +115,7 @@ module Target = struct
         ~(stdout : string list)
         ~(exit : int)
         ~(sh : string list)
+        ~(stdin : string list)
     : [ `Run ] art option
     =
     let* cmd = tgt.run_cmd in
@@ -123,7 +124,12 @@ module Target = struct
     let stdout = List.map stdout ~f:(( ^ ) "\n  ") |> String.concat in
     let exit = if exit = 0 then "" else spf "  [%d]\n" exit in
     let sh = List.map sh ~f:(spf "  $ %s\n") |> String.concat in
-    let rule = spf run_rule name sh cmd (Path.to_string input) stdout exit in
+    let stdin =
+      match stdin with
+      | [] -> ""
+      | h :: tl -> "echo " ^ List.fold_left tl ~f:( ^ ) ~init:h ^ " | "
+    in
+    let rule = spf run_rule name sh stdin cmd (Path.to_string input) stdout exit in
     return { name; rule }
   ;;
 end
@@ -218,6 +224,7 @@ module TestSpec = struct
     { exit : int
     ; stdout : string list
     ; sh : string list
+    ; stdin : string list
     }
 
   type t =
@@ -253,13 +260,15 @@ module TestSpec = struct
       | None -> fail "invalid code"
     in
     let pstdout = string "stdout" *> many atom in
+    let pstdin = string "stdin" *> many atom in
     let psh = string "sh" *> many atom in
 
     let* () = string "run" in
     let* exit = option 0 (list pexit) in
     let* stdout = option [] (list pstdout) in
+    let* stdin = option [] (list pstdin) in
     let* sh = option [] (list psh) in
-    return { exit; stdout; sh }
+    return { exit; stdout; sh; stdin }
   ;;
 
   let pspec =
@@ -405,6 +414,7 @@ module Test = struct
           ~exit:spec.exit
           ~stdout:spec.stdout
           ~sh:spec.sh
+          ~stdin:spec.stdin
         >>= fun art ->
         let cram_rule =
           spf

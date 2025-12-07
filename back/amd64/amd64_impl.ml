@@ -282,6 +282,9 @@ let generate_body is_toplevel ppf body =
       | AVar { Ident.hum_name = "set"; _ } ->
         emit_alloc_closure ppf (Ident.of_string "rukaml_array_set") 3;
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar { Ident.hum_name = "stdin"; _ } ->
+        printfn ppf "  call rukaml_array_stdin";
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar vname ->
         printfn
           ppf
@@ -325,6 +328,12 @@ let generate_body is_toplevel ppf body =
       printfn ppf "%s:" el_lab;
       helper dest bel;
       printfn ppf "%s:" fin_lab
+    | CAtom (AVar f)
+      when f.Ident.hum_name = "stdin"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      printfn ppf "  call rukaml_array_stdin";
+      printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (AVar f, arg, [])
       when f.Ident.hum_name = "length"
            && is_toplevel f = None
@@ -764,6 +773,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
       ; (* printfn ppf "extern rukaml_alloc_tuple"; *)
         "rukaml_alloc_pair"
       ; "rukaml_alloc_array"
+      ; "rukaml_array_stdin"
       ; "rukaml_array_length"
       ; "rukaml_array_get"
       ; "rukaml_array_set"

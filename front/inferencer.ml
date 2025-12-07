@@ -715,6 +715,7 @@ let start_env =
   Type_env.empty
   |> extend_s "print" (Scheme.make_mono (tarrow int_typ unit_typ))
   |> extend_s "char_code" (Scheme.make_mono (tarrow char_typ int_typ))
+  |> extend_s "stdin" (Scheme.make_mono (array_typ char_typ))
   |> extend_s
        "open_in"
        (Scheme.make_mono (tarrow (array_typ char_typ) (array_typ char_typ)))

@@ -13,6 +13,7 @@ void rukaml_print_alloc_closure_count (void);
 
 void rukaml_print_int(int, int, int, int, int, int, int x);
 uint64_t rukaml_array_length(int, int, int, int, int, int, void **arr);
+void **rukaml_array_stdin(void);
 void *rukaml_array_get(int, int, int, int, int, int, void **arr,
                            uint64_t n);
 void rukaml_array_set(int, int, int, int, int, int, void **arr, uint64_t n,
