@@ -388,6 +388,8 @@ let generate_body is_toplevel body =
         emit_alloc_closure "rukaml_array_set" 3;
         (* Result is in a0 *)
         emit sd a0 (ROffset (SP, 8 * i))
+      | AVar { Ident.hum_name = "stdin"; _ } -> emit call "rukaml_array_stdin"
+      (* Result is in a0 *)
       | AVar vname ->
         (* TODO: use pp_access *)
         emit ld t0 (pp_to_mach vname) ~comm:(sprintf "arg %S" vname.hum_name);
@@ -465,6 +467,38 @@ let generate_body is_toplevel body =
          emit li t0 (Char.code c);
          emit sd_dest t0 dest
        | _ -> failwith "Should not happen: char_code")
+    | CAtom (AVar f)
+      when f.Ident.hum_name = "stdin"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      emit call "rukaml_array_stdin";
+      emit sd_dest a0 dest
+    | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "open_in"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar v when Addr_of_local.has_key v ->
+         with_two_slots (fun ra_name arg_name ->
+           emit addi SP SP (-16);
+           emit sd ra (pp_to_mach ra_name);
+           emit ld t0 (pp_to_mach v);
+           emit mv (pp_to_mach arg_name) t0;
+           emit call "rukaml_array_read_in";
+           emit ld ra (pp_to_mach ra_name);
+           emit sd_dest a0 dest;
+           emit addi SP SP 16)
+       | AArray _ as r ->
+         with_two_slots (fun ra_name arg_name ->
+           emit addi SP SP (-16);
+           emit sd ra (pp_to_mach ra_name);
+           emit sd a0 (pp_to_mach arg_name);
+           helper_a (DReg "a0") r;
+           emit call "rukaml_array_read_in";
+           emit ld ra (pp_to_mach ra_name);
+           emit sd_dest a0 dest;
+           emit addi SP SP 16)
+       | _ -> failwith "Should not happen: open_in")
     | CApp (AVar f, arg1, [])
       when f.Ident.hum_name = "print"
            && is_toplevel f = None
@@ -906,6 +940,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
         ; "rukaml_array_length"
         ; "rukaml_array_get"
         ; "rukaml_array_set"
+        ; "rukaml_array_stdin"
+        ; "rukaml_array_read_in"
         ; "rukaml_applyN"
         ; "rukaml_field"
         ; (* printfn ppf "extern rukaml_alloc_tuple"; *)
