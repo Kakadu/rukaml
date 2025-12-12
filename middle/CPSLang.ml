@@ -279,6 +279,7 @@ struct
   and no_pars ppf = pp_triv ~ps:false ppf
 
   and maybe_pars ppf = pp_triv ~ps:true ppf
+  let pp_stru ppf xs = fprintf ppf "@[<v>%a@]" (pp_print_list pp_vb) xs
 end
 
 (* single-arg CPS language *)
