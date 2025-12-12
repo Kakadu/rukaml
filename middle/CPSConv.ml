@@ -362,9 +362,18 @@ let of_vb ds_ref_once ds_no_refs glob_env =
     | AVar v when String.equal v.hum_name "print" -> primop v a [] c counts
     | AVar v when String.equal v.hum_name "closure_count" -> primop v a [] c counts
     | AVar _ | AConst _ | AUnit | ASafeBinop _ | ATuple _ ->
-      let* func, arg, counts2 = blessa2 f a counts in
-      let+ cont, counts3 = blessc c counts2 in
-      Call (func, arg, cont), counts3
+      (match a with
+       | AVar v when String.equal v.hum_name "print" ->
+         let x = gensym ~prefix:"x" () |> of_string in
+         let k = gensym ~prefix:"k" () |> of_string in
+         let* func, counts2 = blessa f counts in
+         let* cont, counts3 = blessc c counts2 in
+         let+ b = primop v (AVar x) [] (KVar k) counts in
+         Call (func, Lam (CPVar x, k, fst b), cont), counts3
+       | _ ->
+         let* func, arg, counts2 = blessa2 f a counts in
+         let+ cont, counts3 = blessc c counts2 in
+         Call (func, arg, cont), counts3)
     | AClo (y, body, env) ->
       bnd cps y a body env c (fun x arg b -> Ret (Cont (x, b), arg)) counts
   and cif a e1 e2 c env counts =
@@ -823,17 +832,17 @@ let main =
       revapply
         21
         (fun t5 -> t5
-                     print
-                     (fun t6 -> let z1 = t6 in apply
-                                                 print
-                                                 (fun t7 -> t7
-                                                              22
-                                                              (fun t8 ->
-                                                                        let z2 =
-                                                                        t8
-                                                                        in
-                                                                        (fun x -> x) 0)
-                                                           )
+                     (fun x6 k7 -> let x14 = print x6 in k7 x14)
+                     (fun t8 -> let z1 = t8 in apply
+                                                 (fun x9 k10 ->
+                                                   let x13 = print x9 in
+                                                   k10 x13)
+                                                 (fun t11 -> t11
+                                                               22
+                                                               (fun t12 ->
+                                                                let z2 = t12 in
+                                                                (fun x -> x) 0)
+                                                            )
                                                )
                   )
     |}]
