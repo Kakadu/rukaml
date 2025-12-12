@@ -8,7 +8,5 @@ Discovered by @ns-58
   >  let f z u = k1 (k2 (z+u)) in
   >  f 1 2
   > EOF
-  let f k2 k1 z u = k1 (k2 (z + u))
-  let k2 x = x
-  let k1 x = x
+  let f k2 k1 z u = k1 (k2 (z + u)) let k2 x = x let k1 x = x
   let main = f k2 k1 1 2

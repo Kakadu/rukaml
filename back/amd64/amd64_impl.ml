@@ -269,6 +269,15 @@ let generate_body is_toplevel ppf body =
       | AVar { Ident.hum_name = "print"; _ } ->
         emit_alloc_closure ppf (Ident.of_string "rukaml_print_int") 1;
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar { Ident.hum_name = "length"; _ } ->
+        emit_alloc_closure ppf (Ident.of_string "rukaml_array_length") 1;
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar { Ident.hum_name = "get"; _ } ->
+        emit_alloc_closure ppf (Ident.of_string "rukaml_array_get") 2;
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar { Ident.hum_name = "set"; _ } ->
+        emit_alloc_closure ppf (Ident.of_string "rukaml_array_set") 3;
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar vname ->
         printfn
           ppf
@@ -280,7 +289,8 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  mov qword [rsp%+d*8], r8" (count - 1 - i)
       | ALam _ -> failwith "Should it be representable in ANF?"
       | APrimitive _ -> assert false
-      | ATuple _ -> assert false);
+      | ATuple _ -> assert false
+      | AArray _ -> assert false);
     count + _stack_padding
   in
   let rec helper dest = function
@@ -311,6 +321,57 @@ let generate_body is_toplevel ppf body =
       printfn ppf "%s:" el_lab;
       helper dest bel;
       printfn ppf "%s:" fin_lab
+    | CApp (AVar f, arg, [])
+      when f.Ident.hum_name = "length"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg with
+       | AVar v when Addr_of_local.has_key v ->
+         let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+         let name2 = Ident.of_string @@ gen_name ~prefix:"array" () in
+         Addr_of_local.extend name1;
+         Addr_of_local.extend name2;
+         printfn ppf "  add rsp, -8*2";
+         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+         printfn ppf "  mov qword [rsp], r11";
+         printfn ppf "  call rukaml_array_length";
+         printfn ppf "  mov %a, rax" pp_dest dest;
+         printfn ppf "  add rsp, 8*2";
+         Addr_of_local.remove_local name2;
+         Addr_of_local.remove_local name1
+       | _ -> failwith "Should not happen")
+    | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "get"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar arr when Addr_of_local.has_key arr ->
+         printfn ppf "  mov rdi, rukaml_array_get";
+         printfn ppf "  mov rsi, 2";
+         printfn ppf "  call rukaml_alloc_closure";
+         printfn ppf "  mov rdi, rax";
+         printfn ppf "  mov rsi, 1";
+         printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arr;
+         printfn ppf "  mov al, 0";
+         printfn ppf "  call rukaml_applyN";
+         printfn ppf "  mov %a, rax" pp_dest dest
+       | _ -> failwith "Should not happen")
+    | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "set"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar arr when Addr_of_local.has_key arr ->
+         printfn ppf "  mov rdi, rukaml_array_set";
+         printfn ppf "  mov rsi, 3";
+         printfn ppf "  call rukaml_alloc_closure";
+         printfn ppf "  mov rdi, rax";
+         printfn ppf "  mov rsi, 1";
+         printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arr;
+         printfn ppf "  mov al, 0";
+         printfn ppf "  call rukaml_applyN";
+         printfn ppf "  mov %a, rax" pp_dest dest
+       | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
       when f.Ident.hum_name = "print"
            && is_toplevel f = None
@@ -344,6 +405,7 @@ let generate_body is_toplevel ppf body =
        | AConst (PConst_bool _)
        | AVar _ | APrimitive _
        | ATuple (_, _, _)
+       | AArray _
        | ALam (_, _)
        | AUnit -> failwith "Should not happen")
     | CApp (APrimitive "=", AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
@@ -557,6 +619,29 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  call rukaml_alloc_pair";
       printfn ppf "  mov %a, rax" pp_dest dest
     | AUnit -> printfn ppf "mov qword %a, 0" pp_dest dest
+    | AArray r ->
+      let length = List.length r in
+      printfn ppf "  mov rdi, %d" length;
+      printfn ppf "  sub rsp, 8*%d ; allocate space on stack for array elements" length;
+      (* List.iteri (fun i rname -> *)
+      (*   printfn ppf "  mov %s, [rsp+8*%d]" rname (formal_arity - i - 1)); *)
+      let idents =
+        List.mapi
+          (fun i rname ->
+             let name =
+               Ident.of_string @@ gen_name ~prefix:("element" ^ string_of_int i) ()
+             in
+             Addr_of_local.extend name;
+             helper_a (DStack_var name) rname;
+             (* printfn ppf "  mov qword [rsp+8*%d], %a" i Compile_lib.ANF.pp_a rname; *)
+             name)
+          r
+      in
+      printfn ppf "  mov rsi, rsp";
+      printfn ppf "  call rukaml_alloc_array";
+      List.iter Addr_of_local.remove_local (List.rev idents);
+      printfn ppf "  add rsp, 8*%d ; free space for array elements" length;
+      printfn ppf "  mov %a, rax" pp_dest dest
     | atom ->
       printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
       printfn ppf ";;; @[`%a`@]" ANF.pp_a atom
@@ -650,6 +735,10 @@ let codegen ?(wrap_main_into_start = true) anf file =
       ; "rukaml_field"
       ; (* printfn ppf "extern rukaml_alloc_tuple"; *)
         "rukaml_alloc_pair"
+      ; "rukaml_alloc_array"
+      ; "rukaml_array_length"
+      ; "rukaml_array_get"
+      ; "rukaml_array_set"
       ; "rukaml_initialize"
       ; "rukaml_gc_compact"
       ; "rukaml_gc_print_stats"

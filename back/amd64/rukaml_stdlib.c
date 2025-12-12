@@ -42,6 +42,7 @@ static uint64_t log_level = 0;
 
 int HEAP_SIZE = 160;
 const uint8_t Tuple_tag = 0;
+const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
 
 struct gc_stats
@@ -223,6 +224,36 @@ void rukaml_print_int(int a0, int a1, int a2, int a3, int a4, int a5, int x)
   fflush(stdout);
 }
 
+uint64_t rukaml_array_length(int a0, int a1, int a2, int a3, int a4, int a5, void **arr)
+{
+  return SIZE(arr);
+}
+
+void *rukaml_array_get(int a0, int a1, int a2, int a3, int a4, int a5,
+                           void **arr, uint64_t n)
+{
+  assert(TAG(arr) == Array_tag);
+  if (n >= SIZE(arr))
+  {
+    fprintf(stderr, "Index out of bounds");
+    exit(1);
+  }
+  return arr[n];
+}
+
+void rukaml_array_set(int a0, int a1, int a2, int a3, int a4, int a5,
+                      void **arr, uint64_t n, void *a)
+{
+  assert(TAG(arr) == Array_tag);
+  if (n >= SIZE(arr))
+  {
+    fprintf(stderr, "Index out of bounds");
+    exit(1);
+  }
+  arr[n] = a;
+  return;
+}
+
 void *rukaml_apply0(fun0 f)
 {
   // TODO: I'm not sure that zero-argument call is needed
@@ -299,6 +330,26 @@ void *rukaml_alloc_pair(void *l, void *r)
   (rez)[1] = l;
   (rez)[2] = r;
   logGC("A pair %lX created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
+  return rez + 1;
+}
+
+void *rukaml_alloc_array(int32_t size, void** arr)
+{
+  if (GC.allocated_words + size + 1 > HEAP_SIZE)
+  {
+    fprintf(stderr, "Not enough memory\n");
+    exit(1);
+  }
+  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
+  GC.allocated_words += size + 1;
+  GC.stats.gs_allocated_words += size + 1;
+  rez[0] = (uint64_t *)HEADER(size, Array_tag);
+  assert(TAG(rez + 1) == Array_tag);
+  assert(SIZE(rez + 1) == size);
+  for (unsigned int i = 1; i < size + 1; i++) {
+    rez[size - i + 1] = arr[i-1];
+  }
+  logGC("An array %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
   return rez + 1;
 }
 

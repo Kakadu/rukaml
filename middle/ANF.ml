@@ -27,6 +27,7 @@ type imm_expr =
   | AVar of Ident.t
   | APrimitive of string
   | ATuple of imm_expr * imm_expr * imm_expr list
+  | AArray of imm_expr list
   | ALam of apat * expr
 
 and c_expr =
@@ -149,6 +150,7 @@ include struct
     | APrimitive s -> fprintf ppf "%s" s
     | AVar s -> Ident.pp ppf s
     | ATuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
+    | AArray xs -> fprintf ppf "@[[|%a|]@]" (pp_comma_list helper_a) xs
     | AUnit -> fprintf ppf "()"
   ;;
 
@@ -198,6 +200,7 @@ let used_once_as_function ~where name =
     | AVar id when Ident.equal id name -> incr used
     | APrimitive _ | AUnit | AConst _ | AVar _ -> ()
     | ALam (_, e) -> helper e
+    | AArray xs -> List.iter helper_i xs
     | ATuple (a, b, cs) ->
       helper_i a;
       helper_i b;
@@ -236,6 +239,7 @@ let used_once_in_if ~where name =
     | AVar id when Ident.equal id name -> incr used
     | APrimitive _ | AUnit | AConst _ | AVar _ -> ()
     | ALam (_, e) -> helper e
+    | AArray xs -> List.iter helper_i xs
     | ATuple (a, b, cs) ->
       helper_i a;
       helper_i b;
@@ -618,6 +622,14 @@ let anf =
         helper eb (fun bimm ->
           let name = gensym_id () in
           make_let_nonrec name (CAtom (ATuple (aimm, bimm, []))) (k (AVar name))))
+    | TArray (xs, _) ->
+      let name = gensym_id () in
+      let rec helper_fold xs ys =
+        match xs with
+        | h :: tl -> helper h (fun x -> helper_fold tl (x :: ys))
+        | [] -> make_let_nonrec name (CAtom (AArray ys)) (k (AVar name))
+      in
+      helper_fold xs []
     | TTuple (_, _, _ :: _, _) as m ->
       Format.eprintf "%a\n%!" Typedtree.pp_expr m;
       Format.kasprintf
@@ -648,8 +660,8 @@ let test_anf ?(print_before = false) text =
   let ( let* ) x f = Result.bind x f in
   match
     let stru = Frontend.Parsing.parse_vb_exn text in
-    let vbs = CConv.structure [ stru ] in
-    let* vbs_typed = Inferencer.structure vbs in
+    let vbs = CConv.structure [ Parsetree.SValue stru ] in
+    let* vbs_typed = Inferencer.structure Typedtree.empty_table vbs in
     (* Format.printf "%s %d\n%!" __FILE__ __LINE__; *)
     let anf = anf_stru vbs_typed in
     if print_before
@@ -678,7 +690,8 @@ let%expect_test "CPS factorial" =
       then k 1
       else let temp5 = (n - 1) in
              let temp8 = fresh_1 n k in
-               fack temp5 temp8) |}]
+               fack temp5 temp8)
+    |}]
 ;;
 
 let%expect_test _ =
@@ -687,7 +700,8 @@ let%expect_test _ =
     {|
     let double =
       let b = 1 in
-        (b, 2) |}]
+        (b, 2)
+    |}]
 ;;
 
 let%expect_test _ =
@@ -700,5 +714,5 @@ let%expect_test _ =
       y
     let foo =
       (fresh_2, fresh_3)
-     |}]
+    |}]
 ;;

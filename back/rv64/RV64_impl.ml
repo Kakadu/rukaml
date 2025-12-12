@@ -371,6 +371,18 @@ let generate_body is_toplevel body =
         emit_alloc_closure "rukaml_print_int" 1;
         (* Result is in a0 *)
         emit sd a0 (ROffset (SP, 8 * i))
+      | AVar { Ident.hum_name = "length"; _ } ->
+        emit_alloc_closure "rukaml_array_length" 1;
+        (* Result is in a0 *)
+        emit sd a0 (ROffset (SP, 8 * i))
+      | AVar { Ident.hum_name = "get"; _ } ->
+        emit_alloc_closure "rukaml_array_get" 2;
+        (* Result is in a0 *)
+        emit sd a0 (ROffset (SP, 8 * i))
+      | AVar { Ident.hum_name = "set"; _ } ->
+        emit_alloc_closure "rukaml_array_set" 3;
+        (* Result is in a0 *)
+        emit sd a0 (ROffset (SP, 8 * i))
       | AVar vname ->
         (* TODO: use pp_access *)
         emit ld t0 (pp_to_mach vname) ~comm:(sprintf "arg %S" vname.hum_name);
@@ -378,6 +390,7 @@ let generate_body is_toplevel body =
       | ALam _ -> failwith "Should it be representable in ANF?"
       | APrimitive _ -> assert false
       | ATuple _ -> assert false
+      | AArray _ -> assert false
     in
     ListLabels.iteri args ~f:on_arg;
     (* printfn ppf "  addi sp, sp, -8*%d # fun %S arguments" count (Option.get f); *)
@@ -468,10 +481,50 @@ let generate_body is_toplevel body =
            emit sd_dest a0 dest;
            emit addi SP SP 16)
        | AConst (PConst_bool _)
-       | AVar _ | APrimitive _
+       | AArray _ | AVar _ | APrimitive _
        | ATuple (_, _, _)
        | ALam (_, _)
        | AUnit -> failwith "Should not happen")
+    | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "length"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar v when Addr_of_local.has_key v ->
+         with_two_slots (fun ra_name arg_name ->
+           emit addi SP SP (-16);
+           emit sd ra (pp_to_mach ra_name);
+           emit ld t0 (pp_to_mach v);
+           emit mv (pp_to_mach arg_name) t0;
+           emit call "rukaml_array_length";
+           emit ld ra (pp_to_mach ra_name);
+           emit sd_dest a0 dest;
+           emit addi SP SP 16)
+       | AArray _ | _ -> failwith "Should not happen")
+    | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "get"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar arr when Addr_of_local.has_key arr ->
+         emit_alloc_closure "rukaml_array_get" 2;
+         emit li a1 1;
+         emit ld a2 (pp_to_mach arr);
+         emit call "rukaml_applyN";
+         emit sd_dest a0 dest
+       | _ -> failwith "Should not happen")
+    | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "set"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar arr when Addr_of_local.has_key arr ->
+         emit_alloc_closure "rukaml_array_set" 3;
+         emit li a1 1;
+         emit ld a2 (pp_to_mach arr);
+         emit call "rukaml_applyN";
+         emit sd_dest a0 dest
+       | _ -> failwith "Should not happen")
     | CApp (APrimitive "=", AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
       (* TODO: user Addr_of_local.pp_local_exn *)
       if l = r
@@ -697,10 +750,11 @@ let generate_body is_toplevel body =
     | _rest -> emit comment (sprintf ";;; TODO %s %d" __FUNCTION__ __LINE__)
   (* printfn ppf "; @[<h>%a@]" Compile_lib.ANF.pp_c rest *)
   and helper_a (dest : dest) x =
-    (* log "  %s: dest=`%a`, expr = %a" __FUNCTION__ pp_dest dest ANF.pp_a x; *)
+    (* log "  %s: expr = %a" __FUNCTION__ ANF.pp_a x; *)
     match x with
     | AConst (Parsetree.PConst_bool true) ->
       emit li_dest dest 1 (* printfn ppf "  li %a, 1" Addr_of_local.pp_dest dest *)
+    (* | AConst (Parsetree.PConst_bool false) -> emit li_dest dest 0 *)
     | AConst (Parsetree.PConst_int n) ->
       (match dest with
        | DReg r -> emit li (RU r) n
@@ -728,15 +782,34 @@ let generate_body is_toplevel body =
          (* print_alloc_closure ppf vname arity; *)
          emit sd_dest (RU "a0") dest
          (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *))
+    | AArray r ->
+      let length = List.length r in
+      emit addi SP SP (-8 * (length + 1));
+      let idents =
+        List.map
+          (fun x ->
+             let ident = Ident.of_string @@ Printf.sprintf "r%d" (gensym ()) in
+             Addr_of_local.extend ident;
+             ident, x)
+          r
+      in
+      let idents = List.rev idents in
+      List.iter (fun (i, x) -> helper_a (DStack_var i) x) idents;
+      emit li a0 length;
+      emit sd_dest a1 (DReg "sp");
+      emit call "rukaml_alloc_array";
+      List.iter (fun (i, _) -> Addr_of_local.remove_local i) idents;
+      emit addi SP SP (8 * (length + 1));
+      emit sd_dest (RU "a0") dest
     | ATuple (_a, _b, []) ->
       failwiths "not implemented %s %d" __FILE__ __LINE__
-      (* store_ra_temp ppf (fun ra_name ->
-            helper_a (DReg "r0") a;
-            helper_a (DReg "r1") b;
+      (* store_ra_temp ppf (fun ra_name -> *)
+      (*       helper_a (DReg "r0") a; *)
+      (*       helper_a (DReg "r1") b; *)
 
-            printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name;
-            printfn ppf "  call rukaml_alloc_pair";
-            printfn ppf "  mv %a, a0" Addr_of_local.pp_dest dest) *)
+      (*       printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
+      (*       printfn ppf "  call rukaml_alloc_pair"; *)
+      (*       printfn ppf "  mv %a, a0" Addr_of_local.pp_dest dest) *)
     | AUnit ->
       failwiths "not implemented %s %d" __FILE__ __LINE__
       (* printfn ppf "mov qword %a, 0" Addr_of_local.pp_dest dest *)
@@ -830,6 +903,10 @@ let codegen ?(wrap_main_into_start = true) anf file =
         (printfn ppf "extern %s")
         [ "rukaml_alloc_closure"
         ; "rukaml_print_int"
+        ; "rukaml_alloc_array"
+        ; "rukaml_array_length"
+        ; "rukaml_array_get"
+        ; "rukaml_array_set"
         ; "rukaml_applyN"
         ; "rukaml_field"
         ; (* printfn ppf "extern rukaml_alloc_tuple"; *)
@@ -896,7 +973,10 @@ let codegen ?(wrap_main_into_start = true) anf file =
       let _ = if argc mod 2 = 0 then argc else argc + 1 in
       let () =
         if name.Ident.hum_name = "main"
-        then emit comment "this is main"
+        then (
+          emit mv a0 sp;
+          emit call "rukaml_initialize";
+          emit comment "this is main")
         else
           List.rev pats
           |> ListLabels.iteri ~f:(fun i -> function

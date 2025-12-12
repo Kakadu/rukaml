@@ -769,7 +769,7 @@ let%expect_test "fibk" =
   @@ Result.get_ok
   @@ CPSConv.cps_conv_program
   @@ Result.get_ok
-  @@ Frontend.Parsing.parse_structure
+  @@ Frontend.Parsing.parse_value_bindings
        "let main  = let rec fibk n = if n <=1 then fun k -> k 1 else let h = fibk (n-1) \
         in fun k -> h (fun l -> fibk (n-2) (fun r -> k (l + r)) ) in fibk 1 (fun x -> x)";
   [%expect
@@ -955,7 +955,7 @@ let%expect_test "(ex-)motivation for call bnd rhs co-call graph fix" =
   @@ Result.get_ok
   @@ CPSConv.cps_conv_program
   @@ Result.get_ok
-  @@ Frontend.Parsing.parse_structure
+  @@ Frontend.Parsing.parse_value_bindings
        "let main = \n\
        \      let rec big n = if n < 2 then 1 else n * big n in\n\
        \      let rec f x = let n = big 10 in fun y -> y + n in\n\

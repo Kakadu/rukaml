@@ -1,7 +1,7 @@
 (* http://dev.stephendiehl.com/fun/006_hindley_milner.html *)
 
-open Base
 open Typedtree
+open Base
 module Format = Stdlib.Format (* silencing a warning *)
 
 let use_logging = false
@@ -160,9 +160,10 @@ end = struct
          | exception Not_found_s _ -> typ
          | x -> x)
       | Arrow (l, r) -> tarrow (helper l) (helper r)
+      | TParam (a, t) -> tparam (helper a) t
       | TProd (a, b, ts) -> tprod (helper a) (helper b) (List.map ~f:helper ts)
       | TLink ty -> helper ty
-      | Prim _ -> typ
+      | Prim _ | Weak _ -> typ
     in
     helper
   ;;
@@ -204,9 +205,11 @@ module Type = struct
       | V ({ var_level; _ } as v) ->
         let min_level = Int.min var_level info.var_level in
         v.var_level <- min_level
+      | Weak _ -> ()
       | Arrow (l, r) ->
         helper l;
         helper r
+      | TParam (a, _) -> helper a
       | TProd (a, b, ts) ->
         helper a;
         helper b;
@@ -225,9 +228,10 @@ module Type = struct
   let free_vars =
     let rec helper acc { typ_desc } =
       match typ_desc with
-      | Prim _ -> acc
+      | Prim _ | Weak _ -> acc
       | V { binder; _ } -> Var_set.add binder acc
       | TLink t -> helper acc t
+      | TParam (a, _) -> helper acc a
       | Arrow (l, r) -> helper (helper acc l) r
       | TProd (a, b, ts) -> List.fold_left ts ~init:(helper (helper acc a) b) ~f:helper
     in
@@ -241,6 +245,8 @@ module Scheme = struct
   type t = scheme
 
   let make_mono ty = S (Var_set.empty, ty)
+
+  (* let make_poly ty *)
 
   let occurs_in info = function
     | S (xs, t) -> (not (Var_set.mem info.binder xs)) && Type.occurs_in info t
@@ -316,7 +322,7 @@ end
 open R
 open R.Syntax
 
-let unify l r =
+let unify weak l r =
   let rec helper l r =
     match l.typ_desc, r.typ_desc with
     | TLink l, _ -> helper l r
@@ -334,6 +340,10 @@ let unify l r =
     | Arrow (l1, r1), Arrow (l2, r2) ->
       let* () = helper l1 l2 in
       helper r1 r2
+    | TParam (a1, t1), TParam (a2, t2) ->
+      (* TODO: make tests *)
+      let* () = helper a1 a2 in
+      if String.equal t1 t2 then return () else fail (`UnificationFailed (l, r))
     | TProd (a1, b1, ts1), TProd (a2, b2, ts2) ->
       let* () = helper a1 a2 in
       let* () = helper b1 b2 in
@@ -343,6 +353,18 @@ let unify l r =
           let* () = acc in
           helper l r)
       else fail (`UnificationFailed (l, r))
+    | Weak n, x ->
+      weak.map <- IntMap.add n { typ_desc = x } weak.map;
+      return ()
+    | x, Weak n ->
+      weak.map <- IntMap.add n { typ_desc = x } weak.map;
+      return ()
+    | TParam _, Arrow _
+    | Arrow _, TParam _
+    | TParam _, Prim _
+    | Prim _, TParam _
+    | TProd _, TParam _
+    | TParam _, TProd _
     | TProd _, Arrow _
     | Arrow _, TProd _
     | TProd _, Prim _
@@ -374,9 +396,10 @@ let generalize : level:int -> Type.t -> Scheme.t =
     match typ.typ_desc with
     | V { var_level; binder } -> if var_level > level then Var_set.add binder acc else acc
     | TLink t -> helper acc t
+    | TParam (a, _) -> helper acc a
     | Arrow (l, r) -> helper (helper acc l) r
     | TProd (a, b, tl) -> List.fold_left ~f:helper tl ~init:(helper (helper acc a) b)
-    | Prim _ -> acc
+    | Prim _ | Weak _ -> acc
   in
   fun ty ->
     (* log "generalize: @[%a@]" pp_ty ty; *)
@@ -430,9 +453,90 @@ let rec check_pat ~level env : _ -> (_ * Typedtree.pattern * ty) t = function
     let* env, p2, t2 = check_pat ~level env p2 in
     return (env, Tpat_tuple (p1, p2, []), tprod t1 t2 [])
   | Parsetree.PTuple (_p1, _p2, _ps) -> failwith "Not implemented"
+  | Parsetree.PAny -> failwith "TODO (psi) : not implemented"
+  | Parsetree.PConstruct _ -> failwith "TODO (psi) : not implemented"
 ;;
 
-let infer env expr =
+let elim weak =
+  let rec helper t =
+    match t.typ_desc with
+    | Prim _ | V _ -> t
+    | Arrow (l, r) -> tarrow (helper l) (helper r)
+    | TParam (a, t) -> tparam (helper a) t
+    | TProd (a, b, tl) -> tprod (helper a) (helper b) (List.map tl ~f:helper)
+    | TLink ty -> tlink (helper ty)
+    | Weak n ->
+      (try IntMap.find n weak.map with
+       | Stdlib.Not_found -> tweak n)
+  in
+  helper
+;;
+
+let is_mutable = function
+  | "array" (* | "ref" *) -> true
+  | _ -> false
+;;
+
+type restriction_state =
+  | MakeWeak (** A State, in which restrict makes weak types*)
+  | DoNothing
+
+type arrow_state =
+  | OnTheRight (** covariant position *)
+  | OnTheLeft (** contravariant position *)
+
+let restrict : restriction_state -> weak_table -> ty -> ty t =
+  fun start table t ->
+  let rec helper { typ_desc } xs state arrow =
+    match typ_desc with
+    | V { binder; _ } ->
+      (match state, arrow with
+       | MakeWeak, OnTheRight | DoNothing, _ -> xs
+       | MakeWeak, OnTheLeft ->
+         if IntMap.mem binder xs
+         then xs
+         else (
+           table.last <- table.last + 1;
+           (* log "table.last counter number to binder %d: %d" binder table.last; *)
+           IntMap.add binder table.last xs))
+    | TLink t -> helper t xs state arrow
+    | TParam (a, t) ->
+      (* log "tparam: %s" t; *)
+      let not_poly =
+        match a.typ_desc with
+        | V _ -> false
+        | _ -> true
+      in
+      helper a xs (if is_mutable t && not_poly then MakeWeak else state) arrow
+    | Prim _ | Weak _ -> xs
+    | Arrow (l, r) ->
+      (* log "%a" Pprint.pp_typ l; *)
+      (* log "%a" Pprint.pp_typ r; *)
+      let xs = helper r xs state OnTheRight in
+      let xs = helper l xs state OnTheLeft in
+      xs
+    | TProd (f, s, ts) ->
+      List.fold_left
+        ts
+        ~init:(helper f (helper s xs state arrow) state arrow)
+        ~f:(fun acc x -> helper x acc state arrow)
+  in
+  let weak_map = helper t IntMap.empty start OnTheLeft in
+  let rec helper t =
+    match t.typ_desc with
+    | Prim _ | Weak _ -> t
+    | TLink l -> tlink (helper l)
+    | V { binder; _ } ->
+      (* log "introduce weak for binder: %d" binder; *)
+      if IntMap.mem binder weak_map then tweak (IntMap.find binder weak_map) else t
+    | TParam (a, t) -> tparam (helper a) t
+    | Arrow (l, r) -> tarrow (helper l) (helper r)
+    | TProd (a, b, ts) -> tprod (helper a) (helper b) (List.map ts ~f:helper)
+  in
+  return @@ helper t
+;;
+
+let infer env table expr =
   let current_level = ref 1 in
   let enter_level () =
     (* log "== enter level %d" (1 + !current_level); *)
@@ -442,35 +546,93 @@ let infer env expr =
     (* log "== leave level %d" !current_level; *)
     Int.decr current_level
   in
-  let rec (helper : Type_env.t -> Parsetree.expr -> (ty * Typedtree.expr) R.t) =
-    fun env -> function
-      (* | Parsetree.EVar "=" ->
-       (* TODO: make equality predefined *)
-       let typ = tarrow int_typ (tarrow int_typ bool_typ) in
-       return (typ, TVar ("=", typ)) *)
+  let rec (helper
+            : Type_env.t
+              -> restriction_state
+              -> Parsetree.expr
+              -> (ty * Typedtree.expr) R.t)
+    =
+    fun env state -> function
+      (* | Parsetree.EVar "=" -> *)
+      (*  (\* TODO: make equality predefined *\) *)
+      (*  let typ = tarrow int_typ (tarrow int_typ bool_typ) in *)
+      (*  return (typ, TVar ("=", typ)) *)
+      (*       |> extend_s *)
+      (*      "get" *)
+      (*      (Scheme.make_mono *)
+      (*         (tarrow (array_typ @@ tv 1 ~level:1) (tarrow int_typ (tv 1 ~level:2)))) *)
+      (* |> extend_s *)
+      (*      "set" *)
+      (*      (Scheme.make_mono *)
+      (*         (tarrow *)
+      (*            (array_typ @@ tv 1 ~level:1) *)
+      (*            (tarrow int_typ (tarrow (tv 1 ~level:3) unit_typ)))) *)
+      (* |> extend_s "length" (Scheme.make_mono (tarrow (array_typ @@ tv 1 ~level:1) int_typ)) *)
+      | Parsetree.EVar "length" ->
+        let* fresh = fresh_var ~level:!current_level in
+        let typ = tarrow (tparam fresh "array") int_typ in
+        return (typ, TVar ("length", Ident.of_string "length", typ))
+      | Parsetree.EVar "get" ->
+        let* fresh = fresh_var ~level:!current_level in
+        let typ = tarrow (tparam fresh "array") (tarrow int_typ fresh) in
+        return (typ, TVar ("get", Ident.of_string "get", typ))
+      | Parsetree.EVar "set" ->
+        let* fresh = fresh_var ~level:!current_level in
+        let typ =
+          tarrow (tparam fresh "array") (tarrow int_typ (tarrow fresh unit_typ))
+        in
+        return (typ, TVar ("set", Ident.of_string "set", typ))
       | Parsetree.EVar x ->
         let* scheme = lookup_scheme_by_string x env in
         let* typ = instantiate ~level:!current_level scheme in
+        let typ = elim table typ in
         return (typ, TVar (x, Type_env.ident_of_string_exn x env, typ))
       | EUnit -> return (unit_typ, TUnit)
+      | Parsetree.EArray r ->
+        (match r with
+         | [] ->
+           let* ty = fresh_var ~level:!current_level in
+           log "ty = %a" pp_ty ty;
+           let ty = array_typ ty in
+           return (ty, TArray ([], ty))
+         | h :: _ ->
+           let* ty, _ = helper env state h in
+           let* _, exprs =
+             list_foldm
+               ~init:(return ([], []))
+               ~f:(fun (typs, exprs) e ->
+                 let* t1, e1 = helper env state e in
+                 let* () = unify table ty t1 in
+                 return (t1 :: typs, e1 :: exprs))
+               r
+           in
+           let ty = elim table @@ array_typ ty in
+           (* log "ty = %a" pp_ty ty; *)
+           return (ty, TArray (exprs, ty)))
       (* lambda abstraction *)
       | ELam (PVar x, e1) ->
         let* tx = fresh_var ~level:!current_level in
         let xID = Ident.of_string x in
-        let env2 = Type_env.extend ~varname:x xID (S (Var_set.empty, tx)) env in
-        let* ty, tbody = helper env2 e1 in
-        let trez = tarrow tx ty in
+        let env = Type_env.extend ~varname:x xID (S (Var_set.empty, tx)) env in
+        let* ty, tbody = helper env DoNothing e1 in
+        (* log "ta = %a" pp_ty ta; *)
+        let trez = elim table @@ tarrow tx ty in
         return (trez, TLam (Tpat_var xID, tbody, trez))
       | Parsetree.ELam ((PTuple _ as pat), body) ->
         let* env, pat, tp = check_pat ~level:!current_level env pat in
-        let* ty, tbody = helper env body in
-        let trez = tarrow tp ty in
+        let* ty, tbody = helper env DoNothing body in
+        let trez = elim table @@ tarrow tp ty in
         return (trez, TLam (pat, tbody, trez))
       | EApp (e1, e2) ->
-        let* t1, te1 = helper env e1 in
-        let* t2, te2 = helper env e2 in
+        let* t1, te1 = helper env state e1 in
+        let* t2, te2 = helper env state e2 in
         let* tv = fresh_var ~level:0 in
-        let* () = unify t1 (tarrow t2 tv) in
+        (* log "t1 = %a" pp_ty t1; *)
+        (* log "t2 = %a" pp_ty t2; *)
+        (* log "tv = %a" pp_ty tv; *)
+        let* () = unify table t1 (tarrow t2 tv) in
+        let* tv = restrict state table tv in
+        let tv = elim table tv in
         (* log "t1 = %a" pp_ty t1; *)
         (* log "t2 = %a" pp_ty t2; *)
         (* log "tv = %a" pp_ty tv; *)
@@ -478,32 +640,34 @@ let infer env expr =
       | EConst (PConst_int _n as c) -> return (int_typ, TConst c)
       | EConst (PConst_bool _b as c) -> return (bool_typ, TConst c)
       | Parsetree.EIf (c, th, el) ->
-        let* t1, tc = helper env c in
-        let* t2, tth = helper env th in
-        let* t3, tel = helper env el in
-        let* () = unify t1 bool_typ in
-        let* () = unify t2 t3 in
-        R.return (t2, TIf (tc, tth, tel, t2))
+        let* t1, tc = helper env state c in
+        let* t2, tth = helper env state th in
+        let* t3, tel = helper env state el in
+        let* () = unify table t1 bool_typ in
+        let* () = unify table t2 t3 in
+        let t2 = elim table t2 in
+        return (t2, TIf (tc, tth, tel, t2))
       | ETuple (a, b, es) ->
-        let* ta, ea = helper env a in
-        let* tb, eb = helper env b in
+        let* ta, ea = helper env state a in
+        let* tb, eb = helper env state b in
         let* typs, exprs =
           list_foldm
             ~init:(return ([], []))
             ~f:(fun (typs, exprs) e ->
-              let* t1, e1 = helper env e in
+              let* t1, e1 = helper env state e in
               return (t1 :: typs, e1 :: exprs))
             es
         in
-        let tup_typ = tprod ta tb typs in
+        let tup_typ = elim table @@ tprod ta tb typs in
         return (tup_typ, TTuple (ea, eb, exprs, tup_typ))
       | Parsetree.ELet (NonRecursive, PVar x, rhs, e2) ->
         enter_level ();
-        let* t1, typed_rhs = helper env rhs in
+        let* t1, typed_rhs = helper env state rhs in
         leave_level ();
         let t2 = generalize ~level:!current_level t1 in
         let x_ident = Ident.of_string x in
-        let* t3, typed_in = helper (Type_env.extend ~varname:x x_ident t2 env) e2 in
+        let* t3, typed_in = helper (Type_env.extend ~varname:x x_ident t2 env) state e2 in
+        let t3 = elim table t3 in
         return (t3, TLet (NonRecursive, Tpat_var x_ident, t2, typed_rhs, typed_in))
       | Parsetree.ELet (Recursive, PVar f, erhs, wher) ->
         let* tf = fresh_var ~level:!current_level in
@@ -512,26 +676,36 @@ let infer env expr =
         let f_ident = Ident.of_string f in
         let* t1, typed_rhs =
           let env = Type_env.extend ~varname:f f_ident (S (Var_set.empty, tf)) env in
-          helper env erhs
+          helper env state erhs
         in
         leave_level ();
-        let* () = unify tf t1 in
+        let* () = unify table tf t1 in
         (* log "  var %s will have type %a" f Pprint.pp_typ tf; *)
         let t2 = generalize ~level:!current_level tf in
-        (* log "letrec  result = %a\n%!" pp_scheme t2; *)
+        (* log "letrec  result = %a\n%!" pp_schepme t2; *)
         let* twher, typed_wher =
-          helper (Type_env.extend ~varname:f f_ident t2 env) wher
+          helper (Type_env.extend ~varname:f f_ident t2 env) state wher
         in
+        let twher = elim table twher in
         return (twher, TLet (Recursive, Tpat_var f_ident, t2, typed_rhs, typed_wher))
       | ELet (Recursive, PTuple _, _, _) -> fail `Only_varibles_on_the_left_of_letrec
       | ELet (NonRecursive, (PTuple _ as pat), rhs, wher) ->
         let* env, pat, tp = check_pat ~level:!current_level env pat in
-        let* _ty, tbody = helper env rhs in
-        let* () = unify tp _ty in
-        let* twher, typed_wher = helper env wher in
+        let* _ty, tbody = helper env state rhs in
+        let* () = unify table tp _ty in
+        let* twher, typed_wher = helper env state wher in
+        let twher = elim table twher in
         return (twher, TLet (NonRecursive, pat, Scheme.make_mono _ty, tbody, typed_wher))
+      | Parsetree.ELet (_, PAny, _, _)
+      | Parsetree.ELet (_, PConstruct _, _, _)
+      | Parsetree.ELam (PAny, _)
+      | Parsetree.ELam (PConstruct _, _)
+      | Parsetree.EMatch _ | Parsetree.EConstruct _ ->
+        failwith "TODO (psi) : not implemented"
   in
-  helper env expr
+  let* ty, expr = helper env MakeWeak expr in
+  let* ty = restrict DoNothing table ty in
+  return (ty, expr)
 ;;
 
 let start_env =
@@ -555,11 +729,12 @@ let start_env =
 ;;
 
 let w e =
-  Result.map (run (infer start_env e)) ~f:snd
+  let table = { map = IntMap.empty; last = 0 } in
+  Result.map (run (infer start_env table e)) ~f:snd
   |> Result.map_error ~f:(function #error as x -> x)
 ;;
 
-let vb ?(env = start_env) (flg, pat, body) : (_, [> error ]) Result.t =
+let vb ?(env = start_env) table (flg, pat, body) : (_, [> error ]) Result.t =
   let comp =
     match flg, pat with
     | Parsetree.NonRecursive, Parsetree.PVar name ->
@@ -567,17 +742,18 @@ let vb ?(env = start_env) (flg, pat, body) : (_, [> error ]) Result.t =
       (* TODO: Why -1 is OK? *)
       let tv = Typedtree.tv v ~level:(-1) in
       let env = Type_env.extend_string name (S (Var_set.empty, tv)) env in
-      let* ty, tbody = infer env body in
+      let* ty, tbody = infer env table body in
       return (env, ty, Tpat_var (Type_env.ident_of_string_exn name env), tbody)
     | Recursive, PVar name ->
       let* v = fresh in
       let tv = Typedtree.tv v ~level:(-1) in
       let env = Type_env.extend_string name (S (Var_set.empty, tv)) env in
-      let* ty, tbody = infer env body in
-      let* () = unify tv (type_of_expr tbody) in
+      let* ty, tbody = infer env table body in
+      let* () = unify table tv (type_of_expr tbody) in
       return (env, ty, Tpat_var (Type_env.ident_of_string_exn name env), tbody)
     | Recursive, PTuple _ -> fail `Only_varibles_on_the_left_of_letrec
     | NonRecursive, PTuple _ -> failwith "Not implemented"
+    | _ -> failwith "TODO (psi) : not implemented"
   in
   run comp
   |> Result.map ~f:(fun (env, ty, tpat, body) ->
@@ -592,7 +768,7 @@ let vb ?(env = start_env) (flg, pat, body) : (_, [> error ]) Result.t =
   |> Result.map_error ~f:(function #error as x -> x)
 ;;
 
-let structure ?(env = start_env) stru =
+let structure ?(env = start_env) table stru =
   let ( let* ) = Result.( >>= ) in
   let return = Result.return in
   let* _new_env, items =
@@ -600,9 +776,12 @@ let structure ?(env = start_env) stru =
       stru
       ~init:(return (env, []))
       ~f:(fun acc item ->
-        let* env, acc = acc in
-        let* env, new_item = vb ~env item in
-        return (env, new_item :: acc))
+        match item with
+        | Parsetree.SValue item ->
+          let* env, acc = acc in
+          let* env, new_item = vb ~env table item in
+          return (env, new_item :: acc)
+        | Parsetree.SType _ -> failwith "TODO (psi) : not implemented")
   in
   return (List.rev items)
 ;;
@@ -613,7 +792,8 @@ let%expect_test _ =
     let tv2 = tv 2 ~level:0 in
     let l = tarrow tv1 tv1 in
     let r = tarrow (tprim "int") tv2 in
-    let subst = unify l r in
+    let weak = { map = IntMap.empty; last = 0 } in
+    let subst = unify weak l r in
     let open Stdlib.Format in
     match R.run subst with
     | Result.Error _ -> ()

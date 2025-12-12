@@ -18,10 +18,20 @@ type ty = { mutable typ_desc : type_desc }
 and type_desc =
   | Prim of string
   | V of var_info
+  | Weak of binder
   | Arrow of ty * ty
+  | TParam of ty * string
   | TLink of ty
   | TProd of ty * ty * ty list
 
+module IntMap : Map.S with type key = int
+
+type weak_table =
+  { mutable map : ty IntMap.t
+  ; mutable last : int
+  }
+
+val empty_table : weak_table
 val pp_ty : Format.formatter -> ty -> unit
 val pp_type_desc : Format.formatter -> type_desc -> unit
 val show_ty : ty -> string
@@ -33,12 +43,15 @@ val pp_scheme : Format.formatter -> scheme -> unit
 val show_scheme : scheme -> string
 val tarrow : ty -> ty -> ty
 val tprim : string -> ty
+val tweak : binder -> ty
+val tparam : ty -> string -> ty
 val tv : binder -> level:int -> ty
 val tlink : ty -> ty
 val tprod : ty -> ty -> ty list -> ty
 val int_typ : ty
 val bool_typ : ty
 val unit_typ : ty
+val array_typ : ty -> ty
 
 type pattern =
   | Tpat_var of Ident.t
@@ -54,6 +67,7 @@ type expr =
   | TIf of expr * expr * expr * ty (** if ... then ... else ... *)
   | TLam of pattern * expr * ty (** fun ... -> ... *)
   | TApp of expr * expr * ty (** Application f x *)
+  | TArray of expr list * ty (** Array [| ... |]*)
   | TTuple of expr * expr * expr list * ty (** Tuple (a,b,...,_) as a tuple (a,b,...) *)
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
   (** let rec? .. = ... in ... *)

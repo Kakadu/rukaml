@@ -8,10 +8,8 @@
   $ run << EOF
   > let main = fun f -> (fun x -> f (fun v -> x x v)) (fun x -> f (fun v -> x x v))
   > EOF
-  let fresh_4 x v = x x v
-  let fresh_3 f x = f (fresh_4 x)
-  let fresh_2 x v = x x v
-  let fresh_1 f x = f (fresh_2 x)
+  let fresh_4 x v = x x v let fresh_3 f x = f (fresh_4 x)
+  let fresh_2 x v = x x v let fresh_1 f x = f (fresh_2 x)
   let main f = fresh_3 f (fresh_1 f)
 
   $ run << EOF
@@ -53,8 +51,7 @@ Polyvariadic uncurrying
   > let three = succ two
   > let four = succ three
   > EOF
-  let two f (a, b) = f a b
-  let succ prev f (a, rest) = prev (f a) rest
+  let two f (a, b) = f a b let succ prev f (a, rest) = prev (f a) rest
   let three = succ two
   let four = succ three
 
@@ -65,10 +62,8 @@ Polyvariadic currying
   > let three = succ two
   > let four = succ three
   > EOF
-  let two f a b = f (a, b)
-  let fresh_1 f arg rest = f (arg, rest)
-  let succ prev f arg = prev (fresh_1 f arg)
-  let three = succ two
+  let two f a b = f (a, b) let fresh_1 f arg rest = f (arg, rest)
+  let succ prev f arg = prev (fresh_1 f arg) let three = succ two
   let four = succ three
 
 Polyvariadic map
@@ -79,11 +74,8 @@ Polyvariadic map
   > let four = succ three
   > let temp = two (fun x -> x) (1,2)
   > EOF
-  let two f (a, b) = (f a, f b)
-  let succ prev f (a, rest) = (f a, prev f rest)
-  let three = succ two
-  let four = succ three
-  let fresh_1 x = x
+  let two f (a, b) = (f a, f b) let succ prev f (a, rest) = (f a, prev f rest)
+  let three = succ two let four = succ three let fresh_1 x = x
   let temp = two fresh_1 (1, 2)
 
 TODO: Following output is a little bit shitty
