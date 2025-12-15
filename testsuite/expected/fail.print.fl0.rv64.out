@@ -13,6 +13,8 @@ prod:
 
 .globl main
 main:
+  mv a0, sp
+  call rukaml_initialize
 # this is main
   addi sp, sp, -32 # allocate for Pad, RA, and 2 locals u, w
   sd ra, 16(sp)

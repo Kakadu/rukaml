@@ -23,8 +23,8 @@ module CallArityAnal
     (DeadCodeElemStatus : sig
        val disable : bool
      end) : sig
-  val call_arity_anal : cps_vb -> MACPS.cps_vb
-  val call_arity_anal_debug : cps_vb -> MACPS.cps_vb
+  val call_arity_anal : cps_vb list -> MACPS.cps_vb list
+  val call_arity_anal_debug : cps_vb list -> MACPS.cps_vb list
 end = struct
   type ress =
     { dead_vars : ISet.t
@@ -46,7 +46,7 @@ end = struct
     | SideEffUnsafe
   [@@deriving show { with_path = false }]
 
-  let anal (_, _, p) bnd_unsafities =
+  let anal vbs bnd_unsafities =
     let ( @@@ ) = IMap.union (fun _ () () -> Some ()) in
     let ar_union = IMap.union (fun _ x y -> Some (min x y)) in
     let domain = IMap.map ignore in
@@ -180,8 +180,8 @@ end = struct
       | Let (Recursive, CPVar { id; _ }, t, body) ->
         let int2 = ISet.add id int in
         anal_rec_bnd id int2 t @@ anal_p conts ress inc_ar body int2
-    and anal_bnd1 ?(jv_specif = None) id conts body int ress inc_ar =
-      let b_co_calls, b_ars, ress = anal_p conts ress inc_ar body @@ ISet.add id int in
+    and handle_wh_res ?(jv_specif = None) ?(ban_elem = false) id (b_co_calls, b_ars, ress)
+      =
       let default v_arity =
         let bnd_lam_co_calls, bnd_lam_ars = leave_vars_scope b_co_calls b_ars id in
         let neigh = adj_nodes id b_co_calls |> IMap.remove id in
@@ -201,13 +201,15 @@ end = struct
         (match IMap.find id bnd_unsafities with
          | SideEffUnsafe | NonRemovable -> default 0
          | (exception Not_found) | Unsafe ->
-           if DeadCodeElemStatus.disable
+           if DeadCodeElemStatus.disable || ban_elem
            then default 0
            else (
              let dead_id = Option.value jv_specif ~default:id in
              ( { ress with dead_vars = ISet.add dead_id ress.dead_vars }
              , fun ress2 _ -> b_co_calls, b_ars, ress2 )))
       | v_arity -> default v_arity
+    and anal_bnd1 ?(jv_specif = None) id conts body int ress inc_ar =
+      handle_wh_res ~jv_specif id @@ anal_p conts ress inc_ar body @@ ISet.add id int
     and anal_rec_bnd v_id int t (b_co_calls, b_ars, ress) =
       let default v_arity =
         let rec fixpointing v_ar has_loop_v =
@@ -321,8 +323,33 @@ end = struct
       List.fold_left f init tt |> fst
     in
     let open IMap in
-    anal_p empty { dead_vars = ISet.empty; call_ars = empty } 0 p ISet.empty
-    |> fun (_, _, ress) -> ress.dead_vars, ress.call_ars
+    let rec fold vbs int =
+      match vbs with
+      | [] -> CoCallGraph.empty, empty, { dead_vars = ISet.empty; call_ars = empty }
+      | (Recursive, CPVar { id; _ }, Ret (HALT, t)) :: tl ->
+        let int = ISet.add id int in
+        anal_rec_bnd id int t @@ fold tl int
+      | (_, CPVar { id; hum_name }, p) :: tl ->
+        let ress, fin_anal =
+          handle_wh_res ~ban_elem:(hum_name = "main") id @@ fold tl @@ ISet.add id int
+        in
+        fin_anal ress
+        @@ fun wh_co_calls v_id v_arity ->
+        let unsafety = find_opt id bnd_unsafities in
+        let inc_ar = take_safety_into_acc unsafety v_id wh_co_calls v_arity in
+        let ress =
+          match p with
+          | Ret (HALT, t) -> add_if_incr inc_ar t ress
+          | _ -> ress
+        in
+        anal_p empty ress inc_ar p int |> ret_with_fv_cond v_id v_arity wh_co_calls
+      | (_, CPTuple _, p) :: tl ->
+        let (b_co_calls, b_ars, ress), b_fv = fold tl int |> ret_with_fv in
+        merge_bnd_subexprs b_ars b_co_calls b_fv
+        @@ ret_with_fv
+        @@ anal_p empty ress 0 p int
+    in
+    fold vbs ISet.empty |> fun (_, _, ress) -> ress.dead_vars, ress.call_ars
   ;;
 
   let foldd_k f =
@@ -338,7 +365,7 @@ end = struct
     | Right_After
     | Other
 
-  let down_anal (_, _, p) (dead_vars, call_ars) =
+  let down_anal vbs (dead_vars, call_ars) =
     let open IMap in
     let lookup_fin_call_ars t k_none k_found fin_call_ars =
       match t with
@@ -477,8 +504,22 @@ end = struct
       | TTuple (t1, t2, tt) -> foldd_k anal_t (t1 :: t2 :: tt) k counts
       | TUnit | TConst _ -> k counts
     in
-    let k _ _ counts barriers fin_call_ars = dead_vars, counts, barriers, fin_call_ars in
-    anal_p p 0 k empty ISet.empty empty
+    let rec fold vbs counts =
+      match vbs with
+      | (_, CPVar { id; _ }, _) :: tl when ISet.mem id dead_vars -> fold tl counts
+      | (rec_flag, pat, Ret (HALT, t)) :: tl ->
+        anal_t_bnd ~rec_flag pat t counts (fold tl)
+      | (_, CPTuple _, p) :: tl -> anal_p p 0 (fun _ _ -> fold tl) counts
+      | (_, CPVar { id; _ }, p) :: tl ->
+        let counts = add id 0 counts in
+        let k ar _ counts barriers fin_call_ars =
+          (* Printf.printf "ps: %d; resr: %d\n" pseudo_call_ar rest_ar; *)
+          fold tl counts barriers @@ add id ar fin_call_ars
+        in
+        anal_p p 0 k counts
+      | [] -> fun barriers fin_call_ars -> dead_vars, counts, barriers, fin_call_ars
+    in
+    fold vbs empty ISet.empty empty
   ;;
 
   module IIOPair = struct
@@ -516,12 +557,13 @@ end = struct
     | CPTupleContJV of safe_ars_elem
     | CPVarContJV of int * p * min_prev_res option
 
-  let pot_unsafe_bnds (_, _, p) =
+  let pot_unsafe_bnds (vbs : cps_vb list) =
     let open Option in
     let open Monads.Store in
     let open IMap in
     let open Base.Fn in
     let drop_conts ((fst, _), snd) = fst, snd in
+    let has_side_eff res = snd res = Some 0 in
     let u_return x () = return x in
     let upd_bnd_unsafities f =
       let* bnd_unsafeties, conts = get in
@@ -625,7 +667,6 @@ end = struct
           let* rhs_res = f_a_hndl >>= rid_off_neg_s_ar in
           rhs_res +.+ n |> bnd_return n
         in
-        let has_side_eff res = snd res = Some 0 in
         let fin_tuple_bnd b_res =
           f_a_hndl
           >>= compose
@@ -712,7 +753,28 @@ end = struct
       @@ let* rhs_res = check_t s_ars 0 rhs in
          upd pat s_ars rhs_res |> return
     in
-    fst @@ fst @@ emp_run2 (check_p empty p 0) empty
+    let rec fold vbs s_ars =
+      let fin pat tl b_res =
+        let* bnd_unsafeties, _ = get in
+        let bnd_unsafeties =
+          match pat with
+          | CPVar { id; _ } when has_side_eff b_res -> add id SideEffUnsafe bnd_unsafeties
+          | CPVar { id; _ } when fst b_res <= 0 -> add id Unsafe bnd_unsafeties
+          | _ -> bnd_unsafeties
+        in
+        let* () = put (bnd_unsafeties, empty) in
+        fold tl @@ upd pat s_ars b_res
+      in
+      match vbs with
+      | [] -> return s_ars
+      | (Recursive, (CPVar { id; _ } as pat), b) :: tl ->
+        check_p (add id (0, None) s_ars) b 0
+        >>= (function
+         | (_, None) as b_res -> fin pat tl b_res
+         | b_res -> check_p (add id b_res s_ars) b 0 >>= fin pat tl)
+      | (_, pat, b) :: tl -> check_p s_ars b 0 >>= fin pat tl
+    in
+    fst @@ fst @@ emp_run2 (fold vbs empty) empty
   ;;
 
   type light_t =
@@ -747,7 +809,7 @@ end = struct
     | DeadJV
     | Sub of cont * cont_hndl * ex_triv list
 
-  let simpl (rec_flag, pat, p) (dead_vars, counts, barriers, fin_call_ars) =
+  let simpl vbs (dead_vars, counts, barriers, fin_call_ars) =
     let open IMap in
     let prep_t_for_env env t =
       match t with
@@ -1084,7 +1146,34 @@ end = struct
       match (ex_triv : ex_triv) with
       | `Var (_, t) | `LightT t | `HeavyT t -> simpl_t ~ignore_ids:true env t
     in
-    rec_flag, translate_pat pat, simpl_p (Present []) p empty
+    List.map
+      (fun (rec_flag, pat, p) ->
+         let p =
+           match p with
+           | Ret (HALT, t) ->
+             MACPS.Ret (HALT, expand empty (v_ar pat) @@ prep_t_for_env empty t)
+           | _ ->
+             let n = v_ar pat in
+             if n <= 0
+             then simpl_p (Present []) p empty
+             else (
+               let eta_arg, eta_pat = gen_eta () in
+               let eta_args, eta_pats = gen_many_etas (n - 1) in
+               let i = gensym ~prefix:"k" () |> of_string in
+               let t =
+                 let b =
+                   simpl_p
+                     ~cont_hndl:(Sub (HALT, Def, []))
+                     (Present (eta_arg :: eta_args))
+                     p
+                     empty
+                 in
+                 MACPS.Lam ((eta_pat, eta_pats), i, b)
+               in
+               MACPS.Ret (HALT, t))
+         in
+         rec_flag, translate_pat pat, p)
+      vbs
   ;;
 
   let call_arity_anal cps_prog =

@@ -1,0 +1,77 @@
+
+.globl main
+main:
+  mv a0, sp
+  call rukaml_initialize
+# this is main
+  addi sp, sp, -64 # allocate for Pad, RA, and 6 locals temp6, temp5, temp3, temp2, unit, r
+  sd ra, 48(sp)
+  addi sp, sp, -40
+  li t0, 1
+  sd t0, (sp)
+  li t0, 4
+  sd t0, 8(sp)
+  li t0, 3
+  sd t0, 16(sp)
+  li t0, 3
+  sd t0, 24(sp)
+  li a0, 4
+  mv a1, sp
+  call rukaml_alloc_array
+  addi sp, sp, 40
+  sd a0, 40(sp)
+  lla a0, rukaml_array_set
+  li a1, 3
+  call rukaml_alloc_closure
+  li a1, 1
+  ld a2, 40(sp)
+  call rukaml_applyN
+  sd a0, 24(sp)
+  addi sp, sp, -16 # pad and 1st arg of function temp2
+  li t0, 1
+  sd t0, (sp)
+  ld a0, 40(sp)
+  li a1, 1
+  ld a2, (sp)
+  call rukaml_applyN
+  addi sp, sp, 16 # DEalloc for pad and arg 1 of function "temp2"
+  sd a0, 16(sp)
+  addi sp, sp, -16 # pad and 1st arg of function temp3
+  li t0, 42
+  sd t0, (sp)
+  ld a0, 32(sp)
+  li a1, 1
+  ld a2, (sp)
+  call rukaml_applyN
+  addi sp, sp, 16 # DEalloc for pad and arg 1 of function "temp3"
+  sd a0, 32(sp)
+  lla a0, rukaml_array_get
+  li a1, 2
+  call rukaml_alloc_closure
+  li a1, 1
+  ld a2, 40(sp)
+  call rukaml_applyN
+  sd a0, 8(sp)
+  addi sp, sp, -16 # pad and 1st arg of function temp5
+  li t0, 1
+  sd t0, (sp)
+  ld a0, 24(sp)
+  li a1, 1
+  ld a2, (sp)
+  call rukaml_applyN
+  addi sp, sp, 16 # DEalloc for pad and arg 1 of function "temp5"
+  sd a0, (sp)
+  addi sp, sp, -16
+  sd ra, 8(sp)
+  ld t0, 16(sp)
+  sd t0, (sp)
+  call rukaml_print_int
+  ld ra, 8(sp)
+  mv a0, a0
+  addi sp, sp, 16
+  ld ra, 48(sp)
+  addi sp, sp, 64 # DEallocate for Pad, RA and 6 locals variables temp6, temp5, temp3, temp2, unit, r
+#  fin
+  addi a0, x0, 0 # Use 0 return code
+  addi a7, x0, 93 # Service command code 93 terminates
+  ecall # Call linux to terminate the program

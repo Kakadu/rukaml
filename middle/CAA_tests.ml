@@ -7,25 +7,26 @@ open CPSLang.OneACPS
 let disable_dead_code_elem = false
 
 let test_call_ar_anal cps_prog =
-  Format.printf "before:\n%a\n" OneACPS.pp_vb cps_prog;
+  Format.printf "before:\n%a\n" OneACPS.pp_stru cps_prog;
+  (*pp looks strange*)
   (* TODO: printer above creates non-closed boxes.
     We need to fix it. Flush is a temporary workaround. *)
   Format.printf "%!";
   call_arity_anal ~disable_dead_code_elem cps_prog
-  |> Format.printf "after:\n%a\n" MACPS.pp_vb;
+  |> Format.printf "after:\n%a\n" MACPS.pp_stru;
   Format.printf "%!";
   ANF.reset_gensym ()
 ;;
 
 let test_call_ar_anal_debug cps_prog =
-  Format.printf "before:\n%a\n" OneACPS.pp_vb cps_prog;
+  Format.printf "before:\n%a\n" OneACPS.pp_stru cps_prog;
   call_arity_anal_debug ~disable_dead_code_elem cps_prog
-  |> Format.printf "after:\n%a\n" MACPS.pp_vb;
+  |> Format.printf "after:\n%a\n" MACPS.pp_stru;
   ANF.reset_gensym ()
 ;;
 
 let v name = name |> of_string
-let prog b = NonRecursive, CPVar (v "main"), b
+let prog b = [ NonRecursive, CPVar (v "main"), b ]
 let var_f, var_g, var_x, var_k1 = v "f", v "g", v "x", v "k1"
 let var_y, var_k2, var_h, var_t = v "y", v "k2", v "h", v "t"
 let var_a, var_k3, var_b, var_k4 = v "a", v "k3", v "b", v "k4"
@@ -62,6 +63,36 @@ let%expect_test "expand call" =
     after:
     let main =
              let f x e1 k1 = k1 (x + e1) in
+             if true then f 1 1 (fun x -> x) else f 2 1 (fun x -> x)
+    |}]
+;;
+
+let%expect_test "expand call: toplevel bind" =
+  let th = Call (UVar var_f, one, Cont (CPVar var_g, Call (UVar var_g, one, HALT))) in
+  let el = Call (UVar var_f, two, Cont (CPVar var_t, Call (UVar var_t, one, HALT))) in
+  let rhs =
+    let sum = sum (UVar var_x) (UVar var_y) in
+    Lam
+      ( CPVar var_x
+      , var_k1
+      , Ret (CVar var_k1, Lam (CPVar var_y, var_k2, Ret (CVar var_k2, sum))) )
+  in
+  test_call_ar_anal
+  @@ [ NonRecursive, CPVar var_f, Ret (HALT, rhs) ]
+  @ prog
+  @@ CIf (tr, th, el);
+  [%expect
+    {|
+    before:
+    let f x k1 =
+              k1 (fun y k2 -> k2 (x + y))
+            let main =
+              if true then f 1 (fun g -> g 1 (fun x -> x))
+              else f 2 (fun t -> t 1 (fun x -> x))
+    after:
+    let f x e1 k1 =
+             k1 (x + e1)
+           let main =
              if true then f 1 1 (fun x -> x) else f 2 1 (fun x -> x)
     |}]
 ;;
@@ -767,7 +798,7 @@ let%expect_test "fack" =
 let%expect_test "fibk" =
   test_call_ar_anal
   @@ Result.get_ok
-  @@ CPSConv.cps_conv_program
+  @@ CPSConv.cps_conv
   @@ Result.get_ok
   @@ Frontend.Parsing.parse_value_bindings
        "let main  = let rec fibk n = if n <=1 then fun k -> k 1 else let h = fibk (n-1) \
@@ -795,21 +826,18 @@ let%expect_test "fibk" =
                                        ))
 
                 in
-              fibk
-                1
-                (fun t8 -> t8 (fun x k9 -> k9 x) (fun t10 -> (fun x -> x) t10))
-
+              fibk 1 (fun t8 -> t8 (fun x k9 -> k9 x) (fun x -> x))
     after:
     let main =
-             let rec fibk n e11 k1 =
-               if n <= 1 then e11 1 k1
+             let rec fibk n e10 k1 =
+               if n <= 1 then e10 1 k1
                else fibk
                       (n - 1)
-                      (fun l k5 -> fibk (n - 2) (fun r k7 -> e11 (l + r) k7) k5)
+                      (fun l k5 -> fibk (n - 2) (fun r k7 -> e10 (l + r) k7) k5)
                       k1
 
                in
-             fibk 1 (fun x k9 -> k9 x) (fun t10 -> (fun x -> x) t10)
+             fibk 1 (fun x k9 -> k9 x) (fun x -> x)
     |}]
 ;;
 
@@ -953,7 +981,7 @@ let%expect_test "heavy cont lam_call_bnd near the barrier" =
 let%expect_test "(ex-)motivation for call bnd rhs co-call graph fix" =
   test_call_ar_anal
   @@ Result.get_ok
-  @@ CPSConv.cps_conv_program
+  @@ CPSConv.cps_conv
   @@ Result.get_ok
   @@ Frontend.Parsing.parse_value_bindings
        "let main = \n\
@@ -1067,5 +1095,31 @@ let%expect_test "not expand call (because of sharing loses): jv version" =
                in
              let jv1 g = g 1 (fun t -> g 1 (fun q -> (fun x -> x) (q + t))) in
              if true then f 1 jv1 else f 1 jv1
+    |}]
+;;
+
+let%expect_test "toplevel apply" =
+  test_call_ar_anal
+  @@ Result.get_ok
+  @@ CPSConv.cps_conv
+  @@ Result.get_ok
+  @@ Frontend.Parsing.parse_value_bindings
+       "let ra x f =  f x\n        let a = ra 10\n        let main = a (fun x -> x * 2)  ";
+  [%expect
+    {|
+    before:
+    let ra x k1 =
+              k1 (fun f k2 -> f x k2)
+            let a =
+              ra 10 (fun x -> x)
+            let main =
+              a (fun x k3 -> k3 (x * 2)) (fun x -> x)
+    after:
+    let ra x e4 k1 =
+             e4 x k1
+           let a e5 k6 =
+             ra 10 e5 k6
+           let main =
+             a (fun x k3 -> k3 (x * 2)) (fun x -> x)
     |}]
 ;;

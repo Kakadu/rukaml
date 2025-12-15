@@ -42,20 +42,20 @@ module Compiler = struct
   (** Perform cps conversion on parsetree *)
   let cps (Parsetree stru) ~(caa : bool) =
     let stru =
-      match CPSConv.cps_conv_program stru with
+      match CPSConv.cps_conv stru with
       | Ok x -> x
       | Error err -> error "cps error: %a" CPSConv.pp_error err
     in
-    let vb =
+    let stru =
       if caa
       then
         let open CPSLang.MACPS in
-        cps_vb_to_parsetree_vb (CAA.call_arity_anal stru)
+        List.map ~f:cps_vb_to_parsetree_vb (CAA.call_arity_anal stru)
       else
         let open CPSLang.OneACPS in
-        cps_vb_to_parsetree_vb stru
+        List.map ~f:cps_vb_to_parsetree_vb stru
     in
-    k (Parsetree [ vb ])
+    k (Parsetree stru)
   ;;
 
   (** Perform closure conversion *)
