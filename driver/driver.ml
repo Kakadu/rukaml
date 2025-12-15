@@ -49,9 +49,8 @@ module Compiler = struct
     let stru =
       if caa
       then
-        failwith "CAA haven't fixed yet!\n"
-        (* let open CPSLang.MACPS in
-        cps_vb_to_parsetree_vb (CAA.call_arity_anal stru) *)
+        let open CPSLang.MACPS in
+        List.map ~f:cps_vb_to_parsetree_vb (CAA.call_arity_anal stru)
       else
         let open CPSLang.OneACPS in
         List.map ~f:cps_vb_to_parsetree_vb stru

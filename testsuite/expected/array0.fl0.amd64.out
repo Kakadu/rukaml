@@ -1,0 +1,55 @@
+section .note.GNU-stack noalloc noexec nowrite progbits
+section .text
+extern rukaml_alloc_closure
+extern rukaml_print_int
+extern rukaml_applyN
+extern rukaml_field
+extern rukaml_alloc_pair
+extern rukaml_alloc_array
+extern rukaml_array_length
+extern rukaml_array_get
+extern rukaml_array_set
+extern rukaml_initialize
+extern rukaml_gc_compact
+extern rukaml_gc_print_stats
+extern rukaml_print_alloc_closure_count
+
+_start:
+              push    rbp
+              mov     rbp, rsp   ; prologue
+              call main
+              mov rdi, rax    ; rdi stores return code
+              mov rax, 60     ; exit syscall
+              syscall
+GLOBAL main
+
+main:
+  push rbp
+  mov  rbp, rsp
+  mov rdi, rsp
+  call rukaml_initialize
+  sub rsp, 8*2 ; allocate for local variables n, r
+  mov rdi, 3
+  sub rsp, 8*3 ; allocate space on stack for array elements
+  mov qword [rbp-3*8],  3
+  mov qword [rbp-4*8],  2
+  mov qword [rbp-5*8],  1
+  mov rsi, rsp
+  call rukaml_alloc_array
+  add rsp, 8*3 ; free space for array elements
+  mov [rbp-1*8], rax
+  add rsp, -8*2
+  mov r11, [rbp-1*8]
+  mov qword [rsp], r11
+  call rukaml_array_length
+  mov [rbp-2*8], rax
+  add rsp, 8*2
+  add rsp, -8*2
+  mov r11, [rbp-2*8]
+  mov qword [rsp], r11
+  call rukaml_print_int ; short
+  add rsp, 8*2
+  mov rax, rax
+  add rsp, 8*2 ; deallocate local variables n, r
+  pop rbp
+  ret  ;;;; main

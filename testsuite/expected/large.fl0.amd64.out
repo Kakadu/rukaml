@@ -5,6 +5,10 @@ extern rukaml_print_int
 extern rukaml_applyN
 extern rukaml_field
 extern rukaml_alloc_pair
+extern rukaml_alloc_array
+extern rukaml_array_length
+extern rukaml_array_get
+extern rukaml_array_set
 extern rukaml_initialize
 extern rukaml_gc_compact
 extern rukaml_gc_print_stats

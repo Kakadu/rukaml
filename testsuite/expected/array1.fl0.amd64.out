@@ -1,0 +1,98 @@
+section .note.GNU-stack noalloc noexec nowrite progbits
+section .text
+extern rukaml_alloc_closure
+extern rukaml_print_int
+extern rukaml_applyN
+extern rukaml_field
+extern rukaml_alloc_pair
+extern rukaml_alloc_array
+extern rukaml_array_length
+extern rukaml_array_get
+extern rukaml_array_set
+extern rukaml_initialize
+extern rukaml_gc_compact
+extern rukaml_gc_print_stats
+extern rukaml_print_alloc_closure_count
+
+_start:
+              push    rbp
+              mov     rbp, rsp   ; prologue
+              call main
+              mov rdi, rax    ; rdi stores return code
+              mov rax, 60     ; exit syscall
+              syscall
+GLOBAL main
+
+main:
+  push rbp
+  mov  rbp, rsp
+  mov rdi, rsp
+  call rukaml_initialize
+  sub rsp, 8*6 ; allocate for local variables temp6, temp5, unit, temp3, temp2, r
+  mov rdi, 4
+  sub rsp, 8*4 ; allocate space on stack for array elements
+  mov qword [rbp-7*8],  3
+  mov qword [rbp-8*8],  3
+  mov qword [rbp-9*8],  4
+  mov qword [rbp-10*8],  1
+  mov rsi, rsp
+  call rukaml_alloc_array
+  add rsp, 8*4 ; free space for array elements
+  mov [rbp-1*8], rax
+  mov rdi, rukaml_array_set
+  mov rsi, 3
+  call rukaml_alloc_closure
+  mov rdi, rax
+  mov rsi, 1
+  mov rdx, [rbp-1*8]
+  mov al, 0
+  call rukaml_applyN
+  mov [rbp-2*8], rax
+  sub rsp, 8 ; padding
+  sub rsp, 8 ; first arg of a function temp2
+  mov qword [rbp-8*8],  1
+  mov rax, 0  ; no float arguments
+  mov rdi, [rbp-2*8]
+  mov rsi, 1
+  mov rdx, [rbp-8*8]
+  call rukaml_applyN
+  add rsp, 8*2 ; free space for args of function "temp2"
+  mov [rbp-3*8], rax
+  sub rsp, 8 ; padding
+  sub rsp, 8 ; first arg of a function temp3
+  mov qword [rbp-8*8],  42
+  mov rax, 0  ; no float arguments
+  mov rdi, [rbp-3*8]
+  mov rsi, 1
+  mov rdx, [rbp-8*8]
+  call rukaml_applyN
+  add rsp, 8*2 ; free space for args of function "temp3"
+  mov [rbp-4*8], rax
+  mov rdi, rukaml_array_get
+  mov rsi, 2
+  call rukaml_alloc_closure
+  mov rdi, rax
+  mov rsi, 1
+  mov rdx, [rbp-1*8]
+  mov al, 0
+  call rukaml_applyN
+  mov [rbp-5*8], rax
+  sub rsp, 8 ; padding
+  sub rsp, 8 ; first arg of a function temp5
+  mov qword [rbp-8*8],  1
+  mov rax, 0  ; no float arguments
+  mov rdi, [rbp-5*8]
+  mov rsi, 1
+  mov rdx, [rbp-8*8]
+  call rukaml_applyN
+  add rsp, 8*2 ; free space for args of function "temp5"
+  mov [rbp-6*8], rax
+  add rsp, -8*2
+  mov r11, [rbp-6*8]
+  mov qword [rsp], r11
+  call rukaml_print_int ; short
+  add rsp, 8*2
+  mov rax, rax
+  add rsp, 8*6 ; deallocate local variables temp6, temp5, unit, temp3, temp2, r
+  pop rbp
+  ret  ;;;; main

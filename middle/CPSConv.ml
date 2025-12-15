@@ -595,7 +595,6 @@ let test_cps text =
   let open Frontend in
   let stru = Result.get_ok @@ Parsing.parse_value_bindings text in
   match cps_conv stru with
-
   | Ok cps_prog ->
     Format.printf "%a" pp_stru cps_prog;
     ANF.reset_gensym ()
@@ -836,7 +835,6 @@ let%expect_test "cps fake rec" =
     |}]
 ;;
 
-(*todo : fix*)
 let%expect_test "print-arg when not-inlined" =
   test_cps
     {| let revapply a f = f a
