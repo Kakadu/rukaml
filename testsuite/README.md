@@ -61,7 +61,9 @@ The test is compiled for each specified target for each specified flag set
   - `stdin` - prepares input for test<br>
   - `sh` - runs shell commands before test<br>
 
+Both `stdout` and `exit` can be omitted and default to `""` and `0` respectively.<br>
 If ommited completely the test is not executed but is still compiled and linked
+
 
 ## General pipeline
 `make testsuite` runs:
