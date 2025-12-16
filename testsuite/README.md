@@ -55,15 +55,15 @@ which makes the testsuite promote compiler's output to the `expected` directory
 The test is compiled for each specified target for each specified flag set
 
 - `run` - run commands for the test.<br>
-  The following commands is currently available:<br>
+  The following commands are currently available:<br>
   - `stdout` - expects specific stdout<br>
   - `exit` - expects specific exit code<br>
   - `stdin` - prepares input for test<br>
   - `sh` - runs shell commands before test<br>
 
 Both `stdout` and `exit` can be omitted and default to `""` and `0` respectively.<br>
-If ommited completely the test is not executed but is still compiled and linked
 
+If ommited completely the test is not executed but is still compiled and linked
 
 ## General pipeline
 `make testsuite` runs:
