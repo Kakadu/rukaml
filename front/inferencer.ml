@@ -246,8 +246,6 @@ module Scheme = struct
 
   let make_mono ty = S (Var_set.empty, ty)
 
-  (* let make_poly ty *)
-
   let occurs_in info = function
     | S (xs, t) -> (not (Var_set.mem info.binder xs)) && Type.occurs_in info t
   ;;
@@ -341,7 +339,6 @@ let unify weak l r =
       let* () = helper l1 l2 in
       helper r1 r2
     | TParam (a1, t1), TParam (a2, t2) ->
-      (* TODO: make tests *)
       let* () = helper a1 a2 in
       if String.equal t1 t2 then return () else fail (`UnificationFailed (l, r))
     | TProd (a1, b1, ts1), TProd (a2, b2, ts2) ->
@@ -510,6 +507,8 @@ let restrict : restriction_state -> weak_table -> ty -> ty t =
       helper a xs (if is_mutable t && not_poly then MakeWeak else state) arrow
     | Prim _ | Weak _ -> xs
     | Arrow (l, r) ->
+      (* Check this branch: V^-(t1 -> t2) =  FTV(t1) U V^-(t2) *)
+
       (* log "%a" Pprint.pp_typ l; *)
       (* log "%a" Pprint.pp_typ r; *)
       let xs = helper r xs state OnTheRight in
@@ -638,6 +637,7 @@ let infer env table expr =
         (* log "tv = %a" pp_ty tv; *)
         return (tv, TApp (te1, te2, tv))
       | EConst (PConst_int _n as c) -> return (int_typ, TConst c)
+      | EConst (PConst_char _c as c) -> return (char_typ, TConst c)
       | EConst (PConst_bool _b as c) -> return (bool_typ, TConst c)
       | Parsetree.EIf (c, th, el) ->
         let* t1, tc = helper env state c in
@@ -714,6 +714,11 @@ let start_env =
   let extend_s varname = Type_env.extend ~varname (Ident.of_string varname) in
   Type_env.empty
   |> extend_s "print" (Scheme.make_mono (tarrow int_typ unit_typ))
+  |> extend_s "char_code" (Scheme.make_mono (tarrow char_typ int_typ))
+  |> extend_s "stdin" (Scheme.make_mono (array_typ char_typ))
+  |> extend_s
+       "open_in"
+       (Scheme.make_mono (tarrow (array_typ char_typ) (array_typ char_typ)))
   |> extend_s "<" cmp_scheme
   |> extend_s ">" cmp_scheme
   |> extend_s "<=" cmp_scheme

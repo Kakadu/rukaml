@@ -38,6 +38,8 @@ static uint64_t log_level = 0;
 #define MAKE_GRAY(ptr) (*ptr = (*ptr | (0b01 << 8)))
 #define MAKE_BLACK(ptr) (*ptr = (*ptr | (0b11 << 8)))
 
+#define MAX_STRING_FROM_STDIN (2 << 15)
+
 int HEAP_SIZE = 160;
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
@@ -214,7 +216,8 @@ void rukaml_print_int(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
   // puts(repr);
   // printf("%s\n", __func__);
   // fflush(stdout);
-  // printf("%s a0=%d a1=%d a2=%d a3=%d a4=%d a5=%d a6=%d a7=%d\n", __func__, a0,a1,a2,a3,a4,a5,a6, a7);
+  // printf("%s a0=%d a1=%d a2=%d a3=%d a4=%d a5=%d a6=%d a7=%d\n", __func__,
+  // a0,a1,a2,a3,a4,a5,a6, a7);
   printf("%s %d\n", __func__, x);
   fflush(stdout);
 }
@@ -307,6 +310,10 @@ rukaml_closure *copy_closure(rukaml_closure *src)
   return memcpy(dst, src, size);
 }
 
+void *rukaml_identity(void *x) {
+  return x;
+}
+
 void *rukaml_alloc_pair(void *l, void *r)
 {
   if (GC.allocated_words + 3 > HEAP_SIZE)
@@ -326,7 +333,7 @@ void *rukaml_alloc_pair(void *l, void *r)
   return rez + 1;
 }
 
-void *rukaml_alloc_array(int64_t size, void** arr)
+void *rukaml_alloc_array(int64_t size)
 {
   if (GC.allocated_words + size + 1 > HEAP_SIZE)
   {
@@ -339,10 +346,6 @@ void *rukaml_alloc_array(int64_t size, void** arr)
   rez[0] = (uint64_t *)HEADER(size, Array_tag);
   assert(TAG(rez + 1) == Array_tag);
   assert(SIZE(rez + 1) == size);
-
-  for (unsigned int i = 1; i < size + 1; i++) {
-    rez[size - i + 1] = arr[i-1];
-  }
   logGC("An array %lX is created. Allocated words = %lu\n",
         (uint64_t)(rez + 1), GC.allocated_words);
   return rez + 1;
@@ -353,6 +356,52 @@ uint64_t rukaml_array_length(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
                              void **arr)
 {
   return SIZE(arr);
+}
+
+void **rukaml_array_stdin(void) {
+  char buf[MAX_STRING_FROM_STDIN];
+  int code = scanf("%s", buf);
+  if (!code) {
+    return rukaml_alloc_array(0);
+  }
+  size_t size = strlen(buf);
+  void **arr = rukaml_alloc_array(size);
+  
+  for (int i = 0; i < size; i++) {
+    arr[i] = (void *) (buf[i]);
+  }
+  return arr;
+}
+
+void **rukaml_array_read_in(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
+			    uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
+                            void **str) {
+  int len = 0;
+  while (str[len++] != 0)
+    ;
+  char path[len];
+  for (int i = 0; i < len; i++) {
+    path[i] = (char)str[i];
+  }
+  
+  FILE *fp = fopen(path, "r");
+  if (!fp) {
+    return rukaml_alloc_array(0);
+  }
+  
+  fseek(fp, 0, SEEK_END);
+  size_t size = ftell(fp);
+  fseek(fp, 0, SEEK_SET);
+
+  void **arr = rukaml_alloc_array(size);
+  
+  for (int i = 0; i < size; i++) {
+    int c = fgetc(fp);
+    arr[i] = (void *) (c);
+  }
+  fread(arr, sizeof(void *), size, fp);
+  fclose(fp);
+  return arr;
 }
 
 void *rukaml_array_get(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,

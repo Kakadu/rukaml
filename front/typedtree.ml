@@ -49,6 +49,7 @@ let tlink t = { typ_desc = TLink t }
 let tparam a t = { typ_desc = TParam (a, t) }
 let tprod a b ts = { typ_desc = TProd (a, b, ts) }
 let int_typ = tprim "int"
+let char_typ = tprim "char"
 let bool_typ = tprim "bool"
 let unit_typ = tprim "unit"
 let array_typ a = tparam a "array"

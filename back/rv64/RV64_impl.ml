@@ -300,7 +300,7 @@ let print_epilogue ppf fname =
 ;;
 
 let sd_dest k a = function
-  | DReg s -> mv k a (RU s)
+  | DReg s -> mv k (RU s) a
   | DStack_var name -> sd k a (Addr_of_local.pp_to_mach name)
 ;;
 
@@ -361,12 +361,17 @@ let generate_body is_toplevel body =
       | Compile_lib.ANF.AUnit | AConst (PConst_bool false) -> pp_access 0 i
       | AConst (PConst_bool true) -> pp_access 1 i
       | AConst (PConst_int n) -> pp_access ~doc:"constant" n i
+      | AConst (PConst_char c) -> pp_access ~doc:"constant" (Char.code c) i
       | AVar vname when Option.is_some (is_toplevel vname) ->
         (match is_toplevel vname with
          | Some arity ->
            emit_alloc_closure vname.hum_name arity;
            emit sd a0 (ROffset (SP, 8 * i))
          | None -> assert false)
+      | AVar { Ident.hum_name = "char_code"; _ } ->
+        emit_alloc_closure "rukaml_identity" 1;
+        (* Result is in a0 *)
+        emit sd a0 (ROffset (SP, 8 * i))
       | AVar { Ident.hum_name = "print"; _ } ->
         emit_alloc_closure "rukaml_print_int" 1;
         (* Result is in a0 *)
@@ -383,6 +388,8 @@ let generate_body is_toplevel body =
         emit_alloc_closure "rukaml_array_set" 3;
         (* Result is in a0 *)
         emit sd a0 (ROffset (SP, 8 * i))
+      | AVar { Ident.hum_name = "stdin"; _ } -> emit call "rukaml_array_stdin"
+      (* Result is in a0 *)
       | AVar vname ->
         (* TODO: use pp_access *)
         emit ld t0 (pp_to_mach vname) ~comm:(sprintf "arg %S" vname.hum_name);
@@ -449,6 +456,50 @@ let generate_body is_toplevel body =
       helper dest bthen;
       emit label lab_fin
     | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "char_code"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar v when Addr_of_local.has_key v ->
+         emit ld t0 (pp_to_mach v);
+         emit sd_dest t0 dest
+       | AConst (PConst_char c) ->
+         emit li t0 (Char.code c);
+         emit sd_dest t0 dest
+       | _ -> failwith "Should not happen: char_code")
+    | CAtom (AVar f)
+      when f.Ident.hum_name = "stdin"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      emit call "rukaml_array_stdin";
+      emit sd_dest a0 dest
+    | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "open_in"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar v when Addr_of_local.has_key v ->
+         with_two_slots (fun ra_name arg_name ->
+           emit addi SP SP (-16);
+           emit sd ra (pp_to_mach ra_name);
+           emit ld t0 (pp_to_mach v);
+           emit mv (pp_to_mach arg_name) t0;
+           emit call "rukaml_array_read_in";
+           emit ld ra (pp_to_mach ra_name);
+           emit sd_dest a0 dest;
+           emit addi SP SP 16)
+       | AArray _ as r ->
+         with_two_slots (fun ra_name arg_name ->
+           emit addi SP SP (-16);
+           emit sd ra (pp_to_mach ra_name);
+           emit sd a0 (pp_to_mach arg_name);
+           helper_a (DReg "a0") r;
+           emit call "rukaml_array_read_in";
+           emit ld ra (pp_to_mach ra_name);
+           emit sd_dest a0 dest;
+           emit addi SP SP 16)
+       | _ -> failwith "Should not happen: open_in")
+    | CApp (AVar f, arg1, [])
       when f.Ident.hum_name = "print"
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
@@ -481,10 +532,11 @@ let generate_body is_toplevel body =
            emit sd_dest a0 dest;
            emit addi SP SP 16)
        | AConst (PConst_bool _)
+       | AConst (PConst_char _)
        | AArray _ | AVar _ | APrimitive _
        | ATuple (_, _, _)
        | ALam (_, _)
-       | AUnit -> failwith "Should not happen")
+       | AUnit -> failwith "Should not happen: print_int")
     | CApp (AVar f, arg1, [])
       when f.Ident.hum_name = "length"
            && is_toplevel f = None
@@ -600,18 +652,6 @@ let generate_body is_toplevel body =
            printfn ppf "%s:" exit_lab;
            dealloc_var ppf right_name;
            dealloc_var ppf left_name *)
-    | CApp (APrimitive "-", AVar vname, [ AConst (PConst_int 1) ]) ->
-      (match is_toplevel vname with
-       | None ->
-         emit ld t0 (pp_to_mach vname);
-         (* printfn ppf "  ld t0, %a" Addr_of_local.pp_local_exn vname; *)
-         emit addi t0 t0 (-1);
-         (* printfn ppf "  addi t0, t0, -1"; *)
-         emit sd_dest t0 dest
-         (* printfn ppf "  sd t0, %a" Addr_of_local.pp_dest dest *)
-       | Some _ ->
-         (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
-         failwiths "not implemented %d" __LINE__)
     | CApp (APrimitive "-", AVar vname, [ AConst (PConst_int n) ]) ->
       (match is_toplevel vname with
        | None ->
@@ -619,8 +659,8 @@ let generate_body is_toplevel body =
          (* printfn ppf "  ld t5, %a #" Addr_of_local.pp_local_exn vname; *)
          emit addi t5 t5 (-n);
          (* printfn ppf "  addi t5, t5, -%d" n; *)
-         emit sd_dest t5 dest
          (* printfn ppf "  sd t5, %a" Addr_of_local.pp_dest dest *)
+         emit sd_dest t5 dest
        | Some _ ->
          (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
          failwiths "not implemented %d" __LINE__)
@@ -630,6 +670,7 @@ let generate_body is_toplevel body =
        | None ->
          emit ld t0 (Addr_of_local.pp_to_mach vname);
          emit li t1 n;
+         emit comment "going to do some arithmetic";
          emit
            (match prim with
             | "+" -> add
@@ -657,13 +698,7 @@ let generate_body is_toplevel body =
         t5
         t3
         t4;
-      (match dest with
-       | DReg _ ->
-         emit addi1dest dest t5 0
-         (* printfn ppf "  addi %a, t5, 0" Addr_of_local.pp_dest dest *)
-       | DStack_var _ ->
-         (* printfn ppf "  sd t5, %a" Addr_of_local.pp_dest dest *)
-         emit sd_dest t5 dest)
+      emit sd_dest t5 dest
     | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
       (* Callig a rukaml function uses custom calling convention.
            Pascal convention: all arguments on stack, LTR *)
@@ -764,6 +799,13 @@ let generate_body is_toplevel body =
          (* printfn ppf "  li t0, %d" n; *)
          emit sd_dest t0 dest
          (* printfn ppf "  sd t0, %a" Addr_of_local.pp_dest dest *))
+    | AConst (Parsetree.PConst_char c) ->
+      let n = Char.code c in
+      (match dest with
+       | DReg r -> emit li (RU r) n
+       | DStack_var _ ->
+         emit li t0 n;
+         emit sd_dest t0 dest)
     | AVar vname ->
       (match is_toplevel vname with
        | None ->
@@ -783,24 +825,14 @@ let generate_body is_toplevel body =
          emit sd_dest (RU "a0") dest
          (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *))
     | AArray r ->
-      let length = List.length r in
-      emit addi SP SP (-8 * (length + 1));
-      let idents =
-        List.map
-          (fun x ->
-             let ident = Ident.of_string @@ Printf.sprintf "r%d" (gensym ()) in
-             Addr_of_local.extend ident;
-             ident, x)
-          r
-      in
-      let idents = List.rev idents in
-      List.iter (fun (i, x) -> helper_a (DStack_var i) x) idents;
-      emit li a0 length;
-      emit sd_dest a1 (DReg "sp");
+      emit li a0 (List.length r);
       emit call "rukaml_alloc_array";
-      List.iter (fun (i, _) -> Addr_of_local.remove_local i) idents;
-      emit addi SP SP (8 * (length + 1));
-      emit sd_dest (RU "a0") dest
+      List.iteri
+        (fun i x ->
+           helper_a (DReg "t0") x;
+           emit sd t0 (ROffset (a0, 8 * i)))
+        (List.rev r);
+      emit sd_dest a0 dest
     | ATuple (_a, _b, []) ->
       failwiths "not implemented %s %d" __FILE__ __LINE__
       (* store_ra_temp ppf (fun ra_name -> *)
@@ -903,10 +935,13 @@ let codegen ?(wrap_main_into_start = true) anf file =
         (printfn ppf "extern %s")
         [ "rukaml_alloc_closure"
         ; "rukaml_print_int"
+        ; "rukaml_identity"
         ; "rukaml_alloc_array"
         ; "rukaml_array_length"
         ; "rukaml_array_get"
         ; "rukaml_array_set"
+        ; "rukaml_array_stdin"
+        ; "rukaml_array_read_in"
         ; "rukaml_applyN"
         ; "rukaml_field"
         ; (* printfn ppf "extern rukaml_alloc_tuple"; *)
@@ -970,13 +1005,14 @@ let codegen ?(wrap_main_into_start = true) anf file =
             | ANF.APname name -> name)
           pats
       in
-      let _ = if argc mod 2 = 0 then argc else argc + 1 in
+      (* let _ = if argc mod 2 = 0 then argc else argc + 1 in *)
       let () =
         if name.Ident.hum_name = "main"
         then (
           emit mv a0 sp;
           emit call "rukaml_initialize";
-          emit comment "this is main")
+          emit comment "this is main";
+          emit li a0 0)
         else
           List.rev pats
           |> ListLabels.iteri ~f:(fun i -> function

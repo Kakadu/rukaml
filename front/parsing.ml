@@ -44,6 +44,10 @@ let parens p =
   char '(' *> trace_pos "after '('" *> p <* trace_pos "before ')'" <* lchar ')'
 ;;
 
+let quotes p =
+  char '"' *> trace_pos "after '\"'" *> p <* trace_pos "before '\"'" <* lchar '"'
+;;
+
 let brackets p =
   char '[' *> char '|' *> trace_pos "after '[|'" *> p
   <* trace_pos "before '|]'"
@@ -76,6 +80,13 @@ let number =
 let is_char_valid_for_name = function
   | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '\'' | '_' -> true
   | _ -> false
+;;
+
+let distinguished_char =
+  any_char
+  >>= function
+  | x when is_char_valid_for_name x -> return x
+  | _ -> fail "distinguished_char"
 ;;
 
 let is_keyword = function
@@ -283,6 +294,10 @@ let pack : dispatch =
       ws
       *> (fail ""
           <|> ws *> (number >>| fun n -> econst (const_int n))
+          <|> ws
+              *> (char '\'' *> distinguished_char
+                  <* char '\''
+                  >>| fun c -> econst (const_char c))
           <|> ws *> char '(' *> char ')' *> return eunit
           <|> ws *> char '[' *> char ']' *> return enil
           <|> (ws *> var_name
@@ -304,12 +319,23 @@ let pack : dispatch =
                  <*> (d.expr d <* ws)
                  <*> many (string ";" *> d.expr d <* ws)
                  <|> return @@ earray [])
+          <|> quotes
+                (many (distinguished_char >>| fun c -> econst (const_char c)) >>| earray)
           <|> parens
                 (return (fun a b xs -> etuple a b xs)
                  <*> (d.expr d <* ws)
                  <*> (char ',' *> d.expr d <* ws)
                  <*> many (char ',' *> d.expr d <* ws))
-          <|> (ws *> var_name >>| evar)
+          <|> (ws *> var_name
+               >>= fun v ->
+               char '.' *> char '(' *> number
+               <* char ')'
+               >>= (fun i ->
+               string " <- " *> d.expr d
+               >>= (fun e ->
+               return @@ eapp (evar "set") [ evar v; econst (const_int i); e ])
+               <|> return @@ eapp (evar "get") [ evar v; econst (const_int i) ])
+               <|> return (evar v))
           <|> (let* name = ws *> constructor_name in
                (let* patt = ws *> d.expr_basic d in
                 return (EConstruct (name, Some patt)))

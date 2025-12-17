@@ -40,6 +40,8 @@ static uint64_t log_level = 0;
 #define MAKE_GRAY(ptr) (*ptr = (*ptr | (0b01 << 8)))
 #define MAKE_BLACK(ptr) (*ptr = (*ptr | (0b11 << 8)))
 
+#define MAX_STRING_FROM_STDIN (2 << 15)
+
 int HEAP_SIZE = 160;
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
@@ -229,6 +231,51 @@ uint64_t rukaml_array_length(int a0, int a1, int a2, int a3, int a4, int a5, voi
   return SIZE(arr);
 }
 
+void **rukaml_array_stdin(void) {
+  char buf[MAX_STRING_FROM_STDIN];
+  int code = scanf("%s", buf);
+  if (!code) {
+    return rukaml_alloc_array(0);
+  }
+  size_t size = strlen(buf);
+  void **arr = rukaml_alloc_array(size);
+  
+  for (int i = 0; i < size; i++) {
+    arr[i] = (void *) (buf[i]);
+  }
+  return arr;
+}
+
+void **rukaml_array_read_in(int a0, int a1, int a2, int a3, int a4, int a5,
+                            void **str) {
+  int len = 0;
+  while (str[len++] != 0)
+    ;
+  char path[len];
+  for (int i = 0; i < len; i++) {
+    path[i] = (char)str[i];
+  }
+  
+  FILE *fp = fopen(path, "r");
+  if (!fp) {
+    return rukaml_alloc_array(0);
+  }
+  
+  fseek(fp, 0, SEEK_END);
+  size_t size = ftell(fp);
+  fseek(fp, 0, SEEK_SET);
+
+  void **arr = rukaml_alloc_array(size);
+  
+  for (int i = 0; i < size; i++) {
+    int c = fgetc(fp);
+    arr[i] = (void *) (c);
+  }
+  fread(arr, sizeof(void *), size, fp);
+  fclose(fp);
+  return arr;
+}
+
 void *rukaml_array_get(int a0, int a1, int a2, int a3, int a4, int a5,
                            void **arr, uint64_t n)
 {
@@ -333,7 +380,7 @@ void *rukaml_alloc_pair(void *l, void *r)
   return rez + 1;
 }
 
-void *rukaml_alloc_array(int32_t size, void** arr)
+void *rukaml_alloc_array(int32_t size)
 {
   if (GC.allocated_words + size + 1 > HEAP_SIZE)
   {
@@ -346,9 +393,6 @@ void *rukaml_alloc_array(int32_t size, void** arr)
   rez[0] = (uint64_t *)HEADER(size, Array_tag);
   assert(TAG(rez + 1) == Array_tag);
   assert(SIZE(rez + 1) == size);
-  for (unsigned int i = 1; i < size + 1; i++) {
-    rez[size - i + 1] = arr[i-1];
-  }
   logGC("An array %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
   return rez + 1;
 }
