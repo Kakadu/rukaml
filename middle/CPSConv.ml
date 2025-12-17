@@ -138,7 +138,7 @@ let preconv_chore ?(with_printing = false) (rec_flag, ptrn, e) k glob_vars free_
       new_count name ident.id k
     | PTuple (p1, p2, pp) ->
       tuple_fold_map_k helper_p p1 p2 pp (fun dp1 dp2 dps -> k (DPTuple (dp1, dp2, dps)))
-    | PAny | PConstruct _ -> failwith "not implemented"
+    | _ -> failwith "not implemented"
   in
   let rec helper_e e vars k free_vars =
     match e with
@@ -241,19 +241,19 @@ let%expect_test "counts simple" =
   test_count {| let m x y z = x y y|};
   [%expect
     {|
-    var x got id 31
-    var y got id 32
-    var z got id 33
-    var m got id 34
-    id: 31; counts 1
-    id: 32; counts 2
-    id: 33; counts 0
-    id: 34; counts 0
+    var x got id 35
+    var y got id 36
+    var z got id 37
+    var m got id 38
+    id: 35; counts 1
+    id: 36; counts 2
+    id: 37; counts 0
+    id: 38; counts 0
     ids that ref_once:
-    31
+    35
     ids that no_refs:
-    33
-    34
+    37
+    38
     |}]
 ;;
 
@@ -261,22 +261,22 @@ let%expect_test "counts branching, shadowing" =
   test_count {| let m x y = if x then fun x -> x 1 else fun x -> (y , y x)|};
   [%expect
     {|
-    var x got id 35
-    var y got id 36
-    var x got id 37
-    var x got id 38
-    var m got id 39
-    id: 35; counts 1
-    id: 36; counts 2
-    id: 37; counts 1
-    id: 38; counts 1
-    id: 39; counts 0
+    var x got id 39
+    var y got id 40
+    var x got id 41
+    var x got id 42
+    var m got id 43
+    id: 39; counts 1
+    id: 40; counts 2
+    id: 41; counts 1
+    id: 42; counts 1
+    id: 43; counts 0
     ids that ref_once:
-    35
-    37
-    38
-    ids that no_refs:
     39
+    41
+    42
+    ids that no_refs:
+    43
     |}]
 ;;
 
@@ -284,12 +284,12 @@ let%expect_test "counts rec, ptuple" =
   test_count {| let rec (x,y) = x x y|};
   [%expect
     {|
-    var x got id 40
-    var y got id 41
-    id: 40; counts 2
-    id: 41; counts 1
+    var x got id 44
+    var y got id 45
+    id: 44; counts 2
+    id: 45; counts 1
     ids that ref_once:
-    41
+    45
     ids that no_refs:
     |}]
 ;;

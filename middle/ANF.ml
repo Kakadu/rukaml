@@ -493,12 +493,14 @@ let anf_pat pat ?(kbefore = fun _ -> Fun.id) k =
             (helper h name_a (fun _ -> loop (1 + i) tl))
       in
       loop 0 (a :: b :: xs)
+    | _ -> failwith "not implemented"
   in
   match pat with
   | Typedtree.Tpat_var s -> kbefore s (k s)
   | Tpat_tuple _ ->
     let name_p = Ident.of_string (gensym_s ()) in
     kbefore name_p (helper pat name_p (fun () -> k name_p))
+  | _ -> failwith "not implemented"
 ;;
 
 let test_anf_pat text =
@@ -639,6 +641,7 @@ let anf =
         __LINE__
         Pprinttyped.pp_hum
         m
+    | _ -> failwith "not implemented"
   in
   fun e -> helper e complex_of_atom
 ;;
@@ -649,6 +652,7 @@ let anf_vb vb : vb =
     match vb.tvb_pat with
     | Tpat_var s -> s
     | Tpat_tuple _ -> assert false
+    | _ -> failwith "not implemented"
   in
   vb.tvb_flag, name, anf_body
 ;;
