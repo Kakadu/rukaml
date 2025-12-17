@@ -206,7 +206,7 @@ let allocate_locals input_anf : (now:unit -> unit) * _ =
       local_names := Ident.Ident_set.add name !local_names;
       helper_c rhs;
       helper where_
-    | ELet (_, Tpat_tuple (_, _, _), _, _) -> assert false
+    | ELet _ -> assert false
   and helper_c = function
     | CIte (_, th, el) ->
       helper th;
@@ -413,7 +413,7 @@ let generate_body is_toplevel body =
            (Addr_of_local.find_exn name); *)
       helper_c local rhs;
       helper dest wher
-    | ELet (_, Tpat_tuple (_, _, _), _, _) -> assert false
+    | ELet _ -> assert false
   and helper_c (dest : dest) = function
     | CIte (CAtom (AConst (Parsetree.PConst_bool true)), bth, _bel) -> helper dest bth
     | CIte (CAtom (AConst (Parsetree.PConst_bool false)), _bth, bel) -> helper dest bel

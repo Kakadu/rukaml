@@ -183,7 +183,7 @@ let allocate_locals ppf input_anf : now:unit -> unit =
       names := name :: !names;
       helper_c rhs;
       helper where_
-    | ELet (_, Tpat_tuple (_, _, _), _, _) -> assert false
+    | ELet _ -> assert false
   and helper_c = function
     | CIte (_, th, el) ->
       helper th;
@@ -310,7 +310,7 @@ let generate_body is_toplevel ppf body =
            (Addr_of_local.find_exn name); *)
       helper_c local rhs;
       helper dest wher
-    | ELet (_, Tpat_tuple (_, _, _), _, _) -> assert false
+    | ELet _ -> assert false
   and helper_c (dest : dest) = function
     | CIte (CAtom (AConst (Frontend.Parsetree.PConst_bool true)), bth, _bel) ->
       helper dest bth

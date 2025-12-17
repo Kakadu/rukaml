@@ -227,12 +227,12 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
       Format.eprintf "ANF: %a\n%!" ANF.pp_c anf;
       failwiths "Unsupported case %s %d" __FUNCTION__ __LINE__
   and gen : _ -> Llvm.llvalue = function
-    | ELet (_, Typedtree.Tpat_tuple _, _, _) -> assert false
     | ELet (_, Tpat_var name, rhs, wher) ->
       let new_virt = gen_c rhs in
       with_virt_binding ~key:name new_virt ~f:(fun () ->
         let rez = gen wher in
         rez)
+    | ELet _ -> assert false
     | EComplex c -> gen_c c
   in
   let args, body = ANF.group_abstractions body in
