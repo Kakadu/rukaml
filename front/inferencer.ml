@@ -499,7 +499,7 @@ let tpat_const_unit = Tpat_unit
 let rec check_pat ~level env table = function
   | Parsetree.PUnit -> return (env, Tpat_unit, unit_typ)
   | Parsetree.PConst (PConst_int n) -> return (env, Tpat_const (PConst_int n), int_typ)
-  | Parsetree.PConst (PConst_bool b) -> return (env, Tpat_const (PConst_bool b), int_typ)
+  | Parsetree.PConst (PConst_bool b) -> return (env, Tpat_const (PConst_bool b), bool_typ)
   | Parsetree.PVar x ->
     let* tx = fresh_var ~level in
     let xident = Ident.of_string x in
@@ -784,6 +784,8 @@ let infer env table expr =
       | EMatch (expr, ((p1, e1), cases)) ->
         let* expr_ty, expr = helper env state expr in
         let* env1, p1, pty = check_pat ~level:!current_level env table p1 in
+        Format.printf "<< patt: { %s } >>\n" (show_pattern p1);
+        Format.printf "<< pty: { %s } >>\n" (show_ty pty);
         let* () = unify table pty expr_ty in
         let* ety, e1 = helper env1 state e1 in
         let infer_case acc (patt, expr) =
