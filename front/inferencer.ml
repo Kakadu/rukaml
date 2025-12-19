@@ -784,8 +784,6 @@ let infer env table expr =
       | EMatch (expr, ((p1, e1), cases)) ->
         let* expr_ty, expr = helper env state expr in
         let* env1, p1, pty = check_pat ~level:!current_level env table p1 in
-        Format.printf "<< patt: { %s } >>\n" (show_pattern p1);
-        Format.printf "<< pty: { %s } >>\n" (show_ty pty);
         let* () = unify table pty expr_ty in
         let* ety, e1 = helper env1 state e1 in
         let infer_case acc (patt, expr) =
