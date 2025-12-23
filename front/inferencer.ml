@@ -799,7 +799,7 @@ let infer env table expr =
         let* _pty, ety, cases =
           List.fold cases ~init:(return (pty, ety, [])) ~f:infer_case
         in
-        return (ety, TMatch (expr, ((p1, e1), cases), ety))
+        return (ety, TMatch (expr, ((p1, e1), List.rev cases), ety))
       | EConstruct (name, arg_opt) ->
         let* constr_info, type_info = find_constructor name env in
         let ty_name, ty_params = type_info.tty_ident.hum_name, type_info.tty_params in
