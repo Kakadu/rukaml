@@ -268,3 +268,77 @@
                      | Nil -> true
                      | Cons (hd, tl) -> (if pred hd then (forall pred) tl else false)
 #
+
+# assert type of find is ('a -> bool) -> 'a list -> 'a option
+  $ run << EOF
+  > type 'a option =
+  >   | Some of 'a
+  >   | None
+  > 
+  > let rec find pred ls =
+  >   match ls with
+  >   | [] -> None
+  >   | x :: xs -> if pred x then Some x else find pred xs
+  type '_0 option =
+    | Some of '_0
+    | None
+  let rec find: ('_4 -> bool) -> '_4 list -> '_4 option =
+    fun pred ls -> match ls with
+                     | [] -> None
+                     | x :: xs -> (if pred x then Some x else (find pred) xs)
+#
+
+# assert type of find is ('a -> bool) -> 'a list -> 'a option
+  $ run << EOF
+  > type 'a option =
+  >   | Some of 'a
+  >   | None
+  > 
+  > let rec find pred ls =
+  >   match ls with
+  >   | [] -> None
+  >   | x :: xs -> if pred x then Some x else find pred xs
+  type '_0 option =
+    | Some of '_0
+    | None
+  let rec find: ('_4 -> bool) -> '_4 list -> '_4 option =
+    fun pred ls -> match ls with
+                     | [] -> None
+                     | x :: xs -> (if pred x then Some x else (find pred) xs)
+#
+
+# assert type of wrap is 'a list -> 'a option list
+# assert type of unwrap is 'a option list -> 'a list option
+  $ run << EOF
+  > type 'a option =
+  >   | Some of 'a
+  >   | None
+  > 
+  > let rec wrap ls =
+  >   match ls with
+  >   | [] -> []
+  >   | x :: xs -> Some x :: wrap ls
+  > 
+  > let unwrap ls =
+  >   let rec aux ls acc =
+  >     match ls with
+  >     | [] -> Some acc
+  >     | None :: _ -> None
+  >     | Some x :: xs -> aux xs (x :: acc)
+  >   in aux ls []
+  >  
+  type '_0 option =
+    | Some of '_0
+    | None
+  let rec wrap: '_2 list -> '_2 option list =
+    fun ls -> match ls with
+                | [] -> []
+                | x :: xs -> (Some x) :: (wrap ls)
+  let unwrap: '_19 option list -> '_19 list option =
+    fun ls -> let rec aux : '_19 option list -> '_19 list -> '_19 list option = fun ls acc -> 
+    match ls with
+      | [] -> Some acc
+      | None :: _ -> None
+      | Some x :: xs -> (aux xs) (x :: acc) in (aux ls) []
+
+#

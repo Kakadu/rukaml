@@ -78,8 +78,24 @@
   let main: int * int -> int =
     fun (x, y) -> match (x, y) with
                     | (a, b) -> a + b
-                    | _ -> 0
                     | x -> 1
+                    | _ -> 0
+
+  $ run << EOF
+  > let main f x =
+  >   match x with
+  >   | (a, b) -> f a b
+  let main: ('_3 -> '_4 -> '_6) -> '_3 * '_4 -> '_6 =
+    fun f x -> match x with
+                 | (a, b) -> (f a) b
+
+  $ run << EOF
+  > let first (x, y) =
+  >   match (x, y) with
+  >   | (a, b) -> a
+  let first: '_1 * '_2 -> '_1 =
+    fun (x, y) -> match (x, y) with
+                    | (a, b) -> a
 
 # unification should fail
   $ run << EOF
