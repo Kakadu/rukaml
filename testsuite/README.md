@@ -55,7 +55,7 @@ which makes the testsuite promote compiler's output to the `expected` directory
 The test is compiled for each specified target for each specified flag set
 
 - `run` - run commands for the test.<br>
-  The following commands are currently available:<br>
+  The following commands are available:<br>
   - `stdout` - expects specific stdout<br>
   - `exit` - expects specific exit code<br>
   - `stdin` - prepares input for test<br>
