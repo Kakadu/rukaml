@@ -301,7 +301,7 @@ module Type_env = struct
     extend ~varname:ident.hum_name ident scheme t
   ;;
 
-  let ident_of_string_exn s t = Ident.Ident_map.ident_of_string_exn s t.env_values
+  let ident_of_string s t = Ident.Ident_map.ident_of_string s t.env_values
 
   let free_vars t =
     Ident.Ident_map.fold_idents
@@ -311,7 +311,7 @@ module Type_env = struct
   ;;
 
   let find_exn s t = Ident.Ident_map.find_by_ident s t.env_values
-  let find_by_string_exn s t = Ident.Ident_map.find_by_string_exn s t.env_values
+  let find_by_string s t = Ident.Ident_map.find_by_string s t.env_values
 
   let extend_constructors ~ident ~type_ident constr_arg t =
     let constr = { constr_type_ident = type_ident; constr_ident = ident; constr_arg } in
@@ -458,7 +458,7 @@ let lookup_scheme : _ -> Type_env.t -> scheme t =
 
 let lookup_scheme_by_string : _ =
   fun s env ->
-  match Type_env.find_by_string_exn s env with
+  match Type_env.find_by_string s env with
   | scheme -> return scheme
   | (exception Stdlib.Not_found) | (exception Not_found_s _) -> fail (`NoVariable s)
 ;;
@@ -669,7 +669,7 @@ let infer env table expr =
         let* scheme = lookup_scheme_by_string x env in
         let* typ = instantiate ~level:!current_level scheme in
         let typ = elim table typ in
-        return (typ, TVar (x, Type_env.ident_of_string_exn x env, typ))
+        return (typ, TVar (x, Type_env.ident_of_string x env, typ))
       | EUnit -> return (unit_typ, TUnit)
       | Parsetree.EArray r ->
         (match r with
@@ -860,14 +860,14 @@ let vb ?(env = start_env) table (flg, pat, body) : (_, [> error ]) Result.t =
       let tv = Typedtree.tv v ~level:(-1) in
       let env = Type_env.extend_string name (S (Var_set.empty, tv)) env in
       let* ty, tbody = infer env table body in
-      return (env, ty, Tpat_var (Type_env.ident_of_string_exn name env), tbody)
+      return (env, ty, Tpat_var (Type_env.ident_of_string name env), tbody)
     | Recursive, PVar name ->
       let* v = fresh in
       let tv = Typedtree.tv v ~level:(-1) in
       let env = Type_env.extend_string name (S (Var_set.empty, tv)) env in
       let* ty, tbody = infer env table body in
       let* () = unify table tv (type_of_expr tbody) in
-      return (env, ty, Tpat_var (Type_env.ident_of_string_exn name env), tbody)
+      return (env, ty, Tpat_var (Type_env.ident_of_string name env), tbody)
     | Recursive, PTuple _ -> fail `Only_varibles_on_the_left_of_letrec
     | NonRecursive, PTuple _ -> failwith "Not implemented"
     | _ -> failwith "not implemented"
