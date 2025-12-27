@@ -316,8 +316,7 @@ module Type_env = struct
   let extend_constructors ~ident ~type_ident constr_arg t =
     let constr = { constr_type_ident = type_ident; constr_ident = ident; constr_arg } in
     { t with
-      env_constructors =
-        Ident.Ident_map.add ident.hum_name ident constr t.env_constructors
+      env_constructors = Ident.String_map.add ident.hum_name constr t.env_constructors
     }
   ;;
 
@@ -353,7 +352,7 @@ module Type_env = struct
     let env_values = Ident.Ident_map.map t.env_values ~f:(Scheme.apply s) in
     let env_types = Ident.Ident_map.map t.env_types ~f:(apply_to_type_declaration s) in
     let env_constructors =
-      Ident.Ident_map.map t.env_constructors ~f:(apply_to_constructor_info s)
+      Ident.String_map.map (apply_to_constructor_info s) t.env_constructors
     in
     { env_values; env_types; env_constructors }
   ;;
@@ -481,7 +480,7 @@ let instantiate_tconstr ?(level = 0) name var_set =
 ;;
 
 let find_constructor name (env : Type_env.t) =
-  match Ident.Ident_map.find_by_string_opt name env.env_constructors with
+  match Ident.String_map.find_opt name env.env_constructors with
   | None -> fail (`Unbound_constructor name)
   | Some constr_entry ->
     let ty_ident = constr_entry.constr_type_ident in

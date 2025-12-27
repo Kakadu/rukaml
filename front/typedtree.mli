@@ -123,7 +123,7 @@ val value_binding : Parsetree.rec_flag -> pattern -> expr -> scheme -> value_bin
 
 module TypeEnv : sig
   type t =
-    { env_constructors : constructor_info Ident.Ident_map.t
+    { env_constructors : constructor_info Ident.String_map.t
     ; env_types : type_declaration Ident.Ident_map.t
     ; env_values : scheme Ident.Ident_map.t
     }

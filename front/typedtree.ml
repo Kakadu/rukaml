@@ -178,7 +178,7 @@ let value_binding tvb_flag tvb_pat tvb_body tvb_typ =
 
 module TypeEnv = struct
   type t =
-    { env_constructors : constructor_info Ident.Ident_map.t
+    { env_constructors : constructor_info Ident.String_map.t
     ; env_types : type_declaration Ident.Ident_map.t
     ; env_values : scheme Ident.Ident_map.t
     }
@@ -186,7 +186,7 @@ module TypeEnv = struct
   let empty =
     { env_values = Ident.Ident_map.empty
     ; env_types = Ident.Ident_map.empty
-    ; env_constructors = Ident.Ident_map.empty
+    ; env_constructors = Ident.String_map.empty
     }
   ;;
 
@@ -226,8 +226,8 @@ module TypeEnv = struct
     let param_binder = -1
     let param_ty = tv ~level:(-1) param_binder
 
-    let cons_ident = Ident.of_string "::"
-    let nil_ident = Ident.of_string "[]"
+    let nil_ident = Ident.ident "[]" 0
+    let cons_ident = Ident.ident "::" 1
 
     let cons_arg_ty = Some (tprod param_ty (tconstr [ param_ty ] "list") [])
 
@@ -261,8 +261,7 @@ module TypeEnv = struct
   let add_constructor (env : t) (constr : constructor_info) =
     let ident = constr.constr_ident in
     { env with
-      env_constructors =
-        Ident.Ident_map.add ident.hum_name ident constr env.env_constructors
+      env_constructors = Ident.String_map.add ident.hum_name constr env.env_constructors
     }
   ;;
 
