@@ -67,7 +67,6 @@ static struct gc_data GC = {.ebp = 0, .allocated_words = 0, .stats = {.gs_alloca
 
 uint64_t allocated_closures = 0;
 
-
 void rukaml_initialize(uint64_t ebp)
 {
   setbuf(stdout, NULL);
@@ -207,7 +206,7 @@ void rukaml_gc_print_stats(void)
   fflush(stdout);
 }
 
-void rukaml_print_alloc_closure_count (void)
+void rukaml_print_alloc_closure_count(void)
 {
   printf("Total closure allocations: %ld\n", allocated_closures);
   fflush(stdout);
@@ -231,45 +230,52 @@ uint64_t rukaml_array_length(int a0, int a1, int a2, int a3, int a4, int a5, voi
   return SIZE(arr);
 }
 
-void **rukaml_array_stdin(void) {
+void **rukaml_array_stdin(void)
+{
   char buf[MAX_STRING_FROM_STDIN];
   int code = scanf("%s", buf);
-  if (!code) {
+  if (!code)
+  {
     return rukaml_alloc_array(0);
   }
   size_t size = strlen(buf);
   void **arr = rukaml_alloc_array(size);
-  
-  for (int i = 0; i < size; i++) {
-    arr[i] = (void *) (buf[i]);
+
+  for (int i = 0; i < size; i++)
+  {
+    arr[i] = (void *)(buf[i]);
   }
   return arr;
 }
 
 void **rukaml_array_read_in(int a0, int a1, int a2, int a3, int a4, int a5,
-                            void **str) {
+                            void **str)
+{
   int len = 0;
   while (str[len++] != 0)
     ;
   char path[len];
-  for (int i = 0; i < len; i++) {
+  for (int i = 0; i < len; i++)
+  {
     path[i] = (char)str[i];
   }
-  
+
   FILE *fp = fopen(path, "r");
-  if (!fp) {
+  if (!fp)
+  {
     return rukaml_alloc_array(0);
   }
-  
+
   fseek(fp, 0, SEEK_END);
   size_t size = ftell(fp);
   fseek(fp, 0, SEEK_SET);
 
   void **arr = rukaml_alloc_array(size);
-  
-  for (int i = 0; i < size; i++) {
+
+  for (int i = 0; i < size; i++)
+  {
     int c = fgetc(fp);
-    arr[i] = (void *) (c);
+    arr[i] = (void *)(c);
   }
   fread(arr, sizeof(void *), size, fp);
   fclose(fp);
@@ -277,7 +283,7 @@ void **rukaml_array_read_in(int a0, int a1, int a2, int a3, int a4, int a5,
 }
 
 void *rukaml_array_get(int a0, int a1, int a2, int a3, int a4, int a5,
-                           void **arr, uint64_t n)
+                       void **arr, uint64_t n)
 {
   assert(TAG(arr) == Array_tag);
   if (n >= SIZE(arr))
@@ -299,6 +305,36 @@ void rukaml_array_set(int a0, int a1, int a2, int a3, int a4, int a5,
   }
   arr[n] = a;
   return;
+}
+
+uint64_t rukaml_constructor_tag(int a0, int a1, int a2, int a3, int a4, int a5, void **constr)
+{
+  // printf("<< get_tag called with { ptr = 0x%zu } >>\n", constr);
+  // printf("<< get_tag returned { tag = %d } >>\n", TAG(constr));
+  return TAG(constr);
+}
+
+uint64_t rukaml_constructor_arity(int a0, int a1, int a2, int a3, int a4, int a5, void **constr)
+{
+  return SIZE(constr);
+}
+
+// void *rukaml_constructor_arg(int a0, int a1, int a2, int a3, int a4, int a5,
+//                              void **constr, uint64_t n)
+// {
+//   if (n >= SIZE(constr))
+//   {
+//     fprintf(stderr, "Index out of arity");
+//     exit(1);
+//   }
+
+//   return constr[n];
+// }
+
+void rukaml_match_failure()
+{
+  fprintf(stderr, "Match failure");
+  exit(1);
 }
 
 void *rukaml_apply0(fun0 f)
@@ -397,9 +433,36 @@ void *rukaml_alloc_array(int32_t size)
   return rez + 1;
 }
 
+void *rukaml_constructor_arg(int n, void **r)
+{
+  // printf("<< get_arg called with { n = %d }, { ptr = 0x%zu } >>\n", n, r);
+  // printf("<< get_arg returned { ptr[n] = 0x%zu } >>\n", r[n]);
+  return r[n];
+}
+
 void *rukaml_field(int n, void **r)
 {
   return r[n];
+}
+
+void *rukaml_alloc_constructor(int32_t size, int32_t tag)
+{
+  // printf("<< alloc_constructor called with { size = %d }, { tag = %d } >>\n", size, tag);
+
+  if (GC.allocated_words + size + 1 > HEAP_SIZE)
+  {
+    fprintf(stderr, "Not enough memory\n");
+    exit(1);
+  }
+  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
+  GC.allocated_words += size + 1;
+  GC.stats.gs_allocated_words += size + 1;
+  rez[0] = (uint64_t *)HEADER(size, tag);
+  assert(SIZE(rez + 1) == size);
+  logGC("An constructor %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
+
+  // printf("<< alloc_constructor returns { ptr = 0x%zu } >>\n", rez + 1);
+  return rez + 1;
 }
 
 /* int64_t myadd(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t a, int64_t b)
@@ -492,16 +555,16 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
     case 6:
       return rukaml_apply6(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2], f_closure->args[3], f_closure->args[4], f_closure->args[5]);
       break;
-    // case 7:
-    //   void** stack_args = alloca(f_closure->argsc * 8); //8 bytes per argument (int64)
-    //   for (int i=0; i<f_closure->argsc; ++i)
-    //     stack_args[i] = (void*)f_closure->args[i];
-    //   return ((fun0)f_closure->code)();
+      // case 7:
+      //   void** stack_args = alloca(f_closure->argsc * 8); //8 bytes per argument (int64)
+      //   for (int i=0; i<f_closure->argsc; ++i)
+      //     stack_args[i] = (void*)f_closure->args[i];
+      //   return ((fun0)f_closure->code)();
 #pragma GCC diagnostic pop
     default:
-      void** stack_args = alloca(f_closure->argsc * 8); //8 bytes per argument (int64)
-      for (int i=0; i<f_closure->argsc; ++i)
-        stack_args[i] = (void*)f_closure->args[i];
+      void **stack_args = alloca(f_closure->argsc * 8); // 8 bytes per argument (int64)
+      for (int i = 0; i < f_closure->argsc; ++i)
+        stack_args[i] = (void *)f_closure->args[i];
       return ((fun0)f_closure->code)();
       // printf("FUCK, f_closure->argsc = %lu\n", f_closure->argsc);
       // printf("Application of too many arguments is not implemented!");

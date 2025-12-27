@@ -276,6 +276,15 @@ let generate_body is_toplevel ppf body =
       | AVar { Ident.hum_name = "length"; _ } ->
         emit_alloc_closure ppf (Ident.of_string "rukaml_array_length") 1;
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar { Ident.hum_name = "get_arity"; _ } ->
+        emit_alloc_closure ppf (Ident.of_string "rukaml_constructor_arity") 1;
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar { Ident.hum_name = "get_tag"; _ } ->
+        emit_alloc_closure ppf (Ident.of_string "rukaml_constructor_tag") 1;
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar { Ident.hum_name = "get_arg"; _ } ->
+        emit_alloc_closure ppf (Ident.of_string "rukaml_constructor_arg") 2;
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar { Ident.hum_name = "get"; _ } ->
         emit_alloc_closure ppf (Ident.of_string "rukaml_array_get") 2;
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
@@ -295,6 +304,7 @@ let generate_body is_toplevel ppf body =
           vname;
         printfn ppf "  mov qword [rsp%+d*8], r8" (count - 1 - i)
       | ALam _ -> failwith "Should it be representable in ANF?"
+      | AConstruct _ -> assert false
       | APrimitive _ -> assert false
       | ATuple _ -> assert false
       | AArray _ -> assert false);
@@ -348,6 +358,22 @@ let generate_body is_toplevel ppf body =
          printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
          printfn ppf "  mov qword [rsp], r11";
          printfn ppf "  call rukaml_array_length";
+         printfn ppf "  mov %a, rax" pp_dest dest;
+         printfn ppf "  add rsp, 8*2";
+         Addr_of_local.remove_local name2;
+         Addr_of_local.remove_local name1
+       | _ -> failwith "Should not happen")
+    | CApp (APrimitive "get_tag", arg, []) ->
+      (match arg with
+       | AVar v when Addr_of_local.has_key v ->
+         let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+         let name2 = Ident.of_string @@ gen_name ~prefix:"constr" () in
+         Addr_of_local.extend name1;
+         Addr_of_local.extend name2;
+         printfn ppf "  add rsp, -8*2";
+         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+         printfn ppf "  mov qword [rsp], r11";
+         printfn ppf "  call rukaml_constructor_tag";
          printfn ppf "  mov %a, rax" pp_dest dest;
          printfn ppf "  add rsp, 8*2";
          Addr_of_local.remove_local name2;
@@ -452,7 +478,7 @@ let generate_body is_toplevel ppf body =
          printfn ppf "  mov %a, rax" pp_dest dest
        | AConst (PConst_bool _)
        | AConst (PConst_char _)
-       | AVar _ | APrimitive _
+       | AVar _ | APrimitive _ | AConstruct _
        | ATuple (_, _, _)
        | AArray _
        | ALam (_, _)
@@ -613,6 +639,11 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov rdi, %d" n;
       printfn ppf "  call rukaml_field";
       printfn ppf "  mov %a, rax" pp_dest dest
+    | CApp (APrimitive "get_arg", AConst (PConst_int n), [ (AVar _ as cont) ]) ->
+      helper_a (DReg "rsi") cont;
+      printfn ppf "  mov rdi, %d" n;
+      printfn ppf "  call rukaml_constructor_arg";
+      printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (AVar id, AUnit, []) when id.Frontend.Ident.hum_name = "gc_compact" ->
       printfn ppf "  mov rdi, rsp";
       printfn ppf "  mov rsi, 0";
@@ -664,12 +695,23 @@ let generate_body is_toplevel ppf body =
        | Some arity ->
          alloc_closure ppf vname arity;
          printfn ppf "  mov %a, rax" pp_dest dest)
+    | AConstruct (tag, args) ->
+      printfn ppf "  mov rdi, %d" (List.length args);
+      printfn ppf "  mov rsi, %d" tag;
+      printfn ppf "  call rukaml_alloc_constructor";
+      List.iteri
+        (fun i x ->
+           helper_a (DReg "rdi") x;
+           printfn ppf "  mov [rax+8*%d], rdi" i)
+        args;
+      printfn ppf "  mov %a, rax" pp_dest dest
     | ATuple (a, b, []) ->
       helper_a (DReg "rdi") a;
       helper_a (DReg "rsi") b;
       printfn ppf "  call rukaml_alloc_pair";
       printfn ppf "  mov %a, rax" pp_dest dest
     | AUnit -> printfn ppf "mov qword %a, 0" pp_dest dest
+    | APrimitive "match_failure" -> printfn ppf "  call rukaml_match_failure"
     | AArray r ->
       printfn ppf "  mov rdi, %d" (List.length r);
       printfn ppf "  call rukaml_alloc_array";
@@ -778,6 +820,11 @@ let codegen ?(wrap_main_into_start = true) anf file =
       ; "rukaml_array_get"
       ; "rukaml_array_set"
       ; "rukaml_array_read_in"
+      ; "rukaml_alloc_constructor"
+      ; "rukaml_constructor_arity"
+      ; "rukaml_constructor_arg"
+      ; "rukaml_constructor_tag"
+      ; "rukaml_match_failure"
       ; "rukaml_initialize"
       ; "rukaml_gc_compact"
       ; "rukaml_gc_print_stats"
