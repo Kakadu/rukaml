@@ -648,10 +648,7 @@ let anf =
         __LINE__
         Pprinttyped.pp_hum
         m
-    | TConstruct (ident, None, _) ->
-      let name = gensym_id () in
-      let rhs = CAtom (AConstruct (ident.id, [])) in
-      make_let_nonrec name rhs (k (AVar name))
+    | TConstruct (ident, None, _) -> k @@ AConst (PConst_int ident.id)
     | TConstruct (ident, Some (TTuple (x1, x2, xs, _)), _) ->
       helper x1
       @@ fun x1 ->
@@ -671,7 +668,7 @@ let anf =
       let name = gensym_id () in
       let rhs = CAtom (AConstruct (ident.id, [ arg ])) in
       make_let_nonrec name rhs (k (AVar name))
-    (* converts TMatch to simple if-then-else decision tree *)
+    (* converts TMatch into if-then-else *)
     | TMatch (scrutinee, (case1, cases), _) ->
       let access n x = CApp (APrimitive "get_arg", AConst (PConst_int n), [ x ]) in
       let cmp a b = CApp (APrimitive "=", a, [ b ]) in
@@ -702,24 +699,29 @@ let anf =
           @@ make_let_nonrec fresh_for_cmp compare_tags
           @@ make_ite fresh_for_cmp success
         in
-        let rec match_many i = function
-          | [] -> success
-          | pat :: tl ->
-            let fresh = gensym_id () in
-            let success = match_many (i + 1) tl in
-            let scrut = access i scrut_var in
-            make_let_nonrec fresh scrut @@ match_pattern pat (AVar fresh) success failure
+        let match_many pats =
+          let rec aux i = function
+            | [] -> success
+            | pat :: tl ->
+              let fresh = gensym_id () in
+              let success = aux (i + 1) tl in
+              let scrut = access i scrut_var in
+              make_let_nonrec fresh scrut
+              @@ match_pattern pat (AVar fresh) success failure
+          in
+          aux 0 pats
         in
         match pat with
         | Typedtree.Tpat_any -> success
         | Tpat_var var -> make_let_nonrec var (CAtom scrut_var) success
         | Tpat_const c -> compare_with_constant (AConst c)
         | Tpat_unit -> compare_with_constant AUnit
-        | Tpat_constr (ident, None) -> compare_tag ident success
+        | Tpat_constr (ident, None) ->
+          compare_with_constant (AConst (PConst_int ident.id))
         | Tpat_constr (ident, Some (Tpat_tuple (p1, p2, ps))) ->
-          compare_tag ident @@ match_many 0 (p1 :: p2 :: ps)
-        | Tpat_constr (ident, Some p) -> compare_tag ident @@ match_many 0 [ p ]
-        | Tpat_tuple (p1, p2, ps) -> match_many 0 (p1 :: p2 :: ps)
+          compare_tag ident @@ match_many (p1 :: p2 :: ps)
+        | Tpat_constr (ident, Some p) -> compare_tag ident @@ match_many [ p ]
+        | Tpat_tuple (p1, p2, ps) -> match_many (p1 :: p2 :: ps)
       in
       let k scrut =
         let fresh = gensym_id () in
