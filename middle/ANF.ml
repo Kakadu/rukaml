@@ -284,7 +284,7 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
       Format.eprintf "%a\n%!" pp_c c;
       assert false
   and helperi = function
-    | (ATuple _ | APrimitive _ | AConst _ | AUnit) as i -> i
+    | (ATuple _ | APrimitive _ | AConst _ | AUnit | AConstruct _) as i -> i
     | AVar _ -> failwith "Should not happen"
     | i ->
       Format.eprintf "%a\n%!" pp_a i;
