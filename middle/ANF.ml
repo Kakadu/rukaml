@@ -27,6 +27,7 @@ type imm_expr =
   | AVar of Ident.t
   | APrimitive of string
   | ATuple of imm_expr * imm_expr * imm_expr list
+  | AConstruct of int * imm_expr list
   | AArray of imm_expr list
   | ALam of apat * expr
 
@@ -152,6 +153,10 @@ include struct
     | ATuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
     | AArray xs -> fprintf ppf "@[[|%a|]@]" (pp_comma_list helper_a) xs
     | AUnit -> fprintf ppf "()"
+    | AConstruct (id, []) -> fprintf ppf "Constr_%d" id
+    | AConstruct (id, [ arg ]) -> fprintf ppf "@[(Constr_%d %a)@]" id helper_a arg
+    | AConstruct (id, args) ->
+      fprintf ppf "@[(Constr_%d (%a))@]" id (pp_comma_list helper_a) args
   ;;
 
   let pp_a = helper_a
@@ -205,6 +210,7 @@ let used_once_as_function ~where name =
       helper_i a;
       helper_i b;
       List.iter helper_i cs
+    | AConstruct (_, args) -> List.iter helper_i args
   and helper : expr -> unit = function
     | EComplex c -> helper_c c
     | ELet (_, _path, cexpr, expr) ->
@@ -244,6 +250,7 @@ let used_once_in_if ~where name =
       helper_i a;
       helper_i b;
       List.iter helper_i cs
+    | AConstruct (_, args) -> List.iter helper_i args
   and helper : expr -> unit = function
     | EComplex c -> helper_c c
     | ELet (_, _path, cexpr, expr) ->
@@ -641,7 +648,85 @@ let anf =
         __LINE__
         Pprinttyped.pp_hum
         m
-    | _ -> failwith "not implemented"
+    | TConstruct (ident, None, _) ->
+      let name = gensym_id () in
+      let rhs = CAtom (AConstruct (ident.id, [])) in
+      make_let_nonrec name rhs (k (AVar name))
+    | TConstruct (ident, Some (TTuple (x1, x2, xs, _)), _) ->
+      helper x1
+      @@ fun x1 ->
+      helper x2
+      @@ fun x2 ->
+      let rec aux = function
+        | hd :: tl, xs -> helper hd (fun x -> aux (tl, x :: xs))
+        | [], xs ->
+          let name = gensym_id () in
+          let rhs = CAtom (AConstruct (ident.id, x1 :: x2 :: List.rev xs)) in
+          make_let_nonrec name rhs (k (AVar name))
+      in
+      aux (xs, [])
+    | TConstruct (ident, Some arg, _) ->
+      helper arg
+      @@ fun arg ->
+      let name = gensym_id () in
+      let rhs = CAtom (AConstruct (ident.id, [ arg ])) in
+      make_let_nonrec name rhs (k (AVar name))
+    (* converts TMatch to simple if-then-else decision tree *)
+    | TMatch (scrutinee, (case1, cases), _) ->
+      let access n x = CApp (APrimitive "get_arg", AConst (PConst_int n), [ x ]) in
+      let cmp a b = CApp (APrimitive "=", a, [ b ]) in
+      let match_failure = APrimitive "match_failure" in
+      let rec process_cases scrut cases k =
+        match cases with
+        | [] -> k match_failure
+        | (pattern, expr) :: rest ->
+          let success = helper expr k in
+          let failure = process_cases scrut rest k in
+          match_pattern pattern scrut success failure
+      and match_pattern pat scrut_var success failure =
+        let make_ite cond success =
+          EComplex (CIte (CAtom (AVar cond), success, failure))
+        in
+        let compare_with_constant constant =
+          let fresh = gensym_id () in
+          let rhs = cmp scrut_var constant in
+          make_let_nonrec fresh rhs @@ make_ite fresh success
+        in
+        let compare_tag (ident : Ident.t) success =
+          let get_tag = CApp (APrimitive "get_tag", scrut_var, []) in
+          let expected_tag = AConst (PConst_int ident.id) in
+          let fresh_for_tag = gensym_id () in
+          let compare_tags = cmp (AVar fresh_for_tag) expected_tag in
+          let fresh_for_cmp = gensym_id () in
+          make_let_nonrec fresh_for_tag get_tag
+          @@ make_let_nonrec fresh_for_cmp compare_tags
+          @@ make_ite fresh_for_cmp success
+        in
+        let rec match_many i = function
+          | [] -> success
+          | pat :: tl ->
+            let fresh = gensym_id () in
+            let success = match_many (i + 1) tl in
+            let scrut = access i scrut_var in
+            make_let_nonrec fresh scrut @@ match_pattern pat (AVar fresh) success failure
+        in
+        match pat with
+        | Typedtree.Tpat_any -> success
+        | Tpat_var var -> make_let_nonrec var (CAtom scrut_var) success
+        | Tpat_const c -> compare_with_constant (AConst c)
+        | Tpat_unit -> compare_with_constant AUnit
+        | Tpat_constr (ident, None) -> compare_tag ident success
+        | Tpat_constr (ident, Some (Tpat_tuple (p1, p2, ps))) ->
+          compare_tag ident @@ match_many 0 (p1 :: p2 :: ps)
+        | Tpat_constr (ident, Some p) -> compare_tag ident @@ match_many 0 [ p ]
+        | Tpat_tuple (p1, p2, ps) -> match_many 0 (p1 :: p2 :: ps)
+      in
+      let k scrut =
+        let fresh = gensym_id () in
+        let wher = process_cases (AVar fresh) (case1 :: cases) k in
+        make_let_nonrec fresh (CAtom scrut) wher
+      in
+      helper scrutinee k
   in
   fun e -> helper e complex_of_atom
 ;;
@@ -660,11 +745,13 @@ let anf_vb vb : vb =
 (* TODO : handle type_declarations here *)
 let anf_stru stru =
   let open Typedtree in
-  let aux = function
-    | Tstr_type _ -> failwith "not implemented"
-    | Tstr_value vb -> anf_vb vb
+  let rec aux items acc =
+    match items with
+    | [] -> List.rev acc
+    | Tstr_type _ :: xs -> aux xs acc
+    | Tstr_value vb :: xs -> aux xs (anf_vb vb :: acc)
   in
-  List.map aux stru
+  aux stru []
 ;;
 
 let test_anf ?(print_before = false) text =
