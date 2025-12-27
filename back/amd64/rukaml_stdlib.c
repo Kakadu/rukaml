@@ -309,8 +309,6 @@ void rukaml_array_set(int a0, int a1, int a2, int a3, int a4, int a5,
 
 uint64_t rukaml_constructor_tag(int a0, int a1, int a2, int a3, int a4, int a5, void **constr)
 {
-  // printf("<< get_tag called with { ptr = 0x%zu } >>\n", constr);
-  // printf("<< get_tag returned { tag = %d } >>\n", TAG(constr));
   return TAG(constr);
 }
 
@@ -319,18 +317,18 @@ uint64_t rukaml_constructor_arity(int a0, int a1, int a2, int a3, int a4, int a5
   return SIZE(constr);
 }
 
-// void *rukaml_constructor_arg(int a0, int a1, int a2, int a3, int a4, int a5,
-//                              void **constr, uint64_t n)
-// {
-//   if (n >= SIZE(constr))
-//   {
-//     fprintf(stderr, "Index out of arity");
-//     exit(1);
-//   }
+void *rukaml_constructor_arg(int a0, int a1, int a2, int a3, int a4, int a5, uint64_t n, void **constr)
+{
+  if (n >= SIZE(constr))
+  {
+    fprintf(stderr, "Index out of arity");
+    exit(1);
+  }
 
-//   return constr[n];
-// }
+  return constr[n];
+}
 
+// TODO: add line and file information here
 void rukaml_match_failure()
 {
   fprintf(stderr, "Match failure");
@@ -433,22 +431,8 @@ void *rukaml_alloc_array(int32_t size)
   return rez + 1;
 }
 
-void *rukaml_constructor_arg(int n, void **r)
-{
-  // printf("<< get_arg called with { n = %d }, { ptr = 0x%zu } >>\n", n, r);
-  // printf("<< get_arg returned { ptr[n] = 0x%zu } >>\n", r[n]);
-  return r[n];
-}
-
-void *rukaml_field(int n, void **r)
-{
-  return r[n];
-}
-
 void *rukaml_alloc_constructor(int32_t size, int32_t tag)
 {
-  // printf("<< alloc_constructor called with { size = %d }, { tag = %d } >>\n", size, tag);
-
   if (GC.allocated_words + size + 1 > HEAP_SIZE)
   {
     fprintf(stderr, "Not enough memory\n");
@@ -459,10 +443,14 @@ void *rukaml_alloc_constructor(int32_t size, int32_t tag)
   GC.stats.gs_allocated_words += size + 1;
   rez[0] = (uint64_t *)HEADER(size, tag);
   assert(SIZE(rez + 1) == size);
-  logGC("An constructor %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
+  logGC("A constructor %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
 
-  // printf("<< alloc_constructor returns { ptr = 0x%zu } >>\n", rez + 1);
   return rez + 1;
+}
+
+void *rukaml_field(int n, void **r)
+{
+  return r[n];
 }
 
 /* int64_t myadd(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t a, int64_t b)

@@ -22,7 +22,7 @@ void rukaml_array_set(int, int, int, int, int, int, void **arr, uint64_t n,
 uint64_t rukaml_constructor_tag(int, int, int, int, int, int, void **constr);
 uint64_t rukaml_constructor_arity(int, int, int, int, int, int, void **constr);
 void rukaml_match_failure();
-void *rukaml_constructor_arg(int n, void **r);
+void *rukaml_constructor_arg(int, int, int, int, int, int, uint64_t n, void **constr);
 
 typedef void *(*fun0)(void);
 typedef void *(*fun1)(void *);

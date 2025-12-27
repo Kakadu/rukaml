@@ -379,6 +379,22 @@ let generate_body is_toplevel ppf body =
          Addr_of_local.remove_local name2;
          Addr_of_local.remove_local name1
        | _ -> failwith "Should not happen")
+    | CApp (APrimitive "get_arity", arg, []) ->
+      (match arg with
+       | AVar v when Addr_of_local.has_key v ->
+         let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+         let name2 = Ident.of_string @@ gen_name ~prefix:"constr" () in
+         Addr_of_local.extend name1;
+         Addr_of_local.extend name2;
+         printfn ppf "  add rsp, -8*2";
+         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+         printfn ppf "  mov qword [rsp], r11";
+         printfn ppf "  call rukaml_constructor_arity";
+         printfn ppf "  mov %a, rax" pp_dest dest;
+         printfn ppf "  add rsp, 8*2";
+         Addr_of_local.remove_local name2;
+         Addr_of_local.remove_local name1
+       | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
       when f.Ident.hum_name = "get"
            && is_toplevel f = None
@@ -639,11 +655,23 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov rdi, %d" n;
       printfn ppf "  call rukaml_field";
       printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (APrimitive "get_arg", AConst (PConst_int n), [ (AVar _ as cont) ]) ->
-      helper_a (DReg "rsi") cont;
-      printfn ppf "  mov rdi, %d" n;
-      printfn ppf "  call rukaml_constructor_arg";
-      printfn ppf "  mov %a, rax" pp_dest dest
+    | CApp (APrimitive "get_arg", AConst (PConst_int n), [ constr ]) ->
+      (match constr with
+       | AVar v when Addr_of_local.has_key v ->
+         let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+         let name2 = Ident.of_string @@ gen_name ~prefix:"constr" () in
+         Addr_of_local.extend name1;
+         Addr_of_local.extend name2;
+         printfn ppf "  add rsp, -8*2";
+         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+         printfn ppf "  mov qword [rsp], %d" n;
+         printfn ppf "  mov qword [rsp+8], r11";
+         printfn ppf "  call rukaml_constructor_arg";
+         printfn ppf "  mov %a, rax" pp_dest dest;
+         printfn ppf "  add rsp, 8*2";
+         Addr_of_local.remove_local name2;
+         Addr_of_local.remove_local name1
+       | _ -> failwith "Should not happen")
     | CApp (AVar id, AUnit, []) when id.Frontend.Ident.hum_name = "gc_compact" ->
       printfn ppf "  mov rdi, rsp";
       printfn ppf "  mov rsi, 0";
@@ -696,8 +724,8 @@ let generate_body is_toplevel ppf body =
          alloc_closure ppf vname arity;
          printfn ppf "  mov %a, rax" pp_dest dest)
     | AConstruct (tag, args) ->
-      printfn ppf "  mov rdi, %d" (List.length args);
-      printfn ppf "  mov rsi, %d" tag;
+      printfn ppf "  mov rdi, %d ; arity" (List.length args);
+      printfn ppf "  mov rsi, %d ; tag" tag;
       printfn ppf "  call rukaml_alloc_constructor";
       List.iteri
         (fun i x ->
