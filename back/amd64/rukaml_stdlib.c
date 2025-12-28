@@ -331,7 +331,7 @@ void *rukaml_constructor_arg(int a0, int a1, int a2, int a3, int a4, int a5, uin
 // TODO: add line and file information here
 void rukaml_match_failure()
 {
-  fprintf(stderr, "Match failure");
+  fprintf(stderr, "Match failure\n");
   exit(1);
 }
 
