@@ -648,7 +648,10 @@ let anf =
         __LINE__
         Pprinttyped.pp_hum
         m
-    | TConstruct (ident, None, _) -> k @@ AConst (PConst_int ident.id)
+    | TConstruct (ident, None, _) ->
+      let name = gensym_id () in
+      let rhs = CAtom (AConstruct (ident.id, [])) in
+      make_let_nonrec name rhs (k (AVar name))
     | TConstruct (ident, Some (TTuple (x1, x2, xs, _)), _) ->
       helper x1
       @@ fun x1 ->
@@ -716,8 +719,7 @@ let anf =
         | Tpat_var var -> make_let_nonrec var (CAtom scrut_var) success
         | Tpat_const c -> compare_with_constant (AConst c)
         | Tpat_unit -> compare_with_constant AUnit
-        | Tpat_constr (ident, None) ->
-          compare_with_constant (AConst (PConst_int ident.id))
+        | Tpat_constr (ident, None) -> compare_tag ident success
         | Tpat_constr (ident, Some (Tpat_tuple (p1, p2, ps))) ->
           compare_tag ident @@ match_many (p1 :: p2 :: ps)
         | Tpat_constr (ident, Some p) -> compare_tag ident @@ match_many [ p ]
