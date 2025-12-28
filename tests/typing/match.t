@@ -1,4 +1,4 @@
-  $ run () { ../../driver/driver.exe $1 --target typedtree --no-cconv -o a.ml && cat a.ml; }
+  $ run () { ../../driver/driver.exe $1 --target typedtree -o a.ml && cat a.ml; }
 
   $ run << EOF
   > let main =
@@ -36,8 +36,9 @@
   >   let x = 1 in
   >     match (f, x) with
   >     | (f, x) -> f x
+  let f: int -> int =
+    fun x -> x + 1
   let main: int =
-    let f : int -> int = fun x -> x + 1 in
     let x : int = 1 in
     match (f, x) with
       | (f, x) -> f x
@@ -47,8 +48,9 @@
   >   let swap (x, y) = (y, x) in
   >   match swap (true, 1) with
   >   | (a, b) -> b
+  let swap: '_1 * '_2 -> '_2 * '_1 =
+    fun (x, y) -> (y, x)
   let main: bool =
-    let swap : '_1 * '_2 -> '_2 * '_1 = fun (x, y) -> (y, x) in
     match swap (true, 1) with
       | (a, b) -> b
 
@@ -57,8 +59,9 @@
   >   let scnd (x, y) = y in
   >     match scnd (1, true) with
   >     | x -> x
+  let scnd: '_1 * '_2 -> '_2 =
+    fun (x, y) -> y
   let main: bool =
-    let scnd : '_1 * '_2 -> '_2 = fun (x, y) -> y in
     match scnd (1, true) with
       | x -> x
   $ run << EOF

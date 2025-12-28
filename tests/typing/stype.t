@@ -1,6 +1,6 @@
 # tests inferencer on simple type declarations
 
-  $ run () { ../../driver/driver.exe $1 --target typedtree --no-cconv -o a.ml && cat a.ml; }
+  $ run () { ../../driver/driver.exe $1 --target typedtree -o a.ml && cat a.ml; }
 
   $ run << EOF
   > type 'a box = | Box of 'a
@@ -50,10 +50,14 @@
   type ('_0, '_1) arrows =
     | Normal of '_0 -> '_1
     | Reversed of '_1 -> '_0
+  let fresh_1: ('_2 -> int -> '_4) -> '_2 -> '_4 =
+    fun > x -> (> x) 0
   let a: (int, bool) arrows =
-    Normal (fun x -> (> x) 0)
+    Normal (fresh_1 >)
+  let fresh_2: ('_2 -> int -> '_4) -> '_2 -> '_4 =
+    fun > x -> (> x) 0
   let b: (bool, int) arrows =
-    Reversed (fun x -> (> x) 0)
+    Reversed (fresh_2 >)
   $ run << EOF
   > type 'a pair =
   >   | Pair of 'a * 'a
@@ -73,8 +77,10 @@
   > let y = Box x
   type '_0 box =
     | Box of '_0
+  let fresh_1: int -> int =
+    fun a -> a + 1
   let x: int -> int box =
-    Box (fun a -> a + 1)
+    Box fresh_1
   let y: int -> int box box =
     Box x
 
@@ -230,11 +236,12 @@
   type '_0 list =
     | Cons of '_0 * '_0 list
     | Nil
-  let rev: '_13 list -> '_13 list =
-    fun ls -> let rec aux : '_13 list -> '_13 list -> '_13 list = fun ls acc -> 
-    match ls with
-      | Nil -> acc
-      | Cons (hd, tl) -> (aux tl) (Cons (hd, acc)) in (aux ls) Nil
+  let aux: '_3 list -> '_3 list -> '_3 list =
+    fun ls acc -> match ls with
+                    | Nil -> acc
+                    | Cons (hd, tl) -> (aux tl) (Cons (hd, acc))
+  let rev: '_3 list -> '_3 list =
+    fun ls -> (aux ls) Nil
   let is_empty: '_3 list -> bool =
     fun ls -> match ls with
                 | Cons (_, _) -> false
@@ -334,11 +341,12 @@
     fun ls -> match ls with
                 | [] -> []
                 | x :: xs -> (Some x) :: (wrap ls)
-  let unwrap: '_19 option list -> '_19 list option =
-    fun ls -> let rec aux : '_19 option list -> '_19 list -> '_19 list option = fun ls acc -> 
-    match ls with
-      | [] -> Some acc
-      | None :: _ -> None
-      | Some x :: xs -> (aux xs) (x :: acc) in (aux ls) []
+  let aux: '_3 option list -> '_3 list -> '_3 list option =
+    fun ls acc -> match ls with
+                    | [] -> Some acc
+                    | None :: _ -> None
+                    | Some x :: xs -> (aux xs) (x :: acc)
+  let unwrap: '_3 option list -> '_3 list option =
+    fun ls -> (aux ls) []
 
 #
