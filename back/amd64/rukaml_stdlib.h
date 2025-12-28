@@ -47,7 +47,7 @@ void *rukaml_alloc_array(int32_t size);
 
 void *rukaml_field(int n, void **r);
 void *rukaml_alloc_closure(void *func, int32_t argsc);
-void *rukaml_alloc_constructor(int32_t size, int32_t tag);
+void *rukaml_alloc_constructor(int32_t arity, int32_t tag);
 
 void *rukaml_applyN(void *f, int64_t argc, ...);
 

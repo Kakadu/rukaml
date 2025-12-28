@@ -431,18 +431,18 @@ void *rukaml_alloc_array(int32_t size)
   return rez + 1;
 }
 
-void *rukaml_alloc_constructor(int32_t size, int32_t tag)
+void *rukaml_alloc_constructor(int32_t arity, int32_t tag)
 {
-  if (GC.allocated_words + size + 1 > HEAP_SIZE)
+  if (GC.allocated_words + arity + 1 > HEAP_SIZE)
   {
     fprintf(stderr, "Not enough memory\n");
     exit(1);
   }
   uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
-  GC.allocated_words += size + 1;
-  GC.stats.gs_allocated_words += size + 1;
-  rez[0] = (uint64_t *)HEADER(size, tag);
-  assert(SIZE(rez + 1) == size);
+  GC.allocated_words += arity + 1;
+  GC.stats.gs_allocated_words += arity + 1;
+  rez[0] = (uint64_t *)HEADER(arity, tag);
+  assert(SIZE(rez + 1) == arity);
   logGC("A constructor %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
 
   return rez + 1;
