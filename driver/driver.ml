@@ -41,40 +41,36 @@ module Compiler = struct
 
   (** Perform cps conversion on parsetree *)
   let cps (Parsetree stru) ~(caa : bool) =
-    let stru =
-      match CPSConv.cps_conv stru with
-      | Ok x -> x
+    (* extracts value_bindings from other structure_items to perform cps conv on it *)
+    let vbs =
+      let aux = function
+        | Parsetree.SValue vb -> Some vb
+        | _ -> None
+      in
+      Stdlib.List.filter_map aux stru
+    in
+    let vbs =
+      match CPSConv.cps_conv vbs with
       | Error err -> error "cps error: %a" CPSConv.pp_error err
-    in
-    let stru =
-      if caa
-      then
+      | Ok vbs when caa ->
         let open CPSLang.MACPS in
-        List.map ~f:cps_vb_to_parsetree_vb (CAA.call_arity_anal stru)
-      else
+        List.map ~f:cps_vb_to_parsetree_vb (CAA.call_arity_anal vbs)
+      | Ok vbs ->
         let open CPSLang.OneACPS in
-        List.map ~f:cps_vb_to_parsetree_vb stru
+        List.map ~f:cps_vb_to_parsetree_vb vbs
     in
+    let open Parsetree in
+    (* merges structure items back together *)
+    let rec merge acc = function
+      | [], [] -> List.rev acc
+      | SType td :: rest, macps_vbs -> merge (SType td :: acc) (rest, macps_vbs)
+      | SValue _ :: rest, macps_vb :: macps_vbs ->
+        merge (SValue macps_vb :: acc) (rest, macps_vbs)
+      | [], _ :: _ | SValue _ :: _, [] -> assert false
+    in
+    let stru = merge [] (stru, vbs) in
     k (Parsetree stru)
   ;;
-
-  (* TODO: type_declaration compatibility
-  let cps (Parsetree stru) ~(caa : bool) =
-    let aux = function
-      | Parsetree.SType _ as td -> td
-      | Parsetree.SValue vb ->
-        let vb =
-          (* TODO: replace it with cps_conv_program. *)
-          match CPSConv.cps_conv_vb vb with
-          | Error err -> error "cps error: %a" CPSConv.pp_error err
-          | Ok vb when caa ->
-            CPSLang.MACPS.cps_vb_to_parsetree_vb @@ CAA.call_arity_anal vb
-          | Ok vb -> CPSLang.OneACPS.cps_vb_to_parsetree_vb vb
-        in
-        Parsetree.SValue vb
-    in
-    k (Parsetree (Base.List.map ~f:aux stru))
-  ;; *)
 
   (** Perform closure conversion *)
   let cconv =
@@ -156,7 +152,6 @@ module Target = struct
     ; out_path : string
     ; cps : bool
     ; caa : bool
-    ; cconv : bool
     }
 
   open Compiler
@@ -165,7 +160,7 @@ module Target = struct
   module Intermediate = struct
     let parsetree (p : params) = parse p.text
     let cpstree p = (parsetree p) (if p.cps then cps ~caa:p.caa else ( |> ))
-    let cconvtree p = (cpstree p) (if p.cconv then cconv else ( |> ))
+    let cconvtree p = (cpstree p) cconv
     let typedtree table p = (cconvtree p) (infer table)
     let anftree table p = (typedtree table p) anf
   end
@@ -215,7 +210,6 @@ let () =
   let target = ref "" in
   let cps = ref false in
   let caa = ref false in
-  let cconv = ref true in
 
   let open Stdlib.Arg in
   let args =
@@ -224,7 +218,6 @@ let () =
     ; "--print-targets", Unit print_targets, " print all supported targets"
     ; "--cps", Set cps, " enable cps conversion"
     ; "--caa", Set caa, " enable call arity analysis"
-    ; "--no-cconv", Clear cconv, " disable closure conversion"
     ]
   in
   parse args (fun s -> inp_path := Some s) "rukaml";
@@ -237,9 +230,7 @@ let () =
     | None -> In_channel.input_all stdin
   in
 
-  let params =
-    Target.{ text; out_path = !out_path; cps = !cps; caa = !caa; cconv = !cconv }
-  in
+  let params = Target.{ text; out_path = !out_path; cps = !cps; caa = !caa } in
   match Map.find (Target.targets Typedtree.empty_table) !target with
   | Some target -> target params
   | None -> error "invalid target %S" !target
