@@ -53,6 +53,7 @@ let rec pp_pattern ppf = function
   | Tpat_unit -> fprintf ppf "()"
   | Tpat_const (PConst_int n) -> fprintf ppf "%d" n
   | Tpat_const (PConst_bool b) -> fprintf ppf "%b" b
+  | Tpat_const (PConst_char c) -> fprintf ppf "%c" c
   | Tpat_var id -> Ident.pp ppf id
   | Tpat_tuple (h1, h2, []) -> fprintf ppf "(%a, %a)" pp_pattern h1 pp_pattern h2
   | Tpat_tuple (h1, h2, rest) ->

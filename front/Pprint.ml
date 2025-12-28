@@ -60,7 +60,6 @@ let rec pp_pattern ppf = function
 ;;
 
 let pp_const ppf = function
-  | PConst_unit -> fprintf ppf "()"
   | PConst_bool b -> fprintf ppf "%b" b
   | PConst_int n -> fprintf ppf "%d" n
   | PConst_char c -> fprintf ppf "'%c'" c

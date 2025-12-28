@@ -1,8 +1,8 @@
 type const =
   | PConst_int of int
   (* | PConst_string of string *)
-  | PConst_bool of bool
   | PConst_char of char
+  | PConst_bool of bool
 [@@deriving show { with_path = false }]
 
 type pattern =

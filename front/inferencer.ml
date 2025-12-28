@@ -499,6 +499,7 @@ let rec check_pat ~level env table = function
   | Parsetree.PUnit -> return (env, Tpat_unit, unit_typ)
   | Parsetree.PConst (PConst_int n) -> return (env, Tpat_const (PConst_int n), int_typ)
   | Parsetree.PConst (PConst_bool b) -> return (env, Tpat_const (PConst_bool b), bool_typ)
+  | Parsetree.PConst (PConst_char c) -> return (env, Tpat_const (PConst_char c), char_typ)
   | Parsetree.PVar x ->
     let* tx = fresh_var ~level in
     let xident = Ident.of_string x in

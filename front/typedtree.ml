@@ -94,6 +94,7 @@ let rec type_of_expr = function
   | TUnit -> unit_typ
   | TConst (Parsetree.PConst_int _) -> int_typ
   | TConst (Parsetree.PConst_bool _) -> bool_typ
+  | TConst (Parsetree.PConst_char _) -> char_typ
   | TVar (_, _, t)
   | TTuple (_, _, _, t)
   | TIf (_, _, _, t)
