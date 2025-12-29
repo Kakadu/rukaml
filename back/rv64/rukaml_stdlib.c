@@ -22,7 +22,7 @@
 #define DEBUG
 #undef DEBUG
 
-static uint64_t log_level = 0;
+static uint64_t log_level = 0x800;
 
 #define logGC(...)       \
   if (log_level & 0x800) \
@@ -206,7 +206,7 @@ void rukaml_gc_print_stats(void)
 // and when we wrap function into closure, predefined functions should behave the same.
 // Because of that this dirty hack. Right thing to do is to switch Rukaml calling convention to default one
 void rukaml_print_int(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
-                      uint64_t a4 , uint64_t a5, uint64_t a6, uint64_t a7, 
+                      uint64_t a4 , uint64_t a5, uint64_t a6, uint64_t a7,
                       int x)
 {
   // putchar(0x30 + x);
@@ -333,7 +333,7 @@ void *rukaml_alloc_pair(void *l, void *r)
   return rez + 1;
 }
 
-void *rukaml_alloc_array(int64_t size)
+void *rukaml_alloc_block(int64_t size, uint8_t tag)
 {
   if (GC.allocated_words + size + 1 > HEAP_SIZE)
   {
@@ -343,12 +343,24 @@ void *rukaml_alloc_array(int64_t size)
   uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
   GC.allocated_words += size + 1;
   GC.stats.gs_allocated_words += size + 1;
-  rez[0] = (uint64_t *)HEADER(size, Array_tag);
-  assert(TAG(rez + 1) == Array_tag);
+  rez[0] = (uint64_t *)HEADER(size, tag);
+  assert(TAG(rez + 1) == tag);
   assert(SIZE(rez + 1) == size);
-  logGC("An array %lX is created. Allocated words = %lu\n",
+  logGC("A block %lX is created. Allocated words = %lu\n",
         (uint64_t)(rez + 1), GC.allocated_words);
   return rez + 1;
+}
+
+void *rukaml_alloc_array(int64_t size)
+{
+  return rukaml_alloc_block(size, Array_tag);
+}
+
+void *rukaml_tag(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
+                  uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
+                  void **obj)
+{
+  return (void *)(uint64_t)(TAG(obj));
 }
 
 uint64_t rukaml_array_length(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
@@ -366,7 +378,7 @@ void **rukaml_array_stdin(void) {
   }
   size_t size = strlen(buf);
   void **arr = rukaml_alloc_array(size);
-  
+
   for (int i = 0; i < size; i++) {
     arr[i] = (void *) (buf[i]);
   }
@@ -383,18 +395,18 @@ void **rukaml_array_read_in(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
   for (int i = 0; i < len; i++) {
     path[i] = (char)str[i];
   }
-  
+
   FILE *fp = fopen(path, "r");
   if (!fp) {
     return rukaml_alloc_array(0);
   }
-  
+
   fseek(fp, 0, SEEK_END);
   size_t size = ftell(fp);
   fseek(fp, 0, SEEK_SET);
 
   void **arr = rukaml_alloc_array(size);
-  
+
   for (int i = 0; i < size; i++) {
     int c = fgetc(fp);
     arr[i] = (void *) (c);
@@ -539,4 +551,37 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
   va_end(argp);
 
   return ans_closure;
+}
+
+void *rukaml_match_failure()
+{
+  puts("Match failure");
+  fflush(stdout);
+  exit(1);
+}
+
+#define PAD(n) \
+  { for (unsigned int i = 0; i < n; i++) \
+      printf(" "); }
+void *rukaml_trace_val(void *arg, unsigned int level)
+{
+  // printf("%s\n", __func__);
+  PAD(level);
+  printf("Address: 0x%" PRIx64 ", tag=%d, size=%d" "\n", (uint64_t)arg, TAG(arg), SIZE(arg));
+  // Need to implement tagged integers
+  for (uint64_t i = 0; i < SIZE(arg); i++)
+  {
+    void **field = FIELD(arg, i);
+    if (*field < 100) {
+      PAD(level + 1);
+      printf("Field %lu: Int %ld\n", i, (int64_t)(*field));
+    }
+    else {
+      PAD(level + 1);
+      printf("BLOCK 0x%" PRIx64 "\n", *field);
+    }
+    // rukaml_trace_val(field, level + 1);
+  }
+  fflush(stdout);
+  // exit(1);
 }

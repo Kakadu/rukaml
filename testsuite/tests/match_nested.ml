@@ -1,6 +1,6 @@
 (*
 test
-  (targets amd64)
+  (targets (rv64 promote))
   (run (stdout "rukaml_print_int 3"))
 *)
 
@@ -9,8 +9,13 @@ type 'a option =
   | None
 
 let main =
-  let scrut = [ Some [ None ; Some 0 ] ] in
-  match scrut with
+  let s0 = Some 0 in
+  let z0 = trace_rukaml_val s0 in
+  let s1 = [ None; s0 ] in
+  let z1 = trace_rukaml_val s1  in
+  let s2 = [ Some s1 ] in
+  let z2 = trace_rukaml_val s2 in
+  match s2 with
   | [] -> print 0
   | x :: xs ->
     match x with

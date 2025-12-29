@@ -700,6 +700,18 @@ let generate_body is_toplevel body =
         t3
         t4;
       emit sd_dest t5 dest
+    | CApp (AVar f, arg, []) when f.Ident.hum_name = "trace_rukaml_val" ->
+      assert (Option.is_none (is_toplevel f));
+      with_two_slots (fun ra_name arg1 ->
+        emit addi SP SP (-16) ~comm:(sprintf "pad and 1st arg of function %s" f.hum_name);
+        emit sd ra (Addr_of_local.pp_to_mach ra_name);
+        helper_a (DStack_var arg1) arg;
+        emit ld (RU "a0") (Addr_of_local.pp_to_mach arg1);
+        emit li (RU "a1") 0;
+        emit call "rukaml_trace_val";
+        emit ld ra (Addr_of_local.pp_to_mach ra_name);
+        emit addi SP SP 16 ~comm:(sprintf "Dealloc 2 slots for %S" f.hum_name));
+      if dest <> DReg "a0" then emit sd_dest (RU "a0") dest
     | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
       (* Callig a rukaml function uses custom calling convention.
            Pascal convention: all arguments on stack, LTR *)
@@ -780,6 +792,18 @@ let generate_body is_toplevel body =
            printfn ppf "  mov rsi, 0";
            printfn ppf "  call rukaml_gc_print_stats" *)
     | CAtom atom -> helper_a dest atom
+    | CApp (APrimitive "get_tag", AVar arg, []) when Addr_of_local.has_key arg ->
+      emit_alloc_closure "rukaml_tag" 1;
+      emit ld a2 (pp_to_mach arg);
+      emit call "rukaml_applyN";
+      emit sd_dest a0 dest
+    | CApp (APrimitive "get_arg", AConst (PConst_int idx), [ AVar from ])
+      when Addr_of_local.has_key from ->
+      emit_alloc_closure "rukaml_field" 2;
+      emit li a2 idx;
+      emit ld a3 (pp_to_mach from);
+      emit call "rukaml_applyN";
+      emit sd_dest a0 dest
     | CApp _ as anf ->
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_c anf;
       failwiths "Not implemented %d" __LINE__
@@ -834,6 +858,24 @@ let generate_body is_toplevel body =
            emit sd t0 (ROffset (a0, 8 * i)))
         (List.rev r);
       emit sd_dest a0 dest
+    | AConstruct (tag, args) ->
+      with_two_slots (fun ra_name rez_slot ->
+        emit addi SP SP (-16) ~comm:(sprintf "padding for construct %d" tag);
+        emit sd (RU "ra") (pp_to_mach ra_name);
+        emit li a0 (List.length args) ~comm:"size";
+        emit li a1 tag;
+        emit call "rukaml_alloc_block";
+        emit sd a0 (pp_to_mach rez_slot);
+
+        List.iteri
+          (fun i x ->
+             helper_a (DReg "t0") x;
+             emit sd t0 (ROffset (a0, 8 * i)))
+          (List.rev args);
+        emit ld ra (Addr_of_local.pp_to_mach ra_name);
+        emit ld t0 (pp_to_mach rez_slot);
+        emit sd_dest t0 dest;
+        emit addi SP SP 16 ~comm:(sprintf "FUN consturctor creation"))
     | ATuple (_a, _b, []) ->
       failwiths "not implemented %s %d" __FILE__ __LINE__
       (* store_ra_temp ppf (fun ra_name -> *)
@@ -846,8 +888,14 @@ let generate_body is_toplevel body =
     | AUnit ->
       failwiths "not implemented %s %d" __FILE__ __LINE__
       (* printfn ppf "mov qword %a, 0" Addr_of_local.pp_dest dest *)
+    | APrimitive "match_failure" ->
+      emit_alloc_closure "rukaml_match_failure" 1;
+      emit li a2 42;
+      emit call "rukaml_applyN";
+      emit sd_dest a0 dest
     | _atom ->
       (* printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__; *)
+      Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_a _atom;
       failwiths "not implemented %s %d" __FILE__ __LINE__
     (* printfn ppf ";;; @[`%a`@]" ANF.pp_a atom *)
   in
@@ -937,6 +985,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
         [ "rukaml_alloc_closure"
         ; "rukaml_print_int"
         ; "rukaml_identity"
+        ; "rukaml_alloc_block"
+        ; "rukaml_tag"
         ; "rukaml_alloc_array"
         ; "rukaml_array_length"
         ; "rukaml_array_get"

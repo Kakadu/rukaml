@@ -123,9 +123,9 @@ let () =
   let gcc_rv64 = "riscv64-linux-gnu-gcc-13" in
   let defaults_rv64 =
     { cc = { defaults_amd64.cc with path = gcc_rv64 }
-    ; as_ = { path = gcc_rv64; flags = "-x assembler -c" }
+    ; as_ = { path = gcc_rv64; flags = "-x assembler -c -march=rv64gc" }
     ; ld = { path = gcc_rv64; flags = "" }
-    ; run = { path = "qemu-riscv64-static"; flags = "-L /usr/riscv64-linux-gnu" }
+    ; run = { path = "qemu-riscv64"; flags = "-L /usr/riscv64-linux-gnu" }
     }
   in
   let toolchain_rv64 = discover_toolchain cfg defaults_rv64 ~suffix:"rv64" in
