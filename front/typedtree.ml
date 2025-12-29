@@ -21,13 +21,12 @@ type var_info =
 type ty = { mutable typ_desc : type_desc }
 
 and type_desc =
-  | Prim of string
   | V of var_info
   | Weak of binder
   | Arrow of ty * ty
-  | TParam of ty * string
   | TLink of ty
   | TProd of ty * ty * ty list
+  | TConstr of ty list * string
 [@@deriving show { with_path = false }]
 
 module IntMap = Map.Make (Int) [@@deriving show { with_path = false }]
@@ -43,28 +42,36 @@ type scheme = S of binder_set * ty [@@deriving show { with_path = false }]
 
 let tarrow l r = { typ_desc = Arrow (l, r) }
 let tweak t = { typ_desc = Weak t }
-let tprim s = { typ_desc = Prim s }
 let tv binder ~level = { typ_desc = V { binder; var_level = level } }
 let tlink t = { typ_desc = TLink t }
-let tparam a t = { typ_desc = TParam (a, t) }
 let tprod a b ts = { typ_desc = TProd (a, b, ts) }
+let tconstr tys name = { typ_desc = TConstr (tys, name) }
+let tprim s = tconstr [] s
+let tparam param name = tconstr [ param ] name
+
 let int_typ = tprim "int"
 let char_typ = tprim "char"
 let bool_typ = tprim "bool"
 let unit_typ = tprim "unit"
-let array_typ a = tparam a "array"
+let array_typ param = tparam param "array"
 
 type pattern =
+  | Tpat_unit
+  | Tpat_const of Parsetree.const
   | Tpat_var of Ident.t
   | Tpat_tuple of pattern * pattern * pattern list
+  | Tpat_any
+  | Tpat_constr of Ident.t * pattern option
 [@@deriving show { with_path = false }]
 
 let of_untyped_pattern =
   let rec helper = function
+    | Parsetree.PUnit -> Tpat_unit
+    | Parsetree.PConst x -> Tpat_const x
     | Parsetree.PVar v -> Tpat_var (Ident.of_string v)
-    | PTuple (a, b, xs) -> Tpat_tuple (helper a, helper b, List.map helper xs)
-    | Parsetree.PAny -> failwith "TODO (psi) : not implemented"
-    | Parsetree.PConstruct _ -> failwith "TODO (psi) : not implemented"
+    | Parsetree.PTuple (a, b, xs) -> Tpat_tuple (helper a, helper b, List.map helper xs)
+    | Parsetree.PAny -> failwith "not implemented"
+    | Parsetree.PConstruct _ -> failwith "not implemented"
   in
   helper
 ;;
@@ -79,11 +86,15 @@ type expr =
   | TArray of expr list * ty
   | TTuple of expr * expr * expr list * ty
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
+  | TMatch of expr * (pattern * expr) Parsetree.list1 * ty
+  | TConstruct of Ident.t * expr option * ty
 [@@deriving show { with_path = false }]
 
 let rec type_of_expr = function
   | TUnit -> unit_typ
-  | TConst _ -> int_typ
+  | TConst (Parsetree.PConst_int _) -> int_typ
+  | TConst (Parsetree.PConst_bool _) -> bool_typ
+  | TConst (Parsetree.PConst_char _) -> char_typ
   | TVar (_, _, t)
   | TTuple (_, _, _, t)
   | TIf (_, _, _, t)
@@ -91,6 +102,8 @@ let rec type_of_expr = function
   | TLam (_, _, t)
   | TApp (_, _, t) -> t
   | TLet (_, _, _, _, wher) -> type_of_expr wher
+  | TMatch (_, _, t) -> t
+  | TConstruct (_, _, t) -> t
 ;;
 
 (** Compaction of the tree *)
@@ -98,11 +111,11 @@ let rec type_of_expr = function
 let type_without_links =
   let rec helper t =
     match t.typ_desc with
-    | Prim _ | V _ | Weak _ -> t
+    | V _ | Weak _ -> t
     | Arrow (l, r) -> tarrow (helper l) (helper r)
-    | TParam (a, t) -> tparam (helper a) t
     | TLink ty -> helper ty
     | TProd (a, b, ts) -> { typ_desc = TProd (helper a, helper b, List.map helper ts) }
+    | TConstr (tys, name) -> { typ_desc = TConstr (List.map helper tys, name) }
   in
   helper
 ;;
@@ -119,6 +132,14 @@ let compact_expr =
     | TLet (flg, pat, S (vars, ty), e1, e2) ->
       TLet (flg, pat, S (vars, type_without_links ty), helper e1, helper e2)
     | TTuple (a, b, ts, ty) -> TTuple (helper a, helper b, List.map helper ts, ty)
+    | TMatch (e, ((p1, e1), cases), ty) ->
+      TMatch
+        ( helper e
+        , ((p1, helper e1), List.map (fun (p, e) -> p, helper e) cases)
+        , type_without_links ty )
+    | TConstruct (ident, None, ty) -> TConstruct (ident, None, type_without_links ty)
+    | TConstruct (ident, Some expr, ty) ->
+      TConstruct (ident, Some (helper expr), type_without_links ty)
   in
   helper
 ;;
@@ -130,9 +151,131 @@ type value_binding =
   ; tvb_typ : scheme
   }
 
-type structure_item = value_binding
+type type_kind =
+  | Tty_abstract of ty option
+  | Tty_variants of (Ident.t * ty option) list
+
+type type_declaration =
+  { tty_ident : Ident.t
+  ; tty_params : binder_set
+  ; tty_kind : type_kind
+  }
+
+type constructor_info =
+  { constr_ident : Ident.t
+  ; constr_type_ident : Ident.t
+  ; constr_arg : ty option
+  }
+
+type structure_item =
+  | Tstr_value of value_binding
+  | Tstr_type of type_declaration
+
 type structure = structure_item list
 
 let value_binding tvb_flag tvb_pat tvb_body tvb_typ =
   { tvb_flag; tvb_pat; tvb_body; tvb_typ }
 ;;
+
+module TypeEnv = struct
+  type t =
+    { env_constructors : constructor_info Ident.String_map.t
+    ; env_types : type_declaration Ident.Ident_map.t
+    ; env_values : scheme Ident.Ident_map.t
+    }
+
+  let empty =
+    { env_values = Ident.Ident_map.empty
+    ; env_types = Ident.Ident_map.empty
+    ; env_constructors = Ident.String_map.empty
+    }
+  ;;
+
+  let typ_unit : type_declaration =
+    { tty_ident = Ident.of_string "unit"
+    ; tty_params = Var_set.empty
+    ; tty_kind = Tty_abstract None
+    }
+  ;;
+
+  let typ_int : type_declaration =
+    { tty_ident = Ident.of_string "int"
+    ; tty_params = Var_set.empty
+    ; tty_kind = Tty_abstract None
+    }
+  ;;
+
+  let typ_bool : type_declaration =
+    { tty_ident = Ident.of_string "bool"
+    ; tty_params = Var_set.empty
+    ; tty_kind = Tty_abstract None
+    }
+  ;;
+
+  let typ_array : type_declaration =
+    { tty_ident = Ident.of_string "array"
+    ; tty_params = Var_set.singleton (-1)
+    ; tty_kind = Tty_abstract None
+    }
+  ;;
+
+  module TypeList : sig
+    val typ_list : type_declaration
+    val constr_nil : constructor_info
+    val constr_cons : constructor_info
+  end = struct
+    let param_binder = -1
+    let param_ty = tv ~level:(-1) param_binder
+
+    let nil_ident = Ident.ident "[]" 0
+    let cons_ident = Ident.ident "::" 1
+
+    let cons_arg_ty = Some (tprod param_ty (tconstr [ param_ty ] "list") [])
+
+    let typ_list : type_declaration =
+      { tty_ident = Ident.of_string "list"
+      ; tty_params = Var_set.singleton param_binder
+      ; tty_kind = Tty_variants [ nil_ident, None; cons_ident, cons_arg_ty ]
+      }
+    ;;
+
+    let constr_nil : constructor_info =
+      { constr_arg = None
+      ; constr_type_ident = typ_list.tty_ident
+      ; constr_ident = nil_ident
+      }
+    ;;
+
+    let constr_cons : constructor_info =
+      { constr_arg = cons_arg_ty
+      ; constr_type_ident = typ_list.tty_ident
+      ; constr_ident = cons_ident
+      }
+    ;;
+  end
+
+  let add_type (env : t) (td : type_declaration) =
+    let ident = td.tty_ident in
+    { env with env_types = Ident.Ident_map.add ident.hum_name ident td env.env_types }
+  ;;
+
+  let add_constructor (env : t) (constr : constructor_info) =
+    let ident = constr.constr_ident in
+    { env with
+      env_constructors = Ident.String_map.add ident.hum_name constr env.env_constructors
+    }
+  ;;
+
+  let env_with_base_types =
+    let env =
+      Base.List.fold
+        ~init:empty
+        ~f:add_type
+        [ typ_unit; typ_int; typ_bool; typ_array; TypeList.typ_list ]
+    in
+    Base.List.fold
+      ~init:env
+      ~f:add_constructor
+      [ TypeList.constr_nil; TypeList.constr_cons ]
+  ;;
+end

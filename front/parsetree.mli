@@ -8,10 +8,13 @@ type const =
 [@@deriving show { with_path = false }]
 
 type pattern =
+  | PUnit
+  | PConst of const
   | PAny
   | PVar of string
   | PTuple of pattern * pattern * pattern list
   | PConstruct of string * pattern option
+[@@deriving show { with_path = false }]
 
 val pp_pattern : Format.formatter -> pattern -> unit
 val show_pattern : pattern -> string
@@ -38,14 +41,14 @@ type expr =
   | EConstruct of string * expr option (** ConstructorName(expr) *)
   | EMatch of expr * (pattern * expr) list1 (** match expr with ... *)
 
-and 'a list1 = 'a * 'a list
+and 'a list1 = 'a * 'a list [@@deriving show { with_path = false }]
 
 type value_binding = rec_flag * pattern * expr [@@deriving show { with_path = false }]
 
 type type_declaration =
-  { typedef_params : string list (** ['a] is param in [type 'a list = ...]  *)
-  ; typedef_name : string (** [list] is name in [type 'a list = ...]  *)
-  ; typedef_kind : type_kind
+  { pty_params : string list (** ['a] is param in [type 'a list = ...]  *)
+  ; pty_name : string (** [list] is name in [type 'a list = ...]  *)
+  ; pty_kind : type_kind
   }
 [@@deriving show { with_path = false }]
 
@@ -84,6 +87,7 @@ val evar : string -> expr
 val elam : pattern -> expr -> expr
 val eapp : expr -> ?is_right_assoc:bool -> expr list -> expr
 val ematch : expr -> pattern * expr -> (pattern * expr) list -> expr
+val econstruct : string -> expr option -> expr
 val eapp1 : expr -> expr -> expr
 val elet : ?isrec:rec_flag -> pattern -> expr -> expr -> expr
 val eite : expr -> expr -> expr -> expr
@@ -98,3 +102,7 @@ val e_cons : expr -> expr -> expr
 val etuple : expr -> expr -> expr list -> expr
 val earray : expr list -> expr
 val group_lams : expr -> pattern list * expr
+val pnil : pattern
+val enil : expr
+val pcons : pattern -> pattern -> pattern
+val econs : expr -> expr -> expr

@@ -171,16 +171,23 @@ type dispatch_patt =
   ; patt : dispatch_patt -> pattern t
   }
 
-let pnil = PConstruct ("[]", None)
-let enil = EConstruct ("[]", None)
-let pcons hd tl = PConstruct ("::", Some (PTuple (hd, tl, [])))
-let econs hd tl = EConstruct ("::", Some (ETuple (hd, tl, [])))
+let patt_const =
+  ws *> fail ""
+  <|> string "()" *> return PUnit
+  <|> (take_while1 is_digit >>| fun chs -> PConst (const_int (int_of_string chs)))
+  <|> (var_name
+       >>= function
+       | "true" -> return @@ PConst (const_bool true)
+       | "false" -> return @@ PConst (const_bool false)
+       | _ -> fail "Not a boolean constant")
+;;
 
 let patt_basic d =
   ws
   *> fix (fun _self ->
     parens (d.patt d)
     <|> char '_' *> return PAny
+    <|> patt_const
     <|> (var_name >>= fun v -> return (pvar v) <* trace_pos v)
     <|> string "[]" *> return pnil
     <|> (char '['
@@ -337,8 +344,11 @@ let pack : dispatch =
                <|> return @@ eapp (evar "get") [ evar v; econst (const_int i) ])
                <|> return (evar v))
           <|> (let* name = ws *> constructor_name in
-               (let* patt = ws *> d.expr_basic d in
-                return (EConstruct (name, Some patt)))
+               fail ""
+               <|> (let* expr = ws *> d.expr_basic d in
+                    return (EConstruct (name, Some expr)))
+               <|> (let* expr = ws *> parens (d.expr d) in
+                    return (EConstruct (name, Some expr)))
                <|> return (EConstruct (name, None)))
           <|> (let parse_case =
                  let* p = char '|' *> ws *> pattern in
@@ -401,8 +411,6 @@ let type_param_tuple =
   | _ -> fail "tuple of param names expected"
 ;;
 
-let core_type_var = ws *> (type_name <|> type_param_name >>| fun name -> CTVar name)
-
 let core_type_arrow core_type =
   fix (fun self ->
     let* operand = ws *> core_type in
@@ -425,7 +433,7 @@ let core_type =
     let prims =
       fail ""
       <|> (type_name >>| fun v -> CTConstr (v, []))
-      <|> (type_param_name >>| fun v -> CTConstr (v, []))
+      <|> (type_param_name >>| fun name -> CTVar name)
     in
     let prims =
       (let* arg = prims in
@@ -468,19 +476,19 @@ let type_kind_variants =
 let type_kind_alias = ws *> core_type >>| fun core_type -> KAbstract (Some core_type)
 let type_kind = ws *> (type_kind_variants <|> type_kind_alias)
 
-let single_type_definition =
+let single_type_declaration =
   let* params = ws *> type_params in
   let* name = ws *> type_name in
   let* kind = ws *> char '=' *> ws *> type_kind in
-  return { typedef_params = params; typedef_name = name; typedef_kind = kind }
+  return { pty_params = params; pty_name = name; pty_kind = kind }
 ;;
 
-let type_definition =
+let type_declaration =
   ws
   *> string "type"
   *>
-  let* frst = ws *> single_type_definition in
-  let* rest = many (ws *> string "and" *> single_type_definition) in
+  let* frst = ws *> single_type_declaration in
+  let* rest = many (ws *> string "and" *> single_type_declaration) in
   return (frst, rest)
 ;;
 
@@ -488,7 +496,7 @@ let value_binding = letdef (pack.expr pack) <* ws
 
 let structure =
   many1
-    (value_binding >>| (fun vb -> SValue vb) <|> (type_definition >>| fun td -> SType td))
+    (value_binding >>| (fun vb -> SValue vb) <|> (type_declaration >>| fun td -> SType td))
 ;;
 
 let parse_structure str =

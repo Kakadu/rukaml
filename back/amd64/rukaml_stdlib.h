@@ -9,15 +9,20 @@ void dfs(uint64_t *allocated, uint64_t *root);
 
 void rukaml_gc_compact(uint64_t rsp);
 void rukaml_gc_print_stats(void);
-void rukaml_print_alloc_closure_count (void);
+void rukaml_print_alloc_closure_count(void);
 
 void rukaml_print_int(int, int, int, int, int, int, int x);
 uint64_t rukaml_array_length(int, int, int, int, int, int, void **arr);
 void **rukaml_array_stdin(void);
 void *rukaml_array_get(int, int, int, int, int, int, void **arr,
-                           uint64_t n);
+                       uint64_t n);
 void rukaml_array_set(int, int, int, int, int, int, void **arr, uint64_t n,
                       void *a);
+
+uint64_t rukaml_constructor_tag(int, int, int, int, int, int, void **constr);
+uint64_t rukaml_constructor_arity(int, int, int, int, int, int, void **constr);
+void rukaml_match_failure();
+void *rukaml_constructor_arg(int, int, int, int, int, int, uint64_t n, void **constr);
 
 typedef void *(*fun0)(void);
 typedef void *(*fun1)(void *);
@@ -42,6 +47,7 @@ void *rukaml_alloc_array(int32_t size);
 
 void *rukaml_field(int n, void **r);
 void *rukaml_alloc_closure(void *func, int32_t argsc);
+void *rukaml_alloc_constructor(int32_t arity, int32_t tag);
 
 void *rukaml_applyN(void *f, int64_t argc, ...);
 

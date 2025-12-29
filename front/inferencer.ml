@@ -19,6 +19,14 @@ type error =
   | `NoVariable of string
   | `UnificationFailed of ty * ty
   | `Only_varibles_on_the_left_of_letrec
+  | `Unbound_constructor of string
+  | `Type_arity_mismatch of string
+  | `Type_param_duplicates of string
+  | `Unbound_type_variable of string
+  | `Type_env_invariant_violation of string
+  | `Unbound_type of string
+  | `Constructor_arity_mismatch of string
+  | `Constructor_name_duplicates of string
   ]
 
 let pp_error ppf : error -> _ = function
@@ -29,6 +37,17 @@ let pp_error ppf : error -> _ = function
     Format.fprintf ppf "unification failed on %a and %a" Pprint.pp_typ l Pprint.pp_typ r
   | `Only_varibles_on_the_left_of_letrec ->
     Format.fprintf ppf "Only variables are allowed as left-hand side of `let rec'"
+  | `Unbound_constructor name -> Format.fprintf ppf "unbound constructror: %s" name
+  | `Type_arity_mismatch name -> Format.fprintf ppf "type arity mismatch: %s" name
+  | `Type_param_duplicates tyname ->
+    Format.fprintf ppf "type parameter duplicates in the declaration of type %s" tyname
+  | `Unbound_type_variable name -> Format.fprintf ppf "unbound type variable: %s" name
+  | `Type_env_invariant_violation msg -> Format.fprintf ppf "%s" msg
+  | `Unbound_type name -> Format.fprintf ppf "type %s was not declared" name
+  | `Constructor_arity_mismatch name ->
+    Format.fprintf ppf "constructor arity mistmatch: %s" name
+  | `Constructor_name_duplicates name ->
+    Format.fprintf ppf "constructor name duplicates in declaration of type %s" name
 ;;
 
 type fresh_counter = int
@@ -160,10 +179,10 @@ end = struct
          | exception Not_found_s _ -> typ
          | x -> x)
       | Arrow (l, r) -> tarrow (helper l) (helper r)
-      | TParam (a, t) -> tparam (helper a) t
       | TProd (a, b, ts) -> tprod (helper a) (helper b) (List.map ~f:helper ts)
       | TLink ty -> helper ty
-      | Prim _ | Weak _ -> typ
+      | Weak _ -> typ
+      | TConstr (tys, name) -> tconstr (List.map ~f:helper tys) name
     in
     helper
   ;;
@@ -209,13 +228,12 @@ module Type = struct
       | Arrow (l, r) ->
         helper l;
         helper r
-      | TParam (a, _) -> helper a
       | TProd (a, b, ts) ->
         helper a;
         helper b;
         List.iter ts ~f:helper
       | TLink t -> helper t
-      | Prim _ -> ()
+      | TConstr (tys, _) -> List.iter tys ~f:helper
     in
     fun wher ->
       try
@@ -228,12 +246,12 @@ module Type = struct
   let free_vars =
     let rec helper acc { typ_desc } =
       match typ_desc with
-      | Prim _ | Weak _ -> acc
+      | Weak _ -> acc
       | V { binder; _ } -> Var_set.add binder acc
       | TLink t -> helper acc t
-      | TParam (a, _) -> helper acc a
       | Arrow (l, r) -> helper (helper acc l) r
       | TProd (a, b, ts) -> List.fold_left ts ~init:(helper (helper acc a) b) ~f:helper
+      | TConstr (ts, _) -> List.fold_left ts ~init:acc ~f:helper
     in
     helper Var_set.empty
   ;;
@@ -271,50 +289,73 @@ let%expect_test " " =
     [ 1; ] |}]
 ;;
 
-module Type_env : sig
-  type t = scheme Ident.Ident_map.t
+module Type_env = struct
+  include Typedtree.TypeEnv
 
-  val pp : Format.formatter -> t -> unit
-  val empty : t
-  val extend : varname:string -> Ident.t -> scheme -> t -> t
-  val extend_string : string -> scheme -> t -> t
-  val extend_by_ident : Ident.t -> scheme -> t -> t
-  val apply : Subst.t -> t -> t
-  val ident_of_string_exn : string -> t -> Ident.t
-  val find_exn : Ident.t -> t -> scheme
-  val find_by_string_exn : string -> t -> scheme
-  val free_vars : t -> Var_set.t
-end = struct
-  open Ident
-
-  type t = scheme Ident.Ident_map.t
-
-  let extend ~varname id scheme map = Ident.Ident_map.add varname id scheme map
+  let extend ~varname id scheme t =
+    { t with env_values = Ident.Ident_map.add varname id scheme t.env_values }
+  ;;
   let extend_string varname = extend (Ident.of_string varname) ~varname
 
-  let extend_by_ident ident scheme map =
-    extend ~varname:ident.Ident.hum_name ident scheme map
+  let extend_by_ident (ident : Ident.t) scheme t =
+    extend ~varname:ident.hum_name ident scheme t
   ;;
 
-  let empty = Ident.Ident_map.empty
-  let ident_of_string_exn = Ident.Ident_map.ident_of_string_exn
+  let ident_of_string s t = Ident.Ident_map.ident_of_string s t.env_values
 
-  let free_vars : t -> Var_set.t =
-    Ident_map.fold_idents ~init:Var_set.empty ~f:(fun acc (_, s) ->
-      Var_set.union acc (Scheme.free_vars s))
+  let free_vars t =
+    Ident.Ident_map.fold_idents
+      ~init:Var_set.empty
+      ~f:(fun acc (_, s) -> Var_set.union acc (Scheme.free_vars s))
+      t.env_values
   ;;
 
-  let apply s env = Ident_map.map env ~f:(Scheme.apply s)
+  let find_exn s t = Ident.Ident_map.find_by_ident s t.env_values
+  let find_by_string s t = Ident.Ident_map.find_by_string s t.env_values
 
-  let pp ppf xs =
-    Stdlib.Format.fprintf ppf "{| ";
-    Ident_map.iter_idents xs ~f:(fun n s ->
-      Stdlib.Format.fprintf ppf "%a -> %a; " Ident.pp n Pprint.pp_scheme s);
-    Stdlib.Format.fprintf ppf "|}%!"
+  let extend_constructors ~ident ~type_ident constr_arg t =
+    let constr = { constr_type_ident = type_ident; constr_ident = ident; constr_arg } in
+    { t with
+      env_constructors = Ident.String_map.add ident.hum_name constr t.env_constructors
+    }
   ;;
 
-  let find_exn = Ident.Ident_map.find_by_ident
-  let find_by_string_exn = Ident_map.find_by_string_exn
+  let extend_types ~ident tty_params tty_kind t =
+    let type_entry = { tty_ident = ident; tty_params; tty_kind } in
+    { t with env_types = Ident.Ident_map.add ident.hum_name ident type_entry t.env_types }
+  ;;
+
+  let apply_to_type_declaration sub { tty_ident; tty_params; tty_kind } =
+    let aux sub = function
+      | Some ty ->
+        Some (Type.apply (Var_set.fold (fun k s -> Subst.remove s k) tty_params sub) ty)
+      | None -> None
+    in
+    { tty_ident
+    ; tty_params
+    ; tty_kind =
+        (match tty_kind with
+         | Tty_abstract ty_opt -> Tty_abstract (aux sub ty_opt)
+         | Tty_variants vs ->
+           Tty_variants (List.map vs ~f:(fun (name, ty_opt) -> name, aux sub ty_opt)))
+    }
+  ;;
+
+  let apply_to_constructor_info sub { constr_ident; constr_arg; constr_type_ident } =
+    { constr_arg = Option.map ~f:(Type.apply sub) constr_arg
+    ; constr_type_ident
+    ; constr_ident
+    }
+  ;;
+
+  let apply s t =
+    let env_values = Ident.Ident_map.map t.env_values ~f:(Scheme.apply s) in
+    let env_types = Ident.Ident_map.map t.env_types ~f:(apply_to_type_declaration s) in
+    let env_constructors =
+      Ident.String_map.map (apply_to_constructor_info s) t.env_constructors
+    in
+    { env_values; env_types; env_constructors }
+  ;;
 end
 
 open R
@@ -325,8 +366,6 @@ let unify weak l r =
     match l.typ_desc, r.typ_desc with
     | TLink l, _ -> helper l r
     | _, TLink r -> helper l r
-    | Prim l, Prim r when String.equal l r -> return ()
-    | Prim _, Prim _ -> fail (`UnificationFailed (l, r))
     | V { binder = a; _ }, V { binder = b; _ } when Int.equal a b -> return ()
     | V info, _ when Type.occurs_in info r -> fail `Occurs_check
     | V _, _ ->
@@ -338,9 +377,6 @@ let unify weak l r =
     | Arrow (l1, r1), Arrow (l2, r2) ->
       let* () = helper l1 l2 in
       helper r1 r2
-    | TParam (a1, t1), TParam (a2, t2) ->
-      let* () = helper a1 a2 in
-      if String.equal t1 t2 then return () else fail (`UnificationFailed (l, r))
     | TProd (a1, b1, ts1), TProd (a2, b2, ts2) ->
       let* () = helper a1 a2 in
       let* () = helper b1 b2 in
@@ -356,18 +392,16 @@ let unify weak l r =
     | x, Weak n ->
       weak.map <- IntMap.add n { typ_desc = x } weak.map;
       return ()
-    | TParam _, Arrow _
-    | Arrow _, TParam _
-    | TParam _, Prim _
-    | Prim _, TParam _
-    | TProd _, TParam _
-    | TParam _, TProd _
-    | TProd _, Arrow _
-    | Arrow _, TProd _
-    | TProd _, Prim _
-    | Prim _, TProd _
-    | Arrow _, Prim _
-    | Prim _, Arrow _ -> fail (`UnificationFailed (l, r))
+    | TConstr (tys1, name1), TConstr (tys2, name2)
+      when String.equal name1 name2 && List.length tys1 = List.length tys2 ->
+      List.fold2_exn
+        ~f:(fun acc l r ->
+          let* () = acc in
+          helper l r)
+        ~init:(return ())
+        tys1
+        tys2
+    | _ -> fail (`UnificationFailed (l, r))
   in
   helper l r
 ;;
@@ -393,10 +427,10 @@ let generalize : level:int -> Type.t -> Scheme.t =
     match typ.typ_desc with
     | V { var_level; binder } -> if var_level > level then Var_set.add binder acc else acc
     | TLink t -> helper acc t
-    | TParam (a, _) -> helper acc a
     | Arrow (l, r) -> helper (helper acc l) r
     | TProd (a, b, tl) -> List.fold_left ~f:helper tl ~init:(helper (helper acc a) b)
-    | Prim _ | Weak _ -> acc
+    | Weak _ -> acc
+    | TConstr (tys, _) -> List.fold_left ~f:helper tys ~init:acc
   in
   fun ty ->
     (* log "generalize: @[%a@]" pp_ty ty; *)
@@ -424,47 +458,93 @@ let lookup_scheme : _ -> Type_env.t -> scheme t =
 
 let lookup_scheme_by_string : _ =
   fun s env ->
-  match Type_env.find_by_string_exn s env with
+  match Type_env.find_by_string s env with
   | scheme -> return scheme
   | (exception Stdlib.Not_found) | (exception Not_found_s _) -> fail (`NoVariable s)
 ;;
 
 let fresh_var ~level = fresh >>| fun n -> tv n ~level
 
-let pp_env subst ppf env =
-  let env : Type_env.t =
-    Ident.Ident_map.map ~f:(fun (S (args, v)) -> S (args, Subst.apply subst v)) env
+let instantiate_tconstr ?(level = 0) name var_set =
+  let* sub, vars =
+    Var_set.fold_R
+      (fun (sub, acc) name ->
+         let* fresh = fresh in
+         let tvar = tv fresh ~level in
+         let sub = Subst.compose sub (Subst.singleton name tvar) in
+         return (sub, tvar :: acc))
+      var_set
+      (return (Subst.empty, []))
   in
-  Type_env.pp ppf env
+  return (sub, tconstr (List.rev vars) name)
 ;;
 
+let find_constructor name (env : Type_env.t) =
+  match Ident.String_map.find_opt name env.env_constructors with
+  | None -> fail (`Unbound_constructor name)
+  | Some constr_entry ->
+    let ty_ident = constr_entry.constr_type_ident in
+    (match Ident.Ident_map.find_by_ident_opt ty_ident env.env_types with
+     | None ->
+       fail
+         (`Type_env_invariant_violation "constructor references a non-existent type ident")
+     | Some type_entry -> return (constr_entry, type_entry))
+;;
+
+let tpat_const_bool x = Tpat_const (PConst_bool x)
+let tpat_const_unit = Tpat_unit
+
 (** Introduce many fresh variables using in the for of a pattern *)
-let rec check_pat ~level env : _ -> (_ * Typedtree.pattern * ty) t = function
+let rec check_pat ~level env table = function
+  | Parsetree.PUnit -> return (env, Tpat_unit, unit_typ)
+  | Parsetree.PConst (PConst_int n) -> return (env, Tpat_const (PConst_int n), int_typ)
+  | Parsetree.PConst (PConst_bool b) -> return (env, Tpat_const (PConst_bool b), bool_typ)
+  | Parsetree.PConst (PConst_char c) -> return (env, Tpat_const (PConst_char c), char_typ)
   | Parsetree.PVar x ->
     let* tx = fresh_var ~level in
     let xident = Ident.of_string x in
     let env = Type_env.extend ~varname:x xident (Scheme.make_mono tx) env in
     return (env, Typedtree.Tpat_var xident, tx)
-  | Parsetree.PTuple (p1, p2, []) ->
-    let* env, p1, t1 = check_pat ~level env p1 in
-    let* env, p2, t2 = check_pat ~level env p2 in
-    return (env, Tpat_tuple (p1, p2, []), tprod t1 t2 [])
-  | Parsetree.PTuple (_p1, _p2, _ps) -> failwith "Not implemented"
-  | Parsetree.PAny -> failwith "TODO (psi) : not implemented"
-  | Parsetree.PConstruct _ -> failwith "TODO (psi) : not implemented"
+  | Parsetree.PTuple (p1, p2, ps) ->
+    let check_many acc p =
+      let* env, ps, ts = acc in
+      let* env, p, t = check_pat ~level env table p in
+      return (env, p :: ps, t :: ts)
+    in
+    let* env, p1, t1 = check_pat ~level env table p1 in
+    let* env, p2, t2 = check_pat ~level env table p2 in
+    let* env, ps, ts = List.fold ps ~init:(return (env, [], [])) ~f:check_many in
+    return (env, Tpat_tuple (p1, p2, ps), tprod t1 t2 ts)
+  | Parsetree.PAny ->
+    let* ty = fresh_var ~level in
+    return (env, Tpat_any, ty)
+  | Parsetree.PConstruct (name, patt_opt) ->
+    let* constr_info, type_info = find_constructor name env in
+    let ty_name, ty_params = type_info.tty_ident.hum_name, type_info.tty_params in
+    let* sub, ty = instantiate_tconstr ~level ty_name ty_params in
+    (match patt_opt, constr_info.constr_arg with
+     | Some patt, Some expected_ty ->
+       let* env, arg_patt, arg_ty = check_pat ~level env table patt in
+       let* () = unify table (Subst.apply sub expected_ty) (Subst.apply sub arg_ty) in
+       let patt = Tpat_constr (constr_info.constr_ident, Some arg_patt) in
+       return (env, patt, ty)
+     | None, None ->
+       let patt = Tpat_constr (constr_info.constr_ident, None) in
+       return (env, patt, ty)
+     | _ -> fail (`Constructor_arity_mismatch name))
 ;;
 
 let elim weak =
   let rec helper t =
     match t.typ_desc with
-    | Prim _ | V _ -> t
+    | V _ -> t
     | Arrow (l, r) -> tarrow (helper l) (helper r)
-    | TParam (a, t) -> tparam (helper a) t
     | TProd (a, b, tl) -> tprod (helper a) (helper b) (List.map tl ~f:helper)
     | TLink ty -> tlink (helper ty)
     | Weak n ->
       (try IntMap.find n weak.map with
        | Stdlib.Not_found -> tweak n)
+    | TConstr (tys, name) -> tconstr (List.map tys ~f:helper) name
   in
   helper
 ;;
@@ -497,15 +577,20 @@ let restrict : restriction_state -> weak_table -> ty -> ty t =
            (* log "table.last counter number to binder %d: %d" binder table.last; *)
            IntMap.add binder table.last xs))
     | TLink t -> helper t xs state arrow
-    | TParam (a, t) ->
-      (* log "tparam: %s" t; *)
+    | TConstr ([], _) -> xs
+    | TConstr ([ param ], name) ->
+      (* log "tparam: %s" ty; *)
       let not_poly =
-        match a.typ_desc with
+        match param.typ_desc with
         | V _ -> false
         | _ -> true
       in
-      helper a xs (if is_mutable t && not_poly then MakeWeak else state) arrow
-    | Prim _ | Weak _ -> xs
+      helper param xs (if is_mutable name && not_poly then MakeWeak else state) arrow
+    | TConstr (_many_params, name) when is_mutable name ->
+      failwith "not implemented: restriction for many params mutable type constructors"
+    | TConstr (params, _) ->
+      List.fold_left params ~f:(fun acc x -> helper x acc state arrow) ~init:xs
+    | Weak _ -> xs
     | Arrow (l, r) ->
       (* Check this branch: V^-(t1 -> t2) =  FTV(t1) U V^-(t2) *)
 
@@ -523,14 +608,14 @@ let restrict : restriction_state -> weak_table -> ty -> ty t =
   let weak_map = helper t IntMap.empty start OnTheLeft in
   let rec helper t =
     match t.typ_desc with
-    | Prim _ | Weak _ -> t
+    | Weak _ -> t
     | TLink l -> tlink (helper l)
     | V { binder; _ } ->
       (* log "introduce weak for binder: %d" binder; *)
       if IntMap.mem binder weak_map then tweak (IntMap.find binder weak_map) else t
-    | TParam (a, t) -> tparam (helper a) t
     | Arrow (l, r) -> tarrow (helper l) (helper r)
     | TProd (a, b, ts) -> tprod (helper a) (helper b) (List.map ts ~f:helper)
+    | TConstr (tys, name) -> tconstr (List.map tys ~f:helper) name
   in
   return @@ helper t
 ;;
@@ -585,7 +670,7 @@ let infer env table expr =
         let* scheme = lookup_scheme_by_string x env in
         let* typ = instantiate ~level:!current_level scheme in
         let typ = elim table typ in
-        return (typ, TVar (x, Type_env.ident_of_string_exn x env, typ))
+        return (typ, TVar (x, Type_env.ident_of_string x env, typ))
       | EUnit -> return (unit_typ, TUnit)
       | Parsetree.EArray r ->
         (match r with
@@ -618,7 +703,7 @@ let infer env table expr =
         let trez = elim table @@ tarrow tx ty in
         return (trez, TLam (Tpat_var xID, tbody, trez))
       | Parsetree.ELam ((PTuple _ as pat), body) ->
-        let* env, pat, tp = check_pat ~level:!current_level env pat in
+        let* env, pat, tp = check_pat ~level:!current_level env table pat in
         let* ty, tbody = helper env DoNothing body in
         let trez = elim table @@ tarrow tp ty in
         return (trez, TLam (pat, tbody, trez))
@@ -690,18 +775,46 @@ let infer env table expr =
         return (twher, TLet (Recursive, Tpat_var f_ident, t2, typed_rhs, typed_wher))
       | ELet (Recursive, PTuple _, _, _) -> fail `Only_varibles_on_the_left_of_letrec
       | ELet (NonRecursive, (PTuple _ as pat), rhs, wher) ->
-        let* env, pat, tp = check_pat ~level:!current_level env pat in
+        let* env, pat, tp = check_pat ~level:!current_level env table pat in
         let* _ty, tbody = helper env state rhs in
         let* () = unify table tp _ty in
         let* twher, typed_wher = helper env state wher in
         let twher = elim table twher in
         return (twher, TLet (NonRecursive, pat, Scheme.make_mono _ty, tbody, typed_wher))
-      | Parsetree.ELet (_, PAny, _, _)
-      | Parsetree.ELet (_, PConstruct _, _, _)
-      | Parsetree.ELam (PAny, _)
-      | Parsetree.ELam (PConstruct _, _)
-      | Parsetree.EMatch _ | Parsetree.EConstruct _ ->
-        failwith "TODO (psi) : not implemented"
+      | EMatch (expr, ((p1, e1), cases)) ->
+        let* expr_ty, expr = helper env state expr in
+        let* env1, p1, pty = check_pat ~level:!current_level env table p1 in
+        let* () = unify table pty expr_ty in
+        let* ety, e1 = helper env1 state e1 in
+        let infer_case acc (patt, expr) =
+          let* pty_acc, ety_acc, cases = acc in
+          let* env, patt, pty = check_pat ~level:!current_level env table patt in
+          let* ety, expr = helper env state expr in
+          let* () = unify table pty pty_acc in
+          let* () = unify table ety ety_acc in
+          let pty = elim table pty in
+          let ety = elim table ety in
+          return (pty, ety, (patt, expr) :: cases)
+        in
+        let* _pty, ety, cases =
+          List.fold cases ~init:(return (pty, ety, [])) ~f:infer_case
+        in
+        return (ety, TMatch (expr, ((p1, e1), List.rev cases), ety))
+      | EConstruct (name, arg_opt) ->
+        let* constr_info, type_info = find_constructor name env in
+        let ty_name, ty_params = type_info.tty_ident.hum_name, type_info.tty_params in
+        let* sub, ty = instantiate_tconstr ~level:!current_level ty_name ty_params in
+        (match constr_info.constr_arg, arg_opt with
+         | Some expected_ty, Some arg ->
+           let* arg_ty, arg_expr = helper env state arg in
+           let* () = unify table (Subst.apply sub expected_ty) (Subst.apply sub arg_ty) in
+           let expr = TConstruct (constr_info.constr_ident, Some arg_expr, ty) in
+           return (ty, expr)
+         | None, None ->
+           let expr = TConstruct (constr_info.constr_ident, None, ty) in
+           return (ty, expr)
+         | _ -> fail (`Constructor_arity_mismatch name))
+      | _ -> failwith "not implemented"
   in
   let* ty, expr = helper env MakeWeak expr in
   let* ty = restrict DoNothing table ty in
@@ -712,7 +825,7 @@ let start_env =
   let cmp_scheme = Scheme.make_mono (tarrow int_typ (tarrow int_typ bool_typ)) in
   let int_arith_scheme = Scheme.make_mono (tarrow int_typ (tarrow int_typ int_typ)) in
   let extend_s varname = Type_env.extend ~varname (Ident.of_string varname) in
-  Type_env.empty
+  Type_env.env_with_base_types
   |> extend_s "print" (Scheme.make_mono (tarrow int_typ unit_typ))
   |> extend_s "char_code" (Scheme.make_mono (tarrow char_typ int_typ))
   |> extend_s "stdin" (Scheme.make_mono (array_typ char_typ))
@@ -748,17 +861,17 @@ let vb ?(env = start_env) table (flg, pat, body) : (_, [> error ]) Result.t =
       let tv = Typedtree.tv v ~level:(-1) in
       let env = Type_env.extend_string name (S (Var_set.empty, tv)) env in
       let* ty, tbody = infer env table body in
-      return (env, ty, Tpat_var (Type_env.ident_of_string_exn name env), tbody)
+      return (env, ty, Tpat_var (Type_env.ident_of_string name env), tbody)
     | Recursive, PVar name ->
       let* v = fresh in
       let tv = Typedtree.tv v ~level:(-1) in
       let env = Type_env.extend_string name (S (Var_set.empty, tv)) env in
       let* ty, tbody = infer env table body in
       let* () = unify table tv (type_of_expr tbody) in
-      return (env, ty, Tpat_var (Type_env.ident_of_string_exn name env), tbody)
+      return (env, ty, Tpat_var (Type_env.ident_of_string name env), tbody)
     | Recursive, PTuple _ -> fail `Only_varibles_on_the_left_of_letrec
     | NonRecursive, PTuple _ -> failwith "Not implemented"
-    | _ -> failwith "TODO (psi) : not implemented"
+    | _ -> failwith "not implemented"
   in
   run comp
   |> Result.map ~f:(fun (env, ty, tpat, body) ->
@@ -773,22 +886,136 @@ let vb ?(env = start_env) table (flg, pat, body) : (_, [> error ]) Result.t =
   |> Result.map_error ~f:(function #error as x -> x)
 ;;
 
+let ( <*> ) mf mx = mf >>= fun f -> mx >>= fun x -> return (f x)
+
+let check_constr_arity (env : Type_env.t) name args =
+  match Ident.Ident_map.find_by_string_opt name env.env_types with
+  | None -> fail (`Unbound_type name)
+  | Some type_declaration ->
+    if List.length args <> Var_set.cardinal type_declaration.tty_params
+    then fail (`Type_arity_mismatch name)
+    else return ()
+;;
+
+let rec infer_core_type (env : Type_env.t) param_map = function
+  | Parsetree.CTVar name ->
+    (match Ident.String_map.find_opt name param_map with
+     | None -> fail (`Unbound_type_variable name)
+     | Some ty -> return ty)
+  | CTArrow (a, b) ->
+    return (fun a b -> tarrow a b)
+    <*> infer_core_type env param_map a
+    <*> infer_core_type env param_map b
+  | CTTuple (a, b, xs) ->
+    return (fun a b xs -> tprod a b xs)
+    <*> infer_core_type env param_map a
+    <*> infer_core_type env param_map b
+    <*> fold_infer_core_type env param_map xs
+  | CTConstr (name, args) ->
+    let* () = check_constr_arity env name args in
+    let* tys = fold_infer_core_type env param_map args in
+    return (tconstr tys name)
+
+and fold_infer_core_type (env : Type_env.t) param_map items =
+  List.fold (List.rev items) ~init:(return []) ~f:(fun acc item ->
+    let* acc = acc in
+    let* ty = infer_core_type env param_map item in
+    return (ty :: acc))
+
+and infer_core_type_opt (env : Type_env.t) param_map = function
+  | None -> return None
+  | Some core_type ->
+    let* ty = infer_core_type env param_map core_type in
+    return (Some ty)
+;;
+
+let check_params_uniqueness pty_name pty_params =
+  if
+    List.length (List.dedup_and_sort pty_params ~compare:String.compare)
+    <> List.length pty_params
+  then fail (`Type_param_duplicates pty_name)
+  else return ()
+;;
+
+let check_constructors_names_uniqueness pty_name variants =
+  let names = List.map ~f:(fun (name, _) -> name) variants in
+  if List.length (List.dedup_and_sort names ~compare:String.compare) <> List.length names
+  then fail (`Constructor_name_duplicates pty_name)
+  else return ()
+;;
+
+let td ?(env = start_env) { Parsetree.pty_name; pty_params; pty_kind }
+  : (_, [> error ]) Result.t
+  =
+  let init_params params_list =
+    let helper acc name =
+      let* map, bs = acc in
+      let* binder = fresh in
+      let ty = tv binder ~level:(-1) in
+      let map = Ident.String_map.add name ty map in
+      let bs = Var_set.add binder bs in
+      return (map, bs)
+    in
+    List.fold ~init:(return (Ident.String_map.empty, Var_set.empty)) ~f:helper params_list
+  in
+  let comp =
+    let* () = check_params_uniqueness pty_name pty_params in
+    let* params_map, binder_set = init_params pty_params in
+    let tty_ident = Ident.of_string pty_name in
+    let type_declatation tty_kind = { tty_kind; tty_ident; tty_params = binder_set } in
+    let extend_types = Type_env.extend_types ~ident:tty_ident binder_set in
+    match pty_kind with
+    | Parsetree.KAbstract core_type_opt ->
+      let* ty_opt = infer_core_type_opt env params_map core_type_opt in
+      let tty_kind = Tty_abstract ty_opt in
+      let env = extend_types tty_kind env in
+      return (env, type_declatation tty_kind)
+    | Parsetree.KVariants (v1, vs) ->
+      let* () = check_constructors_names_uniqueness pty_name (v1 :: vs) in
+      (* > temporarily adds type to env to use it in recursive type declarations *)
+      let env = extend_types (Tty_abstract None) env in
+      (* < *)
+      let aux acc (name, core_type_opt) =
+        let* env, variants, id_cnt = acc in
+        let* ty_opt = infer_core_type_opt env params_map core_type_opt in
+        let ident = Ident.ident name id_cnt in
+        let env = Type_env.extend_constructors ~ident ~type_ident:tty_ident ty_opt env in
+        return (env, (ident, ty_opt) :: variants, id_cnt + 1)
+      in
+      let* env, variants, _ = List.fold ~init:(return (env, [], 0)) ~f:aux (v1 :: vs) in
+      let tty_kind = Tty_variants (List.rev variants) in
+      let env = extend_types tty_kind env in
+      return (env, type_declatation tty_kind)
+  in
+  run comp
+;;
+
+let structure_item ?(env = start_env) table pstru_item =
+  let ( let* ) = Result.( >>= ) in
+  let return = Result.return in
+  match pstru_item with
+  | Parsetree.SValue item ->
+    let* env, typed_vb = vb ~env table item in
+    return (env, Tstr_value typed_vb)
+  | Parsetree.SType (item, []) ->
+    let* env, stru_item = td ~env item in
+    return (env, Tstr_type stru_item)
+  | _ -> failwith "not implemented: \"and\" chain of type declarations"
+;;
+
 let structure ?(env = start_env) table stru =
   let ( let* ) = Result.( >>= ) in
   let return = Result.return in
-  let* _new_env, items =
+  let* env, items =
     List.fold_left
       stru
       ~init:(return (env, []))
       ~f:(fun acc item ->
-        match item with
-        | Parsetree.SValue item ->
-          let* env, acc = acc in
-          let* env, new_item = vb ~env table item in
-          return (env, new_item :: acc)
-        | Parsetree.SType _ -> failwith "TODO (psi) : not implemented")
+        let* env, items = acc in
+        let* new_env, new_item = structure_item ~env table item in
+        return (new_env, new_item :: items))
   in
-  return (List.rev items)
+  return (env, List.rev items)
 ;;
 
 let%expect_test _ =

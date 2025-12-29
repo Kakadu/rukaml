@@ -206,7 +206,7 @@ let allocate_locals input_anf : (now:unit -> unit) * _ =
       local_names := Ident.Ident_set.add name !local_names;
       helper_c rhs;
       helper where_
-    | ELet (_, Tpat_tuple (_, _, _), _, _) -> assert false
+    | ELet _ -> assert false
   and helper_c = function
     | CIte (_, th, el) ->
       helper th;
@@ -398,6 +398,7 @@ let generate_body is_toplevel body =
       | APrimitive _ -> assert false
       | ATuple _ -> assert false
       | AArray _ -> assert false
+      | AConstruct _ -> assert false
     in
     ListLabels.iteri args ~f:on_arg;
     (* printfn ppf "  addi sp, sp, -8*%d # fun %S arguments" count (Option.get f); *)
@@ -413,7 +414,7 @@ let generate_body is_toplevel body =
            (Addr_of_local.find_exn name); *)
       helper_c local rhs;
       helper dest wher
-    | ELet (_, Tpat_tuple (_, _, _), _, _) -> assert false
+    | ELet _ -> assert false
   and helper_c (dest : dest) = function
     | CIte (CAtom (AConst (Parsetree.PConst_bool true)), bth, _bel) -> helper dest bth
     | CIte (CAtom (AConst (Parsetree.PConst_bool false)), _bth, bel) -> helper dest bel
@@ -533,7 +534,7 @@ let generate_body is_toplevel body =
            emit addi SP SP 16)
        | AConst (PConst_bool _)
        | AConst (PConst_char _)
-       | AArray _ | AVar _ | APrimitive _
+       | AArray _ | AVar _ | APrimitive _ | AConstruct _
        | ATuple (_, _, _)
        | ALam (_, _)
        | AUnit -> failwith "Should not happen: print_int")

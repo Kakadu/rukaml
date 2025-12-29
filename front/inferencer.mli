@@ -4,37 +4,33 @@ type error =
   | `NoVariable of string
   | `UnificationFailed of Typedtree.ty * Typedtree.ty
   | `Only_varibles_on_the_left_of_letrec
+  | `Unbound_constructor of string
+  | `Type_arity_mismatch of string
+  | `Type_param_duplicates of string
+  | `Unbound_type_variable of string
+  | `Type_env_invariant_violation of string
+  | `Unbound_type of string
+  | `Constructor_arity_mismatch of string
+  | `Constructor_name_duplicates of string
   ]
 
 val pp_error : Format.formatter -> error -> unit
+
 val w : Parsetree.expr -> (Typedtree.expr, [> error ]) Result.t
 
-module Type_env : sig
-  open Typedtree
-
-  type t = Typedtree.scheme Ident.Ident_map.t
-
-  val pp : Format.formatter -> t -> unit
-  val empty : t
-  val extend : varname:string -> Ident.t -> scheme -> t -> t
-  val extend_string : string -> scheme -> t -> t
-  val extend_by_ident : Ident.t -> scheme -> t -> t
-  val ident_of_string_exn : string -> t -> Ident.t
-  val find_exn : Ident.t -> t -> scheme
-  val find_by_string_exn : string -> t -> scheme
-  val free_vars : t -> Var_set.t
-end
-
-val start_env : Type_env.t
-
 val vb
-  :  ?env:Type_env.t
+  :  ?env:Typedtree.TypeEnv.t
   -> Typedtree.weak_table
   -> Parsetree.value_binding
-  -> (Type_env.t * Typedtree.value_binding, [> error ]) Result.t
+  -> (Typedtree.TypeEnv.t * Typedtree.value_binding, [> error ]) Result.t
+
+val td
+  :  ?env:Typedtree.TypeEnv.t
+  -> Parsetree.type_declaration
+  -> (Typedtree.TypeEnv.t * Typedtree.type_declaration, error) Result.t
 
 val structure
-  :  ?env:Type_env.t
+  :  ?env:Typedtree.TypeEnv.t
   -> Typedtree.weak_table
   -> Parsetree.structure
-  -> (Typedtree.structure, [> error ]) Result.t
+  -> (Typedtree.TypeEnv.t * Typedtree.structure, error) Result.t

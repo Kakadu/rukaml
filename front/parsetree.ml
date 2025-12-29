@@ -1,4 +1,13 @@
+type const =
+  | PConst_int of int
+  (* | PConst_string of string *)
+  | PConst_char of char
+  | PConst_bool of bool
+[@@deriving show { with_path = false }]
+
 type pattern =
+  | PUnit
+  | PConst of const
   | PAny
   | PVar of string
   | PTuple of pattern * pattern * pattern list
@@ -8,13 +17,6 @@ type pattern =
 type rec_flag =
   | Recursive
   | NonRecursive
-[@@deriving show { with_path = false }]
-
-type const =
-  | PConst_int of int
-  | PConst_char of char
-  (* | PConst_string of string *)
-  | PConst_bool of bool
 [@@deriving show { with_path = false }]
 
 type expr =
@@ -44,6 +46,7 @@ let elam v body = ELam (v, body)
 let eapp1 f x = EApp (f, x)
 let etuple a b xs = ETuple (a, b, xs)
 let ematch e pe pes = EMatch (e, (pe, pes))
+let econstruct name arg = EConstruct (name, arg)
 let earray xs = EArray xs
 
 let eapp f ?(is_right_assoc = false) args =
@@ -71,9 +74,9 @@ let e_cons a b = eapp ~is_right_assoc:true (evar "::") [ a; b ]
 type value_binding = rec_flag * pattern * expr [@@deriving show { with_path = false }]
 
 type type_declaration =
-  { typedef_params : string list (** ['a] is param in [type 'a list = ...]  *)
-  ; typedef_name : string (** [list] is name in [type 'a list = ...]  *)
-  ; typedef_kind : type_kind
+  { pty_params : string list (** ['a] is param in [type 'a list = ...]  *)
+  ; pty_name : string (** [list] is name in [type 'a list = ...]  *)
+  ; pty_kind : type_kind
   }
 [@@deriving show { with_path = false }]
 
