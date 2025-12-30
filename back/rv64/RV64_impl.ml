@@ -794,15 +794,15 @@ let generate_body is_toplevel body =
     | CAtom atom -> helper_a dest atom
     | CApp (APrimitive "get_tag", AVar arg, []) when Addr_of_local.has_key arg ->
       emit_alloc_closure "rukaml_tag" 1;
+      emit li a1 1;
       emit ld a2 (pp_to_mach arg);
       emit call "rukaml_applyN";
       emit sd_dest a0 dest
     | CApp (APrimitive "get_arg", AConst (PConst_int idx), [ AVar from ])
       when Addr_of_local.has_key from ->
-      emit_alloc_closure "rukaml_field" 2;
-      emit li a2 idx;
-      emit ld a3 (pp_to_mach from);
-      emit call "rukaml_applyN";
+      emit li a0 idx;
+      emit ld a1 (pp_to_mach from);
+      emit call "rukaml_field";
       emit sd_dest a0 dest
     | CApp _ as anf ->
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_c anf;
@@ -871,7 +871,7 @@ let generate_body is_toplevel body =
           (fun i x ->
              helper_a (DReg "t0") x;
              emit sd t0 (ROffset (a0, 8 * i)))
-          (List.rev args);
+          args;
         emit ld ra (Addr_of_local.pp_to_mach ra_name);
         emit ld t0 (pp_to_mach rez_slot);
         emit sd_dest t0 dest;

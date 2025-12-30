@@ -1,3 +1,4 @@
+#include <alloca.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <inttypes.h>
@@ -22,7 +23,7 @@
 #define DEBUG
 #undef DEBUG
 
-static uint64_t log_level = 0x800;
+static uint64_t log_level = 0x0;
 
 #define logGC(...)       \
   if (log_level & 0x800) \
@@ -563,25 +564,27 @@ void *rukaml_match_failure()
 #define PAD(n) \
   { for (unsigned int i = 0; i < n; i++) \
       printf(" "); }
-void *rukaml_trace_val(void *arg, unsigned int level)
+void rukaml_trace_val(void *arg, unsigned int level)
 {
-  // printf("%s\n", __func__);
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wunused-parameter"
+  #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
+
   PAD(level);
-  printf("Address: 0x%" PRIx64 ", tag=%d, size=%d" "\n", (uint64_t)arg, TAG(arg), SIZE(arg));
+  printf("BLOCK: 0x%" PRIx64 ", tag=%lu, size=%lu" "\n", (uint64_t)arg, TAG(arg), SIZE(arg));
   // Need to implement tagged integers
   for (uint64_t i = 0; i < SIZE(arg); i++)
   {
-    void **field = FIELD(arg, i);
-    if (*field < 100) {
+    void **field = (void**) FIELD(arg, i);
+    if ((unsigned)(*field) < 100) {
       PAD(level + 1);
-      printf("Field %lu: Int %ld\n", i, (int64_t)(*field));
+      printf("%lu -> Int %ld\n", i, (int64_t)(*field));
     }
     else {
-      PAD(level + 1);
-      printf("BLOCK 0x%" PRIx64 "\n", *field);
+      rukaml_trace_val(*field, level  + 1);
+
     }
-    // rukaml_trace_val(field, level + 1);
   }
   fflush(stdout);
-  // exit(1);
+  #pragma GCC diagnostic pop
 }
