@@ -272,6 +272,7 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
     | CAtom i -> catom (helperi i)
     | CIte (CAtom (AVar name), ethen, eelse) when Ident.equal ident1 name ->
       cite rhs ethen eelse
+    | CIte (cond, ethen, eelse) -> cite (helper_c cond) (helper ethen) (helper eelse)
     | CApp (AVar x, arg1, args) when Ident.equal x ident1 ->
       (match rhs with
        | CApp (f, arg0, arg_mid) -> CApp (f, arg0, arg_mid @ (arg1 :: args))
@@ -282,9 +283,13 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
       is
     | c ->
       Format.eprintf "%a\n%!" pp_c c;
+      Format.eprintf "can't substitute %a -> %a\n%!" Ident.pp ident1 pp_c rhs;
       assert false
   and helperi = function
-    | (ATuple _ | APrimitive _ | AConst _ | AUnit | AConstruct _) as i -> i
+    | AConst (PConst_bool true) -> AConst (PConst_int 1)
+    | AConst (PConst_bool false) -> AConst (PConst_int 0)
+    | (ATuple _ | APrimitive _ | AConst _ | AUnit) as i -> i
+    | AConstruct (tag, is) -> AConstruct (tag, List.map helperi is)
     | AVar _ -> failwith "Should not happen"
     | i ->
       Format.eprintf "%a\n%!" pp_a i;
