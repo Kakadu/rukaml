@@ -11,7 +11,9 @@ void rukaml_gc_compact(uint64_t rsp);
 void rukaml_gc_print_stats(void);
 void rukaml_print_alloc_closure_count(void);
 
-void rukaml_print_int(int, int, int, int, int, int, int x);
+void rukaml_print_int(int64_t);
+void rukaml_print_int_kaml(int, int, int, int, int, int, int64_t);
+
 uint64_t rukaml_array_length(int, int, int, int, int, int, void **arr);
 void **rukaml_array_stdin(void);
 void *rukaml_array_get(int, int, int, int, int, int, void **arr,

@@ -102,11 +102,11 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
     in
     match anf with
     | CAtom a -> gen_a a
-    | CApp (APrimitive "print", AConst (PConst_int n), []) ->
+    | CApp (APrimitive ("print", _), AConst (PConst_int n), []) ->
       let accessor, accessor_typ = top_look_exn "rukaml_print_int" in
       LL.build_call accessor_typ accessor [ LL.const_int i64_typ n ]
     (* | CApp (APrimitive "length", AArray r, []) ->  *)
-    | CApp (APrimitive "field", AConst (PConst_int n), [ what ]) ->
+    | CApp (APrimitive ("field", _), AConst (PConst_int n), [ what ]) ->
       let source = gen_a what in
       (* let accessor = LL.lookup_func_exn "rukaml_field" in
            LL.build_call accessor [ LL.const_int i64_typ n; source ] *)
@@ -158,7 +158,7 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
              LL.set_metadata rez "result_of_application_of_localvar" ""
            in *)
       rez
-    | CApp (APrimitive (("+" | "-" | "*" | "/") as prim), arg1, [ arg2 ]) ->
+    | CApp (APrimitive ((("+" | "-" | "*" | "/") as prim), _), arg1, [ arg2 ]) ->
       let arg1 = gen_a arg1 in
       let arg2 = gen_a arg2 in
       (match prim with
@@ -167,7 +167,7 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
        | "-" -> LL.build_sub arg1 arg2
        | "/" -> LL.build_sdiv arg1 arg2
        | _ -> assert false)
-    | CApp (APrimitive "=", arg1, [ arg2 ]) ->
+    | CApp (APrimitive ("=", _), arg1, [ arg2 ]) ->
       let arg1 = gen_a arg1 in
       let arg2 = gen_a arg2 in
       let rez = LL.build_icmp Llvm.Icmp.Eq arg1 arg2 in
@@ -178,11 +178,11 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
     | CIte (cond, then_, else_) ->
       let cond =
         match cond with
-        | CApp (APrimitive "<", l, [ r ]) ->
+        | CApp (APrimitive ("<", _), l, [ r ]) ->
           let l = gen_a l in
           let r = gen_a r in
           LL.build_icmp Llvm.Icmp.Ult ~name:"ifcond" l r
-        | CApp (APrimitive "=", l, [ r ]) ->
+        | CApp (APrimitive ("=", _), l, [ r ]) ->
           let l = gen_a l in
           let r = gen_a r in
           LL.build_icmp Llvm.Icmp.Eq ~name:"ifcond" l r
@@ -255,7 +255,6 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
   in
   let return_val = gen body in
   let (_ : Llvm.llvalue) = Llvm.build_ret return_val LL.builder in
-
   (* log "@[%a@]\n===\n" LL.pp_value the_function; *)
   (* Llvm.dump_value the_function; *)
 

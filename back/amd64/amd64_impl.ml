@@ -268,7 +268,7 @@ let generate_body is_toplevel ppf body =
            printfn ppf "  mov qword [rsp%+d*8], rax ; arg \"%a\"" i Ident.pp vname
          | None -> assert false)
       | AVar { Ident.hum_name = "print"; _ } ->
-        emit_alloc_closure ppf (Ident.of_string "rukaml_print_int") 1;
+        emit_alloc_closure ppf (Ident.of_string "rukaml_print_int_kaml") 1;
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar { Ident.hum_name = "open_in"; _ } ->
         emit_alloc_closure ppf (Ident.of_string "rukaml_array_read_in") 1;
@@ -304,8 +304,11 @@ let generate_body is_toplevel ppf body =
           vname;
         printfn ppf "  mov qword [rsp%+d*8], r8" (count - 1 - i)
       | ALam _ -> failwith "Should it be representable in ANF?"
+      | APrimitive ("print", (1 as parity)) ->
+        emit_alloc_closure ppf (Ident.of_string "rukaml_print_int_kaml") parity;
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AConstruct _ -> assert false
-      | APrimitive _ -> assert false
+      | APrimitive _ as arg -> failwiths "Primitive %a is not supported" ANF.pp_a arg
       | ATuple _ -> assert false
       | AArray _ -> assert false);
     count + _stack_padding
@@ -326,6 +329,15 @@ let generate_body is_toplevel ppf body =
       helper dest bth
     | CIte (CAtom (AConst (Frontend.Parsetree.PConst_bool false)), _bth, bel) ->
       helper dest bel
+    | CIte
+        ( CApp
+            ( APrimitive ("=", 2)
+            , AConst (Frontend.Parsetree.PConst_int l)
+            , [ AConst (Frontend.Parsetree.PConst_int r) ] )
+        , bth
+        , bel ) ->
+      (* This is not entirely correct, because OCaml number and target could be different *)
+      helper dest (if l = r then bth else bel)
     | CIte (CAtom (AVar econd), bth, bel) when Addr_of_local.contains econd ->
       (* if on global or local variable  *)
       printfn ppf "  mov qword rdx, %a" Addr_of_local.pp_local_exn econd;
@@ -339,12 +351,18 @@ let generate_body is_toplevel ppf body =
       helper dest bel;
       printfn ppf "%s:" fin_lab
     | CAtom (AVar f)
+    (* TODO(Kakadu): change to builtin *)
       when f.Ident.hum_name = "stdin"
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
       printfn ppf "  call rukaml_array_stdin";
       printfn ppf "  mov %a, rax" pp_dest dest
+    | CApp (APrimitive ("print", 1), AVar arg, []) ->
+      printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn arg;
+      printfn ppf "  call rukaml_print_int";
+      printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (AVar f, arg, [])
+    (* TODO(Kakadu): change to builtin *)
       when f.Ident.hum_name = "length"
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
@@ -363,7 +381,7 @@ let generate_body is_toplevel ppf body =
          Addr_of_local.remove_local name2;
          Addr_of_local.remove_local name1
        | _ -> failwith "Should not happen")
-    | CApp (APrimitive "get_tag", arg, []) ->
+    | CApp (APrimitive ("get_tag", _), arg, []) ->
       (match arg with
        | AVar v when Addr_of_local.has_key v ->
          let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
@@ -379,7 +397,7 @@ let generate_body is_toplevel ppf body =
          Addr_of_local.remove_local name2;
          Addr_of_local.remove_local name1
        | _ -> failwith "Should not happen")
-    | CApp (APrimitive "get_arity", arg, []) ->
+    | CApp (APrimitive ("get_arity", _), arg, []) ->
       (match arg with
        | AVar v when Addr_of_local.has_key v ->
          let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
@@ -396,6 +414,7 @@ let generate_body is_toplevel ppf body =
          Addr_of_local.remove_local name1
        | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
+    (* TODO(Kakadu): change to builtin *)
       when f.Ident.hum_name = "get"
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
@@ -412,6 +431,7 @@ let generate_body is_toplevel ppf body =
          printfn ppf "  mov %a, rax" pp_dest dest
        | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
+    (* TODO(Kakadu): change to builtin *)
       when f.Ident.hum_name = "set"
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
@@ -427,10 +447,7 @@ let generate_body is_toplevel ppf body =
          printfn ppf "  call rukaml_applyN";
          printfn ppf "  mov %a, rax" pp_dest dest
        | _ -> failwith "Should not happen")
-    | CApp (AVar f, arg1, [])
-      when f.Ident.hum_name = "char_code"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
+    | CApp (APrimitive ("char_code", 1), arg1, []) ->
       (match arg1 with
        | AVar v when Addr_of_local.has_key v ->
          printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
@@ -439,6 +456,7 @@ let generate_body is_toplevel ppf body =
          printfn ppf "  mov qword %a, %d" pp_dest dest (Char.code c)
        | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
+    (* TODO(Kakadu): change to builtin *)
       when f.Ident.hum_name = "open_in"
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
@@ -463,6 +481,7 @@ let generate_body is_toplevel ppf body =
          printfn ppf "  mov %a, rax" pp_dest dest
        | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
+    (* TODO(Kakadu): change to builtin *)
       when f.Ident.hum_name = "print"
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
@@ -499,13 +518,12 @@ let generate_body is_toplevel ppf body =
        | AArray _
        | ALam (_, _)
        | AUnit -> failwith "Should not happen")
-    | CApp (APrimitive "=", AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
-      (* TODO: user Addr_of_local.pp_local_exn *)
+    | CApp (APrimitive ("=", 2), AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
       if l = r
       then printfn ppf "  mov qword %a, 1" pp_dest dest
       else printfn ppf "  mov qword %a, 0" pp_dest dest
-    | CApp (APrimitive "=", AConst (PConst_int n), [ AVar vname ])
-    | CApp (APrimitive "=", AVar vname, [ AConst (PConst_int n) ]) ->
+    | CApp (APrimitive ("=", 2), AConst (PConst_int n), [ AVar vname ])
+    | CApp (APrimitive ("=", 2), AVar vname, [ AConst (PConst_int n) ]) ->
       printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
       printfn ppf "  mov qword r12, %d" n;
       printfn ppf "  cmp r11, r12";
@@ -542,7 +560,7 @@ let generate_body is_toplevel ppf body =
            printfn ppf "%s:" exit_lab;
            dealloc_var ppf right_name;
            dealloc_var ppf left_name *)
-    | CApp (APrimitive "-", AVar vname, [ AConst (PConst_int 1) ]) ->
+    | CApp (APrimitive ("-", 2), AVar vname, [ AConst (PConst_int 1) ]) ->
       (match is_toplevel vname with
        | None ->
          printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
@@ -551,7 +569,7 @@ let generate_body is_toplevel ppf body =
        | Some _ ->
          (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
          failwiths "not implemented %d" __LINE__)
-    | CApp (APrimitive "-", AVar vname, [ AConst (PConst_int n) ]) ->
+    | CApp (APrimitive ("-", 2), AVar vname, [ AConst (PConst_int n) ]) ->
       (match is_toplevel vname with
        | None ->
          printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
@@ -560,8 +578,9 @@ let generate_body is_toplevel ppf body =
        | Some _ ->
          (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
          failwiths "not implemented %d" __LINE__)
-    | CApp (APrimitive (("+" | "*") as prim), AVar vname, [ AConst (PConst_int n) ])
-    | CApp (APrimitive (("+" | "*") as prim), AConst (PConst_int n), [ AVar vname ]) ->
+    | CApp (APrimitive ((("+" | "*") as prim), _), AVar vname, [ AConst (PConst_int n) ])
+    | CApp (APrimitive ((("+" | "*") as prim), _), AConst (PConst_int n), [ AVar vname ])
+      ->
       (match is_toplevel vname with
        | None ->
          printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
@@ -577,7 +596,7 @@ let generate_body is_toplevel ppf body =
        | Some _ ->
          (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
          failwiths "not implemented %d" __LINE__)
-    | CApp (APrimitive (("+" | "*" | "-") as prim), AVar vl, [ AVar vr ]) ->
+    | CApp (APrimitive ((("+" | "*" | "-") as prim), _), AVar vl, [ AVar vr ]) ->
       printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vl;
       printfn ppf "  mov qword r12, %a" Addr_of_local.pp_local_exn vr;
       printfn
@@ -590,14 +609,17 @@ let generate_body is_toplevel ppf body =
          | op -> failwiths "not_implemeted  %S. %d" op __LINE__);
       printfn ppf "  mov %a, r11" pp_dest dest
       (* TODO: Maybe move this specialization to the case below  *)
-    | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
+    | CApp (AVar f, arg1, args) as cexpr when Option.is_some (is_toplevel f) ->
       (* Callig a rukaml function uses custom calling convention.
            CDECL convention: all arguments on stack, LTR *)
       let expected_arity = Option.get (is_toplevel f) in
       let formal_arity = 1 + List.length args in
-      (* printfn ppf "\t; expected_arity = %d\n\t; formal_arity = %d"
-             expected_arity formal_arity;
-           printfn ppf "\t; calling %S" f; *)
+      (* printfn
+        ppf
+        "\t; expected_arity = %d\n\t; formal_arity = %d"
+        expected_arity
+        formal_arity; *)
+      (* printfn ppf "@[; calling @[%a@]@]" ANF.pp_c cexpr; *)
       if expected_arity = formal_arity
       then (
         let to_remove = allocate_args (arg1 :: args) in
@@ -626,10 +648,13 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  mov %a, rax" pp_dest dest
         (* printfn ppf "  sub rsp, 8*2 ; deallocate closure value and padding" *))
       else failwith "Arity mismatch: over application"
-    | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), []) ->
+    | CApp (AVar f, (AConst _ as arg), [])
+    | CApp (AVar f, (APrimitive _ as arg), [])
+    | CApp (AVar f, (AVar _ as arg), []) ->
       assert (Option.is_none (is_toplevel f));
       let arg =
         match arg with
+        (* TODO(Kakadu): change to builtin *)
         | AVar id when id.Frontend.Ident.hum_name = "closure_count" ->
           ANF.AConst (PConst_int 0)
         | _ -> arg
@@ -650,12 +675,17 @@ let generate_body is_toplevel ppf body =
       Addr_of_local.remove_local temp_padding;
       printfn ppf "  add rsp, 8*2 ; free space for args of function \"%a\"" Ident.pp f;
       printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (APrimitive "field", AConst (PConst_int n), [ (AVar _ as cont) ]) ->
+    | CApp (APrimitive ("field", 2), AConst (PConst_int n), [ (AVar _ as cont) ]) ->
+      (* TODO(Kakadu): field vs get_arg? *)
       helper_a (DReg "rsi") cont;
       printfn ppf "  mov rdi, %d" n;
       printfn ppf "  call rukaml_field";
       printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (APrimitive "get_arg", AConst (PConst_int n), [ constr ]) ->
+    | CApp (APrimitive ("print", 1), AConst (PConst_int n), []) ->
+      printfn ppf "  mov rdi, %d" n;
+      printfn ppf "  call rukaml_print_int";
+      printfn ppf "  mov qword %a, 0" pp_dest dest
+    | CApp (APrimitive ("get_arg", 2), AConst (PConst_int n), [ constr ]) ->
       (match constr with
        | AVar v when Addr_of_local.has_key v ->
          let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
@@ -687,6 +717,7 @@ let generate_body is_toplevel ppf body =
     | CAtom atom -> helper_a dest atom
     | CApp _ as anf ->
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_c anf;
+      Format.eprintf "@[`%s`@]\n%!" (Compile_lib.ANF.show_c_expr anf);
       failwiths "Not implemented %d" __LINE__
     | rest ->
       printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
@@ -696,7 +727,7 @@ let generate_body is_toplevel ppf body =
     match x with
     | AConst (Frontend.Parsetree.PConst_bool true) ->
       printfn ppf "  mov qword %a, 1" pp_dest dest
-    | AConst (Frontend.Parsetree.PConst_bool false) ->
+    | AConst (Frontend.Parsetree.PConst_bool false) | AUnit ->
       printfn ppf "  mov qword %a, 0" pp_dest dest
     | AConst (Frontend.Parsetree.PConst_int n) ->
       printfn ppf "  mov qword %a,  %d" pp_dest dest n
@@ -738,8 +769,10 @@ let generate_body is_toplevel ppf body =
       helper_a (DReg "rsi") b;
       printfn ppf "  call rukaml_alloc_pair";
       printfn ppf "  mov %a, rax" pp_dest dest
-    | AUnit -> printfn ppf "mov qword %a, 0" pp_dest dest
-    | APrimitive "match_failure" -> printfn ppf "  call rukaml_match_failure"
+    | APrimitive ("match_failure", _) -> printfn ppf "  call rukaml_match_failure"
+    | APrimitive ("print", (1 as parity)) ->
+      alloc_closure ppf (Ident.of_string "rukaml_print_int_kaml") parity;
+      printfn ppf "  mov %a, rax" pp_dest dest
     | AArray r ->
       printfn ppf "  mov rdi, %d" (List.length r);
       printfn ppf "  call rukaml_alloc_array";
@@ -751,7 +784,7 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov %a, rax" pp_dest dest
     | atom ->
       printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
-      printfn ppf ";;; @[`%a`@]" ANF.pp_a atom
+      failwiths "Unsupported: %a" ANF.pp_a atom
   in
   let dealloc_locals = allocate_locals ppf body in
   helper (DReg "rax") body;
@@ -838,6 +871,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
       (printfn ppf "extern %s")
       [ "rukaml_alloc_closure"
       ; "rukaml_print_int"
+      ; "rukaml_print_int_kaml"
       ; "rukaml_applyN"
       ; "rukaml_field"
       ; (* printfn ppf "extern rukaml_alloc_tuple"; *)
@@ -895,7 +929,6 @@ let codegen ?(wrap_main_into_start = true) anf file =
           Ident.pp
           name
           (Addr_of_local.keys ());
-
       (* printfn ppf "";
                 fprintf ppf "\t; %a\n" Loc_of_ident.pp (); *)
 

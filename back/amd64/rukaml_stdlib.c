@@ -212,17 +212,15 @@ void rukaml_print_alloc_closure_count(void)
   fflush(stdout);
 }
 
-void rukaml_print_int(int a0, int a1, int a2, int a3, int a4, int a5, int x)
+void rukaml_print_int(int64_t x)
 {
-  // putchar(0x30 + x);
-  // putchar('\n');
-  // char repr[15];
-  // snprintf(repr, 15, "%d", x);
-  // puts(repr);
-  // printf("%s\n", __func__);
-  // fflush(stdout);
   printf("%s %d\n", __func__, x);
   fflush(stdout);
+}
+
+void rukaml_print_int_kaml(int a0, int a1, int a2, int a3, int a4, int a5, int64_t x)
+{
+  rukaml_print_int(x);
 }
 
 uint64_t rukaml_array_length(int a0, int a1, int a2, int a3, int a4, int a5, void **arr)

@@ -372,10 +372,6 @@ let generate_body is_toplevel body =
         emit_alloc_closure "rukaml_identity" 1;
         (* Result is in a0 *)
         emit sd a0 (ROffset (SP, 8 * i))
-      | AVar { Ident.hum_name = "print"; _ } ->
-        emit_alloc_closure "rukaml_print_int" 1;
-        (* Result is in a0 *)
-        emit sd a0 (ROffset (SP, 8 * i))
       | AVar { Ident.hum_name = "length"; _ } ->
         emit_alloc_closure "rukaml_array_length" 1;
         (* Result is in a0 *)
@@ -395,7 +391,10 @@ let generate_body is_toplevel body =
         emit ld t0 (pp_to_mach vname) ~comm:(sprintf "arg %S" vname.hum_name);
         emit sd t0 (ROffset (SP, 8 * i))
       | ALam _ -> failwith "Should it be representable in ANF?"
-      | APrimitive _ -> assert false
+      | APrimitive ("print", (1 as parity)) ->
+        emit_alloc_closure "rukaml_print_int_kaml" parity;
+        emit sd a0 (ROffset (SP, 8 * i))
+      | APrimitive _ as arg -> failwiths "Primitive %a is not supported" ANF.pp_a arg
       | ATuple _ -> assert false
       | AArray _ -> assert false
       | AConstruct _ -> assert false
@@ -420,7 +419,7 @@ let generate_body is_toplevel body =
     | CIte (CAtom (AConst (Parsetree.PConst_bool false)), _bth, bel) -> helper dest bel
     | CIte
         ( CApp
-            ( APrimitive "="
+            ( APrimitive ("=", 2)
             , AConst (Parsetree.PConst_int l)
             , [ AConst (Parsetree.PConst_int r) ] )
         , bth
@@ -430,7 +429,6 @@ let generate_body is_toplevel body =
     | CIte (CAtom (AVar econd), bth, bel) when Addr_of_local.contains econd ->
       (* if on global or local variable  *)
       emit ld t0 (pp_to_mach econd);
-      (* printfn ppf "  ld  t0, %a" Addr_of_local.pp_local_exn econd; *)
       let el_lab = Printf.sprintf "lab_else_%d" (gensym ()) in
       let fin_lab = Printf.sprintf "lab_endif_%d" (gensym ()) in
       emit beq t0 zero el_lab;
@@ -445,7 +443,9 @@ let generate_body is_toplevel body =
       (* printfn ppf "%s:" fin_lab *)
     | CIte
         ( CApp
-            (APrimitive (("<" | "=" | "<=") as op), AVar vname, [ AConst (PConst_int n) ])
+            ( APrimitive ((("<" | "=" | "<=") as op), _)
+            , AVar vname
+            , [ AConst (PConst_int n) ] )
         , bthen
         , belse ) ->
       emit ld t0 (pp_to_mach vname) ~comm:(Format.asprintf "access %a" Ident.pp vname);
@@ -509,38 +509,16 @@ let generate_body is_toplevel body =
            emit sd_dest a0 dest;
            emit addi SP SP 16)
        | _ -> failwith "Should not happen: open_in")
-    | CApp (AVar f, arg1, [])
-      when f.Ident.hum_name = "print"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
+    | CApp (APrimitive ("print", 1), arg1, []) ->
       (match arg1 with
        | AVar v when Addr_of_local.has_key v ->
-         with_two_slots (fun ra_name arg_name ->
-           emit addi SP SP (-16);
-           emit sd ra (pp_to_mach ra_name);
-           emit ld t0 (pp_to_mach v);
-           emit mv (pp_to_mach arg_name) t0;
-           (* emit li a1 1;
-                   emit li a2 2;
-                   emit li a3 3;
-                   emit li a4 4;
-                   emit li a5 5;
-                   emit li a6 6;
-                   emit li a7 7; *)
-           emit call "rukaml_print_int";
-           emit ld ra (pp_to_mach ra_name);
-           emit sd_dest a0 dest;
-           emit addi SP SP 16)
+         emit ld a0 (pp_to_mach v);
+         emit call "rukaml_print_int";
+         emit sd_dest zero dest
        | AConst (PConst_int n) ->
-         with_two_slots (fun ra_name arg_name ->
-           emit addi SP SP (-16);
-           emit li a0 n;
-           emit sd a0 (pp_to_mach arg_name);
-           emit sd ra (pp_to_mach ra_name);
-           emit call "rukaml_print_int";
-           emit ld ra (pp_to_mach ra_name);
-           emit sd_dest a0 dest;
-           emit addi SP SP 16)
+         emit li a0 n;
+         emit call "rukaml_print_int";
+         emit sd_dest zero dest
        | AConst (PConst_bool _)
        | AConst (PConst_char _)
        | AArray _ | AVar _ | APrimitive _ | AConstruct _
@@ -587,7 +565,7 @@ let generate_body is_toplevel body =
          emit call "rukaml_applyN";
          emit sd_dest a0 dest
        | _ -> failwith "Should not happen")
-    | CApp (APrimitive "=", AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
+    | CApp (APrimitive ("=", _), AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
       (* TODO: user Addr_of_local.pp_local_exn *)
       if l = r
       then (
@@ -598,8 +576,8 @@ let generate_body is_toplevel body =
       else
         failwiths "not implemented %d" __LINE__
         (* printfn ppf "  mov qword %a, 0" Addr_of_local.pp_dest dest *)
-    | CApp (APrimitive ("=" as op), AConst (PConst_int n), [ AVar vname ])
-    | CApp (APrimitive (("=" | "<") as op), AVar vname, [ AConst (PConst_int n) ]) ->
+    | CApp (APrimitive (("=" as op), _), AConst (PConst_int n), [ AVar vname ])
+    | CApp (APrimitive ((("=" | "<") as op), _), AVar vname, [ AConst (PConst_int n) ]) ->
       let branch_instr =
         match op with
         | "=" -> emit beq
@@ -662,7 +640,7 @@ let generate_body is_toplevel body =
            printfn ppf "%s:" exit_lab;
            dealloc_var ppf right_name;
            dealloc_var ppf left_name *)
-    | CApp (APrimitive "-", AVar vname, [ AConst (PConst_int n) ]) ->
+    | CApp (APrimitive ("-", 2), AVar vname, [ AConst (PConst_int n) ]) ->
       (match is_toplevel vname with
        | None ->
          emit ld t5 (pp_to_mach vname);
@@ -674,8 +652,9 @@ let generate_body is_toplevel body =
        | Some _ ->
          (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
          failwiths "not implemented %d" __LINE__)
-    | CApp (APrimitive (("+" | "*") as prim), AVar vname, [ AConst (PConst_int n) ])
-    | CApp (APrimitive (("+" | "*") as prim), AConst (PConst_int n), [ AVar vname ]) ->
+    | CApp (APrimitive ((("+" | "*") as prim), _), AVar vname, [ AConst (PConst_int n) ])
+    | CApp (APrimitive ((("+" | "*") as prim), _), AConst (PConst_int n), [ AVar vname ])
+      ->
       (match is_toplevel vname with
        | None ->
          emit ld t0 (Addr_of_local.pp_to_mach vname);
@@ -693,7 +672,7 @@ let generate_body is_toplevel body =
        | Some _ ->
          (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
          failwiths "not implemented %d" __LINE__)
-    | CApp (APrimitive (("+" | "*" | "-") as prim), AVar vl, [ AVar vr ]) ->
+    | CApp (APrimitive ((("+" | "*" | "-") as prim), _), AVar vl, [ AVar vr ]) ->
       emit comment (sprintf "%s is stored in %d" vl.hum_name (Addr_of_local.find_exn vl));
       emit comment (sprintf "%s is stored in %d" vr.hum_name (Addr_of_local.find_exn vr));
       emit comment (sprintf "last_pos = %d" !Addr_of_local.last_pos);
@@ -784,7 +763,7 @@ let generate_body is_toplevel body =
           16
           ~comm:(sprintf "DEalloc for pad and arg 1 of function %S" f.hum_name));
       if dest <> DReg "a0" then emit sd_dest (RU "a0") dest
-    | CApp (APrimitive "field", AConst (PConst_int _n), [ AVar _ ]) ->
+    | CApp (APrimitive ("field", _), AConst (PConst_int _n), [ AVar _ ]) ->
       failwiths "Not implemented"
       (* helper_a (DReg "rsi") cont;
            printfn ppf "  mov rdi, %d" n;
@@ -801,16 +780,22 @@ let generate_body is_toplevel body =
            printfn ppf "  mov rsi, 0";
            printfn ppf "  call rukaml_gc_print_stats" *)
     | CAtom atom -> helper_a dest atom
-    | CApp (APrimitive "get_tag", AVar arg, []) when Addr_of_local.has_key arg ->
+    | CApp (APrimitive ("char_code", 1), AVar arg, []) ->
+      emit ld t0 (pp_to_mach arg);
+      emit sd_dest t0 dest
+    | CApp (APrimitive ("get_tag", _), AVar arg, []) ->
       emit ld a0 (pp_to_mach arg);
       emit call "rukaml_tag0";
       emit sd_dest a0 dest ~comm:(Format.asprintf "got tag of '%a'" Ident.pp arg)
-    | CApp (APrimitive "get_arg", AConst (PConst_int idx), [ AVar from ])
+    | CApp (APrimitive ("get_arg", _), AConst (PConst_int idx), [ AVar from ])
       when Addr_of_local.has_key from ->
       emit li a0 idx;
       emit ld a1 (pp_to_mach from);
       emit call "rukaml_field";
       emit sd_dest a0 dest
+    | CApp (APrimitive (pname, partiy), _, _) ->
+      Format.eprintf "Unsupported primitive call: %s/%d\n%!" pname partiy;
+      failwiths "Not implemented %d" __LINE__
     | CApp _ as anf ->
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_c anf;
       failwiths "Not implemented %d" __LINE__
@@ -822,13 +807,12 @@ let generate_body is_toplevel body =
     match x with
     | AConst (Parsetree.PConst_int n) ->
       (match dest with
-       | DReg r -> emit li (RU r) n
-       (* printfn ppf "  li %a, %d" Addr_of_local.pp_dest dest n *)
+       | DReg r ->
+         (* TODO(Kakadu): LI works only for small numbers *)
+         emit li (RU r) n
        | DStack_var _ ->
          emit li t0 n;
-         (* printfn ppf "  li t0, %d" n; *)
-         emit sd_dest t0 dest
-         (* printfn ppf "  sd t0, %a" Addr_of_local.pp_dest dest *))
+         emit sd_dest t0 dest)
     | AConst (Parsetree.PConst_char c) ->
       let n = Char.code c in
       (match dest with
@@ -893,7 +877,7 @@ let generate_body is_toplevel body =
       emit li t0 1;
       emit sd_dest t0 dest
     | AConst (PConst_bool false) | AUnit -> emit sd_dest zero dest
-    | APrimitive "match_failure" -> emit call "rukaml_match_failure"
+    | APrimitive ("match_failure", _) -> emit call "rukaml_match_failure"
     | _atom ->
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_a _atom;
       failwiths "not implemented %s %d" __FILE__ __LINE__
