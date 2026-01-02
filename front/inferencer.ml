@@ -658,16 +658,6 @@ let infer env table expr =
         let* fresh = fresh_var ~level:!current_level in
         let typ = tarrow (tparam fresh "array") int_typ in
         return (typ, TVar ("length", Ident.of_string "length", typ)) *)
-      (* | Parsetree.EVar "get" ->
-        let* fresh = fresh_var ~level:!current_level in
-        let typ = tarrow (tparam fresh "array") (tarrow int_typ fresh) in
-        return (typ, TVar ("get", Ident.of_string "get", User, typ))
-      | Parsetree.EVar "set" ->
-        let* fresh = fresh_var ~level:!current_level in
-        let typ =
-          tarrow (tparam fresh "array") (tarrow int_typ (tarrow fresh unit_typ))
-        in
-        return (typ, TVar ("set", Ident.of_string "set", typ)) *)
       | Parsetree.EVar x ->
         let* scheme, kind = lookup_scheme_by_string x env in
         let* typ = instantiate ~level:!current_level scheme in

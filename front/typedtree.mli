@@ -23,6 +23,7 @@ and type_desc =
   | TProd of ty * ty * ty list
   | TConstr of ty list * string
   (** [ int ] is [ TConstr ([], "int") ] ;; [ int array ] is [ TConstr ([ TConst ("int", []) ], "array") ] etc. *)
+
 module IntMap : Map.S with type key = int
 
 type weak_table =
@@ -63,6 +64,7 @@ type pattern =
   | Tpat_constr of Ident.t * pattern option
 
 val show_pattern : pattern -> string
+val pp_pattern : Format.formatter -> pattern -> unit
 val of_untyped_pattern : Parsetree.pattern -> pattern
 
 type def_kind =
@@ -86,7 +88,6 @@ type expr =
 val type_of_expr : expr -> ty
 val type_without_links : ty -> ty
 val compact_expr : expr -> expr
-
 val pp_expr : Format.formatter -> expr -> unit
 val show_expr : expr -> string
 val pp_binder_set : Format.formatter -> binder_set -> unit
@@ -134,7 +135,6 @@ module TypeEnv : sig
 
   val empty : t
   val add_type : t -> type_declaration -> t
-
   val typ_unit : type_declaration
   val typ_int : type_declaration
   val typ_bool : type_declaration
