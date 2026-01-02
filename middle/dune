@@ -1,7 +1,16 @@
 (library
  (name compile_lib)
  (libraries stdio Frontend cconv ppxlib.stdppx ocamlgraph)
- (modules ANF CPSLang CPSConv CAA CFlags compile_tests CAA_tests)
+ (modules
+  ANF
+  CPSLang
+  CPSConv
+  CAA
+  CFlags
+  compile_tests
+  CAA_tests
+  ANF_tests
+  CPSConv_tests)
  (preprocess
   (pps ppx_deriving.show ppx_expect))
  (instrumentation

@@ -12,3 +12,7 @@ type error =
 
 val pp_error : Format.formatter -> error -> unit
 val cps_conv : value_binding list -> (cps_vb list, error) Result.t
+
+(** Testing stuff *)
+
+val test_cps : string -> unit
