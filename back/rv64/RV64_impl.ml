@@ -418,6 +418,15 @@ let generate_body is_toplevel body =
   and helper_c (dest : dest) = function
     | CIte (CAtom (AConst (Parsetree.PConst_bool true)), bth, _bel) -> helper dest bth
     | CIte (CAtom (AConst (Parsetree.PConst_bool false)), _bth, bel) -> helper dest bel
+    | CIte
+        ( CApp
+            ( APrimitive "="
+            , AConst (Parsetree.PConst_int l)
+            , [ AConst (Parsetree.PConst_int r) ] )
+        , bth
+        , bel ) ->
+      (* This is not entirely correct, because OCaml number and target could be different *)
+      helper dest (if l = r then bth else bel)
     | CIte (CAtom (AVar econd), bth, bel) when Addr_of_local.contains econd ->
       (* if on global or local variable  *)
       emit ld t0 (pp_to_mach econd);
@@ -793,11 +802,9 @@ let generate_body is_toplevel body =
            printfn ppf "  call rukaml_gc_print_stats" *)
     | CAtom atom -> helper_a dest atom
     | CApp (APrimitive "get_tag", AVar arg, []) when Addr_of_local.has_key arg ->
-      emit_alloc_closure "rukaml_tag" 1;
-      emit li a1 1;
-      emit ld a2 (pp_to_mach arg);
-      emit call "rukaml_applyN";
-      emit sd_dest a0 dest
+      emit ld a0 (pp_to_mach arg);
+      emit call "rukaml_tag0";
+      emit sd_dest a0 dest ~comm:(Format.asprintf "got tag of '%a'" Ident.pp arg)
     | CApp (APrimitive "get_arg", AConst (PConst_int idx), [ AVar from ])
       when Addr_of_local.has_key from ->
       emit li a0 idx;
@@ -807,14 +814,12 @@ let generate_body is_toplevel body =
     | CApp _ as anf ->
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_c anf;
       failwiths "Not implemented %d" __LINE__
-    | _rest -> emit comment (sprintf ";;; TODO %s %d" __FUNCTION__ __LINE__)
-  (* printfn ppf "; @[<h>%a@]" Compile_lib.ANF.pp_c rest *)
+    | _rest ->
+      Format.eprintf "@[%a@]\n%!" Compile_lib.ANF.pp_c _rest;
+      failwiths "Not implemented %s %d" __FILE__ __LINE__
   and helper_a (dest : dest) x =
     (* log "  %s: expr = %a" __FUNCTION__ ANF.pp_a x; *)
     match x with
-    | AConst (Parsetree.PConst_bool true) ->
-      emit li_dest dest 1 (* printfn ppf "  li %a, 1" Addr_of_local.pp_dest dest *)
-    (* | AConst (Parsetree.PConst_bool false) -> emit li_dest dest 0 *)
     | AConst (Parsetree.PConst_int n) ->
       (match dest with
        | DReg r -> emit li (RU r) n
@@ -866,7 +871,6 @@ let generate_body is_toplevel body =
         emit li a1 tag;
         emit call "rukaml_alloc_block";
         emit sd a0 (pp_to_mach rez_slot);
-
         List.iteri
           (fun i x ->
              helper_a (DReg "t0") x;
@@ -885,19 +889,14 @@ let generate_body is_toplevel body =
       (*       printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
       (*       printfn ppf "  call rukaml_alloc_pair"; *)
       (*       printfn ppf "  mv %a, a0" Addr_of_local.pp_dest dest) *)
-    | AUnit ->
-      failwiths "not implemented %s %d" __FILE__ __LINE__
-      (* printfn ppf "mov qword %a, 0" Addr_of_local.pp_dest dest *)
-    | APrimitive "match_failure" ->
-      emit_alloc_closure "rukaml_match_failure" 1;
-      emit li a2 42;
-      emit call "rukaml_applyN";
-      emit sd_dest a0 dest
+    | AConst (PConst_bool true) ->
+      emit li t0 1;
+      emit sd_dest t0 dest
+    | AConst (PConst_bool false) | AUnit -> emit sd_dest zero dest
+    | APrimitive "match_failure" -> emit call "rukaml_match_failure"
     | _atom ->
-      (* printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__; *)
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_a _atom;
       failwiths "not implemented %s %d" __FILE__ __LINE__
-    (* printfn ppf ";;; @[`%a`@]" ANF.pp_a atom *)
   in
   helper (DReg "a0") body;
   dealloc_locals ~now:()
@@ -1036,7 +1035,6 @@ let codegen ?(wrap_main_into_start = true) anf file =
           "There are left over variables (before function %s): %s "
           name.Ident.hum_name
           (Addr_of_local.keys ());
-
       (* printfn ppf "";
            fprintf ppf "\t; %a\n" Loc_of_ident.pp (); *)
 

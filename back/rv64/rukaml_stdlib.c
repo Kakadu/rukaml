@@ -357,11 +357,16 @@ void *rukaml_alloc_array(int64_t size)
   return rukaml_alloc_block(size, Array_tag);
 }
 
+// Standart CC
+void *rukaml_tag0(void **obj) {
+  return (void *)(uint64_t)(TAG(obj));
+}
+
 void *rukaml_tag(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
                   uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
                   void **obj)
 {
-  return (void *)(uint64_t)(TAG(obj));
+  return rukaml_tag0(obj);
 }
 
 uint64_t rukaml_array_length(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
