@@ -573,7 +573,8 @@ let anf =
   let rec helper e (k : imm_expr -> expr) =
     match e with
     | Typedtree.TConst n -> k @@ AConst n
-    | TApp (TApp (TVar (varname, _, _), arg1, _), arg2, _) when is_infix_binop varname ->
+    | TApp (TApp (TVar (varname, _, _, _), arg1, _), arg2, _) when is_infix_binop varname
+      ->
       helper arg1 (fun arg1 ->
         helper arg2 (fun arg2 ->
           let name = gensym_id () in
@@ -632,10 +633,14 @@ let anf =
           name
           (CIte (CAtom eimm, helper eth complex_of_atom, helper el complex_of_atom))
           (k (AVar name)))
-    | TVar ("=", _id, _) ->
+    | TVar ("=", _id, _, _) ->
       (* TODO: Could be a bug. Check id too. *)
       k (APrimitive "=")
-    | TVar (_, name, _) -> k (AVar name)
+    | TVar (_, name, User, _) -> k (AVar name)
+    | TVar (_, name, Builtin (_name, _arity), _) ->
+      (* TODO(Kakadu): Create builtins here  *)
+      (* k (APrimitive name) *)
+      k (AVar name)
     | TUnit -> k AUnit
     | TTuple (ea, eb, [], _) ->
       helper ea (fun aimm ->

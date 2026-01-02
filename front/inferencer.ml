@@ -292,8 +292,8 @@ let%expect_test " " =
 module Type_env = struct
   include Typedtree.TypeEnv
 
-  let extend ~varname id scheme t =
-    { t with env_values = Ident.Ident_map.add varname id scheme t.env_values }
+  let extend ~varname ?(kind = User) id scheme t =
+    { t with env_values = Ident.Ident_map.add varname id (scheme, kind) t.env_values }
   ;;
   let extend_string varname = extend (Ident.of_string varname) ~varname
 
@@ -306,7 +306,7 @@ module Type_env = struct
   let free_vars t =
     Ident.Ident_map.fold_idents
       ~init:Var_set.empty
-      ~f:(fun acc (_, s) -> Var_set.union acc (Scheme.free_vars s))
+      ~f:(fun acc (_, (s, _)) -> Var_set.union acc (Scheme.free_vars s))
       t.env_values
   ;;
 
@@ -349,7 +349,9 @@ module Type_env = struct
   ;;
 
   let apply s t =
-    let env_values = Ident.Ident_map.map t.env_values ~f:(Scheme.apply s) in
+    let env_values =
+      Ident.Ident_map.map t.env_values ~f:(fun (typ, info) -> Scheme.apply s typ, info)
+    in
     let env_types = Ident.Ident_map.map t.env_types ~f:(apply_to_type_declaration s) in
     let env_constructors =
       Ident.String_map.map (apply_to_constructor_info s) t.env_constructors
@@ -453,7 +455,7 @@ let lookup_scheme : _ -> Type_env.t -> scheme t =
      log "  inside %a" Type_env.pp xs; *)
   match Type_env.find_exn id xs with
   | (exception Stdlib.Not_found) | (exception Not_found_s _) -> fail (`No_ident id)
-  | scheme -> return scheme
+  | scheme, _ -> return scheme
 ;;
 
 let lookup_scheme_by_string : _ =
@@ -652,25 +654,25 @@ let infer env table expr =
       (*            (array_typ @@ tv 1 ~level:1) *)
       (*            (tarrow int_typ (tarrow (tv 1 ~level:3) unit_typ)))) *)
       (* |> extend_s "length" (Scheme.make_mono (tarrow (array_typ @@ tv 1 ~level:1) int_typ)) *)
-      | Parsetree.EVar "length" ->
+      (* | Parsetree.EVar "length" ->
         let* fresh = fresh_var ~level:!current_level in
         let typ = tarrow (tparam fresh "array") int_typ in
-        return (typ, TVar ("length", Ident.of_string "length", typ))
-      | Parsetree.EVar "get" ->
+        return (typ, TVar ("length", Ident.of_string "length", typ)) *)
+      (* | Parsetree.EVar "get" ->
         let* fresh = fresh_var ~level:!current_level in
         let typ = tarrow (tparam fresh "array") (tarrow int_typ fresh) in
-        return (typ, TVar ("get", Ident.of_string "get", typ))
+        return (typ, TVar ("get", Ident.of_string "get", User, typ))
       | Parsetree.EVar "set" ->
         let* fresh = fresh_var ~level:!current_level in
         let typ =
           tarrow (tparam fresh "array") (tarrow int_typ (tarrow fresh unit_typ))
         in
-        return (typ, TVar ("set", Ident.of_string "set", typ))
+        return (typ, TVar ("set", Ident.of_string "set", typ)) *)
       | Parsetree.EVar x ->
-        let* scheme = lookup_scheme_by_string x env in
+        let* scheme, kind = lookup_scheme_by_string x env in
         let* typ = instantiate ~level:!current_level scheme in
         let typ = elim table typ in
-        return (typ, TVar (x, Type_env.ident_of_string x env, typ))
+        return (typ, TVar (x, Type_env.ident_of_string x env, kind, typ))
       | EUnit -> return (unit_typ, TUnit)
       | Parsetree.EArray r ->
         (match r with
@@ -821,26 +823,54 @@ let infer env table expr =
   return (ty, expr)
 ;;
 
+let ( @-> ) = tarrow
+
 let start_env =
   let cmp_scheme = Scheme.make_mono (tarrow int_typ (tarrow int_typ bool_typ)) in
   let int_arith_scheme = Scheme.make_mono (tarrow int_typ (tarrow int_typ int_typ)) in
-  let extend_s varname = Type_env.extend ~varname (Ident.of_string varname) in
+  let extend_s ?(kind = User) varname =
+    Type_env.extend ~varname ~kind (Ident.of_string varname)
+  in
+  let extend_binop name = extend_s ~kind:(Builtin (name, 2)) name in
   Type_env.env_with_base_types
-  |> extend_s "print" (Scheme.make_mono (tarrow int_typ unit_typ))
-  |> extend_s "char_code" (Scheme.make_mono (tarrow char_typ int_typ))
+  (* TODO: print_int *)
+  |> extend_s
+       "print"
+       (Scheme.make_mono (tarrow int_typ unit_typ))
+       ~kind:(Builtin ("print", 1))
+  |> extend_s
+       "char_code"
+       (Scheme.make_mono (tarrow char_typ int_typ))
+       ~kind:(Builtin ("char_code", 1))
+     (* ***** StdIO stuff *)
   |> extend_s "stdin" (Scheme.make_mono (array_typ char_typ))
   |> extend_s
        "open_in"
        (Scheme.make_mono (tarrow (array_typ char_typ) (array_typ char_typ)))
-  |> extend_s "<" cmp_scheme
-  |> extend_s ">" cmp_scheme
-  |> extend_s "<=" cmp_scheme
-  |> extend_s ">=" cmp_scheme
-  |> extend_s "=" cmp_scheme
-  |> extend_s "+" int_arith_scheme
-  |> extend_s "-" int_arith_scheme
-  |> extend_s "*" int_arith_scheme
-  |> extend_s "/" int_arith_scheme
+  |> extend_binop "<" cmp_scheme
+  |> extend_binop ">" cmp_scheme
+  |> extend_binop "<=" cmp_scheme
+  |> extend_binop ">=" cmp_scheme
+  |> extend_binop "=" cmp_scheme
+  |> extend_binop "+" int_arith_scheme
+  |> extend_binop "-" int_arith_scheme
+  |> extend_binop "*" int_arith_scheme
+  |> extend_binop "/" int_arith_scheme
+  (* Array stuff *)
+  |> extend_s
+       "length"
+       (Typedtree.S (Var_set.singleton 0, tarrow (array_typ (tv 0 ~level:1000)) int_typ))
+  |> extend_s
+       "get"
+       (let param = tv 0 ~level:1000 in
+        let ( @-> ) = tarrow in
+        Typedtree.S (Var_set.singleton 0, array_typ param @-> int_typ @-> param))
+  |> extend_s
+       "set"
+       (let param = tv 0 ~level:1000 in
+        Typedtree.S
+          (Var_set.singleton 0, array_typ param @-> int_typ @-> param @-> unit_typ))
+  (* GC stuff *)
   |> extend_s "gc_compact" (Scheme.make_mono (tarrow unit_typ unit_typ))
   |> extend_s "gc_stats" (Scheme.make_mono (tarrow unit_typ unit_typ))
   |> extend_s "closure_count" (Scheme.make_mono (tarrow unit_typ unit_typ))

@@ -76,10 +76,15 @@ let of_untyped_pattern =
   helper
 ;;
 
+type def_kind =
+  | User
+  | Builtin of string * int
+[@@deriving show { with_path = false }]
+
 type expr =
   | TUnit
   | TConst of Parsetree.const
-  | TVar of string * Ident.t * ty
+  | TVar of string * Ident.t * def_kind * ty
   | TIf of expr * expr * expr * ty
   | TLam of pattern * expr * ty
   | TApp of expr * expr * ty
@@ -95,7 +100,7 @@ let rec type_of_expr = function
   | TConst (Parsetree.PConst_int _) -> int_typ
   | TConst (Parsetree.PConst_bool _) -> bool_typ
   | TConst (Parsetree.PConst_char _) -> char_typ
-  | TVar (_, _, t)
+  | TVar (_, _, _, t)
   | TTuple (_, _, _, t)
   | TIf (_, _, _, t)
   | TArray (_, t)
@@ -124,7 +129,7 @@ let compact_expr =
   let rec helper t =
     match t with
     | TUnit | TConst _ -> t
-    | TVar (name, id, ty) -> TVar (name, id, type_without_links ty)
+    | TVar (name, id, kind, ty) -> TVar (name, id, kind, type_without_links ty)
     | TIf (a, b, c, ty) -> TIf (helper a, helper b, helper c, type_without_links ty)
     | TLam (pat, e, ty) -> TLam (pat, helper e, type_without_links ty)
     | TArray (a, ty) -> TArray (List.map helper a, type_without_links ty)
@@ -181,7 +186,7 @@ module TypeEnv = struct
   type t =
     { env_constructors : constructor_info Ident.String_map.t
     ; env_types : type_declaration Ident.Ident_map.t
-    ; env_values : scheme Ident.Ident_map.t
+    ; env_values : (scheme * def_kind) Ident.Ident_map.t
     }
 
   let empty =
@@ -191,30 +196,22 @@ module TypeEnv = struct
     }
   ;;
 
-  let typ_unit : type_declaration =
-    { tty_ident = Ident.of_string "unit"
+  let mk_ground_typ name =
+    { tty_ident = Ident.of_string name
     ; tty_params = Var_set.empty
     ; tty_kind = Tty_abstract None
     }
   ;;
 
-  let typ_int : type_declaration =
-    { tty_ident = Ident.of_string "int"
-    ; tty_params = Var_set.empty
-    ; tty_kind = Tty_abstract None
-    }
-  ;;
+  let typ_unit = mk_ground_typ "unit"
 
-  let typ_bool : type_declaration =
-    { tty_ident = Ident.of_string "bool"
-    ; tty_params = Var_set.empty
-    ; tty_kind = Tty_abstract None
-    }
-  ;;
+  let typ_int = mk_ground_typ "int"
+
+  let typ_bool = mk_ground_typ "bool"
 
   let typ_array : type_declaration =
     { tty_ident = Ident.of_string "array"
-    ; tty_params = Var_set.singleton (-1)
+    ; tty_params = Var_set.singleton (-1) (* TODO: Why -1? *)
     ; tty_kind = Tty_abstract None
     }
   ;;

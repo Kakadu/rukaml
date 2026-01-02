@@ -65,10 +65,14 @@ type pattern =
 val show_pattern : pattern -> string
 val of_untyped_pattern : Parsetree.pattern -> pattern
 
+type def_kind =
+  | User
+  | Builtin of string * int
+
 type expr =
   | TUnit
   | TConst of Parsetree.const (** Contants *)
-  | TVar of string * Ident.t * ty
+  | TVar of string * Ident.t * def_kind * ty
   | TIf of expr * expr * expr * ty (** if ... then ... else ... *)
   | TLam of pattern * expr * ty (** fun ... -> ... *)
   | TApp of expr * expr * ty (** Application f x *)
@@ -125,7 +129,7 @@ module TypeEnv : sig
   type t =
     { env_constructors : constructor_info Ident.String_map.t
     ; env_types : type_declaration Ident.Ident_map.t
-    ; env_values : scheme Ident.Ident_map.t
+    ; env_values : (scheme * def_kind) Ident.Ident_map.t
     }
 
   val empty : t
