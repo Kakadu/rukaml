@@ -17,6 +17,8 @@ let log fmt =
   else Format.ifprintf Format.std_formatter fmt
 ;;
 
+let failwiths fmt = Format.kasprintf failwith fmt
+
 open Frontend
 
 type apat = APname of Ident.t
@@ -262,6 +264,7 @@ let used_once_in_if ~where name =
   !used_in_if = 1 && !used = 0
 ;;
 
+(* TODO: Why we substitute by complex expression only? *)
 let substitute ~where ident1 (rhs : c_expr) : expr =
   let rec helper = function
     | EComplex c -> ecomplex (helper_c c)
@@ -271,7 +274,7 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
     | CAtom (AVar _) as c -> c
     | CAtom i -> catom (helperi i)
     | CIte (CAtom (AVar name), ethen, eelse) when Ident.equal ident1 name ->
-      cite rhs ethen eelse
+      cite rhs (helper ethen) (helper eelse)
     | CIte (cond, ethen, eelse) -> cite (helper_c cond) (helper ethen) (helper eelse)
     | CApp (AVar x, arg1, args) when Ident.equal x ident1 ->
       (match rhs with
@@ -290,10 +293,13 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
     | AConst (PConst_bool false) -> AConst (PConst_int 0)
     | (ATuple _ | APrimitive _ | AConst _ | AUnit) as i -> i
     | AConstruct (tag, is) -> AConstruct (tag, List.map helperi is)
-    | AVar _ -> failwith "Should not happen"
+    | AVar name when Ident.equal ident1 name ->
+      Format.eprintf "Possible missing substitution. %s %d\n%!" __FILE__ __LINE__;
+      AVar name
+    | AVar _ as i -> i
     | i ->
       Format.eprintf "%a\n%!" pp_a i;
-      assert false
+      failwiths "%s: unsupported case" __FUNCTION__
   in
   let ans = helper where in
   log
