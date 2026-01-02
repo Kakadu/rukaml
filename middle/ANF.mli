@@ -8,7 +8,7 @@ type imm_expr =
   | AUnit
   | AConst of Frontend.Parsetree.const
   | AVar of Frontend.Ident.t
-  | APrimitive of string
+  | APrimitive of string * int
   | ATuple of imm_expr * imm_expr * imm_expr list
   | AConstruct of int * imm_expr list
   | AArray of imm_expr list
@@ -23,6 +23,7 @@ and expr =
   | ELet of Frontend.Parsetree.rec_flag * Frontend.Typedtree.pattern * c_expr * expr
   | EComplex of c_expr
 
+val show_c_expr : c_expr -> string
 val pp_a : Format.formatter -> imm_expr -> unit
 val pp_c : Format.formatter -> c_expr -> unit
 val pp : Format.formatter -> expr -> unit

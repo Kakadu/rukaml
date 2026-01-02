@@ -21,18 +21,19 @@ let failwiths fmt = Format.kasprintf failwith fmt
 
 open Frontend
 
-type apat = APname of Ident.t
+type apat = APname of Ident.t [@@deriving show { with_path = false }]
 
 type imm_expr =
   | AUnit
   | AConst of Parsetree.const
   | AVar of Ident.t
-  | APrimitive of string
+  | APrimitive of string * int
   | ATuple of imm_expr * imm_expr * imm_expr list
   | AConstruct of int * imm_expr list
   | AArray of imm_expr list
   | ALam of apat * expr
 
+(* TODO(Kakadu): array, lambda, constructor and tuple are not immediates *)
 and c_expr =
   | CApp of imm_expr * imm_expr * imm_expr list
   | CIte of c_expr * expr * expr
@@ -42,6 +43,7 @@ and expr =
   | ELet of Parsetree.rec_flag * Typedtree.pattern * c_expr * expr
   (* Maybe recursive flag is not required? *)
   | EComplex of c_expr
+[@@deriving show { with_path = false }]
 
 type vb = Parsetree.rec_flag * Ident.t * expr
 (* TODO: only complex expression should be there *)
@@ -109,7 +111,7 @@ include struct
     | EComplex ea -> helper_c ppf ea
 
   and helper_c ppf = function
-    | CApp (APrimitive binop, arg1, [ arg2 ]) when is_infix_binop binop ->
+    | CApp (APrimitive (binop, _arity), arg1, [ arg2 ]) when is_infix_binop binop ->
       fprintf ppf "(%a %s %a)" helper_a arg1 binop helper_a arg2
     | CApp (f, arg1, args) ->
       fprintf
@@ -150,7 +152,7 @@ include struct
       fprintf ppf "@[(fun %a %a -> %a)@]" pp_apat arg1 pp_apat arg2 helper e
     | ALam (name, e) -> fprintf ppf "(fun %a -> %a)" pp_apat name helper e
     | AConst c -> Pprint.pp_const ppf c
-    | APrimitive s -> fprintf ppf "%s" s
+    | APrimitive (s, _arity) -> fprintf ppf "%s" s
     | AVar s -> Ident.pp ppf s
     | ATuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
     | AArray xs -> fprintf ppf "@[[|%a|]@]" (pp_comma_list helper_a) xs
@@ -351,7 +353,7 @@ end
 
 let simplify : _ Arity_map.t -> expr -> expr =
   let is_comparison : c_expr -> bool = function
-    | CApp (APrimitive ("<" | "=" | "<="), _, [ _ ]) ->
+    | CApp (APrimitive (("<" | "=" | "<="), _), _, [ _ ]) ->
       (* TODO(Kakadu): fix here, when we get user-defined operators *)
       true
     | _ -> false
@@ -492,7 +494,7 @@ let gensym_s : _ =
 let gensym_id ?(prefix = "temp") () = Ident.of_string (gensym_s ~prefix ())
 
 let anf_pat pat ?(kbefore = fun _ -> Fun.id) k =
-  let access n e = CApp (APrimitive "field", AConst (PConst_int n), [ e ]) in
+  let access n e = CApp (APrimitive ("field", 2), AConst (PConst_int n), [ e ]) in
   (* TODO: the use of continuation here is weird, revisit it later. *)
   let rec helper pat ident_name k =
     match pat with
@@ -521,32 +523,20 @@ let anf_pat pat ?(kbefore = fun _ -> Fun.id) k =
   | _ -> failwith "not implemented"
 ;;
 
-(* let test_anf_pat text =
-  reset_gensym ();
-  match
-    let pat = Frontend.Parsing.parse_pat_exn text in
-    anf_pat ~kbefore:elam (Typedtree.of_untyped_pattern pat) (fun _name ->
-      complex_of_atom (AVar (Ident.of_string "use_pattern_vars_here")))
-    |> Result.ok
-  with
-  | Result.Error err -> Format.printf "%a\n%!" Inferencer.pp_error err
-  | Ok e -> Format.printf "@[<v>%a@]\n%!" pp e
-;; *)
-
 let anf =
   (* Standard pitfall: forgot to call continuation *)
   let rec helper e (k : imm_expr -> expr) =
     match e with
     | Typedtree.TConst n -> k @@ AConst n
-    | TApp (TApp (TVar (varname, _, _, _), arg1, _), arg2, _) when is_infix_binop varname
-      ->
+    | TApp (TApp (TVar (varname, _, Builtin (bname, 2), _), arg1, _), arg2, _)
+      when is_infix_binop varname ->
       helper arg1 (fun arg1 ->
         helper arg2 (fun arg2 ->
           let name = gensym_id () in
           ELet
             ( NonRecursive
             , Tpat_var name
-            , CApp (APrimitive varname, arg1, [ arg2 ])
+            , CApp (APrimitive (bname, 2), arg1, [ arg2 ])
             , k (AVar name) )))
     (* | TApp (TApp (TVar ("fresh", _), arg1, _), arg2, _) ->
        helper arg1 (fun arg1 ->
@@ -600,12 +590,9 @@ let anf =
           (k (AVar name)))
     | TVar ("=", _id, _, _) ->
       (* TODO: Could be a bug. Check id too. *)
-      k (APrimitive "=")
+      k (APrimitive ("=", 2))
     | TVar (_, name, User, _) -> k (AVar name)
-    | TVar (_, name, Builtin (_name, _arity), _) ->
-      (* TODO(Kakadu): Create builtins here  *)
-      (* k (APrimitive name) *)
-      k (AVar name)
+    | TVar (_, _, Builtin (_name, _arity), _) -> k (APrimitive (_name, _arity))
     | TUnit -> k AUnit
     | TTuple (ea, eb, [], _) ->
       helper ea (fun aimm ->
@@ -654,9 +641,11 @@ let anf =
       make_let_nonrec name rhs (k (AVar name))
     (* converts TMatch into if-then-else *)
     | TMatch (scrutinee, (case1, cases), _) ->
-      let access n x = CApp (APrimitive "get_arg", AConst (PConst_int n), [ x ]) in
-      let cmp a b = CApp (APrimitive "=", a, [ b ]) in
-      let match_failure = APrimitive "match_failure" in
+      let prim_field = APrimitive ("get_arg", 2) in
+      let prim_tag = APrimitive ("get_tag", 2) in
+      let match_failure = APrimitive ("match_failure", 0) in
+      let access n x = CApp (prim_field, AConst (PConst_int n), [ x ]) in
+      let cmp a b = CApp (APrimitive ("=", 2), a, [ b ]) in
       let rec process_cases scrut cases k =
         match cases with
         | [] -> k match_failure
@@ -674,7 +663,7 @@ let anf =
           make_let_nonrec fresh rhs @@ make_ite fresh success
         in
         let compare_tag (ident : Ident.t) success =
-          let get_tag = CApp (APrimitive "get_tag", scrut_var, []) in
+          let get_tag = CApp (prim_tag, scrut_var, []) in
           let expected_tag = AConst (PConst_int ident.id) in
           let fresh_for_tag = gensym_id () in
           let compare_tags = cmp (AVar fresh_for_tag) expected_tag in

@@ -82,7 +82,6 @@ let free_vars_of_expr =
       let aux acc (p, e) = SS.diff (helper acc e) (vars_from_pattern p) in
       List.fold_left aux (helper acc expr) (pe1 :: pes)
   in
-
   helper String_set.empty
 ;;
 
@@ -174,7 +173,6 @@ let conv ?(standart_globals = standart_globals)
   : Parsetree.value_binding -> Parsetree.value_binding list
   =
   let open Parsetree in
-  let open Parsetree in
   (* TODO(Kakadu): don't know if monads are needed here *)
   let open Monads.Store in
   let save : value_binding -> (value_binding list, unit) t =
@@ -262,7 +260,7 @@ let conv ?(standart_globals = standart_globals)
          (match args with
           | [] -> return (elet ~isrec pat (elams args rhs) body)
           | _ ->
-            let* () = save (NonRecursive, pat, elams args rhs) in
+            let* () = save (isrec, pat, elams args rhs) in
             return body)
        | Some extra ->
          log "classify says Some %a" String_set.pp extra;
@@ -347,10 +345,12 @@ let conv ?(standart_globals = standart_globals)
   in
   function
   | is_rec, (PVar v as pat), root ->
+    log "%s %d, is_rec = %a, name = %S" __FUNCTION__ __LINE__ pp_rec_flag is_rec v;
     let args, rhs = group_lams root in
     let enriched_globals = standart_globals |> String_set.add v in
     let saved, last_rhs = Monads.Store.run (helper enriched_globals rhs) [] in
-    List.rev_append saved [ is_rec, pat, elams args last_rhs ] |> List.map simplify_vb
+    List.rev_append saved [ is_rec, pat, elams args last_rhs ]
+    (* |> List.map simplify_vb *)
   | is_rec, (PTuple _ as pat), root ->
     let saved, rhs =
       Monads.Store.run
@@ -375,9 +375,11 @@ let structure ?(standart_globals = standart_globals) stru =
     (stru : Parsetree.structure)
     ~init
     ~f:(fun (glob, ans) stru ->
+      log "%s %d" "Processing structure item" __LINE__;
       match stru with
       | Parsetree.SValue stru ->
         let new_strus = conv ~standart_globals:glob stru in
+        log "new strus length = %d" (List.length new_strus);
         let new_glob =
           ListLabels.fold_left ~init:glob new_strus ~f:(fun acc -> function
             | _, Parsetree.PVar s, _ -> String_set.add s acc

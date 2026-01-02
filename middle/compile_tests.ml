@@ -39,6 +39,22 @@ let wrap ?(verbose = false) ?(standart_globals = standart_globals) input =
   set_logging false
 ;;
 
+let on_structure ?(verbose = false) ?(standart_globals = standart_globals) input =
+  set_logging verbose;
+  match Parsing.parse_structure input with
+  | Error (`Parse_error msg) -> Format.eprintf "Parse error: %s\n" msg
+  | Ok ast ->
+    let rez = structure ~standart_globals ast in
+    Format.printf
+      "@[%a@]\n\t~~[%d value bindings]~~>\n@[<v>%a@]\n"
+      Pprint.pp_stru
+      ast
+      (List.length rez)
+      Pprint.pp_stru
+      rez;
+    set_logging false
+;;
+
 let%expect_test " " =
   wrap iter;
   [%expect
@@ -137,4 +153,49 @@ let%expect_test " nested let" =
     let main = 5
 
      |}]
+;;
+
+let aux_unwrap_demo =
+  {|
+let unwrap ls =
+  let rec aux  ls  =
+    match ls with
+    | Some x :: xs ->
+      aux xs
+    | _ -> 0
+  in
+  aux ls
+  |}
+;;
+
+let%expect_test "unwrap as expression" =
+  wrap aux_unwrap_demo;
+  [%expect
+    {|
+    let unwrap ls = let rec aux ls = match ls with
+                                       | Some (x) :: xs -> (aux xs)
+                                       | _ -> 0 in aux ls
+    ~~[2 value bindings]~~>
+
+    let rec aux ls = match ls with
+                       | Some (x) :: xs -> (aux xs)
+                       | _ -> 0
+    let unwrap ls = aux ls
+    |}]
+;;
+
+let%expect_test "unwrap as structure" =
+  on_structure aux_unwrap_demo;
+  [%expect
+    {|
+    let unwrap ls = let rec aux ls = match ls with
+                                       | Some (x) :: xs -> (aux xs)
+                                       | _ -> 0 in aux ls
+    ~~[2 value bindings]~~>
+
+    let rec aux ls = match ls with
+                       | Some (x) :: xs -> (aux xs)
+                       | _ -> 0
+    let unwrap ls = aux ls
+    |}]
 ;;
