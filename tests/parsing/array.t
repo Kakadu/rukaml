@@ -2,11 +2,11 @@
   $ cat << EOF | ./run.exe -e -
   > ""
   > EOF
-  Parsed: [||]
+  Parsed: [| |]
   $ cat << EOF | ./run.exe -e -
   > "asdf"
   > EOF
-  Parsed: [|'a'; 's'; 'd'; 'f'|]
+  Parsed: "asdf"
 
 # get sugar
   $ cat << EOF | ./run.exe -e -
@@ -18,8 +18,7 @@
   > let r = "foobar" in
   > print (char_code r.(0))
   > EOF
-  Parsed: let r = [|'f'; 'o'; 'o'; 'b'; 'a'; 'r'|] in print (char_code 
-                                                             (get r 0))
+  Parsed: let r = "foobar" in print (char_code (get r 0))
 
 # set sugar
   $ cat << EOF | ./run.exe -e -
@@ -31,6 +30,6 @@
   > let r = "Ocaml" in
   > r.(1) <- 'C'
   > EOF
-  Parsed: let r = [|'O'; 'c'; 'a'; 'm'; 'l'|] in set r 1 'C'
+  Parsed: let r = "Ocaml" in set r 1 'C'
 
 

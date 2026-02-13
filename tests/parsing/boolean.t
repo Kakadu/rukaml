@@ -17,7 +17,7 @@
   > x && y ||
   > x && y
   > EOF
-  Error: : end_of_input
+  Parsed: ((x && y) || (x && y))
 
   $ cat << EOF | ./run.exe -prio -
   > fun x -> if x then printint 52 else ()
