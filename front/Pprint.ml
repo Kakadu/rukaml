@@ -86,6 +86,8 @@ let rec pp_expr_helper ?(ps = true) ppf = function
            no_pars)
       el
   | EVar s -> pp_print_string ppf s
+  | EApp (EApp (EVar ("||" as op), l), r)
+  | EApp (EApp (EVar ("&&" as op), l), r)
   | EApp (EApp (EVar ("<" as op), l), r)
   | EApp (EApp (EVar ("<=" as op), l), r)
   | EApp (EApp (EVar (">" as op), l), r)
@@ -121,14 +123,24 @@ let rec pp_expr_helper ?(ps = true) ppf = function
     Format.fprintf ppf "@[<2>%a @]@[in @]@]" no_pars body;
     fprintf ppf "@[%a@]" no_pars in_;
     fprintf ppf "@]"
+  | EArray [] ->
+    (* an empty array is indistinguishable from an empty string *)
+    fprintf ppf "[| |]"
   | EArray r ->
-    fprintf ppf "[|";
-    Format.fprintf
-      ppf
-      "%a"
-      (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "; ") no_pars)
-      r;
-    fprintf ppf "|]"
+    let rec aux acc = function
+      (* pretty-prints arrays when they are strings. in most cases it works well but it slows down weird incorrect programs *)
+      | [] ->
+        (* prints array as string literal *)
+        fprintf ppf "\"%s\"" (Base.String.of_list (List.rev acc))
+      | EConst (PConst_char ch) :: tail ->
+        (* collects chars *)
+        aux (ch :: acc) tail
+      | _ ->
+        (* realizing that the array is not a string literal, it prints it as usual *)
+        let pp_sep ppf () = fprintf ppf "; " in
+        Format.fprintf ppf "[| %a |]" (pp_print_list ~pp_sep no_pars) r
+    in
+    aux [] r
   | ETuple (h1, h2, hs) ->
     fprintf ppf "@[(%a, " no_pars h1;
     Format.fprintf
@@ -159,7 +171,6 @@ let rec pp_expr_helper ?(ps = true) ppf = function
   | EConstruct (name, Some arg) -> fprintf ppf "@[%s %a@]" name maybe_pars arg
 
 and no_pars ppf = pp_expr_helper ~ps:false ppf
-
 and maybe_pars ppf = pp_expr_helper ~ps:true ppf
 
 let pp_expr = pp_expr_helper ~ps:true
