@@ -1,0 +1,4 @@
+(cram
+ (deps
+  %{project_root}/driver/driver.exe
+  (glob_files %{project_root}/tests/minirukaml/*.ml)))
