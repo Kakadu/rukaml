@@ -44,8 +44,19 @@ let parens p =
   char '(' *> trace_pos "after '('" *> p <* trace_pos "before ')'" <* lchar ')'
 ;;
 
+let apostrophes p =
+  char '\'' *> trace_pos "after \'" *> p <* trace_pos "before \'" <* lchar '\''
+;;
+
 let quotes p =
   char '"' *> trace_pos "after '\"'" *> p <* trace_pos "before '\"'" <* lchar '"'
+;;
+
+let any_char_except chs =
+  any_char
+  >>= function
+  | x when List.mem x chs -> fail "any_char_except"
+  | x -> return x
 ;;
 
 let brackets p =
@@ -80,13 +91,6 @@ let number =
 let is_char_valid_for_name = function
   | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '\'' | '_' -> true
   | _ -> false
-;;
-
-let distinguished_char =
-  any_char
-  >>= function
-  | x when is_char_valid_for_name x -> return x
-  | _ -> fail "distinguished_char"
 ;;
 
 let is_keyword = function
@@ -133,19 +137,19 @@ let parse_name regexp error_message =
 ;;
 
 let var_name =
-  let regexp = "^[a-z_][a-zA-Z0-9_]*$" in
+  let regexp = "^[a-z_][a-zA-Z0-9_']*$" in
   let message = "not a variable name" in
   parse_name regexp message
 ;;
 
 let constructor_name =
-  let regexp = "^[A-Z][a-zA-Z0-9_]*$" in
+  let regexp = "^[A-Z][a-zA-Z0-9_']*$" in
   let message = "not a constructor name" in
   parse_name regexp message
 ;;
 
 let type_name =
-  let regexp = "^[a-z_][a-zA-Z0-9_]*$" in
+  let regexp = "^[a-z_][a-zA-Z0-9_']*$" in
   let message = "not a type name" in
   parse_name regexp message
 ;;
@@ -157,7 +161,7 @@ let type_param_name =
 ;;
 
 let constructor_name =
-  let regexp = "^[A-Z][a-zA-Z0-9_]*$" in
+  let regexp = "^[A-Z][a-zA-Z0-9_']*$" in
   let message = "not a constructor name" in
   parse_name regexp message
 ;;
@@ -171,14 +175,25 @@ type dispatch_patt =
   ; patt : dispatch_patt -> pattern t
   }
 
-let patt_const =
+let constant =
   ws *> fail ""
-  <|> string "()" *> return PUnit
-  <|> (take_while1 is_digit >>| fun chs -> PConst (const_int (int_of_string chs)))
+  <|> (take_while1 is_digit >>| fun chs -> const_int (int_of_string chs))
+  <|> apostrophes
+        (char '\\'
+         *> choice
+              (* TODO : simplify *)
+              [ char 'n' *> return (PConst_char '\n')
+              ; char 'r' *> return (PConst_char '\r')
+              ; char 't' *> return (PConst_char '\t')
+              ; char 'b' *> return (PConst_char '\b')
+              ; char '\\' *> return (PConst_char '\\')
+              ; char '\'' *> return (PConst_char '\'')
+              ])
+  <|> (apostrophes (any_char_except [ '\''; '\\' ]) >>| fun ch -> const_char ch)
   <|> (var_name
        >>= function
-       | "true" -> return @@ PConst (const_bool true)
-       | "false" -> return @@ PConst (const_bool false)
+       | "true" -> return (const_bool true)
+       | "false" -> return (const_bool false)
        | _ -> fail "Not a boolean constant")
 ;;
 
@@ -187,9 +202,10 @@ let patt_basic d =
   *> fix (fun _self ->
     parens (d.patt d)
     <|> char '_' *> return PAny
-    <|> patt_const
+    <|> char '(' *> char ')' *> return PUnit
+    <|> (constant >>| fun x -> PConst x)
     <|> (var_name >>= fun v -> return (pvar v) <* trace_pos v)
-    <|> string "[]" *> return pnil
+    <|> char '[' *> ws *> char ']' *> return pnil
     <|> (char '['
          *> ws
          *>
@@ -285,8 +301,12 @@ let pack : dispatch =
     *> fix (fun _self ->
       prio
         (d.expr_long d)
-        [| [ ws *> string "=", eeq
+        [| [ ws *> string "||", elor ]
+         ; [ ws *> string "&&", eland ]
+         ; [ ws *> string "=", eeq
+           ; ws *> string "<>", ene
            ; ws *> string "<=", ele
+           ; ws *> string ">=", ege
            ; ws *> string "<", elt
            ; ws *> string ">", egt
            ]
@@ -300,18 +320,9 @@ let pack : dispatch =
     *> fix (fun _self ->
       ws
       *> (fail ""
-          <|> ws *> (number >>| fun n -> econst (const_int n))
-          <|> ws
-              *> (char '\'' *> distinguished_char
-                  <* char '\''
-                  >>| fun c -> econst (const_char c))
-          <|> ws *> char '(' *> char ')' *> return eunit
-          <|> ws *> char '[' *> char ']' *> return enil
-          <|> (ws *> var_name
-               >>= function
-               | "true" -> return @@ econst (const_bool true)
-               | "false" -> return @@ econst (const_bool false)
-               | _ -> fail "Not a boolean constant")
+          <|> (constant >>| fun x -> EConst x)
+          <|> char '(' *> char ')' *> return EUnit
+          <|> char '[' *> ws *> char ']' *> return enil
           <|> (char '['
                *> ws
                *>
@@ -327,13 +338,15 @@ let pack : dispatch =
                  <*> many (string ";" *> d.expr d <* ws)
                  <|> return @@ earray [])
           <|> quotes
-                (many (distinguished_char >>| fun c -> econst (const_char c)) >>| earray)
+                (many (any_char_except [ '"' ] >>| fun c -> econst (const_char c))
+                 >>| earray)
           <|> parens
+                (* TODO : parse tuples without parentheses *)
                 (return (fun a b xs -> etuple a b xs)
                  <*> (d.expr d <* ws)
                  <*> (char ',' *> d.expr d <* ws)
                  <*> many (char ',' *> d.expr d <* ws))
-          <|> (ws *> var_name
+          <|> (var_name
                >>= fun v ->
                char '.' *> char '(' *> number
                <* char ')'
@@ -366,10 +379,11 @@ let pack : dispatch =
                let* case = first in
                let* cases = many parse_case in
                return (ematch subject case cases))
-          <|> (keyword "fun" *> pattern
-               >>= fun p ->
-               (* let () = log "Got a abstraction over %a" Pprint.pp_pattern p in *)
-               ws *> string "->" *> ws *> d.prio d >>= fun b -> return (elam p b))
+          <|> (keyword "fun" *> many1 pattern
+               >>= fun ps ->
+               ws *> string "->" *> ws *> d.prio d
+               >>= fun b -> return (List.fold_right (fun patt acc -> elam patt acc) ps b)
+              )
           <|> (keyword "if" *> d.prio d
                >>= fun cond ->
                keyword "then" *> d.prio d
@@ -493,21 +507,25 @@ let type_declaration =
 ;;
 
 let value_binding = letdef (pack.expr pack) <* ws
+let skip_separator = option () (char ';' *> char ';' *> return ())
 
 let structure =
   many1
-    (value_binding >>| (fun vb -> SValue vb) <|> (type_declaration >>| fun td -> SType td))
+    (value_binding
+     >>| (fun vb -> SValue vb)
+     <|> (type_declaration >>| fun td -> SType td)
+     <* skip_separator)
 ;;
 
 let parse_structure str =
-  parse_string ~consume:All structure str
+  parse_string ~consume:All (structure <* ws <* end_of_input) str
   |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
 ;;
 
 (** {1} Testing stuff *)
 
 let parse_pat_exn str =
-  match parse_string ~consume:All pattern str with
+  match parse_string ~consume:All (pattern <* ws <* end_of_input) str with
   | Result.Error e ->
     Format.eprintf "Error: %s\n" e;
     failwith "Error during parsing of pattern"
@@ -516,16 +534,16 @@ let parse_pat_exn str =
 
 let parse_vb_exn str =
   (* Stdlib.Format.printf "parsing a string '%s'\n%!" str; *)
-  match parse_string ~consume:All value_binding str with
+  match parse_string ~consume:All (value_binding <* ws <* end_of_input) str with
   | Result.Error e ->
     Format.eprintf "Error: %s\n" e;
     failwith "Error during parsing"
   | Ok r -> r
 ;;
 
-let value_bindings = many1 value_binding
+let value_bindings = many1 (value_binding <* skip_separator)
 
 let parse_value_bindings str =
-  parse_string ~consume:All value_bindings str
+  parse_string ~consume:All (value_bindings <* ws <* end_of_input) str
   |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
 ;;
