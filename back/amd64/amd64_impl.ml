@@ -261,6 +261,7 @@ let generate_body is_toplevel ppf body =
       | AConst (PConst_bool true) -> pp_access 1
       | AConst (PConst_int n) -> pp_access ~doc:"constant" n
       | AConst (PConst_char c) -> pp_access ~doc:"constant" (Char.code c)
+      | AConst (PConst_string _) -> failwith "TODO : not implemented"
       | AVar vname when Option.is_some (is_toplevel vname) ->
         (match is_toplevel vname with
          | Some arity ->
@@ -511,9 +512,7 @@ let generate_body is_toplevel ppf body =
          Addr_of_local.remove_local name2;
          Addr_of_local.remove_local name1;
          printfn ppf "  mov %a, rax" pp_dest dest
-       | AConst (PConst_bool _)
-       | AConst (PConst_char _)
-       | AVar _ | APrimitive _ | AConstruct _
+       | AConst _ | AVar _ | APrimitive _ | AConstruct _
        | ATuple (_, _, _)
        | AArray _
        | ALam (_, _)
@@ -609,7 +608,7 @@ let generate_body is_toplevel ppf body =
          | op -> failwiths "not_implemeted  %S. %d" op __LINE__);
       printfn ppf "  mov %a, r11" pp_dest dest
       (* TODO: Maybe move this specialization to the case below  *)
-    | CApp (AVar f, arg1, args) as cexpr when Option.is_some (is_toplevel f) ->
+    | CApp (AVar f, arg1, args) as _cexpr when Option.is_some (is_toplevel f) ->
       (* Callig a rukaml function uses custom calling convention.
            CDECL convention: all arguments on stack, LTR *)
       let expected_arity = Option.get (is_toplevel f) in
@@ -619,7 +618,7 @@ let generate_body is_toplevel ppf body =
         "\t; expected_arity = %d\n\t; formal_arity = %d"
         expected_arity
         formal_arity; *)
-      (* printfn ppf "@[; calling @[%a@]@]" ANF.pp_c cexpr; *)
+      (* printfn ppf "@[; calling @[%a@]@]" ANF.pp_c _cexpr; *)
       if expected_arity = formal_arity
       then (
         let to_remove = allocate_args (arg1 :: args) in

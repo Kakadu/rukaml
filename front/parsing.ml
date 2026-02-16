@@ -66,8 +66,6 @@ let brackets p =
   <* char ']'
 ;;
 
-let const = char '0' >>= fun c -> return (Printf.sprintf "%c" c)
-
 let is_digit = function
   | '0' .. '9' -> true
   | _ -> false
@@ -190,6 +188,9 @@ let constant =
               ; char '\'' *> return (PConst_char '\'')
               ])
   <|> (apostrophes (any_char_except [ '\''; '\\' ]) >>| fun ch -> const_char ch)
+  <|> quotes
+        (many (any_char_except [ '"' ])
+         >>| fun chs -> const_string (Base.String.of_char_list chs))
   <|> (var_name
        >>= function
        | "true" -> return (const_bool true)
@@ -197,11 +198,22 @@ let constant =
        | _ -> fail "Not a boolean constant")
 ;;
 
+let constructor parse_atom parse_item mk_constructor =
+  let constant_constr =
+    let* name = ws *> constructor_name in
+    return (mk_constructor name [])
+  in
+  let* name = ws *> constructor_name in
+  (let* args = parens (sep_by (ws <* char ',') parse_item) in
+   return (mk_constructor name args))
+  <|> (parse_atom <|> constant_constr >>| fun arg -> mk_constructor name [ arg ])
+  <|> return (mk_constructor name [])
+;;
+
 let patt_basic d =
   ws
   *> fix (fun _self ->
     parens (d.patt d)
-    <|> char '_' *> return PAny
     <|> char '(' *> char ')' *> return PUnit
     <|> (constant >>| fun x -> PConst x)
     <|> (var_name >>= fun v -> return (pvar v) <* trace_pos v)
@@ -214,10 +226,8 @@ let patt_basic d =
           return (pcons first (List.fold_right pcons rest pnil)))
          <* ws
          <* char ']')
-    <|> let* name = ws *> constructor_name in
-        (let* patt = ws *> d.patt_basic d in
-         return (PConstruct (name, Some patt)))
-        <|> return (PConstruct (name, None)))
+    <|> constructor (d.patt_basic d) (d.patt_basic d <|> d.patt_cons d) pconstruct
+    <|> char '_' *> return PAny)
 ;;
 
 let patt_cons d =
@@ -337,15 +347,13 @@ let pack : dispatch =
                  <*> (d.expr d <* ws)
                  <*> many (string ";" *> d.expr d <* ws)
                  <|> return @@ earray [])
-          <|> quotes
-                (many (any_char_except [ '"' ] >>| fun c -> econst (const_char c))
-                 >>| earray)
           <|> parens
                 (* TODO : parse tuples without parentheses *)
                 (return (fun a b xs -> etuple a b xs)
                  <*> (d.expr d <* ws)
                  <*> (char ',' *> d.expr d <* ws)
                  <*> many (char ',' *> d.expr d <* ws))
+          <|> constructor (d.expr_basic d) (d.expr_long d) econstruct
           <|> (var_name
                >>= fun v ->
                char '.' *> char '(' *> number
@@ -356,13 +364,6 @@ let pack : dispatch =
                return @@ eapp (evar "set") [ evar v; econst (const_int i); e ])
                <|> return @@ eapp (evar "get") [ evar v; econst (const_int i) ])
                <|> return (evar v))
-          <|> (let* name = ws *> constructor_name in
-               fail ""
-               <|> (let* expr = ws *> d.expr_basic d in
-                    return (EConstruct (name, Some expr)))
-               <|> (let* expr = ws *> parens (d.expr d) in
-                    return (EConstruct (name, Some expr)))
-               <|> return (EConstruct (name, None)))
           <|> (let parse_case =
                  let* p = char '|' *> ws *> pattern in
                  let* e = ws *> string "->" *> ws *> d.prio d in
@@ -372,7 +373,8 @@ let pack : dispatch =
                  parse_case
                  <|>
                  let* p = pattern in
-                 let* e = ws *> string "->" *> ws *> d.prio d in
+                 let* () = ws *> string "->" *> ws in
+                 let* e = d.prio d in
                  return (p, e)
                in
                let* subject = keyword "match" *> ws *> d.prio d <* ws <* keyword "with" in
@@ -429,7 +431,7 @@ let core_type_arrow core_type =
   fix (fun self ->
     let* operand = ws *> core_type in
     ws *> string "->" *> ws *> self
-    >>| (fun operand2 -> CTArrow (operand, operand2))
+    >>| (fun operand2 -> Ptyp_arrow (operand, operand2))
     <|> return operand)
 ;;
 
@@ -438,7 +440,7 @@ let core_type_tuple core_type =
   many (ws *> char '*' *> ws *> core_type)
   >>= function
   | [] -> return first
-  | second :: rest -> return (CTTuple (first, second, rest))
+  | second :: rest -> return (Ptyp_tuple (first, second, rest))
 ;;
 
 let core_type =
@@ -446,13 +448,13 @@ let core_type =
   *> fix (fun self ->
     let prims =
       fail ""
-      <|> (type_name >>| fun v -> CTConstr (v, []))
-      <|> (type_param_name >>| fun name -> CTVar name)
+      <|> (type_name >>| fun v -> Ptyp_constr (v, []))
+      <|> (type_param_name >>| fun name -> Ptyp_var name)
     in
     let prims =
       (let* arg = prims in
        let* name = ws *> type_name in
-       return (CTConstr (name, [ arg ])))
+       return (Ptyp_constr (name, [ arg ])))
       <|> prims
     in
     let self = parens self <|> prims in
@@ -461,7 +463,7 @@ let core_type =
     (let* ct = char '(' *> ws *> self in
      let* cts = many (ws *> char ',' *> self) in
      let* name = ws *> char ')' *> type_name in
-     return (CTConstr (name, ct :: cts)))
+     return (Ptyp_constr (name, ct :: cts)))
     <|> self)
 ;;
 
@@ -475,32 +477,41 @@ let type_params =
 ;;
 
 let type_kind_variants =
-  let parse_variant =
-    let* name = ws *> char '|' *> ws *> constructor_name in
-    (let* ct = ws *> keyword "of" *> ws *> core_type in
-     return (name, Some ct))
-    <|> return (name, None)
+  let variant =
+    let* name = ws *> constructor_name in
+    (let* () = ws *> keyword "of" in
+     let* args = sep_by1 (ws *> char '*') core_type in
+     return (name, args))
+    <|> return (name, [])
   in
-  many parse_variant
-  >>= function
-  | var :: vars -> return (KVariants (var, vars))
-  | _ -> fail "is not variants"
+  let* pty_params = ws *> type_params in
+  let* pty_name = ws *> type_name in
+  let* () = ws <* char '=' in
+  let* v1 = variant <|> ws *> char '|' *> variant in
+  let* vs = many (ws *> char '|' *> variant) in
+  return { pty_name; pty_params; pty_kind = Ptype_variant (v1, vs); pty_manifest = None }
 ;;
 
-let type_kind_alias = ws *> core_type >>| fun core_type -> KAbstract (Some core_type)
-let type_kind = ws *> (type_kind_variants <|> type_kind_alias)
+let type_kind_alias =
+  let* pty_params = ws *> type_params in
+  let* pty_name = ws *> type_name in
+  let* () = ws <* char '=' in
+  let* pty_manifest = core_type >>| Option.some in
+  return { pty_name; pty_params; pty_kind = Ptype_abstract; pty_manifest }
+;;
+
+let type_kind_abstract =
+  let* pty_params = ws *> type_params in
+  let* pty_name = ws *> type_name in
+  return { pty_name; pty_params; pty_kind = Ptype_abstract; pty_manifest = None }
+;;
 
 let single_type_declaration =
-  let* params = ws *> type_params in
-  let* name = ws *> type_name in
-  let* kind = ws *> char '=' *> ws *> type_kind in
-  return { pty_params = params; pty_name = name; pty_kind = kind }
+  choice [ type_kind_variants; type_kind_alias; type_kind_abstract ]
 ;;
 
 let type_declaration =
-  ws
-  *> string "type"
-  *>
+  let* () = ws <* string "type" in
   let* frst = ws *> single_type_declaration in
   let* rest = many (ws *> string "and" *> single_type_declaration) in
   return (frst, rest)
@@ -512,8 +523,8 @@ let skip_separator = option () (char ';' *> char ';' *> return ())
 let structure =
   many1
     (value_binding
-     >>| (fun vb -> SValue vb)
-     <|> (type_declaration >>| fun td -> SType td)
+     >>| (fun vb -> Pstr_value vb)
+     <|> (type_declaration >>| fun td -> Pstr_type td)
      <* skip_separator)
 ;;
 

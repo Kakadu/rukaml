@@ -362,6 +362,7 @@ let generate_body is_toplevel body =
       | AConst (PConst_bool true) -> pp_access 1 i
       | AConst (PConst_int n) -> pp_access ~doc:"constant" n i
       | AConst (PConst_char c) -> pp_access ~doc:"constant" (Char.code c) i
+      | AConst (PConst_string _) -> failwith "TODO: not implemented"
       | AVar vname when Option.is_some (is_toplevel vname) ->
         (match is_toplevel vname with
          | Some arity ->
@@ -519,9 +520,7 @@ let generate_body is_toplevel body =
          emit li a0 n;
          emit call "rukaml_print_int";
          emit sd_dest zero dest
-       | AConst (PConst_bool _)
-       | AConst (PConst_char _)
-       | AArray _ | AVar _ | APrimitive _ | AConstruct _
+       | AConst _ | AArray _ | AVar _ | APrimitive _ | AConstruct _
        | ATuple (_, _, _)
        | ALam (_, _)
        | AUnit -> failwith "Should not happen: print_int")

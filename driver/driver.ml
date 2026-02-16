@@ -1,6 +1,5 @@
 open! Base
 open Stdio
-
 open Frontend
 open Compile_lib
 
@@ -44,7 +43,7 @@ module Compiler = struct
     (* extracts value_bindings from other structure_items to perform cps conv on it *)
     let vbs =
       let aux = function
-        | Parsetree.SValue vb -> Some vb
+        | Parsetree.Pstr_value vb -> Some vb
         | _ -> None
       in
       Stdlib.List.filter_map aux stru
@@ -63,10 +62,10 @@ module Compiler = struct
     (* merges structure items back together *)
     let rec merge acc = function
       | [], [] -> List.rev acc
-      | SType td :: rest, macps_vbs -> merge (SType td :: acc) (rest, macps_vbs)
-      | SValue _ :: rest, macps_vb :: macps_vbs ->
-        merge (SValue macps_vb :: acc) (rest, macps_vbs)
-      | [], _ :: _ | SValue _ :: _, [] -> assert false
+      | Pstr_type td :: rest, macps_vbs -> merge (Pstr_type td :: acc) (rest, macps_vbs)
+      | Pstr_value _ :: rest, macps_vb :: macps_vbs ->
+        merge (Pstr_value macps_vb :: acc) (rest, macps_vbs)
+      | [], _ :: _ | Pstr_value _ :: _, [] -> assert false
     in
     let stru = merge [] (stru, vbs) in
     k (Parsetree stru)
@@ -81,11 +80,11 @@ module Compiler = struct
         | _ -> failwith "not implemented")
     in
     let f (globals, acc) = function
-      | Parsetree.SValue vb ->
+      | Parsetree.Pstr_value vb ->
         let stru = CConv.conv ~standart_globals:globals vb in
         let globals = collect_globals ~init:globals stru in
-        globals, List.append acc (List.map ~f:(fun vb -> Parsetree.SValue vb) stru)
-      | Parsetree.SType _ as td -> globals, List.append acc [ td ]
+        globals, List.append acc (List.map ~f:(fun vb -> Parsetree.Pstr_value vb) stru)
+      | Parsetree.Pstr_type _ as td -> globals, List.append acc [ td ]
     in
     fun (Parsetree stru) ->
       let _, stru = List.fold_left stru ~init:(CConv.standart_globals, []) ~f in
@@ -168,7 +167,6 @@ module Target = struct
   let rv64 table p = (Intermediate.anftree table p) rv64
   let amd64 table p = (Intermediate.anftree table p) amd64
   let llvm table p = (Intermediate.anftree table p) llvm
-
   let finish target p = (target p) (to_file p.out_path)
 
   let targets table =
@@ -210,7 +208,6 @@ let () =
   let target = ref "" in
   let cps = ref false in
   let caa = ref false in
-
   let open Stdlib.Arg in
   let args =
     [ "-o", Set_string out_path, " output file"
@@ -221,15 +218,12 @@ let () =
     ]
   in
   parse args (fun s -> inp_path := Some s) "rukaml";
-
   hack !target;
-
   let text =
     match !inp_path with
     | Some path -> In_channel.with_file path ~f:In_channel.input_all
     | None -> In_channel.input_all stdin
   in
-
   let params = Target.{ text; out_path = !out_path; cps = !cps; caa = !caa } in
   match Map.find (Target.targets Typedtree.empty_table) !target with
   | Some target -> target params

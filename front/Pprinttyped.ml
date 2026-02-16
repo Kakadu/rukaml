@@ -54,6 +54,7 @@ let rec pp_pattern ppf = function
   | Tpat_const (PConst_int n) -> fprintf ppf "%d" n
   | Tpat_const (PConst_bool b) -> fprintf ppf "%b" b
   | Tpat_const (PConst_char c) -> fprintf ppf "%c" c
+  | Tpat_const (PConst_string s) -> fprintf ppf "\"%s\"" s
   | Tpat_var id -> Ident.pp ppf id
   | Tpat_tuple (h1, h2, []) -> fprintf ppf "(%a, %a)" pp_pattern h1 pp_pattern h2
   | Tpat_tuple (h1, h2, rest) ->
@@ -67,20 +68,24 @@ let rec pp_pattern ppf = function
       (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " ") pp_pattern)
       rest
   | Tpat_any -> fprintf ppf "_"
-  | Tpat_constr (ident, None) -> fprintf ppf "%s" ident.hum_name
-  | Tpat_constr (ident, Some (Tpat_tuple (head, tail, [])))
+  | Tpat_constr (ident, []) -> fprintf ppf "%s" ident.hum_name
+  | Tpat_constr (ident, [ head; tail ])
   (* syntactic sugar for lists *)
     when Ident.equal ident cons_ident ->
     let rec aux acc = function
-      | Tpat_constr (ident, Some (Tpat_tuple (hd, tl, [])))
-        when Ident.equal ident cons_ident -> aux (hd :: acc) tl
-      | Tpat_constr (ident, None) when Ident.equal ident nil_ident ->
+      | Tpat_constr (ident, [ hd; tl ]) when Ident.equal ident cons_ident ->
+        aux (hd :: acc) tl
+      | Tpat_constr (ident, []) when Ident.equal ident nil_ident ->
         Pprint.pp_cons_brackets ppf head ~pp_item:pp_pattern (List.rev acc)
       | _ as exp ->
         Pprint.pp_cons_semicolons ppf ~pp_item:pp_pattern head (List.rev (exp :: acc))
     in
     aux [] tail
-  | Tpat_constr (ident, Some patt) -> fprintf ppf "%s %a" ident.hum_name pp_pattern patt
+  | Tpat_constr (ident, [ arg ]) -> fprintf ppf "%s %a" ident.hum_name pp_pattern arg
+  | Tpat_constr (ident, args) ->
+    fprintf ppf "@[%s (" ident.hum_name;
+    pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp_pattern ppf args;
+    fprintf ppf ")@]"
 ;;
 
 let pp_expr =
@@ -169,21 +174,25 @@ let pp_expr =
       if pars
       then fprintf ppf "(@[<v 2>%a@])" pp_match ()
       else fprintf ppf "@[<v 2>%a@]" pp_match ()
-    | TConstruct (ident, None, _ty) -> fprintf ppf "%s" ident.hum_name
-    | TConstruct (ident, Some (TTuple (head, tail, [], _)), _ty)
+    | TConstruct (ident, [], _ty) -> fprintf ppf "%s" ident.hum_name
+    | TConstruct (ident, [ head; tail ], _ty)
     (* syntactic sugar for lists *)
       when Ident.equal ident cons_ident ->
       let rec aux ppf acc = function
-        | TConstruct (ident, Some (TTuple (hd, tl, [], _)), _)
-          when Ident.equal ident cons_ident -> aux ppf (hd :: acc) tl
-        | TConstruct (ident, None, _) when Ident.equal ident nil_ident ->
+        | TConstruct (ident, [ hd; tl ], _) when Ident.equal ident cons_ident ->
+          aux ppf (hd :: acc) tl
+        | TConstruct (ident, [], _) when Ident.equal ident nil_ident ->
           Pprint.pp_cons_brackets ppf head ~pp_item:expr_no (List.rev acc)
         | _ as exp ->
           Pprint.pp_cons_semicolons ppf ~pp_item:expr ~pars head (List.rev (exp :: acc))
       in
       aux ppf [] tail
-    | TConstruct (ident, Some arg, _ty) ->
-      fprintf ppf (if pars then "(%s %a)" else "%s %a") ident.hum_name expr arg
+    | TConstruct (ident, args, _ty) ->
+      fprintf ppf (if pars then "@[(" else "@[");
+      fprintf ppf "%s (" ident.hum_name;
+      pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") expr_no ppf args;
+      fprintf ppf ")";
+      fprintf ppf (if pars then ")@]" else "@]")
   and pp_typ = pp_typ_hum
   and pp_pat ppf s = fprintf ppf "%a" pp_pattern s
   and expr ppf = expr_gen ~pars:true ppf
@@ -222,16 +231,20 @@ let pp_td_hum ppf td =
   fprintf ppf "@[<v 2>";
   fprintf ppf "type%a%s" pp_params td.tty_params td.tty_ident.hum_name;
   (match td.tty_kind with
-   | Tty_abstract None -> ()
-   | Tty_abstract (Some ty) -> fprintf ppf " = %a@ " pp_typ_hum ty
-   | Tty_variants variants ->
-     let pp_variant ppf = function
-       | (ident : Ident.t), None -> fprintf ppf "| %s" ident.hum_name
-       | (ident : Ident.t), Some ty ->
-         fprintf ppf "| %s of %a" ident.hum_name pp_typ_hum ty
+   | Ttype_variants variants ->
+     let pp_variant ppf variant =
+       match variant.constr_args with
+       | [] -> fprintf ppf "| %s" variant.constr_ident.hum_name
+       | args ->
+         fprintf ppf "| %s of " variant.constr_ident.hum_name;
+         pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " * ") pp_typ_hum ppf args
      in
      fprintf ppf " =@ ";
-     pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "@ ") pp_variant ppf variants);
+     pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "@ ") pp_variant ppf variants
+   | Ttype_abstract ->
+     (match td.tty_manifest with
+      | Some ty -> fprintf ppf " = %a@ " pp_typ_hum ty
+      | None -> ()));
   fprintf ppf "@]"
 ;;
 

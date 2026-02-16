@@ -20,7 +20,8 @@ let group_applications l r =
 let pp_const ppf = function
   | PConst_bool b -> fprintf ppf "%b" b
   | PConst_int n -> fprintf ppf "%d" n
-  | PConst_char c -> fprintf ppf "%c" c
+  | PConst_char c -> fprintf ppf "\'%c\'" c
+  | PConst_string s -> fprintf ppf "\"%s\"" s
 ;;
 
 let pp_cons_brackets ppf ~pp_item hd tl =
@@ -45,24 +46,21 @@ let rec pp_pattern ppf = function
     List.iter (fprintf ppf ", %a" pp_pattern) (pb :: ps);
     fprintf ppf ")@]"
   | PAny -> fprintf ppf "@[_@]"
-  | PConstruct ("[]", None) -> fprintf ppf "[]"
-  | PConstruct ("::", Some (PTuple (head, tail, []))) ->
+  | PConstruct ("[]", []) -> fprintf ppf "[]"
+  | PConstruct ("::", [ head; tail ]) ->
     let rec aux acc = function
-      | PConstruct ("::", Some (PTuple (hd, tl, []))) -> aux (hd :: acc) tl
-      | PConstruct ("[]", None) ->
+      | PConstruct ("::", [ hd; tl ]) -> aux (hd :: acc) tl
+      | PConstruct ("[]", []) ->
         pp_cons_brackets ppf ~pp_item:pp_pattern head (List.rev acc)
       | _ as exp ->
         pp_cons_semicolons ppf ~pp_item:pp_pattern head (List.rev (exp :: acc))
     in
     aux [] tail
-  | PConstruct (name, None) -> fprintf ppf "@[%s@]" name
-  | PConstruct (name, Some arg) -> fprintf ppf "@[%s (%a)@]" name pp_pattern arg
-;;
-
-let pp_const ppf = function
-  | PConst_bool b -> fprintf ppf "%b" b
-  | PConst_int n -> fprintf ppf "%d" n
-  | PConst_char c -> fprintf ppf "'%c'" c
+  | PConstruct (name, []) -> fprintf ppf "@[%s@]" name
+  | PConstruct (name, args) ->
+    fprintf ppf "@[%s (" name;
+    pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp_pattern ppf args;
+    fprintf ppf ")@]"
 ;;
 
 let pp_flg ppf = function
@@ -157,18 +155,20 @@ let rec pp_expr_helper ?(ps = true) ppf = function
     if ps
     then fprintf ppf "@[<v 2>(match %a with@ %a)@]" no_pars e pp_cases ()
     else fprintf ppf "@[<v 2>match %a with@ %a@]" no_pars e pp_cases ()
-  | EConstruct ("[]", None) -> fprintf ppf "[]"
-  | EConstruct ("::", Some (ETuple (head, tail, []))) ->
+  | EConstruct ("[]", []) -> fprintf ppf "[]"
+  | EConstruct ("::", [ head; tail ]) ->
     let rec aux acc = function
-      | EConstruct ("::", Some (ETuple (hd, tl, []))) -> aux (hd :: acc) tl
-      | EConstruct ("[]", None) ->
-        pp_cons_brackets ppf ~pp_item:no_pars head (List.rev acc)
+      | EConstruct ("::", [ hd; tl ]) -> aux (hd :: acc) tl
+      | EConstruct ("[]", []) -> pp_cons_brackets ppf ~pp_item:no_pars head (List.rev acc)
       | _ as exp ->
         pp_cons_semicolons ppf ~pars:ps ~pp_item:maybe_pars head (List.rev (exp :: acc))
     in
     aux [] tail
-  | EConstruct (name, None) -> fprintf ppf "%s" name
-  | EConstruct (name, Some arg) -> fprintf ppf "@[%s %a@]" name maybe_pars arg
+  | EConstruct (name, []) -> fprintf ppf "%s" name
+  | EConstruct (name, args) ->
+    fprintf ppf "@[%s (" name;
+    pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") maybe_pars ppf args;
+    fprintf ppf ")@]"
 
 and no_pars ppf = pp_expr_helper ~ps:false ppf
 and maybe_pars ppf = pp_expr_helper ~ps:true ppf
@@ -213,15 +213,15 @@ let pp_scheme ppf = function
 ;;
 
 let rec pp_core_type ppf = function
-  | CTVar name -> fprintf ppf "%s" name
-  | CTArrow (ctl, ctr) -> fprintf ppf "(%a -> %a)" pp_core_type ctl pp_core_type ctr
-  | CTTuple (ct1, ct2, cts) ->
+  | Ptyp_var name -> fprintf ppf "%s" name
+  | Ptyp_arrow (ctl, ctr) -> fprintf ppf "(%a -> %a)" pp_core_type ctl pp_core_type ctr
+  | Ptyp_tuple (ct1, ct2, cts) ->
     fprintf ppf "@[(%a * %a" pp_core_type ct1 pp_core_type ct2;
     List.iter (fprintf ppf " * %a" pp_core_type) cts;
     fprintf ppf ")@]"
-  | CTConstr (name, []) -> fprintf ppf "@[%s@]" name
-  | CTConstr (name, [ CTVar var_name ]) -> fprintf ppf "@[%s %s@]" var_name name
-  | CTConstr (name, arg :: args) ->
+  | Ptyp_constr (name, []) -> fprintf ppf "@[%s@]" name
+  | Ptyp_constr (name, [ Ptyp_var var_name ]) -> fprintf ppf "@[%s %s@]" var_name name
+  | Ptyp_constr (name, arg :: args) ->
     fprintf ppf "@[(%a" pp_core_type arg;
     List.iter (fprintf ppf ", %a" pp_core_type) args;
     fprintf ppf ") %s@]" name
@@ -239,15 +239,19 @@ let pp_type_params ppf td =
 
 let pp_type_kind ppf td =
   match td.pty_kind with
-  | KAbstract None -> ()
-  | KAbstract (Some ct) -> fprintf ppf " = %a" pp_core_type ct
-  | KVariants (case, cases) ->
+  | Ptype_variant (case, cases) ->
     let pp_case ppf = function
-      | name, None -> fprintf ppf "| %s" name
-      | name, Some ct -> fprintf ppf "| %s of %a" name pp_core_type ct
+      | name, [] -> fprintf ppf "| %s" name
+      | name, args ->
+        fprintf ppf "| %s of " name;
+        pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " * ") pp_core_type ppf args
     in
     fprintf ppf " =@ ";
     List.iter (fprintf ppf "%a@ " pp_case) (case :: cases)
+  | Ptype_abstract ->
+    (match td.pty_manifest with
+     | None -> ()
+     | Some ct -> fprintf ppf " = %a" pp_core_type ct)
 ;;
 
 let pp_type_declaration ppf (td, tds) =
@@ -266,8 +270,8 @@ let pp_type_declaration ppf (td, tds) =
 ;;
 
 let pp_structure_item ppf = function
-  | Parsetree.SValue vb -> pp_value_binding ppf vb
-  | Parsetree.SType tds -> pp_type_declaration ppf tds
+  | Parsetree.Pstr_value vb -> pp_value_binding ppf vb
+  | Parsetree.Pstr_type tds -> pp_type_declaration ppf tds
 ;;
 
 let pp_stru ppf vbs =
