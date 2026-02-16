@@ -146,11 +146,11 @@
 # invalid input
   $ cat << EOF | ./run.exe -stru -
   > type foo =
-  Error: : count_while1
+  Error: : end_of_input
 
   $ cat << EOF | ./run.exe -stru -
   > type foo = 123
-  Error: : not a type param name
+  Error: : end_of_input
 
   $ cat << EOF | ./run.exe -stru -
   > type foo = a ->
@@ -170,21 +170,21 @@
 
   $ cat << EOF | ./run.exe -stru -
   > type a my_list = a list
-  Error: : char '='
+  Error: : end_of_input
 
   $ cat << EOF | ./run.exe -stru -
   > type ''a my_list = ''a list
-  Error: : not a type name
+  Error: : no more choices
 
   $ cat << EOF | ./run.exe -stru -
   > type '_a my_list = '_a list
-  Error: : not a type name
+  Error: : no more choices
 
   $ cat << EOF | ./run.exe -stru -
   > type foo =
   > | a
   > | b
-  Error: : count_while1
+  Error: : end_of_input
 
   $ cat << EOF | ./run.exe -stru -
   > type foo =

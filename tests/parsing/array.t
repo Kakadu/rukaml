@@ -2,7 +2,7 @@
   $ cat << EOF | ./run.exe -e -
   > ""
   > EOF
-  Parsed: [| |]
+  Parsed: ""
   $ cat << EOF | ./run.exe -e -
   > "asdf"
   > EOF

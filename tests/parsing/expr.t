@@ -192,3 +192,4 @@ value binding
   > if (match x with _ -> ()) then 1 else 2
   Parsed: (if match x with
                 | _ -> () then 1 else 2)
+
