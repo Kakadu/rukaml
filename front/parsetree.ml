@@ -1,8 +1,8 @@
 type const =
   | PConst_int of int
-  (* | PConst_string of string *)
   | PConst_char of char
   | PConst_bool of bool
+  | PConst_string of string
 [@@deriving show { with_path = false }]
 
 type pattern =
@@ -11,7 +11,7 @@ type pattern =
   | PAny
   | PVar of string
   | PTuple of pattern * pattern * pattern list
-  | PConstruct of string * pattern option
+  | PConstruct of string * pattern list
 [@@deriving show { with_path = false }]
 
 type rec_flag =
@@ -29,7 +29,7 @@ type expr =
   | EApp of expr * expr
   | ETuple of expr * expr * expr list
   | ELet of rec_flag * pattern * expr * expr
-  | EConstruct of string * expr option
+  | EConstruct of string * expr list
   | EMatch of expr * (pattern * expr) list1
 [@@deriving show { with_path = false }]
 
@@ -40,13 +40,15 @@ let pvar s = PVar s
 let const_int n = PConst_int n
 let const_char c = PConst_char c
 let const_bool b = PConst_bool b
+let const_string s = PConst_string s
 let eunit = EUnit
 let econst n = EConst n
 let elam v body = ELam (v, body)
 let eapp1 f x = EApp (f, x)
 let etuple a b xs = ETuple (a, b, xs)
 let ematch e pe pes = EMatch (e, (pe, pes))
-let econstruct name arg = EConstruct (name, arg)
+let econstruct name args = EConstruct (name, args)
+let pconstruct name args = PConstruct (name, args)
 let earray xs = EArray xs
 
 let eapp f ?(is_right_assoc = false) args =
@@ -56,10 +58,10 @@ let eapp f ?(is_right_assoc = false) args =
   | true, args -> List.fold_right eapp1 args f
 ;;
 
-let pnil = PConstruct ("[]", None)
-let enil = EConstruct ("[]", None)
-let pcons hd tl = PConstruct ("::", Some (PTuple (hd, tl, [])))
-let econs hd tl = EConstruct ("::", Some (ETuple (hd, tl, [])))
+let pnil = PConstruct ("[]", [])
+let enil = EConstruct ("[]", [])
+let pcons hd tl = PConstruct ("::", [ hd; tl ])
+let econs hd tl = EConstruct ("::", [ hd; tl ])
 let elet ?(isrec = NonRecursive) p b wher = ELet (isrec, p, b, wher)
 let eite c t e = EIf (c, t, e)
 let emul a b = eapp (evar "*") [ a; b ]
@@ -81,24 +83,26 @@ type type_declaration =
   { pty_params : string list (** ['a] is param in [type 'a list = ...]  *)
   ; pty_name : string (** [list] is name in [type 'a list = ...]  *)
   ; pty_kind : type_kind
+  ; pty_manifest : core_type option
   }
 [@@deriving show { with_path = false }]
 
 and type_kind =
-  | KAbstract of core_type option (** [ type t ], [ type t = x ] *)
-  | KVariants of (string * core_type option) list1 (** [ type t = Some of int | None ]  *)
+  | Ptype_abstract
+  | Ptype_variant of (string * core_type list) list1
+  (** [ type t = Some of int | None ]  *)
 [@@deriving show { with_path = false }]
 
 and core_type =
-  | CTVar of string (** [ 'a, 'b ] are type variables in [ type ('a, 'b) ty = ... ] *)
-  | CTArrow of core_type * core_type (** ['a -> 'b] *)
-  | CTTuple of core_type * core_type * core_type list (** [ 'a * 'b * 'c ] *)
-  | CTConstr of string * core_type list (** [ int ], ['a option], [ ('a, 'b) list ] *)
+  | Ptyp_var of string (** [ 'a, 'b ] are type variables in [ type ('a, 'b) ty = ... ] *)
+  | Ptyp_arrow of core_type * core_type (** ['a -> 'b] *)
+  | Ptyp_tuple of core_type * core_type * core_type list (** [ 'a * 'b * 'c ] *)
+  | Ptyp_constr of string * core_type list (** [ int ], ['a option], [ ('a, 'b) list ] *)
 [@@deriving show { with_path = false }]
 
 type structure_item =
-  | SValue of value_binding (** [ let x = ... ] *)
-  | SType of type_declaration list1 (** [ type x = ... ] *)
+  | Pstr_value of value_binding (** [ let x = ... ] *)
+  | Pstr_type of type_declaration list1 (** [ type x = ... ] *)
 [@@deriving show { with_path = false }]
 
 type structure = structure_item list [@@deriving show { with_path = false }]
