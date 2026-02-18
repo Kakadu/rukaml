@@ -55,6 +55,8 @@ val bool_typ : ty
 val unit_typ : ty
 val string_typ : ty
 val array_typ : ty -> ty
+val in_channel_typ : ty
+val out_channel_typ : ty
 
 type pattern =
   | Tpat_unit

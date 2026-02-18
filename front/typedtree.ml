@@ -54,6 +54,9 @@ let bool_typ = tprim "bool"
 let unit_typ = tprim "unit"
 let string_typ = tprim "string"
 let array_typ param = tparam param "array"
+let in_channel_typ = tprim "in_channel"
+let out_channel_typ = tprim "out_channel"
+let format_typ ~arg_ty ~out_ty ~dest = tconstr [ arg_ty; out_ty; dest ] "format"
 
 type pattern =
   | Tpat_unit
@@ -210,6 +213,8 @@ module TypeEnv = struct
   let typ_bool = mk_ground_typ "bool"
   let typ_char = mk_ground_typ "char"
   let typ_string = mk_ground_typ "string"
+  let typ_in_channel = mk_ground_typ "in_channel"
+  let typ_out_channel = mk_ground_typ "out_channel"
 
   let typ_array : type_declaration =
     { tty_ident = Ident.of_string "array"
@@ -271,6 +276,8 @@ module TypeEnv = struct
     |> add_type typ_char
     |> add_type typ_string
     |> add_type typ_array
+    |> add_type typ_in_channel
+    |> add_type typ_out_channel
     |> add_type TypeList.typ_list
     |> add_constructor TypeList.constr_nil
     |> add_constructor TypeList.constr_cons

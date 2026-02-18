@@ -739,15 +739,15 @@ let infer env table expr =
         in
         let twher = elim table twher in
         return (twher, TLet (Recursive, Tpat_var f_ident, t2, typed_rhs, typed_wher))
-      | ELet (Recursive, PTuple _, _, _) -> fail `Only_varibles_on_the_left_of_letrec
-      | ELet (NonRecursive, (PTuple _ as lhs), rhs, wher) ->
+      | ELet (Recursive, (PAny | PUnit | PConst _ | PTuple _ | PConstruct _), _, _) ->
+        fail `Only_varibles_on_the_left_of_letrec
+      | ELet (NonRecursive, lhs, rhs, wher) ->
         let* env, lhs, lhs_ty = check_pat ~level:!current_level env table lhs in
         let* rhs_ty, rhs = helper env state rhs in
         let* () = unify table lhs_ty rhs_ty in
         let* twher, typed_wher = helper env state wher in
         let twher = elim table twher in
         return (twher, TLet (NonRecursive, lhs, Scheme.make_mono rhs_ty, rhs, typed_wher))
-      | ELet _ -> failwith "TODO : not implemented"
       | EMatch (expr, ((p1, e1), cases)) ->
         let* expr_ty, expr = helper env state expr in
         let* env1, p1, pty = check_pat ~level:!current_level env table p1 in
@@ -815,6 +815,28 @@ let start_env =
   |> extend_s
        "open_in"
        (Scheme.make_mono (tarrow (array_typ char_typ) (array_typ char_typ)))
+  (* Stdio channels *)
+  |> extend_s "stdin" (Scheme.make_mono in_channel_typ)
+  |> extend_s "stdout" (Scheme.make_mono out_channel_typ)
+  |> extend_s "stderr" (Scheme.make_mono out_channel_typ)
+  (* Stdio file access primitives *)
+  |> extend_s "open_in" (Scheme.make_mono (tarrow string_typ in_channel_typ))
+  |> extend_s "open_out" (Scheme.make_mono (tarrow string_typ out_channel_typ))
+  |> extend_s "close_in" (Scheme.make_mono (tarrow in_channel_typ unit_typ))
+  |> extend_s "close_out" (Scheme.make_mono (tarrow out_channel_typ unit_typ))
+  (* Stdio reading primitives *)
+  |> extend_s "input_char" (Scheme.make_mono (tarrow in_channel_typ char_typ))
+  |> extend_s "input_line" (Scheme.make_mono (tarrow in_channel_typ string_typ))
+  |> extend_s "end_of_file" (Scheme.make_mono (tarrow in_channel_typ bool_typ))
+  (* Stdio writing primitives *)
+  |> extend_s
+       "output_char"
+       (Scheme.make_mono (tarrow out_channel_typ (tarrow char_typ unit_typ)))
+  |> extend_s
+       "output_string"
+       (Scheme.make_mono (tarrow out_channel_typ (tarrow string_typ unit_typ)))
+  |> extend_s "flush" (Scheme.make_mono (tarrow out_channel_typ unit_typ))
+  (* Built-in binops *)
   |> extend_binop "<" cmp_scheme
   |> extend_binop ">" cmp_scheme
   |> extend_binop "<=" cmp_scheme
