@@ -117,7 +117,7 @@ type type_kind =
 
 type type_declaration =
   { tty_ident : Ident.t
-  ; tty_params : binder_set (* TODO:  replace it with Ident.t list or smth like that *)
+  ; tty_params : binder list
   ; tty_kind : type_kind
   ; tty_manifest : ty option
   }

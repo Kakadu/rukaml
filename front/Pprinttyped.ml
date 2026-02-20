@@ -3,11 +3,17 @@ open Typedtree
 open Format
 
 type pp_typ_ctx =
-  | CArrow_left
-  | CArrow_right
-  | CTuple
+  | CArrow_left (* <here> -> ... *)
+  | CArrow_right (* ... -> <here> *)
+  | CTuple (* <here> * <here> * <here> *)
+  | CSingleTypeParam (* <here> list *)
+  | CManyTypeParam (* (<here>, <here>) map *)
+  | CFree (* omit outer parens *)
+  | CWrap (* do not omit outer parens *)
 
-let pp_typ_hum =
+type under_test = int list -> int list list
+
+let pp_typ_hum ~parens =
   let open Format in
   let rec pp_typ ctx ppf t =
     match t.typ_desc with
@@ -17,15 +23,15 @@ let pp_typ_hum =
     | Arrow (l, r) ->
       let fmt : _ format =
         match ctx with
-        | CArrow_right -> "%a -> %a"
-        | CArrow_left | CTuple -> "(%a -> %a)"
+        | CArrow_right | CManyTypeParam | CFree -> "%a -> %a"
+        | CArrow_left | CTuple | CSingleTypeParam | CWrap -> "(%a -> %a)"
       in
       fprintf ppf fmt (pp_typ CArrow_left) l (pp_typ CArrow_right) r
     | TProd (a, b, ts) ->
       let fmt : _ format =
         match ctx with
-        | CArrow_left | CArrow_right -> "%a"
-        | CTuple -> "(%a)"
+        | CArrow_left | CArrow_right | CManyTypeParam | CFree -> "%a"
+        | CTuple | CSingleTypeParam | CWrap -> "(%a)"
       in
       fprintf
         ppf
@@ -36,14 +42,15 @@ let pp_typ_hum =
            fprintf ppf "@]")
         ()
     | TConstr ([], name) -> fprintf ppf "%s" name
-    | TConstr ([ param ], name) -> fprintf ppf "%a %s" (pp_typ ctx) param name
+    | TConstr ([ param ], name) ->
+      fprintf ppf "%a %s" (pp_typ CSingleTypeParam) param name
     | TConstr (params, name) ->
       fprintf ppf "(";
       let pp_sep ppf () = fprintf ppf ", " in
-      pp_print_list (pp_typ CTuple) ~pp_sep ppf params;
+      pp_print_list (pp_typ CManyTypeParam) ~pp_sep ppf params;
       fprintf ppf ") %s" name
   in
-  pp_typ CArrow_right
+  pp_typ (if parens then CWrap else CFree)
 ;;
 
 let cons_ident = Typedtree.TypeEnv.TypeList.constr_cons.constr_ident
@@ -175,6 +182,7 @@ let pp_expr =
       then fprintf ppf "(@[<v 2>%a@])" pp_match ()
       else fprintf ppf "@[<v 2>%a@]" pp_match ()
     | TConstruct (ident, [], _ty) -> fprintf ppf "%s" ident.hum_name
+    | TConstruct (ident, [ arg ], _ty) -> fprintf ppf "%s %a" ident.hum_name expr arg
     | TConstruct (ident, [ head; tail ], _ty)
     (* syntactic sugar for lists *)
       when Ident.equal ident cons_ident ->
@@ -193,7 +201,7 @@ let pp_expr =
       pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") expr_no ppf args;
       fprintf ppf ")";
       fprintf ppf (if pars then ")@]" else "@]")
-  and pp_typ = pp_typ_hum
+  and pp_typ = pp_typ_hum ~parens:false
   and pp_pat ppf s = fprintf ppf "%a" pp_pattern s
   and expr ppf = expr_gen ~pars:true ppf
   and expr_no ppf = expr_gen ~pars:false ppf in
@@ -211,7 +219,7 @@ let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
      | NonRecursive -> "")
     pp_pattern
     tvb_pat
-    pp_typ_hum
+    (pp_typ_hum ~parens:false)
     (match tvb_typ with
      | S (_, typ) -> typ)
     (fun ppf e -> pp_hum ppf e)
@@ -220,9 +228,8 @@ let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
 
 let pp_td_hum ppf td =
   let pp_binder ppf binder = fprintf ppf "'_%d" binder in
-  let pp_params ppf params =
-    match List.of_seq (Var_set.to_seq params) with
-    | [] -> ()
+  let pp_params ppf = function
+    | [] -> fprintf ppf " "
     | [ x ] -> fprintf ppf " %a " pp_binder x
     | xs ->
       let pp_sep ppf () = fprintf ppf ", " in
@@ -237,13 +244,17 @@ let pp_td_hum ppf td =
        | [] -> fprintf ppf "| %s" variant.constr_ident.hum_name
        | args ->
          fprintf ppf "| %s of " variant.constr_ident.hum_name;
-         pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " * ") pp_typ_hum ppf args
+         pp_print_list
+           ~pp_sep:(fun ppf () -> fprintf ppf " * ")
+           (pp_typ_hum ~parens:true)
+           ppf
+           args
      in
      fprintf ppf " =@ ";
      pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "@ ") pp_variant ppf variants
    | Ttype_abstract ->
      (match td.tty_manifest with
-      | Some ty -> fprintf ppf " = %a@ " pp_typ_hum ty
+      | Some ty -> fprintf ppf " = %a@ " (pp_typ_hum ~parens:false) ty
       | None -> ()));
   fprintf ppf "@]"
 ;;

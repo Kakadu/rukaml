@@ -445,16 +445,17 @@ let lookup_scheme_by_string : _ =
 
 let fresh_var ~level = fresh >>| fun n -> tv n ~level
 
-let instantiate_tconstr ?(level = 0) name var_set =
+let instantiate_tconstr ?(level = 0) name params =
   let* sub, vars =
-    Var_set.fold_R
-      (fun (sub, acc) name ->
-         let* fresh = fresh in
-         let tvar = tv fresh ~level in
-         let sub = Subst.compose sub (Subst.singleton name tvar) in
-         return (sub, tvar :: acc))
-      var_set
-      (return (Subst.empty, []))
+    List.fold
+      ~f:(fun acc binder ->
+        let* sub, tvars = acc in
+        let* fresh = fresh in
+        let tvar = tv fresh ~level in
+        let sub = Subst.compose sub (Subst.singleton binder tvar) in
+        return (sub, tvar :: tvars))
+      params
+      ~init:(return (Subst.empty, []))
   in
   return (sub, tconstr (List.rev vars) name)
 ;;
@@ -922,7 +923,7 @@ let check_constr_arity (env : Type_env.t) name args =
   match Ident.Ident_map.find_by_string_opt name env.env_types with
   | None -> fail (`Unbound_type name)
   | Some type_declaration ->
-    if List.length args <> Var_set.cardinal type_declaration.tty_params
+    if List.length args <> List.length type_declaration.tty_params
     then fail (`Type_arity_mismatch name)
     else return ()
 ;;
@@ -977,10 +978,10 @@ let td ?(env = start_env) { Parsetree.pty_name; pty_params; pty_kind; pty_manife
       let* binder = fresh in
       let ty = tv binder ~level:(-1) in
       let map = Ident.String_map.add name ty map in
-      let bs = Var_set.add binder bs in
-      return (map, bs)
+      return (map, binder :: bs)
     in
-    List.fold ~init:(return (Ident.String_map.empty, Var_set.empty)) ~f:helper params_list
+    List.fold ~init:(return (Ident.String_map.empty, [])) ~f:helper params_list
+    >>| fun (map, params) -> map, List.rev params
   in
   let comp =
     let* () = check_params_uniqueness pty_name pty_params in

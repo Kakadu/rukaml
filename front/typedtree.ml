@@ -69,12 +69,12 @@ type pattern =
 
 let of_untyped_pattern =
   let rec helper = function
+    | Parsetree.PAny -> Tpat_any
     | Parsetree.PUnit -> Tpat_unit
     | Parsetree.PConst x -> Tpat_const x
     | Parsetree.PVar v -> Tpat_var (Ident.of_string v)
     | Parsetree.PTuple (a, b, xs) -> Tpat_tuple (helper a, helper b, List.map helper xs)
-    | Parsetree.PAny -> failwith "not implemented"
-    | Parsetree.PConstruct _ -> failwith "not implemented"
+    | Parsetree.PConstruct _ -> failwith "should not happen"
   in
   helper
 ;;
@@ -161,7 +161,10 @@ type value_binding =
 
 type constructor_info =
   { constr_ident : Ident.t
-  ; constr_type_ident : Ident.t
+  ; (* is used to implement constructors shadowing.
+       allows the type in which the constructor was declared to be unambiguously determined,
+       even if another constructor with the same name is declared (and the constructor table is updated accordingly) *)
+    constr_type_ident : Ident.t
   ; constr_args : ty list
   }
 
@@ -171,7 +174,7 @@ type type_kind =
 
 type type_declaration =
   { tty_ident : Ident.t
-  ; tty_params : binder_set
+  ; tty_params : binder list
   ; tty_kind : type_kind
   ; tty_manifest : ty option
   }
@@ -202,7 +205,7 @@ module TypeEnv = struct
 
   let mk_ground_typ name =
     { tty_ident = Ident.of_string name
-    ; tty_params = Var_set.empty
+    ; tty_params = []
     ; tty_kind = Ttype_abstract
     ; tty_manifest = None
     }
@@ -218,7 +221,7 @@ module TypeEnv = struct
 
   let typ_array : type_declaration =
     { tty_ident = Ident.of_string "array"
-    ; tty_params = Var_set.singleton (-1) (* TODO: Why -1? *)
+    ; tty_params = [ -1 ]
     ; tty_kind = Ttype_abstract
     ; tty_manifest = None
     }
@@ -249,7 +252,7 @@ module TypeEnv = struct
 
     let typ_list : type_declaration =
       { tty_ident = type_list_ident
-      ; tty_params = Var_set.singleton param_binder
+      ; tty_params = [ param_binder ]
       ; tty_kind = Ttype_variants [ constr_nil; constr_cons ]
       ; tty_manifest = None
       }

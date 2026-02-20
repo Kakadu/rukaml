@@ -212,20 +212,52 @@ let pp_scheme ppf = function
   | S (xs, t) -> fprintf ppf "forall %a . %a" Var_set.pp xs pp_typ t
 ;;
 
-let rec pp_core_type ppf = function
+type pp_core_type_ctx =
+  | CtxLeftSideArrow (* <here> -> ... *)
+  | CtxRightSideArrow (* ... -> <here> *)
+  | CtxSingleTypeParam (* <here> list *)
+  | CtxManyTypeParam (* (<here>, <here>) map *)
+  | CtxTuple (* <here> * <here> * <here> *)
+  | CtxOmit (* omit outer parens *)
+  | CtxDontOmit (* do not omit outer parens *)
+
+let rec pp_core_type ctx ppf = function
   | Ptyp_var name -> fprintf ppf "%s" name
-  | Ptyp_arrow (ctl, ctr) -> fprintf ppf "(%a -> %a)" pp_core_type ctl pp_core_type ctr
+  | Ptyp_arrow (ctl, ctr) ->
+    let fmt : _ format =
+      match ctx with
+      | CtxLeftSideArrow | CtxSingleTypeParam | CtxTuple | CtxDontOmit -> "(%a -> %a)"
+      | CtxRightSideArrow | CtxManyTypeParam | CtxOmit -> "%a -> %a"
+    in
+    fprintf
+      ppf
+      fmt
+      (pp_core_type CtxLeftSideArrow)
+      ctl
+      (pp_core_type CtxRightSideArrow)
+      ctr
   | Ptyp_tuple (ct1, ct2, cts) ->
-    fprintf ppf "@[(%a * %a" pp_core_type ct1 pp_core_type ct2;
-    List.iter (fprintf ppf " * %a" pp_core_type) cts;
-    fprintf ppf ")@]"
+    let fmt : _ format =
+      match ctx with
+      | CtxSingleTypeParam | CtxTuple | CtxDontOmit -> "(%a)"
+      | CtxRightSideArrow | CtxLeftSideArrow | CtxManyTypeParam | CtxOmit -> "%a"
+    in
+    let pp_tuple ppf () =
+      fprintf ppf "@[%a * %a" (pp_core_type CtxTuple) ct1 (pp_core_type CtxTuple) ct2;
+      List.iter (fprintf ppf " * %a" (pp_core_type CtxTuple)) cts;
+      fprintf ppf "@]"
+    in
+    fprintf ppf fmt pp_tuple ()
   | Ptyp_constr (name, []) -> fprintf ppf "@[%s@]" name
-  | Ptyp_constr (name, [ Ptyp_var var_name ]) -> fprintf ppf "@[%s %s@]" var_name name
+  | Ptyp_constr (name, [ arg ]) ->
+    fprintf ppf "@[%a %s@]" (pp_core_type CtxSingleTypeParam) arg name
   | Ptyp_constr (name, arg :: args) ->
-    fprintf ppf "@[(%a" pp_core_type arg;
-    List.iter (fprintf ppf ", %a" pp_core_type) args;
+    fprintf ppf "@[(%a" (pp_core_type CtxManyTypeParam) arg;
+    List.iter (fprintf ppf ", %a" (pp_core_type CtxManyTypeParam)) args;
     fprintf ppf ") %s@]" name
 ;;
+
+let pp_core_type ~pars = pp_core_type (if pars then CtxDontOmit else CtxOmit)
 
 let pp_type_params ppf td =
   match td.pty_params with
@@ -244,14 +276,18 @@ let pp_type_kind ppf td =
       | name, [] -> fprintf ppf "| %s" name
       | name, args ->
         fprintf ppf "| %s of " name;
-        pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " * ") pp_core_type ppf args
+        pp_print_list
+          ~pp_sep:(fun ppf () -> fprintf ppf " * ")
+          (pp_core_type ~pars:true)
+          ppf
+          args
     in
     fprintf ppf " =@ ";
     List.iter (fprintf ppf "%a@ " pp_case) (case :: cases)
   | Ptype_abstract ->
     (match td.pty_manifest with
      | None -> ()
-     | Some ct -> fprintf ppf " = %a" pp_core_type ct)
+     | Some ct -> fprintf ppf " = %a" (pp_core_type ~pars:false) ct)
 ;;
 
 let pp_type_declaration ppf (td, tds) =
