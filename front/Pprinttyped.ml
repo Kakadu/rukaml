@@ -129,17 +129,9 @@ let pp_expr =
          List.iter (fun name -> fprintf ppf "%a " pp_pattern name) ps;
          fprintf ppf "-> %a" expr_no e;
          if pars then fprintf ppf ")")
-    | TApp (TApp (TVar ("+", _, _, _), l, _), r, _) ->
-      fprintf ppf (if pars then "(%a + %a)" else "%a + %a") expr l expr r
-    | TApp (TApp (TVar ("*", _, _, _), l, _), r, _) ->
-      fprintf ppf (if pars then "(%a * %a)" else "%a * %a") expr l expr r
-      (* fprintf ppf "(%a * %a)" expr l expr r *)
-    | TApp (TApp (TVar ("-", _, _, _), l, _), r, _) ->
-      fprintf ppf (if pars then "(%a - %a)" else "%a - %a") expr l expr r
-      (* fprintf ppf "(%a - %a)" expr l expr r *)
-    | TApp (TApp (TVar ("=", _, _, _), l, _), r, _) ->
-      fprintf ppf (if pars then "(%a = %a)" else "%a = %a") expr l expr r
-      (* fprintf ppf "(%a = %a)" expr l expr r *)
+    | TApp (TApp (TVar (op, _, _, _), l, _), r, _)
+      when List.mem op [ "+"; "-"; "*"; "/"; ">"; "<"; "="; "<>"; "<="; ">="; "&&"; "||" ]
+      -> fprintf ppf (if pars then "(%a %s %a)" else "%a %s %a") expr l op expr r
     | TApp (l, r, _) -> fprintf ppf (if pars then "(%a %a)" else "%a %a") expr l expr r
     | TLet (Parsetree.Recursive, pat, S (_vars, ty), rhs, wher) ->
       fprintf
@@ -182,7 +174,8 @@ let pp_expr =
       then fprintf ppf "(@[<v 2>%a@])" pp_match ()
       else fprintf ppf "@[<v 2>%a@]" pp_match ()
     | TConstruct (ident, [], _ty) -> fprintf ppf "%s" ident.hum_name
-    | TConstruct (ident, [ arg ], _ty) -> fprintf ppf "%s %a" ident.hum_name expr arg
+    | TConstruct (ident, [ arg ], _ty) ->
+      fprintf ppf (if pars then "(%s %a)" else "%s %a") ident.hum_name expr arg
     | TConstruct (ident, [ head; tail ], _ty)
     (* syntactic sugar for lists *)
       when Ident.equal ident cons_ident ->
