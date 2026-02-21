@@ -91,13 +91,55 @@ value binding
   > EOF
   Parsed: (if 1 then 2 else x * (fac (y - 1)))
 
-# match
+constructors
+  $ cat << EOF | ./run.exe -e -
+  > Some (1, 2, 3)
+  > EOF
+  Parsed: (Some (1, 2, 3))
+
+  $ cat << EOF | ./run.exe -e -
+  > Some (fun x -> x)
+  > EOF
+  Parsed: (Some (fun x -> x))
+
+  $ cat << EOF | ./run.exe -e -
+  > Some (if true then 1 else 0)
+  > EOF
+  Parsed: (Some (if true then 1 else 0))
+
+  $ cat << EOF | ./run.exe -e -
+  > Some (match true with _ -> true)
+  > EOF
+  Parsed: (Some (match true with
+                  | _ -> true))
+
+  $ cat << EOF | ./run.exe -e -
+  > Some [ 1; 2; 3 ]
+  > EOF
+  Parsed: Some ([ 1; 2; 3 ])
+
+  $ cat << EOF | ./run.exe -e -
+  > Some (Some None)
+  > EOF
+  Parsed: (Some Some (None))
+
+  $ cat << EOF | ./run.exe -e -
+  > f (Some x)
+  > EOF
+  Parsed: (f (Some x))
+
+  $ cat << EOF | ./run.exe -e -
+  > f None x
+  > EOF
+  Parsed: (f None x)
+
+match with
   $ cat << EOF | ./run.exe -e -
   > match (x, y) with
   > | (x, y) -> (x, y)
   > | _ -> (y, x)
   Parsed: (match (x, y) with
-            | (x, y) -> (x, y)
+            | x, y -> (x, y)
             | _ -> (y, x))
 
   $ cat << EOF | ./run.exe -e -
@@ -108,10 +150,10 @@ value binding
   > | (f, s) -> 1
   > | s -> 0
   Parsed: (match e with
-            | (f, (f, (f, (f, s)))) -> 4
-            | (f, (f, (f, s))) -> 3
-            | (f, (f, s)) -> 2
-            | (f, s) -> 1
+            | f, (f, (f, (f, s))) -> 4
+            | f, (f, (f, s)) -> 3
+            | f, (f, s) -> 2
+            | f, s -> 1
             | s -> 0)
   $ cat << EOF | ./run.exe -e -
   > match x with
@@ -119,9 +161,9 @@ value binding
   > | Two (x, y) -> 2
   > | Three (x, y, z) -> 3
   Parsed: (match x with
-            | One (x) -> 1
-            | Two ((x, y)) -> 2
-            | Three ((x, y, z)) -> 3)
+            | One x -> 1
+            | Two (x, y) -> 2
+            | Three (x, y, z) -> 3)
 
   $ cat << EOF | ./run.exe -e -
   > match x with
@@ -145,7 +187,7 @@ value binding
   > | Some x -> g x
   > | None -> a b c
   Parsed: (match f x with
-            | Some (x) -> (g x)
+            | Some x -> (g x)
             | None -> (a b c))
 
   $ cat << EOF | ./run.exe -e -
@@ -193,3 +235,97 @@ value binding
   Parsed: (if match x with
                 | _ -> () then 1 else 2)
 
+
+# fixed issue: parsing tuples without parentheses
+  $ cat << EOF | ./run.exe -e -
+  > 1,2,3
+  Parsed: (1, 2, 3)
+
+  $ cat << EOF | ./run.exe -e -
+  > (1,2,3), (4, 5), 6
+  Parsed: ((1, 2, 3), (4, 5), 6)
+
+  $ cat << EOF | ./run.exe -e -
+  > let x, y = 1, 2 in x + y
+  Parsed: let (x, y) = (1, 2) in x + y
+
+  $ cat << EOF | ./run.exe -e -
+  > if true then 1, 2 else 2, 1
+  Parsed: (if true then (1, 2) else (2, 1))
+
+  $ cat << EOF | ./run.exe -e -
+  > (if true then 1, 2 else 2), 1
+  Parsed: (if true then (1, 2) else 2, 1)
+
+# edge cases
+
+should pass
+  $ cat << EOF | ./run.exe -e -
+  > fun (x, y) -> x + y
+  Parsed: (fun (x, y) -> x + y)
+
+TODO
+should fail
+  $ cat << EOF | ./run.exe -e -
+  > fun x, y -> x + y
+  Parsed: (fun (x, y) -> x + y)
+
+should pass
+  $ cat << EOF | ./run.exe -e -
+  > match 1, 2 with
+  > | (x, y) -> x + y
+  Parsed: (match (1, 2) with
+            | x, y -> (x + y))
+
+should pass
+  $ cat << EOF | ./run.exe -e -
+  > match 1, 2 with
+  > | x, y -> x + y
+  Parsed: (match (1, 2) with
+            | x, y -> (x + y))
+
+should pass
+  $ cat << EOF | ./run.exe -e -
+  > let (x, y) = 1, 2 in x, y
+  Parsed: let (x, y) = (1, 2) in (x, y)
+
+should pass
+  $ cat << EOF | ./run.exe -e -
+  > let x, y = 1, 2 in x, y
+  Parsed: let (x, y) = (1, 2) in (x, y)
+
+should pass
+  $ cat << EOF | ./run.exe -e -
+  > fun (Some x) -> x
+  Parsed: (fun (Some x) -> x)
+
+TODO
+should fail
+  $ cat << EOF | ./run.exe -e -
+  > fun Some x -> x
+  Parsed: (fun (Some x) -> x)
+
+should pass
+  $ cat << EOF | ./run.exe -e -
+  > match Some 42 with
+  > | (Some x) -> x
+  Parsed: (match Some (42) with
+            | Some x -> x)
+
+
+should pass
+  $ cat << EOF | ./run.exe -e -
+  > match Some 42 with
+  > | Some x -> x
+  Parsed: (match Some (42) with
+            | Some x -> x)
+
+should pass
+  $ cat << EOF | ./run.exe -e -
+  > let Some x = Some 42 in x
+  Parsed: let (Some x) = Some (42) in x
+
+should pass
+  $ cat << EOF | ./run.exe -e -
+  > let (Some x) = Some 42 in x
+  Parsed: let (Some x) = Some (42) in x

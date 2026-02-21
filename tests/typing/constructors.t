@@ -1,18 +1,9 @@
-# some weird edge-cases (which required fixing parser and typechecker)
-
   $ parse () { ../../driver/driver.exe $1 --target parsetree -o a.ml && cat a.ml; }
   $ infer () { ../../driver/driver.exe $1 --target typedtree -o a.ml && cat a.ml; }
 
+# some weird edge-cases (which required fixing parser and typechecker)
+
 assert int * int and (int * int) ARE NOT equivalent
-  $ parse << EOF
-  > type t =
-  > | Foo of (int * int)
-  > | Bar of int * int
-  > EOF
-  type t =
-    | Foo of (int * int)
-    | Bar of int * int
-     
   $ infer << EOF
   > type t =
   > | Foo of (int * int)
@@ -23,12 +14,6 @@ assert int * int and (int * int) ARE NOT equivalent
     | Bar of int * int
 
 assert int * int and (int * int) ARE equivalent
-  $ parse << EOF
-  > type t = int * int
-  > type t = (int * int)
-  type t = int * int 
-  type t = int * int 
-
   $ infer << EOF
   > type t = int * int
   > type t = (int * int)
@@ -36,48 +21,80 @@ assert int * int and (int * int) ARE equivalent
     
   type t = int * int
     
-should pass
-  $ parse << EOF
-  > type t = ('a -> 'b)
-  > EOF
-  type t = 'a -> 'b 
-
-should pass
-  $ parse << EOF
-  > type t = 'a -> 'b
-  > EOF
-  type t = 'a -> 'b 
-
-
-should pass
-  $ parse << EOF
-  > type t = Foo of ('a -> 'b)
+assert Foo and Bar applications are syntactic equivalent
+  $ infer << EOF
+  > type t =
+  > | Foo of (int * int * int)
+  > | Bar of int * int * int
+  > 
+  > let t = Foo (1, 2, 3)
+  > let t = Bar (1, 2, 3)
   > EOF
   type t =
-    | Foo of ('a -> 'b)
-     
+    | Foo of (int * int * int)
+    | Bar of int * int * int
+  let t: t =
+    Foo (3, 2, 1)
+  let t: t =
+    Bar (3, 2, 1)
+
+should pass
+  $ infer << EOF
+  > type t =
+  > | Foo of (int * int * int)
+  > | Bar of int * int * int
+  > 
+  > let f x =
+  >   match x with
+  >   | Foo x -> x
+  type t =
+    | Foo of (int * int * int)
+    | Bar of int * int * int
+  let f: t -> int * int * int =
+    fun x -> match x with
+               | Foo x -> x
+
+should pass
+  $ infer << EOF
+  > type t =
+  > | Foo of (int * int * int)
+  > | Bar of int * int * int
+  > 
+  > let f x =
+  >   match x with
+  >   | Foo (a, b, c) -> a + b + c
+  type t =
+    | Foo of (int * int * int)
+    | Bar of int * int * int
+  let f: t -> int =
+    fun x -> match x with
+               | Foo (a, b, c) -> (a + b) + c
 
 should fail
-  $ parse << EOF
-  > type t = Foo of 'a -> 'b
-  > EOF
-  parse error: : end_of_input
+  $ infer << EOF
+  > type t =
+  > | Foo of (int * int * int)
+  > | Bar of int * int * int
+  > 
+  > let f x =
+  >   match x with
+  >   | Bar x -> x
+  infer error: constructor arity mistmatch: Bar
   [1]
 
-# nested type constructors
-  $ parse << EOF
-  > type t =
-  > | Foo of int
-  > | Bar of int list
-  > | Qwe of ('a -> 'b) option
-  > | Asd of (int list, bool option) map
-  > | Zxc of ((int, bool) result, string option list) map list
-  > EOF
-  type t =
-    | Foo of int
-    | Bar of int list
-    | Qwe of ('a -> 'b) option
-    | Asd of (int list, bool option) map
-    | Zxc of ((int, bool) result, string option list) map list
-     
 
+should pass
+  $ infer << EOF
+  > type t =
+  > | Foo of (int * int * int)
+  > | Bar of int * int * int
+  > 
+  > let f x =
+  >   match x with
+  >   | Bar (a, b, c) -> a + b + c
+  type t =
+    | Foo of (int * int * int)
+    | Bar of int * int * int
+  let f: t -> int =
+    fun x -> match x with
+               | Bar (a, b, c) -> (a + b) + c
