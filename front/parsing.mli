@@ -4,6 +4,7 @@ type dispatch =
   { prio : dispatch -> Parsetree.expr Angstrom.t
   ; expr_basic : dispatch -> Parsetree.expr Angstrom.t
   ; expr_long : dispatch -> Parsetree.expr Angstrom.t
+  ; expr_tuple : dispatch -> Parsetree.expr Angstrom.t
   ; expr : dispatch -> Parsetree.expr Angstrom.t
   }
 

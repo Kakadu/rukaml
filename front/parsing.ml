@@ -192,15 +192,15 @@ let constant =
        | _ -> fail "Not a boolean constant")
 ;;
 
-let constructor parse_atom parse_item mk_constructor =
+let constructor ~atom ~item mk_constructor =
   let constant_constr =
     let* name = ws *> constructor_name in
     return (mk_constructor name [])
   in
   let* name = ws *> constructor_name in
-  (let* args = parens (sep_by (ws <* char ',') parse_item) in
+  (let* args = parens (sep_by (ws <* char ',') item) in
    return (mk_constructor name args))
-  <|> (parse_atom <|> constant_constr >>| fun arg -> mk_constructor name [ arg ])
+  <|> (atom <|> constant_constr >>| fun arg -> mk_constructor name [ arg ])
   <|> return (mk_constructor name [])
 ;;
 
@@ -220,7 +220,10 @@ let patt_basic d =
           return (pcons first (List.fold_right pcons rest pnil)))
          <* ws
          <* char ']')
-    <|> constructor (d.patt_basic d) (d.patt_basic d <|> d.patt_cons d) pconstruct
+    <|> constructor
+          ~atom:(d.patt_basic d)
+          ~item:(d.patt_basic d <|> d.patt_cons d <|> parens (d.patt_tuple d))
+          pconstruct
     <|> char '_' *> return PAny)
 ;;
 
@@ -274,7 +277,7 @@ let letdef erhs =
        *> keyword "let"
        *> option NonRecursive (keyword "rec" >>| fun _ -> Recursive)
        <* ws)
-  <*> pattern
+  <*> ws *> pattern
   <*> many (ws *> pattern)
   <*> ws *> string "=" *> ws *> erhs
 ;;
@@ -295,14 +298,23 @@ type dispatch =
   { prio : dispatch -> expr t
   ; expr_basic : dispatch -> expr t
   ; expr_long : dispatch -> expr t
+  ; expr_tuple : dispatch -> expr t
   ; expr : dispatch -> expr t
   }
 
 let pack : dispatch =
   let open Format in
+  let expr_tuple d =
+    let* () = ws *> trace_pos "expr_tuple" in
+    let* x1 = d.prio d in
+    return (fun x2 xs -> etuple x1 x2 xs)
+    <*> ws *> char ',' *> d.prio d
+    <*> many (ws *> char ',' *> d.prio d)
+    <|> return x1
+  in
   let prio d =
-    ws
-    *> fix (fun _self ->
+    let* () = ws *> trace_pos "prio" in
+    fix (fun _self ->
       prio
         (d.expr_long d)
         [| [ ws *> string "||", elor ]
@@ -320,85 +332,86 @@ let pack : dispatch =
         |])
   in
   let expr_basic d =
-    trace_pos "expr_basic"
-    *> fix (fun _self ->
-      ws
-      *> (fail ""
-          <|> (constant >>| fun x -> EConst x)
-          <|> char '(' *> char ')' *> return EUnit
-          <|> char '[' *> ws *> char ']' *> return enil
-          <|> (char '['
-               *> ws
-               *>
-               let* first = d.prio d in
-               (let* rest = many (ws *> char ';' *> d.prio d) in
-                return (econs first (List.fold_right econs rest enil)))
-               <|> return (econs first enil)
-               <* ws
-               <* char ']')
-          <|> brackets
-                (return (fun h tl -> earray (h :: tl))
-                 <*> (d.expr d <* ws)
-                 <*> many (string ";" *> d.expr d <* ws)
-                 <|> return @@ earray [])
-          <|> parens
-                (* TODO : parse tuples without parentheses *)
-                (return (fun a b xs -> etuple a b xs)
-                 <*> (d.expr d <* ws)
-                 <*> (char ',' *> d.expr d <* ws)
-                 <*> many (char ',' *> d.expr d <* ws))
-          <|> constructor (d.expr_basic d) (d.expr_long d) econstruct
-          <|> (var_name
-               >>= fun v ->
-               char '.' *> char '(' *> number
-               <* char ')'
-               >>= (fun i ->
-               string " <- " *> d.expr d
-               >>= (fun e ->
-               return @@ eapp (evar "set") [ evar v; econst (const_int i); e ])
-               <|> return @@ eapp (evar "get") [ evar v; econst (const_int i) ])
-               <|> return (evar v))
-          <|> (let parse_case =
-                 let* p = char '|' *> ws *> pattern in
-                 let* e = ws *> string "->" *> ws *> d.prio d in
-                 return (p, e)
-               in
-               let first =
-                 parse_case
-                 <|>
-                 let* p = pattern in
-                 let* () = ws *> string "->" *> ws in
-                 let* e = d.prio d in
-                 return (p, e)
-               in
-               let* subject = keyword "match" *> ws *> d.prio d <* ws <* keyword "with" in
-               let* case = first in
-               let* cases = many parse_case in
-               return (ematch subject case cases))
-          <|> (keyword "fun" *> many1 pattern
-               >>= fun ps ->
-               ws *> string "->" *> ws *> d.prio d
-               >>= fun b -> return (List.fold_right (fun patt acc -> elam patt acc) ps b)
-              )
-          <|> (keyword "if" *> d.prio d
-               >>= fun cond ->
-               keyword "then" *> d.prio d
-               >>= fun th ->
-               keyword "else" *> d.prio d >>= fun el -> return (eite cond th el))
-          <|> (letdef (d.prio d)
-               >>= fun (isrec, ident, rhs) ->
-               keyword "in" *> d.prio d >>= fun in_ -> return (elet ~isrec ident rhs in_)
-              )))
+    let* () = ws *> trace_pos "expr_basic" in
+    fix (fun _self ->
+      fail ""
+      <|> (constant >>| fun x -> EConst x)
+      <|> char '(' *> char ')' *> return EUnit
+      <|> char '[' *> ws *> char ']' *> return enil
+      <|> (constructor_name >>| fun name -> EConstruct (name, []))
+      <|> (char '['
+           *> ws
+           *>
+           let* first = d.expr_tuple d in
+           (let* rest = many (ws *> char ';' *> d.expr_tuple d) in
+            return (econs first (List.fold_right econs rest enil)))
+           <|> return (econs first enil)
+           <* ws
+           <* char ']')
+      <|> brackets
+            (return (fun h tl -> earray (h :: tl))
+             <*> (d.expr_tuple d <* ws)
+             <*> many (string ";" *> d.expr_tuple d <* ws)
+             <|> return @@ earray [])
+      <|> (var_name
+           >>= fun v ->
+           char '.' *> char '(' *> number
+           <* char ')'
+           >>= (fun i ->
+           string " <- " *> d.expr d
+           >>= (fun e -> return @@ eapp (evar "set") [ evar v; econst (const_int i); e ])
+           <|> return @@ eapp (evar "get") [ evar v; econst (const_int i) ])
+           <|> return (evar v))
+      <|> (let parse_case =
+             let* () = ws <* char '|' in
+             let* p = pattern in
+             let* () = ws <* string "->" in
+             let* e = d.expr_tuple d in
+             return (p, e)
+           in
+           let first =
+             parse_case
+             <|>
+             let* p = pattern in
+             let* () = ws *> string "->" *> ws in
+             let* e = d.expr_tuple d in
+             return (p, e)
+           in
+           let* subject =
+             keyword "match" *> ws *> d.expr_tuple d <* ws <* keyword "with"
+           in
+           let* case = first in
+           let* cases = many parse_case in
+           return (ematch subject case cases))
+      <|> (keyword "fun" *> many1 pattern
+           >>= fun ps ->
+           ws *> string "->" *> ws *> d.expr d
+           >>= fun b -> return (List.fold_right (fun patt acc -> elam patt acc) ps b))
+      <|> (keyword "if" *> d.expr_tuple d
+           >>= fun cond ->
+           keyword "then" *> d.expr_tuple d
+           >>= fun th ->
+           keyword "else" *> d.expr_tuple d >>= fun el -> return (eite cond th el))
+      <|> (letdef (d.expr_tuple d)
+           >>= fun (isrec, ident, rhs) ->
+           ws *> keyword "in" *> d.expr d
+           >>= fun in_ -> return (elet ~isrec ident rhs in_)))
   in
   let expr_long d =
+    let* () = ws *> trace_pos "expr_long" in
     fix (fun _self ->
-      many (ws *> (d.expr_basic d <|> parens (d.prio d)) <* ws)
+      many (ws *> (d.expr_basic d <|> parens (d.expr d)) <* ws)
       >>= function
       | [] -> fail "can't parse many expressions"
       | [ h ] -> return h
+      (* TODO? > fix these kludges for adt constructors *)
+      | [ EConstruct (name, []); ETuple (arg1, arg2, args) ] ->
+        return (EConstruct (name, arg1 :: arg2 :: args))
+      | [ EConstruct (name, []); arg ] -> return (EConstruct (name, [ arg ]))
+      (* < *)
       | foo :: args -> return @@ eapp foo args)
   in
-  { expr_basic; expr_long; prio; expr = prio }
+  { expr_basic; expr_long; prio; expr_tuple; expr = expr_tuple }
 ;;
 
 let parse_pack p str = parse_string ~consume:All (p pack) str
