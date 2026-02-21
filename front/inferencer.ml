@@ -712,9 +712,10 @@ let infer env table expr =
           list_foldm
             ~init:(return ([], []))
             ~f:(fun (typs, exprs) e ->
-              let* t1, e1 = helper env state e in
-              return (t1 :: typs, e1 :: exprs))
+              let* ty, expr = helper env state e in
+              return (ty :: typs, expr :: exprs))
             es
+          >>| fun (tys, exprs) -> List.rev tys, List.rev exprs
         in
         let tup_typ = elim table @@ tprod ta tb typs in
         return (tup_typ, TTuple (ea, eb, exprs, tup_typ))
