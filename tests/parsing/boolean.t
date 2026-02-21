@@ -6,20 +6,20 @@
   $ cat << EOF | ./run.exe -prio -
   > if true then 1 else 2
   > EOF
-  Parsed: (if true then 1 else 2)
+  Parsed: if true then 1 else 2
 
   $ cat << EOF | ./run.exe -prio -
   > fun x -> fun y -> if x then y else true
   > EOF
-  Parsed: (fun x -> (fun y -> if x then y else true))
+  Parsed: fun x -> fun y -> if x then y else true
 
   $ cat << EOF | ./run.exe -prio -
   > x && y ||
   > x && y
   > EOF
-  Parsed: ((x && y) || (x && y))
+  Parsed: (x && y) || (x && y)
 
   $ cat << EOF | ./run.exe -prio -
   > fun x -> if x then printint 52 else ()
   > EOF
-  Parsed: (fun x -> if x then printint 52 else ())
+  Parsed: fun x -> if x then printint 52 else ()

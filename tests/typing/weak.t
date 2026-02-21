@@ -16,9 +16,9 @@
   > let h x = [| pair x |]
   let pair: '_1 -> '_1 * '_1 =
     fun x -> (x, x)
-  let g: '_weak1 -> '_weak1 * '_weak1 array =
+  let g: ('_weak1 -> '_weak1 * '_weak1) array =
     [|pair|]
-  let h: '_1 -> '_1 * '_1 array =
+  let h: '_1 -> ('_1 * '_1) array =
     fun x -> [|pair x|]
 
   $ run << EOF

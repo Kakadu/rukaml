@@ -63,18 +63,18 @@
   >     | hd :: tl, acc -> aux tl (hd :: acc)
   >    in
   >  aux (rev xs) ys   
-  let aux: '_3 list -> '_3 list -> '_3 list =
+  let rec aux: '_3 list -> '_3 list -> '_3 list =
     fun ls acc -> match ls with
                     | [] -> acc
                     | hd :: tl -> (aux tl) (hd :: acc)
   let rev: '_3 list -> '_3 list =
     fun ls -> (aux ls) []
-  let rec join: '_3 list -> '_7 list -> '_3 * '_7 list =
+  let rec join: '_3 list -> '_7 list -> ('_3 * '_7) list =
     fun xs ys -> match (xs, ys) with
                    | ([], _) -> []
                    | (_, []) -> []
                    | (xhd :: xtl, yhd :: ytl) -> (xhd, yhd) :: ((join xtl) ytl)
-  let aux: '_3 list -> '_3 list -> '_3 list =
+  let rec aux: '_3 list -> '_3 list -> '_3 list =
     fun xs ys -> match (xs, ys) with
                    | ([], acc) -> acc
                    | (hd :: tl, acc) -> (aux tl) (hd :: acc)
@@ -152,7 +152,7 @@
     fun n ls -> match ls with
                   | [] -> []
                   | x :: xs -> let tail : '_4 list = (skip (n - 1)) xs in
-                  (if (> n) 0 then x :: tail else tail)
+                  (if n > 0 then x :: tail else tail)
 #
 
 # assert type of take is int -> 'a list -> 'a list
@@ -164,5 +164,5 @@
   let rec take: int -> '_4 list -> '_4 list =
     fun n ls -> match ls with
                   | [] -> []
-                  | x :: xs -> (if (< n) 1 then [] else x :: ((take (n - 1)) xs))
+                  | x :: xs -> (if n < 1 then [] else x :: ((take (n - 1)) xs))
 #

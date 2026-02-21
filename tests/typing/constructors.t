@@ -34,9 +34,9 @@ assert Foo and Bar applications are syntactic equivalent
     | Foo of (int * int * int)
     | Bar of int * int * int
   let t: t =
-    Foo (3, 2, 1)
+    Foo (1, 2, 3)
   let t: t =
-    Bar (3, 2, 1)
+    Bar (1, 2, 3)
 
 should pass
   $ infer << EOF

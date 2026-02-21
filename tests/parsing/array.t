@@ -12,7 +12,7 @@
   $ cat << EOF | ./run.exe -e -
   > r.(0)
   > EOF
-  Parsed: (get r 0)
+  Parsed: get r 0
 
   $ cat << EOF | ./run.exe -e -
   > let r = "foobar" in
@@ -24,7 +24,7 @@
   $ cat << EOF | ./run.exe -e -
   > r.(123) <- 123
   > EOF
-  Parsed: (set r 123 123)
+  Parsed: set r 123 123
 
   $ cat << EOF | ./run.exe -e -
   > let r = "Ocaml" in
