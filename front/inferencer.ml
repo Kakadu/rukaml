@@ -515,7 +515,13 @@ let rec check_pat ~level env table = function
         aux env args expected_tys (patt :: acc_patts)
       | _ -> fail (`Constructor_arity_mismatch name)
     in
-    aux env args constr_info.constr_args []
+    (match args, constr_info.constr_args with
+     (* > delayed adt constructor arity calculating *)
+     | ([ Parsetree.PTuple _ ] as actual), ty1 :: ty2 :: tys ->
+       let expected = [ { typ_desc = TProd (ty1, ty2, tys) } ] in
+       aux env actual expected []
+     (* < *)
+     | _ -> aux env args constr_info.constr_args [])
 ;;
 
 let elim weak =
@@ -784,7 +790,13 @@ let infer env table expr =
             aux args expected_tys (arg_expr :: acc_args)
           | _ -> fail (`Constructor_arity_mismatch name)
         in
-        aux args constr_info.constr_args []
+        (match args, constr_info.constr_args with
+         | arg1 :: arg2 :: args, ([ { typ_desc = TProd _ } ] as expected) ->
+           (* > delayed adt constructor arity calculating *)
+           let actual = [ Parsetree.ETuple (arg1, arg2, args) ] in
+           aux actual expected []
+           (* < *)
+         | _ -> aux args constr_info.constr_args [])
   in
   let* ty, expr = helper env MakeWeak expr in
   let* ty = restrict DoNothing table ty in
