@@ -339,15 +339,17 @@ let conv ?(standart_globals = standart_globals)
       return (elet ~isrec pat rhs body)
     | ELet (_, PConstruct _, _, _) | ELet (_, PConst _, _, _) ->
       failwith "not implemented 3"
-  and helper_list globals : Parsetree.expr list -> (value_binding list, expr list) t =
-    fun es ->
-    List.fold_left
-      (fun acc e ->
-         let* acc = acc in
-         let* e = helper globals e in
-         return (e :: acc))
-      (return [])
-      es
+  and helper_list globals es =
+    let* es =
+      List.fold_left
+        (fun acc e ->
+           let* acc = acc in
+           let* e = helper globals e in
+           return (e :: acc))
+        (return [])
+        es
+    in
+    return (List.rev es)
   in
   function
   | is_rec, (PVar v as pat), root ->
