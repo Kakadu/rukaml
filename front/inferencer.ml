@@ -519,12 +519,12 @@ let rec check_pat ~level env table = function
         aux env args expected_tys (patt :: acc_patts)
       | _ -> fail (`Constructor_arity_mismatch name)
     in
+    (* delayed adt constructor arity calculating *)
     (match args, constr_info.constr_args with
-     (* > delayed adt constructor arity calculating *)
      | ([ Parsetree.PTuple _ ] as actual), ty1 :: ty2 :: tys ->
+       (* here the case of (ty1 * ... * tyN) is explicitly distinguished from the case of ty1 * ... * tyN *)
        let expected = [ { typ_desc = TProd (ty1, ty2, tys) } ] in
        aux env actual expected []
-     (* < *)
      | _ -> aux env args constr_info.constr_args [])
 ;;
 
@@ -617,25 +617,30 @@ let restrict : restriction_state -> weak_table -> ty -> ty t =
 let infer_format3_of_string ~level s =
   let* out_ty = fresh_var ~level in
   let* dest_ty = fresh_var ~level in
-  let open Angstrom in
-  let specifier =
-    char '%'
-    *> choice
-         [ char 's' *> return string_typ
-         ; char 'd' *> return int_typ
-         ; char 'b' *> return bool_typ
-         ]
+  let rec helper chs acc_ty =
+    (* TODO? it is probably faster then Angstrom monads for short format strings *)
+    match chs with
+    | [] -> return acc_ty
+    | '%' :: 'd' :: tl -> helper tl (tarrow int_typ acc_ty)
+    | '%' :: 'b' :: tl -> helper tl (tarrow bool_typ acc_ty)
+    | '%' :: 'c' :: tl -> helper tl (tarrow char_typ acc_ty)
+    | '%' :: 's' :: tl -> helper tl (tarrow string_typ acc_ty)
+    | '%' :: 'a' :: tl ->
+      let* fresh = fresh_var ~level in
+      helper tl (tarrow (tarrow dest_ty (tarrow fresh acc_ty)) (tarrow fresh acc_ty))
+    | '%' :: _ -> fail (`InvalidFormatString s)
+    | _ :: tl -> helper tl acc_ty
   in
-  let arg_type =
-    many (skip_while (fun c -> Stdlib.( != ) c '%') *> specifier)
-    >>| fun tys -> List.fold_right ~f:(fun ty acc -> tarrow ty acc) tys ~init:out_ty
-  in
-  match parse_string ~consume:All (arg_type <* end_of_input) s with
-  | Error _ -> R.fail (`InvalidFormatString s)
-  | Ok arg_ty ->
-    let ty = format3_typ ~arg_ty ~out_ty ~dest_ty in
-    let expr = TFormat (s, ty) in
-    R.return (ty, expr)
+  let* arg_ty = helper (String.to_list s) out_ty in
+  let ty = format3_typ ~arg_ty ~out_ty ~dest_ty in
+  let expr = TFormat (s, ty) in
+  return (ty, expr)
+;;
+
+let expects_format3 ty =
+  match type_without_links ty with
+  | { typ_desc = Arrow ({ typ_desc = TConstr (_, "format3") }, _) } -> true
+  | _ -> false
 ;;
 
 let infer env table expr =
@@ -707,14 +712,19 @@ let infer env table expr =
         let* ty, tbody = helper env DoNothing body in
         let trez = elim table @@ tarrow tp ty in
         return (trez, TLam (pat, tbody, trez))
-      | EApp ((EVar ("fprintf" | "sprintf" | "printf") as f), EConst (PConst_string s)) ->
+      | EApp (f, EConst (PConst_string s)) ->
+        (* some kind of implicit coercion to distinguish format3 from strings *)
         let* f_ty, f_expr = helper env state f in
-        let* fmt_ty, fmt_expr = infer_format3_of_string ~level:!current_level s in
+        let* s_ty, s_expr =
+          if f_ty |> expects_format3
+          then infer_format3_of_string ~level:!current_level s
+          else return (string_typ, TConst (PConst_string s))
+        in
         let* tv = fresh_var ~level:0 in
-        let* () = unify table f_ty (tarrow fmt_ty tv) in
+        let* () = unify table f_ty (tarrow s_ty tv) in
         let* tv = restrict state table tv in
         let tv = elim table tv in
-        return (tv, TApp (f_expr, fmt_expr, tv))
+        return (tv, TApp (f_expr, s_expr, tv))
       | EApp (e1, e2) ->
         let* t1, te1 = helper env state e1 in
         let* t2, te2 = helper env state e2 in
@@ -827,12 +837,12 @@ let infer env table expr =
             aux args expected_tys (arg_expr :: acc_args)
           | _ -> fail (`Constructor_arity_mismatch name)
         in
+        (* delayed adt constructor arity calculating *)
         (match args, constr_info.constr_args with
          | arg1 :: arg2 :: args, ([ { typ_desc = TProd _ } ] as expected) ->
-           (* > delayed adt constructor arity calculating *)
+           (* here the case of (ty1 * ... * tyN) is explicitly distinguished from the case of ty1 * ... * tyN *)
            let actual = [ Parsetree.ETuple (arg1, arg2, args) ] in
            aux actual expected []
-           (* < *)
          | _ -> aux args constr_info.constr_args [])
   in
   let* ty, expr = helper env MakeWeak expr in

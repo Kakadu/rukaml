@@ -79,6 +79,33 @@ closes out_channel.
   let f: out_channel -> (int -> '_6, out_channel, unit) format3 -> '_6 =
     fun oc fmt -> ((fprintf oc) fmt) 1
 
+  $ run << EOF
+  > let pp_int oc n = fprintf oc "%d" n
+  > let pp_char oc c = fprintf oc "%c" c
+  > let pp_bool oc b = fprintf oc "%b" b
+  > let pp_string oc s = fprintf oc "%s" s
+  > 
+  > let u = fprintf stdout "%a" pp_int 1
+  > let u = fprintf stdout "%a" pp_char '1'
+  > let u = fprintf stdout "%a" pp_bool true
+  > let u = fprintf stdout "%a" pp_string "one"
+  let pp_int: out_channel -> int -> unit =
+    fun oc n -> ((fprintf oc) "%d") n
+  let pp_char: out_channel -> char -> unit =
+    fun oc c -> ((fprintf oc) "%c") c
+  let pp_bool: out_channel -> bool -> unit =
+    fun oc b -> ((fprintf oc) "%b") b
+  let pp_string: out_channel -> string -> unit =
+    fun oc s -> ((fprintf oc) "%s") s
+  let u: unit =
+    (((fprintf stdout) "%a") pp_int) 1
+  let u: unit =
+    (((fprintf stdout) "%a") pp_char) '1'
+  let u: unit =
+    (((fprintf stdout) "%a") pp_bool) true
+  let u: unit =
+    (((fprintf stdout) "%a") pp_string) "one"
+
 # edge cases
 
 should fail
@@ -96,11 +123,13 @@ should pass
 
 # invalid input
 
+should fail
   $ run << EOF
   > let t = printf "%s" 42
   infer error: unification failed on string and int
   [1]
 
+should fail
   $ run << EOF
   > let t = printf "%d" 1 2
   infer error: unification failed on unit and (int -> '_6)
