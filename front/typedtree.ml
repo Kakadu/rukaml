@@ -56,7 +56,7 @@ let string_typ = tprim "string"
 let array_typ param = tparam param "array"
 let in_channel_typ = tprim "in_channel"
 let out_channel_typ = tprim "out_channel"
-let format_typ ~arg_ty ~out_ty ~dest = tconstr [ arg_ty; out_ty; dest ] "format"
+let format3_typ ~arg_ty ~dest_ty ~out_ty = tconstr [ arg_ty; dest_ty; out_ty ] "format3"
 
 type pattern =
   | Tpat_unit
@@ -96,6 +96,7 @@ type expr =
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
   | TMatch of expr * (pattern * expr) Parsetree.list1 * ty
   | TConstruct of Ident.t * expr list * ty
+  | TFormat of string * ty
 [@@deriving show { with_path = false }]
 
 let rec type_of_expr = function
@@ -104,15 +105,16 @@ let rec type_of_expr = function
   | TConst (Parsetree.PConst_bool _) -> bool_typ
   | TConst (Parsetree.PConst_char _) -> char_typ
   | TConst (Parsetree.PConst_string _) -> string_typ
+  | TLet (_, _, _, _, wher) -> type_of_expr wher
   | TVar (_, _, _, t)
   | TTuple (_, _, _, t)
   | TIf (_, _, _, t)
   | TArray (_, t)
   | TLam (_, _, t)
-  | TApp (_, _, t) -> t
-  | TLet (_, _, _, _, wher) -> type_of_expr wher
-  | TMatch (_, _, t) -> t
-  | TConstruct (_, _, t) -> t
+  | TApp (_, _, t)
+  | TMatch (_, _, t)
+  | TConstruct (_, _, t)
+  | TFormat (_, t) -> t
 ;;
 
 (** Compaction of the tree *)
@@ -148,6 +150,7 @@ let compact_expr =
         , type_without_links ty )
     | TConstruct (ident, args, ty) ->
       TConstruct (ident, List.map helper args, type_without_links ty)
+    | TFormat (s, ty) -> TFormat (s, type_without_links ty)
   in
   helper
 ;;
@@ -259,6 +262,14 @@ module TypeEnv = struct
     ;;
   end
 
+  let typ_format3 =
+    { tty_ident = Ident.of_string "format3"
+    ; tty_params = [ -1; -2; -3 ]
+    ; tty_kind = Ttype_abstract
+    ; tty_manifest = None
+    }
+  ;;
+
   let add_type (td : type_declaration) (env : t) =
     let ident = td.tty_ident in
     { env with env_types = Ident.Ident_map.add ident.hum_name ident td env.env_types }
@@ -284,5 +295,6 @@ module TypeEnv = struct
     |> add_type TypeList.typ_list
     |> add_constructor TypeList.constr_nil
     |> add_constructor TypeList.constr_cons
+    |> add_type typ_format3
   ;;
 end

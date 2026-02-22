@@ -12,10 +12,10 @@ type error =
   | `Unbound_type of string
   | `Constructor_arity_mismatch of string
   | `Constructor_name_duplicates of string
+  | `InvalidFormatString of string
   ]
 
 val pp_error : Format.formatter -> error -> unit
-
 val w : Parsetree.expr -> (Typedtree.expr, [> error ]) Result.t
 
 val vb

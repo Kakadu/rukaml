@@ -194,6 +194,7 @@ let pp_expr =
       pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") expr_no ppf args;
       fprintf ppf ")";
       fprintf ppf (if pars then ")@]" else "@]")
+    | TFormat (s, _ty) -> fprintf ppf "\"%s\"" s
   and pp_typ = pp_typ_hum ~parens:false
   and pp_pat ppf s = fprintf ppf "%a" pp_pattern s
   and expr ppf = expr_gen ~pars:true ppf

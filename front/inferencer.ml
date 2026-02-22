@@ -27,6 +27,7 @@ type error =
   | `Unbound_type of string
   | `Constructor_arity_mismatch of string
   | `Constructor_name_duplicates of string
+  | `InvalidFormatString of string
   ]
 
 let pp_error ppf : error -> _ = function
@@ -48,6 +49,7 @@ let pp_error ppf : error -> _ = function
     Format.fprintf ppf "constructor arity mistmatch: %s" name
   | `Constructor_name_duplicates name ->
     Format.fprintf ppf "constructor name duplicates in declaration of type %s" name
+  | `InvalidFormatString fmt -> Format.fprintf ppf "\"%s\" is not a valid formatter" fmt
 ;;
 
 type fresh_counter = int
@@ -258,6 +260,8 @@ module Type = struct
 
   let apply subs t = Subst.apply subs t
 end
+
+let scheme vs ty = S (vs, ty)
 
 module Scheme = struct
   type t = scheme
@@ -610,6 +614,30 @@ let restrict : restriction_state -> weak_table -> ty -> ty t =
   return @@ helper t
 ;;
 
+let infer_format3_of_string ~level s =
+  let* out_ty = fresh_var ~level in
+  let* dest_ty = fresh_var ~level in
+  let open Angstrom in
+  let specifier =
+    char '%'
+    *> choice
+         [ char 's' *> return string_typ
+         ; char 'd' *> return int_typ
+         ; char 'b' *> return bool_typ
+         ]
+  in
+  let arg_type =
+    many (skip_while (fun c -> Stdlib.( != ) c '%') *> specifier)
+    >>| fun tys -> List.fold_right ~f:(fun ty acc -> tarrow ty acc) tys ~init:out_ty
+  in
+  match parse_string ~consume:All (arg_type <* end_of_input) s with
+  | Error _ -> R.fail (`InvalidFormatString s)
+  | Ok arg_ty ->
+    let ty = format3_typ ~arg_ty ~out_ty ~dest_ty in
+    let expr = TFormat (s, ty) in
+    R.return (ty, expr)
+;;
+
 let infer env table expr =
   let current_level = ref 1 in
   let enter_level () =
@@ -679,6 +707,14 @@ let infer env table expr =
         let* ty, tbody = helper env DoNothing body in
         let trez = elim table @@ tarrow tp ty in
         return (trez, TLam (pat, tbody, trez))
+      | EApp ((EVar ("fprintf" | "sprintf" | "printf") as f), EConst (PConst_string s)) ->
+        let* f_ty, f_expr = helper env state f in
+        let* fmt_ty, fmt_expr = infer_format3_of_string ~level:!current_level s in
+        let* tv = fresh_var ~level:0 in
+        let* () = unify table f_ty (tarrow fmt_ty tv) in
+        let* tv = restrict state table tv in
+        let tv = elim table tv in
+        return (tv, TApp (f_expr, fmt_expr, tv))
       | EApp (e1, e2) ->
         let* t1, te1 = helper env state e1 in
         let* t2, te2 = helper env state e2 in
@@ -849,6 +885,31 @@ let start_env =
   |> extend_s
        "output_string"
        (Scheme.make_mono (tarrow out_channel_typ (tarrow string_typ unit_typ)))
+  |> extend_s
+       "sprintf"
+       (let arg_ty = tv 0 ~level:(-1) in
+        (* forall '_0 . ('_0, unit, string) format3 -> '_0 *)
+        scheme
+          (Var_set.singleton 0)
+          (tarrow (format3_typ ~arg_ty ~dest_ty:unit_typ ~out_ty:string_typ) arg_ty))
+  |> extend_s
+       "fprintf"
+       (let arg_ty = tv 0 ~level:(-1) in
+        (* forall '_0 . out_channel -> ('_0, out_channel, unit) format3 -> '_0 *)
+        scheme
+          (Var_set.singleton 0)
+          (tarrow
+             out_channel_typ
+             (tarrow
+                (format3_typ ~arg_ty ~dest_ty:out_channel_typ ~out_ty:unit_typ)
+                arg_ty)))
+  |> extend_s
+       "printf"
+       (let arg_ty = tv 0 ~level:(-1) in
+        (* forall '_0 . ('_0, out_channel, unit) format -> 'a *)
+        scheme
+          (Var_set.singleton 0)
+          (tarrow (format3_typ ~arg_ty ~dest_ty:out_channel_typ ~out_ty:unit_typ) arg_ty))
   |> extend_s "flush" (Scheme.make_mono (tarrow out_channel_typ unit_typ))
   (* Built-in binops *)
   |> extend_binop "<" cmp_scheme
