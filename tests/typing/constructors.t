@@ -1,9 +1,12 @@
   $ parse () { ../../driver/driver.exe $1 --target parsetree -o a.ml && cat a.ml; }
   $ infer () { ../../driver/driver.exe $1 --target typedtree -o a.ml && cat a.ml; }
 
-# some weird edge-cases (which required fixing parser and typechecker)
+some weird edge-cases (which required fixing parser and typechecker)
 
-assert int * int and (int * int) ARE NOT equivalent
+adt constructors arity calculating is deferred from parsing stage to typechecking stage
+although Foo is declared as Foo of (int * int), in the parsetree it is represented as Foo [ int; int ], whereas in the typedtree it is represented as Foo [ (int, int) ]
+
+assert that int * int and (int * int) ARE NOT equivalent
   $ infer << EOF
   > type t =
   > | Foo of (int * int)
@@ -13,7 +16,7 @@ assert int * int and (int * int) ARE NOT equivalent
     | Foo of (int * int)
     | Bar of int * int
 
-assert int * int and (int * int) ARE equivalent
+assert that int * int and (int * int) ARE equivalent
   $ infer << EOF
   > type t = int * int
   > type t = (int * int)
@@ -21,7 +24,7 @@ assert int * int and (int * int) ARE equivalent
     
   type t = int * int
     
-assert Foo and Bar applications are syntactic equivalent
+assert that Foo and Bar applications are syntactic equivalent
   $ infer << EOF
   > type t =
   > | Foo of (int * int * int)
