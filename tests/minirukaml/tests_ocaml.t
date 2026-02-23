@@ -5,7 +5,7 @@
   $ parse_expr << EOF
   > ;garbage
   > EOF
-  parsing error: (Minirukaml.Perr_message "choice")
+  parsing error: choice
 
   $ parse_expr << EOF
   > 1 + 2 * 3 - 4 < 5 || 6 / 7 >= 8

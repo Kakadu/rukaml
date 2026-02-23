@@ -19,10 +19,10 @@ type opts =
 let run_expr ~out opts input =
   let open Minirukaml in
   match parse_expression input with
-  | Error err -> fprintf out "parsing error: %s" (show_parsing_error err)
+  | Error err -> fprintf out "parsing error: %a" pp_parsing_error err
   | Ok ast ->
     (match opts.target with
-     | Parsetree -> fprintf out "parsed: %s" (show_expression ast)
+     | Parsetree -> fprintf out "parsed: %a" pp_expression ast
      | Typedtree -> failwith "not implemented")
 ;;
 
@@ -60,9 +60,7 @@ let () =
     | Expr -> run_expr
     | Patt | Stru -> failwith "not implemented"
   in
-  let fmt = Format.formatter_of_out_channel out_channel in
-  run ~out:fmt opts input;
-  Format.pp_print_flush fmt ();
+  run ~out:out_channel opts input;
   Stdio.Out_channel.flush out_channel;
   Stdio.Out_channel.close_no_err out_channel
 ;;

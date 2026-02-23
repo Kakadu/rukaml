@@ -1,21 +1,6 @@
 (* --- TODO --- *)
 
 let string_of_char_list s = Base.String.of_char_list s
-
-let is_keyword s =
-  match s with
-  | "let" -> true
-  | "rec" -> true
-  | "in" -> true
-  | "true" -> true
-  | "false" -> true
-  | "fun" -> true
-  | "if" -> true
-  | "then" -> true
-  | "else" -> true
-  | _ -> false
-;;
-
 let rec math_pow b e = if e < 1 then 1 else b * math_pow b (e - 1)
 let string_len s = String.length s
 let string_nth s n = s.[n]
@@ -27,6 +12,7 @@ let string_of_int = string_of_int
 let string_concat = Base.String.concat ~sep:""
 let string_concat_sep sep = Base.String.concat ~sep
 let list_mem = List.mem
+let fprintf = Stdlib.Printf.fprintf
 
 (* ----- list primitives ----- *)
 
@@ -55,6 +41,14 @@ let rec list_map f ls =
   match ls with
   | [] -> []
   | x :: xs -> f x :: list_map f xs
+;;
+
+let rec list_iter f ls =
+  match ls with
+  | [] -> ()
+  | x :: xs ->
+    let () = f x in
+    list_iter f xs
 ;;
 
 (* ---- AST ----- *)
@@ -99,6 +93,20 @@ type expression =
   | Pexpr_app of expression * expression
   | Pexpr_let of rec_flag * pattern * expression * expression
 
+let is_keyword s =
+  match s with
+  | "let" -> true
+  | "rec" -> true
+  | "in" -> true
+  | "true" -> true
+  | "false" -> true
+  | "fun" -> true
+  | "if" -> true
+  | "then" -> true
+  | "else" -> true
+  | _ -> false
+;;
+
 (* ----- char primitives ----- *)
 
 let int_of_digits chs =
@@ -117,17 +125,18 @@ let is_char_valid_for_name ch =
 
 (* ----- AST pretty-printers ----- *)
 
-let show_tuple show_item (x1, x2, xs) =
-  string_concat_sep ", " (list_map (fun x -> show_item x) (x1 :: x2 :: xs))
+let pp_tuple pp_item oc (x1, x2, xs) =
+  let () = fprintf oc "%a, %a" pp_item x1 pp_item x2 in
+  list_iter (fun x -> fprintf oc ", %a" pp_item x) xs
 ;;
 
-let show_constant c =
-  match c with
-  | Pconst_unit -> "()"
-  | Pconst_int n -> string_of_int n
-  | Pconst_bool true -> "true"
-  | Pconst_bool false -> "false"
-  | Pconst_string s -> string_concat [ "\""; s; "\"" ]
+let pp_constant oc const =
+  match const with
+  | Pconst_unit -> fprintf oc "()"
+  | Pconst_int n -> fprintf oc "%d" n
+  | Pconst_bool true -> fprintf oc "true"
+  | Pconst_bool false -> fprintf oc "false"
+  | Pconst_string s -> fprintf oc "\"%s\"" s
 ;;
 
 let show_binop binop =
@@ -146,84 +155,103 @@ let show_binop binop =
   | Pbinop_land -> "&&"
 ;;
 
-type pprinter_context =
+let pp_binop oc binop = fprintf oc "%s" (show_binop binop)
+
+type pp_pattern_ctx =
+  | Ctx_tuple (* <here>, <here> *)
+  | Ctx_let_lhs (* let <here> = ... in ... *)
+  | Ctx_fun_lhs (* fun <here> -> ... *)
+  | Ctx_free (* for testing purposes *)
+
+let rec pp_pattern ctx oc patt =
+  match patt with
+  | Ppatt_any -> fprintf oc "_"
+  | Ppatt_var name -> fprintf oc "%s" name
+  | Ppatt_const c -> pp_constant oc c
+  | Ppatt_tuple (p1, p2, ps) ->
+    let pars = list_mem ctx [ Ctx_tuple; Ctx_fun_lhs ] in
+    fprintf
+      oc
+      (if pars then "(%a)" else "%a")
+      (pp_tuple (pp_pattern Ctx_tuple))
+      (p1, p2, ps)
+;;
+
+type pp_expression_ctx =
   | Ctx_binop (* <here> + <here> *)
   | Ctx_tuple (* <here>, <here> *)
   | Ctx_app (* <here> <here> *)
   | Ctx_ite (* if <here> then <here> else <here> *)
-  | Ctx_let_lhs (* let <here> = ... in ... *)
   | Ctx_let_rhs (* let ... = <here> in ... *)
   | Ctx_let_body (* let ... = ... in <here> *)
-  | Ctx_fun_lhs (* fun <here> -> ... *)
   | Ctx_fun_rhs (* fun ... -> <here> *)
   | Ctx_free (* for testing purposes *)
 
-(* ctx is current context; cases are contexts in which parentheses are set; s is input *)
-let set_parens_ctx ctx cases s =
-  if list_mem ctx cases then string_concat [ "("; s; ")" ] else s
-;;
-
-let rec show_pattern ctx patt =
-  match patt with
-  | Ppatt_any -> "_"
-  | Ppatt_var name -> name
-  | Ppatt_const c -> show_constant c
-  | Ppatt_tuple (p1, p2, ps) ->
-    let s = show_tuple (show_pattern Ctx_tuple) (p1, p2, ps) in
-    set_parens_ctx ctx [ Ctx_tuple; Ctx_fun_lhs ] s
-;;
-
-let show_expression expr =
-  let rec helper ctx expr =
-    match expr with
-    | Pexpr_var name -> name
-    | Pexpr_const const -> show_constant const
-    | Pexpr_binop (op, e1, e2) ->
-      let s =
-        string_concat
-          [ helper Ctx_binop e1; " "; show_binop op; " "; helper Ctx_binop e2 ]
-      in
-      set_parens_ctx ctx [ Ctx_binop; Ctx_app ] s
-    | Pexpr_ite (e1, e2, e3) ->
-      let s =
-        string_concat
-          [ "if "
-          ; helper Ctx_ite e1
-          ; " then "
-          ; helper Ctx_ite e2
-          ; " else "
-          ; helper Ctx_ite e3
-          ]
-      in
-      set_parens_ctx ctx [ Ctx_binop; Ctx_tuple; Ctx_app; Ctx_ite ] s
-    | Pexpr_tuple (e1, e2, es) ->
-      let s = show_tuple (helper Ctx_tuple) (e1, e2, es) in
-      set_parens_ctx ctx [ Ctx_binop; Ctx_tuple; Ctx_app ] s
-    | Pexpr_fun (p, e) ->
-      let s =
-        string_concat [ "fun "; show_pattern Ctx_fun_lhs p; " -> "; helper Ctx_fun_rhs e ]
-      in
-      set_parens_ctx ctx [ Ctx_binop; Ctx_tuple; Ctx_app ] s
-    | Pexpr_app (e1, e2) ->
-      let s = string_concat [ helper Ctx_app e1; " "; helper Ctx_app e2 ] in
-      set_parens_ctx ctx [ Ctx_app ] s
-    | Pexpr_let (rec_flag, lhs, rhs, body) ->
-      let s =
-        string_concat
-          [ "let"
-          ; (match rec_flag with
-             | Pexpr_recursive -> " rec "
-             | Pexpr_non_recursive -> " ")
-          ; show_pattern Ctx_let_lhs lhs
-          ; " = "
-          ; helper Ctx_let_rhs rhs
-          ; " in "
-          ; helper Ctx_let_body body
-          ]
-      in
-      set_parens_ctx ctx [ Ctx_binop; Ctx_tuple; Ctx_app; Ctx_ite; Ctx_let_rhs ] s
-  in
-  helper Ctx_free expr
+let rec pp_expression ctx oc expr =
+  match expr with
+  | Pexpr_var name -> fprintf oc "%s" name
+  | Pexpr_const const -> pp_constant oc const
+  | Pexpr_binop (op, e1, e2) ->
+    let pars = list_mem ctx [ Ctx_binop; Ctx_app ] in
+    fprintf
+      oc
+      (if pars then "(%a %s %a)" else "%a %s %a")
+      (pp_expression Ctx_binop)
+      e1
+      (show_binop op)
+      (pp_expression Ctx_binop)
+      e2
+  | Pexpr_ite (e1, e2, e3) ->
+    let pars = list_mem ctx [ Ctx_binop; Ctx_tuple; Ctx_app; Ctx_ite ] in
+    fprintf
+      oc
+      (if pars then "(if %a then %a else %a)" else "if %a then %a else %a")
+      (pp_expression Ctx_ite)
+      e1
+      (pp_expression Ctx_ite)
+      e2
+      (pp_expression Ctx_ite)
+      e3
+  | Pexpr_tuple (e1, e2, es) ->
+    let pars = list_mem ctx [ Ctx_binop; Ctx_tuple; Ctx_app ] in
+    fprintf
+      oc
+      (if pars then "(%a)" else "%a")
+      (pp_tuple (pp_expression Ctx_tuple))
+      (e1, e2, es)
+  | Pexpr_fun (p, e) ->
+    let pars = list_mem ctx [ Ctx_binop; Ctx_tuple; Ctx_app ] in
+    fprintf
+      oc
+      (if pars then "(fun %a -> %a)" else "fun %a -> %a")
+      (pp_pattern Ctx_fun_lhs)
+      p
+      (pp_expression Ctx_fun_rhs)
+      e
+  | Pexpr_app (e1, e2) ->
+    let pars = list_mem ctx [ Ctx_app ] in
+    fprintf
+      oc
+      (if pars then "(%a %a)" else "%a %a")
+      (pp_expression Ctx_app)
+      e1
+      (pp_expression Ctx_app)
+      e2
+  | Pexpr_let (rec_flag, lhs, rhs, body) ->
+    let pars = list_mem ctx [ Ctx_binop; Ctx_tuple; Ctx_app; Ctx_ite; Ctx_let_rhs ] in
+    fprintf
+      oc
+      (match (pars, rec_flag) with
+       | true, Pexpr_non_recursive -> "(let %a = %a in %a)"
+       | false, Pexpr_non_recursive -> "let %a = %a in %a"
+       | true, Pexpr_recursive -> "(let rec %a = %a in %a)"
+       | false, Pexpr_recursive -> "let rec %a = %a in %a")
+      (pp_pattern Ctx_let_lhs)
+      lhs
+      (pp_expression Ctx_let_rhs)
+      rhs
+      (pp_expression Ctx_let_body)
+      body
 ;;
 
 (* ----- angstrom-like parser-combinators ----- *)
@@ -233,7 +261,6 @@ type parsing_error =
   | Perr_expected of string
   | Perr_not_implemented of string
   | Perr_unexpected_eof
-[@@deriving show]
 
 type parser_state = string * int (* int stands for current position *)
 
@@ -242,8 +269,6 @@ type 'a parsing_result =
   | Prez_error of parsing_error
 
 type 'a parser = parser_state -> 'a parsing_result
-
-(* ----- pretty-printers ----- *)
 
 let return x state = Prez_success (x, state)
 let fail err _state = Prez_error err
@@ -372,13 +397,9 @@ let ws =
   drop_left (many (choice [ char ' '; char '\t'; char '\n'; char '\r' ])) (return ())
 ;;
 
+let skip_ws p = drop_left ws p
 let trim p = drop_right (drop_left ws p) ws
-
-let parens p =
-  drop_left
-    ws
-    (drop_left (char '(') (drop_left ws (drop_right p (drop_right ws (char ')')))))
-;;
+let parens p = drop_left (trim (char '(')) (drop_right p (trim (char ')')))
 
 let parse_constant =
   choice
@@ -404,8 +425,7 @@ let parse_tuple parse_item =
 ;;
 
 let parse_pattern_atom =
-  drop_left
-    ws
+  skip_ws
     (choice
        [ drop_left (char '_') (return Ppatt_any)
        ; map parse_var_name (fun name -> Ppatt_var name)
@@ -421,8 +441,7 @@ let parse_pattern =
 ;;
 
 let parse_expr_atom =
-  drop_left
-    ws
+  skip_ws
     (choice
        [ map parse_var_name (fun name -> Pexpr_var name)
        ; map parse_constant (fun c -> Pexpr_const c)
@@ -432,7 +451,7 @@ let parse_expr_atom =
 let make_binop_level expr cases =
   let make_parser (op, sep) =
     drop_left
-      (drop_left ws (string sep))
+      (skip_ws (string sep))
       (map expr (fun right left -> Pexpr_binop (op, left, right)))
   in
   let level = choice (list_map make_parser cases) in
@@ -457,14 +476,14 @@ let parse_expr_binop expr =
   let l_and expr = make_binop_level expr [ (Pbinop_land, "&&") ] in
   let l_or expr = make_binop_level expr [ (Pbinop_lor, "||") ] in
   list_fold
-    (fun acc level -> choice [ level acc; acc ])
+    (fun acc level -> choice2 (level acc) acc)
     [ mul_div; add_sub; cmp; l_and; l_or ]
     expr
 ;;
 
 let parse_expr_app parse_expr =
   bind
-    (drop_left ws (many (drop_left ws parse_expr)))
+    (skip_ws (many (skip_ws parse_expr)))
     (fun exprs ->
        match exprs with
        | [] -> fail (Perr_expected "expr_app (or expr_basic)")
@@ -473,67 +492,54 @@ let parse_expr_app parse_expr =
 
 let parse_expr_ite parse_expr =
   drop_left
-    ws
-    (drop_left
-       (string "if")
-       (drop_left
-          ws
-          (bind parse_expr (fun e1 ->
-             drop_left
-               ws
-               (drop_left
-                  (string "then")
-                  (drop_left
-                     ws
-                     (bind parse_expr (fun e2 ->
-                        drop_left
-                          ws
-                          (drop_left
-                             (string "else")
-                             (drop_left
-                                ws
-                                (bind parse_expr (fun e3 ->
-                                   return (Pexpr_ite (e1, e2, e3))))))))))))))
+    (trim (string "if"))
+    (bind parse_expr (fun e1 ->
+       drop_left
+         (trim (string "then"))
+         (bind parse_expr (fun e2 ->
+            drop_left
+              (trim (string "else"))
+              (bind parse_expr (fun e3 -> return (Pexpr_ite (e1, e2, e3))))))))
 ;;
 
 let parse_expr_fun parse_expr =
   drop_left
-    (drop_left ws (string "fun"))
-    (bind
-       (many1 (drop_left ws parse_pattern))
-       (fun ps ->
-          drop_left
-            (drop_left ws (drop_left (string "->") ws))
-            (bind parse_expr (fun b ->
-               let desugared =
-                 (* presents [ fun x y z -> ... ] as [ fun x -> fun y -> fun z -> ... ] *)
-                 list_fold_right (fun p e -> Pexpr_fun (p, e)) ps b
-               in
-               return desugared))))
+    (trim (string "fun"))
+    (bind (many1 parse_pattern) (fun ps ->
+       drop_left
+         (trim (string "->"))
+         (bind parse_expr (fun b ->
+            let desugared =
+              (* presents [ fun x y z -> ... ] as [ fun x -> fun y -> fun z -> ... ] *)
+              list_fold_right (fun p e -> Pexpr_fun (p, e)) ps b
+            in
+            return desugared))))
+;;
+
+let parse_rec_flag =
+  choice
+    [ drop_left (skip_ws (string "rec")) (return Pexpr_recursive)
+    ; return Pexpr_non_recursive
+    ]
 ;;
 
 let parse_expr_let parse_expr =
   drop_left
-    (drop_left ws (string "let"))
-    (bind
-       (choice
-          [ drop_left (drop_left ws (string "rec")) (return Pexpr_recursive)
-          ; return Pexpr_non_recursive
-          ])
-       (fun rec_flag ->
-          bind parse_pattern (fun p1 ->
-            bind (many parse_pattern) (fun ps ->
-              drop_left
-                (drop_left ws (drop_left (char '=') ws))
-                (bind parse_expr (fun rhs ->
-                   drop_left
-                     (drop_left ws (drop_left (string "in") ws))
-                     (bind parse_expr (fun body ->
-                        let desugared =
-                          (* presents [ let f x y = ... in ... ] as [ let f = fun x -> fun y -> ... in ... ]*)
-                          list_fold_right (fun p acc -> Pexpr_fun (p, acc)) ps rhs
-                        in
-                        return (Pexpr_let (rec_flag, p1, desugared, body))))))))))
+    (trim (string "let"))
+    (bind parse_rec_flag (fun rec_flag ->
+       bind parse_pattern (fun p1 ->
+         bind (many parse_pattern) (fun ps ->
+           drop_left
+             (trim (char '='))
+             (bind parse_expr (fun rhs ->
+                drop_left
+                  (trim (string "in"))
+                  (bind parse_expr (fun body ->
+                     let desugared =
+                       (* presents [ let f x y = ... in ... ] as [ let f = fun x -> fun y -> ... in ... ]*)
+                       list_fold_right (fun p acc -> Pexpr_fun (p, acc)) ps rhs
+                     in
+                     return (Pexpr_let (rec_flag, p1, desugared, body))))))))))
 ;;
 
 let parse_expr_complex expr =
@@ -544,13 +550,11 @@ let parse_expr_complex expr =
 let parse_expr_tuple expr =
   bind (parse_expr_complex expr) (fun e1 ->
     drop_left
-      ws
-      (drop_left
-         (char ',')
-         (bind (parse_expr_complex expr) (fun e2 ->
-            bind
-              (many (drop_left ws (drop_left (char ',') (parse_expr_complex expr))))
-              (fun es -> return (Pexpr_tuple (e1, e2, es)))))))
+      (trim (char ','))
+      (bind (parse_expr_complex expr) (fun e2 ->
+         bind
+           (many (drop_left (trim (char ',')) (parse_expr_complex expr)))
+           (fun es -> return (Pexpr_tuple (e1, e2, es))))))
 ;;
 
 let parse_expr =
@@ -565,6 +569,16 @@ let parse_expr =
 type ('a, 'b) result =
   | Ok of 'a
   | Error of 'b
+
+let pp_parsing_error oc err =
+  match err with
+  | Perr_message msg -> fprintf oc "%s" msg
+  | Perr_expected x -> fprintf oc "expected: %s" x
+  | Perr_not_implemented x -> fprintf oc "not implemented: %s" x
+  | Perr_unexpected_eof -> fprintf oc "unexpected eof"
+;;
+
+let pp_expression = pp_expression Ctx_free
 
 let parse_expression s =
   match parse_expr (s, 0) with
