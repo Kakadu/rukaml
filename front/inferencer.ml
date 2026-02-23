@@ -643,6 +643,19 @@ let expects_format3 ty =
   | _ -> false
 ;;
 
+type string_inference_mode =
+  | TypeString
+  | TypeFormat3
+
+type inferencer_state =
+  { restriction_state : restriction_state
+  ; infer_strings_as : string_inference_mode
+  }
+
+let clean_state { restriction_state; _ } =
+  { restriction_state; infer_strings_as = TypeString }
+;;
+
 let infer env table expr =
   let current_level = ref 1 in
   let enter_level () =
@@ -655,7 +668,7 @@ let infer env table expr =
   in
   let rec (helper
             : Type_env.t
-              -> restriction_state
+              -> inferencer_state
               -> Parsetree.expr
               -> (ty * Typedtree.expr) R.t)
     =
@@ -686,6 +699,7 @@ let infer env table expr =
         return (typ, TVar (x, Type_env.ident_of_string x env, kind, typ))
       | EUnit -> return (unit_typ, TUnit)
       | Parsetree.EArray r ->
+        let state = clean_state state in
         (match r with
          | [] ->
            let* ty = fresh_var ~level:!current_level in
@@ -708,32 +722,29 @@ let infer env table expr =
            return (ty, TArray (exprs, ty)))
       (* lambda abstraction *)
       | Parsetree.ELam (pat, body) ->
+        let state = clean_state state in
         let* env, pat, tp = check_pat ~level:!current_level env table pat in
-        let* ty, tbody = helper env DoNothing body in
+        let* ty, tbody = helper env { state with restriction_state = DoNothing } body in
         let trez = elim table @@ tarrow tp ty in
         return (trez, TLam (pat, tbody, trez))
-      | EApp (f, EConst (PConst_string s)) ->
-        (* some kind of implicit coercion to distinguish format3 from strings *)
-        let* f_ty, f_expr = helper env state f in
-        let* s_ty, s_expr =
-          if f_ty |> expects_format3
-          then infer_format3_of_string ~level:!current_level s
-          else return (string_typ, TConst (PConst_string s))
-        in
-        let* tv = fresh_var ~level:0 in
-        let* () = unify table f_ty (tarrow s_ty tv) in
-        let* tv = restrict state table tv in
-        let tv = elim table tv in
-        return (tv, TApp (f_expr, s_expr, tv))
       | EApp (e1, e2) ->
+        let state = clean_state state in
         let* t1, te1 = helper env state e1 in
-        let* t2, te2 = helper env state e2 in
+        let* t2, te2 =
+          helper
+            env
+            { state with
+              infer_strings_as =
+                (if t1 |> expects_format3 then TypeFormat3 else TypeString)
+            }
+            e2
+        in
         let* tv = fresh_var ~level:0 in
         (* log "t1 = %a" pp_ty t1; *)
         (* log "t2 = %a" pp_ty t2; *)
         (* log "tv = %a" pp_ty tv; *)
         let* () = unify table t1 (tarrow t2 tv) in
-        let* tv = restrict state table tv in
+        let* tv = restrict state.restriction_state table tv in
         let tv = elim table tv in
         (* log "t1 = %a" pp_ty t1; *)
         (* log "t2 = %a" pp_ty t2; *)
@@ -742,9 +753,12 @@ let infer env table expr =
       | EConst (PConst_int _n as c) -> return (int_typ, TConst c)
       | EConst (PConst_char _c as c) -> return (char_typ, TConst c)
       | EConst (PConst_bool _b as c) -> return (bool_typ, TConst c)
-      | EConst (PConst_string _s as c) -> return (string_typ, TConst c)
+      | EConst (PConst_string _s as c) ->
+        (match state.infer_strings_as with
+         | TypeString -> return (string_typ, TConst c)
+         | TypeFormat3 -> infer_format3_of_string ~level:!current_level _s)
       | Parsetree.EIf (c, th, el) ->
-        let* t1, tc = helper env state c in
+        let* t1, tc = helper env (clean_state state) c in
         let* t2, tth = helper env state th in
         let* t3, tel = helper env state el in
         let* () = unify table t1 bool_typ in
@@ -752,6 +766,7 @@ let infer env table expr =
         let t2 = elim table t2 in
         return (t2, TIf (tc, tth, tel, t2))
       | ETuple (a, b, es) ->
+        let state = clean_state state in
         let* ta, ea = helper env state a in
         let* tb, eb = helper env state b in
         let* typs, exprs =
@@ -767,7 +782,7 @@ let infer env table expr =
         return (tup_typ, TTuple (ea, eb, exprs, tup_typ))
       | Parsetree.ELet (NonRecursive, PVar x, rhs, e2) ->
         enter_level ();
-        let* t1, typed_rhs = helper env state rhs in
+        let* t1, typed_rhs = helper env (clean_state state) rhs in
         leave_level ();
         let t2 = generalize ~level:!current_level t1 in
         let x_ident = Ident.of_string x in
@@ -781,7 +796,7 @@ let infer env table expr =
         let f_ident = Ident.of_string f in
         let* t1, typed_rhs =
           let env = Type_env.extend ~varname:f f_ident (S (Var_set.empty, tf)) env in
-          helper env state erhs
+          helper env (clean_state state) erhs
         in
         leave_level ();
         let* () = unify table tf t1 in
@@ -797,13 +812,13 @@ let infer env table expr =
         fail `Only_varibles_on_the_left_of_letrec
       | ELet (NonRecursive, lhs, rhs, wher) ->
         let* env, lhs, lhs_ty = check_pat ~level:!current_level env table lhs in
-        let* rhs_ty, rhs = helper env state rhs in
+        let* rhs_ty, rhs = helper env (clean_state state) rhs in
         let* () = unify table lhs_ty rhs_ty in
         let* twher, typed_wher = helper env state wher in
         let twher = elim table twher in
         return (twher, TLet (NonRecursive, lhs, Scheme.make_mono rhs_ty, rhs, typed_wher))
       | EMatch (expr, ((p1, e1), cases)) ->
-        let* expr_ty, expr = helper env state expr in
+        let* expr_ty, expr = helper env (clean_state state) expr in
         let* env1, p1, pty = check_pat ~level:!current_level env table p1 in
         let* () = unify table pty expr_ty in
         let* ety, e1 = helper env1 state e1 in
@@ -822,6 +837,7 @@ let infer env table expr =
         in
         return (ety, TMatch (expr, ((p1, e1), List.rev cases), ety))
       | EConstruct (name, args) ->
+        let state = clean_state state in
         let* constr_info, type_info = find_constructor name env in
         let ty_name, ty_params = type_info.tty_ident.hum_name, type_info.tty_params in
         let* sub, ty = instantiate_tconstr ~level:!current_level ty_name ty_params in
@@ -845,7 +861,8 @@ let infer env table expr =
            aux actual expected []
          | _ -> aux args constr_info.constr_args [])
   in
-  let* ty, expr = helper env MakeWeak expr in
+  let init_state = { restriction_state = MakeWeak; infer_strings_as = TypeString } in
+  let* ty, expr = helper env init_state expr in
   let* ty = restrict DoNothing table ty in
   return (ty, expr)
 ;;

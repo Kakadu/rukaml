@@ -1,11 +1,33 @@
   $ run () { ../../driver/driver.exe $1 --target typedtree -o a.ml && cat a.ml; }
 
   $ run << EOF
-  > let main =
-  >   output_string stdout "hello world"
-  > EOF
-  let main: unit =
+  > let u = output_string stdout "hello world"
+  let u: unit =
     (output_string stdout) "hello world"
+
+  $ run << EOF
+  > let u = printf "hello world"
+  let u: unit =
+    printf "hello world"
+
+  $ run << EOF
+  > let u = printf "%s" "hello world"
+  let u: unit =
+    (printf "%s") "hello world"
+
+  $ run << EOF
+  > let u = fprintf stdout "%s" "hello world"
+  let u: unit =
+    ((fprintf stdout) "%s") "hello world"
+
+  $ run << EOF
+  > let pp_print_string oc s = fprintf oc "%s" s
+  > let u = printf "%a" pp_print_string "hello world"
+  let pp_print_string: out_channel -> string -> unit =
+    fun oc s -> ((fprintf oc) "%s") s
+  let u: unit =
+    ((printf "%a") pp_print_string) "hello world"
+
 
 opens "in.txt" for read as in_channel;
 reads line from in_channel;
@@ -106,21 +128,6 @@ closes out_channel.
   let u: unit =
     (((fprintf stdout) "%a") pp_string) "one"
 
-# edge cases
-
-should fail
-  $ run << EOF
-  > let s = "%s"
-  > let u = printf s "hello world"
-  infer error: unification failed on '_1, out_channel, unit format3 and string
-  [1]
-
-should pass
-  $ run << EOF
-  > let u = printf "%s" "hello world"
-  let u: unit =
-    (printf "%s") "hello world"
-
 # invalid input
 
 should fail
@@ -133,4 +140,69 @@ should fail
   $ run << EOF
   > let t = printf "%d" 1 2
   infer error: unification failed on unit and (int -> '_6)
+  [1]
+
+should fail
+  $ run << EOF  
+  > let pp_int oc n = fprintf oc "%d" n
+  > let u = fprintf stdout "%a" pp_int '1'
+  infer error: unification failed on int and char
+  [1]
+
+# weird cases
+
+should fail
+  $ run << EOF
+  > let fmt = "%s"
+  > let u = printf fmt "hello world"
+  infer error: unification failed on '_1, out_channel, unit format3 and string
+  [1]
+
+should fail
+  $ run << EOF
+  > let u = printf (let fmt = "%s" in fmt) "hello world"
+  infer error: unification failed on '_1, out_channel, unit format3 and string
+  [1]
+
+should pass
+  $ run << EOF
+  > let u = printf (let () = () in "%s") "hello world"
+  let u: unit =
+    (printf let () : unit = () in
+    "%s") "hello world"
+
+should pass
+  $ run << EOF
+  > let pp_string oc parens s =
+  >   fprintf oc (if parens then "(%s)" else "%s") s
+  let pp_string: out_channel -> bool -> string -> unit =
+    fun oc parens s -> ((fprintf oc) (if parens then "(%s)" else "%s")) s
+
+should fail
+  $ run << EOF
+  > let main = printf (if true then "%d" else "%s")
+  infer error: unification failed on int and string
+  [1]
+
+should pass
+  $ run << EOF
+  > let pp_string oc parens s =
+  >   fprintf oc
+  >     (match parens with
+  >      | true -> "(%s)"
+  >      | false -> "%s")
+  >     s
+  let pp_string: out_channel -> bool -> string -> unit =
+    fun oc parens s -> ((fprintf oc) (match parens with
+                                        | true -> "(%s)"
+                                        | false -> "%s")) s
+
+should fail
+  $ run << EOF
+  > let main =
+  >   printf
+  >     (match true with
+  >      | true -> "%d"
+  >      | false -> "%s")
+  infer error: unification failed on string and int
   [1]
