@@ -614,24 +614,24 @@ let restrict : restriction_state -> weak_table -> ty -> ty t =
   return @@ helper t
 ;;
 
+(* TODO : make it faster *)
 let infer_format3_of_string ~level s =
   let* out_ty = fresh_var ~level in
   let* dest_ty = fresh_var ~level in
   let rec helper chs acc_ty =
-    (* TODO? it is probably faster then Angstrom monads for short format strings *)
     match chs with
     | [] -> return acc_ty
-    | '%' :: 'd' :: tl -> helper tl (tarrow int_typ acc_ty)
-    | '%' :: 'b' :: tl -> helper tl (tarrow bool_typ acc_ty)
-    | '%' :: 'c' :: tl -> helper tl (tarrow char_typ acc_ty)
-    | '%' :: 's' :: tl -> helper tl (tarrow string_typ acc_ty)
-    | '%' :: 'a' :: tl ->
+    | 'd' :: '%' :: tl -> helper tl (tarrow int_typ acc_ty)
+    | 'b' :: '%' :: tl -> helper tl (tarrow bool_typ acc_ty)
+    | 'c' :: '%' :: tl -> helper tl (tarrow char_typ acc_ty)
+    | 's' :: '%' :: tl -> helper tl (tarrow string_typ acc_ty)
+    | 'a' :: '%' :: tl ->
       let* fresh = fresh_var ~level in
-      helper tl (tarrow (tarrow dest_ty (tarrow fresh acc_ty)) (tarrow fresh acc_ty))
-    | '%' :: _ -> fail (`InvalidFormatString s)
+      helper tl (tarrow (tarrow dest_ty (tarrow fresh out_ty)) (tarrow fresh acc_ty))
+    | _ :: '%' :: _ -> fail (`InvalidFormatString s)
     | _ :: tl -> helper tl acc_ty
   in
-  let* arg_ty = helper (String.to_list s) out_ty in
+  let* arg_ty = helper (List.rev (String.to_list s)) out_ty in
   let ty = format3_typ ~arg_ty ~out_ty ~dest_ty in
   let expr = TFormat (s, ty) in
   return (ty, expr)
@@ -870,7 +870,11 @@ let infer env table expr =
 let ( @-> ) = tarrow
 
 let start_env =
-  let cmp_scheme = Scheme.make_mono (tarrow int_typ (tarrow int_typ bool_typ)) in
+  let cmp_scheme =
+    scheme
+      (Var_set.of_list [ -1 ])
+      (tarrow (tv (-1) ~level:(-1)) (tarrow (tv (-1) ~level:(-1)) bool_typ))
+  in
   let int_arith_scheme = Scheme.make_mono (tarrow int_typ (tarrow int_typ int_typ)) in
   let bool_arith_scheme = Scheme.make_mono (tarrow bool_typ (tarrow bool_typ bool_typ)) in
   let extend_s ?(kind = User) varname =

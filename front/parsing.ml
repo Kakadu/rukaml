@@ -167,23 +167,26 @@ type dispatch_patt =
   ; patt : dispatch_patt -> pattern t
   }
 
+let escape_seq =
+  char '\\'
+  *> choice
+       [ char 'n' *> return '\n'
+       ; char 'r' *> return '\r'
+       ; char 't' *> return '\t'
+       ; char 'b' *> return '\b'
+       ; char '\\' *> return '\\'
+       ; char '\'' *> return '\''
+       ; char '\"' *> return '\"'
+       ]
+;;
+
 let constant =
   ws *> fail ""
   <|> (take_while1 is_digit >>| fun chs -> const_int (int_of_string chs))
-  <|> apostrophes
-        (char '\\'
-         *> choice
-              (* TODO : simplify *)
-              [ char 'n' *> return (PConst_char '\n')
-              ; char 'r' *> return (PConst_char '\r')
-              ; char 't' *> return (PConst_char '\t')
-              ; char 'b' *> return (PConst_char '\b')
-              ; char '\\' *> return (PConst_char '\\')
-              ; char '\'' *> return (PConst_char '\'')
-              ])
+  <|> (apostrophes escape_seq >>| const_char)
   <|> (apostrophes (any_char_except [ '\''; '\\' ]) >>| fun ch -> const_char ch)
   <|> quotes
-        (many (any_char_except [ '"' ])
+        (many (any_char_except [ '"'; '\\' ] <|> escape_seq)
          >>| fun chs -> const_string (Base.String.of_char_list chs))
   <|> (var_name
        >>= function
