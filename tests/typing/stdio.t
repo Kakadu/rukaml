@@ -28,13 +28,7 @@
   let u: unit =
     ((printf "%a") pp_print_string) "hello world"
 
-
-opens "in.txt" for read as in_channel;
-reads line from in_channel;
-closes in_channel;
-opens "out.txt" for write as out_channel;
-writes line to out_channel;
-closes out_channel.
+example:
   $ run << EOF
   > let main =
   >   let in_channel = open_in "in.txt" in
@@ -128,6 +122,42 @@ closes out_channel.
   let u: unit =
     (((fprintf stdout) "%a") pp_string) "one"
 
+# multiple specifiers
+  $ run << EOF
+  > let a = fprintf stdout "%a"
+  > let aa = fprintf stdout "%a %a"
+  > let aaa = fprintf stdout "%a %a %a"
+  let a: (out_channel -> '_5 -> unit) -> '_5 -> unit =
+    (fprintf stdout) "%a"
+  let aa: (out_channel -> '_6 -> unit) -> '_6 -> (out_channel -> '_5 -> unit) -> '_5 -> unit =
+    (fprintf stdout) "%a %a"
+  let aaa: (out_channel -> '_7 -> unit) -> '_7 -> (out_channel -> '_6 -> unit) -> '_6 -> (out_channel -> '_5 -> unit) -> '_5 -> unit =
+    (fprintf stdout) "%a %a %a"
+
+  $ run << EOF
+  > let pp_int oc n = fprintf oc "%d" n
+  > let pp_string oc s = fprintf oc "%s" s
+  > let u = fprintf stdout "%a %a %a %a %a" pp_int 1 pp_string "2" pp_int 3 pp_int 4 pp_string "5"
+  let pp_int: out_channel -> int -> unit =
+    fun oc n -> ((fprintf oc) "%d") n
+  let pp_string: out_channel -> string -> unit =
+    fun oc s -> ((fprintf oc) "%s") s
+  let u: unit =
+    (((((((((((fprintf stdout) "%a %a %a %a %a") pp_int) 1) pp_string) "2") pp_int) 3) pp_int) 4) pp_string) "5"
+
+  $ run << EOF
+  > let pp_str oc s = fprintf oc "%s" s
+  > let u = printf "%a %s" pp_str "hello" "world"
+  let pp_str: out_channel -> string -> unit =
+    fun oc s -> ((fprintf oc) "%s") s
+  let u: unit =
+    (((printf "%a %s") pp_str) "hello") "world"
+
+  $ run << EOF
+  > let u = printf "%d %s %b" 1 "one" true
+  let u: unit =
+    (((printf "%d %s %b") 1) "one") true
+
 # invalid input
 
 should fail
@@ -206,3 +236,25 @@ should fail
   >      | false -> "%s")
   infer error: unification failed on string and int
   [1]
+
+TODO:
+
+coerce strings to format under lambda abstraction
+  $ run << EOF
+  > let u = printf "%a" (fun oc () -> fprintf oc "hello") ()
+  infer error: unification failed on string and '_8, out_channel, unit format3
+  [1]
+
+  $ run << EOF
+  > let u = printf "%a" (fun oc s -> fprintf oc "%s" s) "world"
+  infer error: unification failed on string and '_10, out_channel, unit format3
+  [1]
+
+
+  $ run << EOF
+  > let pp_str oc s = fprintf oc "%s" s
+  > let u = printf "%a" pp_str "world"
+  let pp_str: out_channel -> string -> unit =
+    fun oc s -> ((fprintf oc) "%s") s
+  let u: unit =
+    ((printf "%a") pp_str) "world"
