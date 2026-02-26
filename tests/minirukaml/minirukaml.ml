@@ -1,18 +1,9 @@
 (* --- TODO --- *)
 
-let string_of_char_list s = Base.String.of_char_list s
-let rec math_pow b e = if e < 1 then 1 else b * math_pow b (e - 1)
+(* let string_of_char_list s = Base.String.of_char_list s
 let string_len s = String.length s
 let string_nth s n = s.[n]
-let is_digit ch = Char.code '0' <= Char.code ch && Char.code ch <= Char.code '9'
-let is_lowercase ch = Char.code 'a' <= Char.code ch && Char.code ch <= Char.code 'z'
-let is_uppercase ch = Char.code 'A' <= Char.code ch && Char.code ch <= Char.code 'Z'
-let int_of_digit ch = Char.code ch - Char.code '0'
-let string_of_int = string_of_int
-let string_concat = Base.String.concat ~sep:""
-let string_concat_sep sep = Base.String.concat ~sep
-let list_mem = List.mem
-let fprintf = Stdlib.Printf.fprintf
+*)
 
 (* ----- list primitives ----- *)
 
@@ -49,6 +40,12 @@ let rec list_iter f ls =
   | x :: xs ->
     let () = f x in
     list_iter f xs
+;;
+
+let rec list_mem eq x ls =
+  match ls with
+  | [] -> false
+  | y :: ys -> if eq x y then true else list_mem eq x ys
 ;;
 
 (* ---- AST ----- *)
@@ -109,10 +106,16 @@ let is_keyword s =
 
 (* ----- char primitives ----- *)
 
+let is_lowercase ch = char_code 'a' <= char_code ch && char_code ch <= char_code 'z'
+let is_uppercase ch = char_code 'A' <= char_code ch && char_code ch <= char_code 'Z'
+let is_digit ch = char_code '0' <= char_code ch && char_code ch <= char_code '9'
+let int_of_digit ch = char_code ch - char_code '0'
+
 let int_of_digits chs =
+  let rec pow b e = if e < 1 then 1 else b * pow b (e - 1) in
   let rez, _pos =
     list_fold_right
-      (fun digit (acc, pos) -> (acc + (math_pow 10 pos * int_of_digit digit), pos))
+      (fun digit (acc, pos) -> (acc + (pow 10 pos * int_of_digit digit), pos))
       chs
       (0, 1)
   in
@@ -585,3 +588,8 @@ let parse_expression s =
   | Prez_success (ast, _state) -> Ok ast
   | Prez_error err -> Error err
 ;;
+
+let fprintf = Stdlib.Printf.fprintf
+let a = fprintf stdout "%a"
+let aa = fprintf stdout "%a %a"
+let aaa = fprintf stdout "%a %a"
