@@ -77,8 +77,8 @@ let%expect_test " " =
     {|
     let mul5 x = repeat 5 (fun acc -> x) 0
     	~~[2 value bindings]~~>
-    let fresh_1
-                                                                    x acc =
+    let fresh_1 x
+                                                                    acc =
                                                                       x
     let mul5 x = repeat 5 (fresh_1 x) 0
        |}]
@@ -172,14 +172,14 @@ let%expect_test "unwrap as expression" =
   wrap aux_unwrap_demo;
   [%expect
     {|
-    let unwrap ls = let rec aux ls = match ls with
-                                       | Some (x) :: xs -> (aux xs)
-                                       | _ -> 0 in aux ls
-    ~~[2 value bindings]~~>
+    let unwrap ls = let rec aux ls = (match ls with
+                                        | (Some x) :: xs -> aux xs
+                                        | _ -> 0) in aux ls
+    	~~[2 value bindings]~~>
 
-    let rec aux ls = match ls with
-                       | Some (x) :: xs -> (aux xs)
-                       | _ -> 0
+    let rec aux ls = (match ls with
+                        | (Some x) :: xs -> aux xs
+                        | _ -> 0)
     let unwrap ls = aux ls
     |}]
 ;;
@@ -188,14 +188,14 @@ let%expect_test "unwrap as structure" =
   on_structure aux_unwrap_demo;
   [%expect
     {|
-    let unwrap ls = let rec aux ls = match ls with
-                                       | Some (x) :: xs -> (aux xs)
-                                       | _ -> 0 in aux ls
-    ~~[2 value bindings]~~>
+    let unwrap ls = let rec aux ls = (match ls with
+                                        | (Some x) :: xs -> aux xs
+                                        | _ -> 0) in aux ls
+    	~~[2 value bindings]~~>
 
-    let rec aux ls = match ls with
-                       | Some (x) :: xs -> (aux xs)
-                       | _ -> 0
+    let rec aux ls = (match ls with
+                        | (Some x) :: xs -> aux xs
+                        | _ -> 0)
     let unwrap ls = aux ls
     |}]
 ;;
