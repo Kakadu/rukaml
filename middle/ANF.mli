@@ -13,6 +13,10 @@ type imm_expr =
   | AConstruct of int * imm_expr list
   | AArray of imm_expr list
   | ALam of apat * expr
+  | AFormat of
+      { afmt_arity : int
+      ; afmt_str : string
+      }
 
 and c_expr =
   | CApp of imm_expr * imm_expr * imm_expr list

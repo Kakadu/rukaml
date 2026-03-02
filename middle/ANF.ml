@@ -32,6 +32,10 @@ type imm_expr =
   | AConstruct of int * imm_expr list
   | AArray of imm_expr list
   | ALam of apat * expr
+  | AFormat of
+      { afmt_arity : int
+      ; afmt_str : string
+      }
 
 (* TODO(Kakadu): array, lambda, constructor and tuple are not immediates *)
 and c_expr =
@@ -152,6 +156,7 @@ include struct
       fprintf ppf "@[(fun %a %a -> %a)@]" pp_apat arg1 pp_apat arg2 helper e
     | ALam (name, e) -> fprintf ppf "(fun %a -> %a)" pp_apat name helper e
     | AConst c -> Pprint.pp_const ppf c
+    | AFormat { afmt_arity = _; afmt_str = s } -> fprintf ppf "\"%s\"" s
     | APrimitive (s, _arity) -> fprintf ppf "%s" s
     | AVar s -> Ident.pp ppf s
     | ATuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
@@ -207,7 +212,7 @@ let used_once_as_function ~where name =
     | CAtom i -> helper_i i
   and helper_i = function
     | AVar id when Ident.equal id name -> incr used
-    | APrimitive _ | AUnit | AConst _ | AVar _ -> ()
+    | APrimitive _ | AUnit | AConst _ | AVar _ | AFormat _ -> ()
     | ALam (_, e) -> helper e
     | AArray xs -> List.iter helper_i xs
     | ATuple (a, b, cs) ->
@@ -247,7 +252,7 @@ let used_once_in_if ~where name =
     | CAtom i -> helper_i i
   and helper_i = function
     | AVar id when Ident.equal id name -> incr used
-    | APrimitive _ | AUnit | AConst _ | AVar _ -> ()
+    | APrimitive _ | AUnit | AConst _ | AVar _ | AFormat _ -> ()
     | ALam (_, e) -> helper e
     | AArray xs -> List.iter helper_i xs
     | ATuple (a, b, cs) ->
@@ -528,6 +533,13 @@ let anf =
   let rec helper e (k : imm_expr -> expr) =
     match e with
     | Typedtree.TConst n -> k @@ AConst n
+    | TFormat (s, ty) ->
+      let rec eval_arity (ty : Typedtree.ty) =
+        match ty.typ_desc with
+        | Typedtree.Arrow (_lty, rty) -> 1 + eval_arity rty
+        | _ -> 0
+      in
+      k @@ AFormat { afmt_arity = eval_arity ty; afmt_str = s }
     | TApp (TApp (TVar (varname, _, Builtin (bname, 2), _), arg1, _), arg2, _)
       when is_infix_binop varname ->
       helper arg1 (fun arg1 ->
@@ -704,7 +716,6 @@ let anf_vb vb : vb =
   vb.tvb_flag, name, anf_body
 ;;
 
-(* TODO : handle type_declarations here *)
 let anf_stru stru =
   let open Typedtree in
   let rec aux items acc =
