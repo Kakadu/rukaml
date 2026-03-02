@@ -22,7 +22,8 @@
   llvm.all_backends
   LL
   compile_lib
-  cconv)
+  cconv
+  zlib)
  (inline_tests)
  (flags
   (:standard -linkall))
