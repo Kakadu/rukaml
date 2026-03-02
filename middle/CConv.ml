@@ -331,14 +331,13 @@ let conv ?(standart_globals = standart_globals)
       let* case = conv_case case in
       let* cases = Base.List.fold ~f ~init:(return []) cases in
       return (ematch scrut case (List.rev cases))
-    | ELet (isrec, ((PUnit | PAny) as pat), rhs, wher) ->
+    | ELet (isrec, ((PUnit | PAny | PConst _) as pat), rhs, wher) ->
       (* TODO : is it correct ? *)
       log "ELet with pattern %a" Pprint.pp_pattern pat;
       let* rhs = helper globals rhs in
       let* body = helper globals wher in
       return (elet ~isrec pat rhs body)
-    | ELet (_, PConstruct _, _, _) | ELet (_, PConst _, _, _) ->
-      failwith "not implemented 3"
+    | ELet (_, PConstruct _, _, _) -> failwith "not implemented 3"
   and helper_list globals es =
     let* es =
       List.fold_left
@@ -366,7 +365,7 @@ let conv ?(standart_globals = standart_globals)
         []
     in
     List.rev_append saved [ is_rec, pat, rhs ] |> List.map simplify_vb
-  | is_rec, ((PUnit | PAny) as pat), root ->
+  | is_rec, ((PUnit | PAny | PConst _) as pat), root ->
     (* TODO : is it correct ?? *)
     log "%s %d, is_rec = %a, discard pattern" __FUNCTION__ __LINE__ pp_rec_flag is_rec;
     let saved, rhs = Monads.Store.run (helper standart_globals root) [] in
