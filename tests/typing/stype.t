@@ -6,6 +6,7 @@
   > type 'a box = | Box of 'a
   > 
   > let x = Box 1
+  > EOF
   type '_0 box =
     | Box of '_0
   let x: int box =
@@ -17,6 +18,7 @@
   > 
   > let x = Ok 1
   > let y = Error true
+  > EOF
   type ('_0, '_1) result =
     | Ok of '_0
     | Error of '_1
@@ -32,6 +34,7 @@
   > 
   > let x = Nil
   > let y = Cons (1, x)
+  > EOF
   type '_0 list =
     | Cons of '_0 * '_0 list
     | Nil
@@ -47,6 +50,7 @@
   > 
   > let a = Normal (fun x -> x > 0)
   > let b = Reversed (fun x -> x > 0)
+  > EOF
   type ('_0, '_1) arrows =
     | Normal of ('_0 -> '_1)
     | Reversed of ('_1 -> '_0)
@@ -63,6 +67,7 @@
   >   | Pair of 'a * 'a
   > 
   > let x = Pair ((1, 2), (3, 4))
+  > EOF
   type '_0 pair =
     | Pair of '_0 * '_0
   let x: (int * int) pair =
@@ -75,6 +80,7 @@
   > let x = Box (fun a -> a + 1)
   > 
   > let y = Box x
+  > EOF
   type '_0 box =
     | Box of '_0
   let fresh_1: int -> int =
@@ -94,6 +100,7 @@
   >   match x with
   >   | Pair (a, b) -> true
   >   | Triple (a, b, c) -> false
+  > EOF
   type '_0 prod =
     | Pair of '_0 * '_0
     | Triple of '_0 * '_0 * '_0
@@ -113,6 +120,7 @@
   >   match x with
   >   | Pair (a, b) -> a + b
   >   | Triple (a, b, c) -> a + b + c
+  > EOF
   type '_0 prod =
     | Pair of '_0 * '_0
     | Triple of '_0 * '_0 * '_0
@@ -128,6 +136,7 @@
   >   | Pair of 'a * 'a
   > 
   > let x = Pair (1, true)
+  > EOF
   infer error: unification failed on int and bool
   [1]
   $ run << EOF
@@ -135,6 +144,7 @@
   >   | Pair of 'a * 'a
   > 
   > let x = Pair (1, 2, 3)
+  > EOF
   infer error: constructor arity mistmatch: Pair
   [1]
 
@@ -146,6 +156,7 @@
   > let main =
   >   match Cons (true, Nil) with
   >   | Cons (x, y) -> x + 1
+  > EOF
   infer error: unification failed on int and bool
   [1]
 
@@ -156,6 +167,7 @@
   > let main =
   >   match (Box true) with
   >   | Box x -> x + 1
+  > EOF
   infer error: unification failed on int and bool
   [1]
 
@@ -166,6 +178,7 @@
   > let main =
   >   match Pair (1, 2) with
   >   | Pair (a, b, c) -> a + 1
+  > EOF
   infer error: unification failed on ('_4, '_4) and ('_4, '_4, '_5)
   [1]
 #
@@ -196,6 +209,7 @@
   >   | Cons (hd, tl) ->
   >     let tl = filter pred tl in
   >     if pred hd then tl else Cons (hd, tl)
+  > EOF
   type '_0 list =
     | Cons of '_0 * '_0 list
     | Nil
@@ -203,7 +217,7 @@
     fun f ls -> match ls with
                   | Nil -> Nil
                   | Cons (hd, tl) -> Cons (f hd, (map f) tl)
-  let rec fold: ('_2 -> '_4 -> '_2) -> '_2 -> '_4 list -> '_2 =
+  let rec fold: ('_2 -> '_4 -> '_11) -> '_2 -> '_4 list -> '_2 =
     fun f acc ls -> match ls with
                       | Nil -> acc
                       | Cons (hd, tl) -> ((fold f) ((f acc) hd)) tl
@@ -233,6 +247,7 @@
   >   match ls with
   >   | Cons (_, _) -> false
   >   | Nil -> true
+  > EOF
   type '_0 list =
     | Cons of '_0 * '_0 list
     | Nil
@@ -240,7 +255,7 @@
     fun ls acc -> match ls with
                     | Nil -> acc
                     | Cons (hd, tl) -> (aux tl) (Cons (hd, acc))
-  let rev: '_3 list -> '_3 list =
+  let rev: '_4 list -> '_4 list =
     fun ls -> (aux ls) Nil
   let is_empty: '_3 list -> bool =
     fun ls -> match ls with
@@ -263,6 +278,7 @@
   >   match ls with
   >   | Nil -> true
   >   | Cons (hd, tl) -> if pred hd then forall pred tl else false
+  > EOF
   type '_0 list =
     | Cons of '_0 * '_0 list
     | Nil
@@ -286,6 +302,7 @@
   >   match ls with
   >   | [] -> None
   >   | x :: xs -> if pred x then Some x else find pred xs
+  > EOF
   type '_0 option =
     | Some of '_0
     | None
@@ -305,6 +322,7 @@
   >   match ls with
   >   | [] -> None
   >   | x :: xs -> if pred x then Some x else find pred xs
+  > EOF
   type '_0 option =
     | Some of '_0
     | None
@@ -333,7 +351,7 @@
   >     | None :: _ -> None
   >     | Some x :: xs -> aux xs (x :: acc)
   >   in aux ls []
-  >  
+  > EOF
   type '_0 option =
     | Some of '_0
     | None
@@ -341,12 +359,12 @@
     fun ls -> match ls with
                 | [] -> []
                 | x :: xs -> (Some x) :: (wrap ls)
-  let rec aux: '_3 option list -> '_3 list -> '_3 list option =
+  let rec aux: '_6 option list -> '_6 list -> '_6 list option =
     fun ls acc -> match ls with
                     | [] -> Some acc
                     | None :: _ -> None
                     | Some x :: xs -> (aux xs) (x :: acc)
-  let unwrap: '_3 option list -> '_3 list option =
+  let unwrap: '_4 option list -> '_4 list option =
     fun ls -> (aux ls) []
 
 #

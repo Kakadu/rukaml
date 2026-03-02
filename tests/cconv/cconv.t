@@ -74,7 +74,7 @@ Polyvariadic map
   > let four = succ three
   > let temp = two (fun x -> x) (1,2)
   > EOF
-  let two f (a, b) = (f a, f b) let succ prev f (a, rest) = (f a, prev f rest)
+  let two f (a, b) = f a, f b let succ prev f (a, rest) = f a, prev f rest
   let three = succ two let four = succ three let fresh_1 x = x
   let temp = two fresh_1 (1, 2)
 

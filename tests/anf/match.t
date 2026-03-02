@@ -6,6 +6,7 @@
   > let main =
   >   match (1, 2) with
   >   | (x, y) -> x + y
+  > EOF
   let main =
     let temp2 = (1, 2) in
       let x = get_arg 0 temp2 in
@@ -17,13 +18,14 @@
   >   match (1, true) with
   >   | (1, true) -> true
   >   | (n, true) -> n = 1
+  > EOF
   let main =
     let temp2 = (1, true) in
       let temp7 = get_arg 0 temp2 in
         (if (temp7 = 1)
         then let temp8 = get_arg 1 temp2 in
                (if (temp8 = true)
-               then true
+               then 1
                else let n = get_arg 0 temp2 in
                       let temp5 = get_arg 1 temp2 in
                         (if (temp5 = true)
@@ -41,51 +43,54 @@
   >   match (1, true) with
   >   | (1, true) -> true
   >   | x -> false
+  > EOF
   let main =
     let temp2 = (1, true) in
       let temp3 = get_arg 0 temp2 in
         (if (temp3 = 1)
         then let temp4 = get_arg 1 temp2 in
                (if (temp4 = true)
-               then true
+               then 1
                else let x = temp2 in
-                      false)
+                      0)
         else let x = temp2 in
-               false)
+               0)
 
   $ run << EOF
   > let main =
   >   match (1, true) with
   >   | (1, true) -> true
   >   | _ -> false
+  > EOF
   let main =
     let temp2 = (1, true) in
       let temp3 = get_arg 0 temp2 in
         (if (temp3 = 1)
         then let temp4 = get_arg 1 temp2 in
                (if (temp4 = true)
-               then true
-               else false)
-        else false)
+               then 1
+               else 0)
+        else 0)
 
   $ run << EOF
   > let main =
   >   match (1, true) with
   >   | (1, true) -> true
   >   | (x, y) -> false
+  > EOF
   let main =
     let temp2 = (1, true) in
       let temp5 = get_arg 0 temp2 in
         (if (temp5 = 1)
         then let temp6 = get_arg 1 temp2 in
                (if (temp6 = true)
-               then true
+               then 1
                else let x = get_arg 0 temp2 in
                       let y = get_arg 1 temp2 in
-                        false)
+                        0)
         else let x = get_arg 0 temp2 in
                let y = get_arg 1 temp2 in
-                 false)
+                 0)
 #
 
 # non exhausive
@@ -94,22 +99,23 @@
   >   match (1, true) with
   >   | (1, true) -> true
   >   | (x, false) -> false
+  > EOF
   let main =
     let temp2 = (1, true) in
       let temp6 = get_arg 0 temp2 in
         (if (temp6 = 1)
         then let temp7 = get_arg 1 temp2 in
                (if (temp7 = true)
-               then true
+               then 1
                else let x = get_arg 0 temp2 in
                       let temp4 = get_arg 1 temp2 in
                         (if (temp4 = false)
-                        then false
+                        then 0
                         else match_failure))
         else let x = get_arg 0 temp2 in
                let temp4 = get_arg 1 temp2 in
                  (if (temp4 = false)
-                 then false
+                 then 0
                  else match_failure))
 
   $ run << EOF
@@ -117,22 +123,23 @@
   >   match (1, true) with
   >   | (1, true) -> true
   >   | (0, x) -> false
+  > EOF
   let main =
     let temp2 = (1, true) in
       let temp6 = get_arg 0 temp2 in
         (if (temp6 = 1)
         then let temp7 = get_arg 1 temp2 in
                (if (temp7 = true)
-               then true
+               then 1
                else let temp3 = get_arg 0 temp2 in
                       (if (temp3 = 0)
                       then let x = get_arg 1 temp2 in
-                             false
+                             0
                       else match_failure))
         else let temp3 = get_arg 0 temp2 in
                (if (temp3 = 0)
                then let x = get_arg 1 temp2 in
-                      false
+                      0
                else match_failure))
 
   $ run << EOF
@@ -140,25 +147,26 @@
   >   match (1, true) with
   >   | (1, true) -> true
   >   | (0, false) -> false
+  > EOF
   let main =
     let temp2 = (1, true) in
       let temp7 = get_arg 0 temp2 in
         (if (temp7 = 1)
         then let temp8 = get_arg 1 temp2 in
                (if (temp8 = true)
-               then true
+               then 1
                else let temp3 = get_arg 0 temp2 in
                       (if (temp3 = 0)
                       then let temp4 = get_arg 1 temp2 in
                              (if (temp4 = false)
-                             then false
+                             then 0
                              else match_failure)
                       else match_failure))
         else let temp3 = get_arg 0 temp2 in
                (if (temp3 = 0)
                then let temp4 = get_arg 1 temp2 in
                       (if (temp4 = false)
-                      then false
+                      then 0
                       else match_failure)
                else match_failure))
 #
@@ -171,6 +179,7 @@
   >   | 2 -> 2
   >   | _ -> 3
   >   | _ -> 4
+  > EOF
   let main =
     let temp1 = 1 in
       (if (temp1 = 1)
@@ -188,6 +197,7 @@
   >   | (_, y) -> 4
   >   | (_, _) -> 5
   >   | _ -> 6
+  > EOF
   let main =
     let temp2 = (1, 2) in
       let temp11 = get_arg 0 temp2 in
@@ -210,6 +220,7 @@
   >   | (n, true) -> 1
   >   | (1, b) -> 2
   >   | (n, b) -> 3
+  > EOF
   let main =
     let temp2 = (1, true) in
       let temp11 = get_arg 0 temp2 in
@@ -245,6 +256,7 @@
   >   match (1, true) with
   >   | (n, true) -> 0
   >   | (1, b) -> 1
+  > EOF
   let main =
     let temp2 = (1, true) in
       let n = get_arg 0 temp2 in
@@ -263,6 +275,7 @@
   >   | (1, true) -> 0
   >   | (n, true) -> 1
   >   | (1, b) -> 2
+  > EOF
   let main =
     let temp2 = (1, true) in
       let temp9 = get_arg 0 temp2 in
@@ -296,6 +309,7 @@
   >   | (n, true) -> 1
   >   | (1, b) -> 2
   >   | (n, b) -> 3
+  > EOF
   let main =
     let temp2 = (1, true) in
       let temp11 = get_arg 0 temp2 in
@@ -332,13 +346,14 @@
   >   | (1, true) -> true
   >   | (n1, true) -> n1 = 1
   >   | (n2, b) -> if b then n2 = 1 else false
+  > EOF
   let main =
     let temp2 = (1, true) in
       let temp11 = get_arg 0 temp2 in
         (if (temp11 = 1)
         then let temp12 = get_arg 1 temp2 in
                (if (temp12 = true)
-               then true
+               then 1
                else let n1 = get_arg 0 temp2 in
                       let temp9 = get_arg 1 temp2 in
                         (if (temp9 = true)
@@ -347,7 +362,7 @@
                                let b = get_arg 1 temp2 in
                                  (if b
                                  then (n2 = 1)
-                                 else false)))
+                                 else 0)))
         else let n1 = get_arg 0 temp2 in
                let temp9 = get_arg 1 temp2 in
                  (if (temp9 = true)
@@ -356,7 +371,7 @@
                         let b = get_arg 1 temp2 in
                           (if b
                           then (n2 = 1)
-                          else false)))
+                          else 0)))
 
 
   $ run << EOF
@@ -364,6 +379,7 @@
   >   match (1 :: [ 2 ]) with
   >   | [] -> 0
   >   | _ :: _ -> 1
+  > EOF
   let main =
     let temp1 = Constr_0 in
       let temp2 = (Constr_1 (2, temp1)) in
@@ -384,6 +400,7 @@
   >   | (true, false) -> 0
   >   | (true, true) -> 1
   >   | (false, true) -> 2
+  > EOF
   let main =
     let temp2 = (true, false) in
       let temp11 = get_arg 0 temp2 in
@@ -436,6 +453,7 @@
   >   | (x, false) -> 1
   >   | (true, x) -> 2
   >   | x -> 3
+  > EOF
   let main =
     let temp2 = (true, false) in
       let x = get_arg 0 temp2 in
@@ -456,6 +474,7 @@
   >   | (x, false) -> 1
   >   | (x, x) -> 2
   >   | _ -> 3
+  > EOF
   let main =
     let temp2 = (true, false) in
       let x = get_arg 0 temp2 in
@@ -474,6 +493,7 @@
   >   | (false, x) -> 2
   >   | (true, x) -> 3
   >   | _ -> 4
+  > EOF
   let main =
     let temp2 = (true, false) in
       let x = get_arg 0 temp2 in
@@ -495,6 +515,7 @@
   >   match [ true; false ] with
   >   | [] -> 0
   >   | _ -> 1
+  > EOF
   let main =
     let temp1 = Constr_0 in
       let temp2 = (Constr_1 (false, temp1)) in
@@ -511,6 +532,7 @@
   >   | [] -> 0
   >   | [ x ] -> 1
   >   | _ -> 2
+  > EOF
   let main =
     let temp1 = Constr_0 in
       let temp2 = (Constr_1 (false, temp1)) in
@@ -535,19 +557,21 @@
   >   match [ 1 ] with
   >   | [] -> true
   >   | _ -> false
+  > EOF
   let is_empty =
     let temp1 = Constr_0 in
       let temp3 = (Constr_1 (1, temp1)) in
         let temp4 = get_tag temp3  in
           (if (temp4 = 0)
-          then true
-          else false)
+          then 1
+          else 0)
 
   $ run << EOF
   > let main =
   >   match 1 with
   >   | 1 -> 1
   >   | 2 -> 2
+  > EOF
   let main =
     let temp1 = 1 in
       (if (temp1 = 1)
@@ -563,6 +587,7 @@
   >   | 1 -> 1
   >   | 2 -> 2
   >   | _ -> 3
+  > EOF
   let main =
     let temp1 = 1 in
       (if (temp1 = 1)
@@ -577,6 +602,7 @@
   >   match (3, 4) with
   >   | 1, 2 -> 5
   >   | 1, y -> 6
+  > EOF
   let main =
     let temp2 = (3, 4) in
       let temp6 = get_arg 0 temp2 in
