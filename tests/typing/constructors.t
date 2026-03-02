@@ -20,6 +20,7 @@ assert that int * int and (int * int) ARE equivalent
   $ infer << EOF
   > type t = int * int
   > type t = (int * int)
+  > EOF
   type t = int * int
     
   type t = int * int
@@ -50,6 +51,7 @@ should pass
   > let f x =
   >   match x with
   >   | Foo x -> x
+  > EOF
   type t =
     | Foo of (int * int * int)
     | Bar of int * int * int
@@ -66,6 +68,7 @@ should pass
   > let f x =
   >   match x with
   >   | Foo (a, b, c) -> a + b + c
+  > EOF
   type t =
     | Foo of (int * int * int)
     | Bar of int * int * int
@@ -82,6 +85,7 @@ should fail
   > let f x =
   >   match x with
   >   | Bar x -> x
+  > EOF
   infer error: constructor arity mistmatch: Bar
   [1]
 
@@ -95,6 +99,7 @@ should pass
   > let f x =
   >   match x with
   >   | Bar (a, b, c) -> a + b + c
+  > EOF
   type t =
     | Foo of (int * int * int)
     | Bar of int * int * int
