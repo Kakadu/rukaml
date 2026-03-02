@@ -19,6 +19,7 @@ type error =
   | `NoVariable of string
   | `UnificationFailed of ty * ty
   | `Only_varibles_on_the_left_of_letrec
+  | `Non_variable_pattern
   | `Unbound_constructor of string
   | `Type_arity_mismatch of string
   | `Type_param_duplicates of string
@@ -28,6 +29,7 @@ type error =
   | `Constructor_arity_mismatch of string
   | `Constructor_name_duplicates of string
   | `InvalidFormatString of string
+  | `Unification_Failed
   ]
 
 let pp_error ppf : error -> _ = function
@@ -38,6 +40,7 @@ let pp_error ppf : error -> _ = function
     Format.fprintf ppf "unification failed on %a and %a" Pprint.pp_typ l Pprint.pp_typ r
   | `Only_varibles_on_the_left_of_letrec ->
     Format.fprintf ppf "Only variables are allowed as left-hand side of `let rec'"
+  | `Non_variable_pattern -> Format.fprintf ppf "non-variable pattern in let binding"
   | `Unbound_constructor name -> Format.fprintf ppf "unbound constructror: %s" name
   | `Type_arity_mismatch name -> Format.fprintf ppf "type arity mismatch: %s" name
   | `Type_param_duplicates tyname ->
@@ -50,6 +53,7 @@ let pp_error ppf : error -> _ = function
   | `Constructor_name_duplicates name ->
     Format.fprintf ppf "constructor name duplicates in declaration of type %s" name
   | `InvalidFormatString fmt -> Format.fprintf ppf "\"%s\" is not a valid formatter" fmt
+  | `Unification_Failed -> Format.fprintf ppf "unification failed"
 ;;
 
 type fresh_counter = int
@@ -811,9 +815,8 @@ let infer env table expr =
       | ELet (Recursive, (PAny | PUnit | PConst _ | PTuple _ | PConstruct _), _, _) ->
         fail `Only_varibles_on_the_left_of_letrec
       | ELet (NonRecursive, lhs, rhs, wher) ->
-        let* env, lhs, lhs_ty = check_pat ~level:!current_level env table lhs in
+        let* env, lhs, _lhs_ty = check_pat ~level:0 env table lhs in
         let* rhs_ty, rhs = helper env (clean_state state) rhs in
-        let* () = unify table lhs_ty rhs_ty in
         let* twher, typed_wher = helper env state wher in
         let twher = elim table twher in
         return (twher, TLet (NonRecursive, lhs, Scheme.make_mono rhs_ty, rhs, typed_wher))
@@ -988,35 +991,45 @@ let w e =
   |> Result.map_error ~f:(function #error as x -> x)
 ;;
 
+let rec has_only_vars_in_tuple = function
+  | Parsetree.PVar _ -> true
+  | Parsetree.PAny -> true
+  | Parsetree.PUnit -> true
+  | Parsetree.PConst _ -> false
+  | Parsetree.PTuple (p1, p2, ps) ->
+    has_only_vars_in_tuple p1
+    && has_only_vars_in_tuple p2
+    && List.for_all ~f:has_only_vars_in_tuple ps
+  | Parsetree.PConstruct _ -> true
+;;
+
 let vb ?(env = start_env) table (flg, pat, body) : (_, [> error ]) Result.t =
+  let level = -1 in
   let comp =
     match flg, pat with
-    | Parsetree.NonRecursive, Parsetree.PVar name ->
-      let* v = fresh in
-      (* TODO: Why -1 is OK? *)
-      let tv = Typedtree.tv v ~level:(-1) in
-      let env = Type_env.extend_string name (S (Var_set.empty, tv)) env in
+    | Parsetree.NonRecursive, _ ->
+      let* env, tpat, _pat_ty = check_pat ~level:0 env table pat in
+      let* rhs_ty, typed_rhs = infer env table body in
+      return (env, rhs_ty, tpat, typed_rhs)
+    | Recursive, Parsetree.PVar name ->
+      let* binder = fresh in
+      let tv = Typedtree.tv binder ~level in
+      let env = Type_env.extend_string name (S (Var_set.singleton binder, tv)) env in
       let* ty, tbody = infer env table body in
       return (env, ty, Tpat_var (Type_env.ident_of_string name env), tbody)
-    | Recursive, PVar name ->
-      let* v = fresh in
-      let tv = Typedtree.tv v ~level:(-1) in
-      let env = Type_env.extend_string name (S (Var_set.empty, tv)) env in
-      let* ty, tbody = infer env table body in
-      let* () = unify table tv (type_of_expr tbody) in
-      return (env, ty, Tpat_var (Type_env.ident_of_string name env), tbody)
-    | Recursive, PTuple _ -> fail `Only_varibles_on_the_left_of_letrec
-    | NonRecursive, PTuple _ -> failwith "Not implemented"
-    | _ -> failwith "not implemented"
+    | Recursive, pat ->
+      if not (has_only_vars_in_tuple pat)
+      then fail `Non_variable_pattern
+      else fail `Only_varibles_on_the_left_of_letrec
   in
   run comp
   |> Result.map ~f:(fun (env, ty, tpat, body) ->
-    let vb = value_binding flg tpat body (generalize ~level:(-1) ty) in
-    let env : Type_env.t =
-      match pat, vb.Typedtree.tvb_pat with
-      | Parsetree.PVar varname, Tpat_var vident ->
-        Type_env.extend ~varname vident vb.Typedtree.tvb_typ env
-      | _ -> failwith "Not implemented"
+    let scheme = generalize ~level ty in
+    let vb = value_binding flg tpat body scheme in
+    let env =
+      match tpat with
+      | Typedtree.Tpat_var ident -> Type_env.extend_by_ident ident scheme env
+      | _ -> env
     in
     env, vb)
   |> Result.map_error ~f:(function #error as x -> x)
