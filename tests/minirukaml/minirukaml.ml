@@ -1,9 +1,11 @@
 (* --- TODO --- *)
 
-(* let string_of_char_list s = Base.String.of_char_list s
+let string_of_char_list s = Base.String.of_char_list s
 let string_len s = String.length s
 let string_nth s n = s.[n]
-*)
+let char_code = Char.code
+let fprintf, sprintf, printf = Stdlib.Printf.(fprintf, sprintf, printf)
+let adt_eq = Stdlib.( == )
 
 (* ----- list primitives ----- *)
 
@@ -172,7 +174,7 @@ let rec pp_pattern ctx oc patt =
   | Ppatt_var name -> fprintf oc "%s" name
   | Ppatt_const c -> pp_constant oc c
   | Ppatt_tuple (p1, p2, ps) ->
-    let pars = list_mem ctx [ Ctx_tuple; Ctx_fun_lhs ] in
+    let pars = list_mem adt_eq ctx [ Ctx_tuple; Ctx_fun_lhs ] in
     fprintf
       oc
       (if pars then "(%a)" else "%a")
@@ -195,7 +197,7 @@ let rec pp_expression ctx oc expr =
   | Pexpr_var name -> fprintf oc "%s" name
   | Pexpr_const const -> pp_constant oc const
   | Pexpr_binop (op, e1, e2) ->
-    let pars = list_mem ctx [ Ctx_binop; Ctx_app ] in
+    let pars = list_mem adt_eq ctx [ Ctx_binop; Ctx_app ] in
     fprintf
       oc
       (if pars then "(%a %s %a)" else "%a %s %a")
@@ -205,7 +207,7 @@ let rec pp_expression ctx oc expr =
       (pp_expression Ctx_binop)
       e2
   | Pexpr_ite (e1, e2, e3) ->
-    let pars = list_mem ctx [ Ctx_binop; Ctx_tuple; Ctx_app; Ctx_ite ] in
+    let pars = list_mem adt_eq ctx [ Ctx_binop; Ctx_tuple; Ctx_app; Ctx_ite ] in
     fprintf
       oc
       (if pars then "(if %a then %a else %a)" else "if %a then %a else %a")
@@ -216,14 +218,14 @@ let rec pp_expression ctx oc expr =
       (pp_expression Ctx_ite)
       e3
   | Pexpr_tuple (e1, e2, es) ->
-    let pars = list_mem ctx [ Ctx_binop; Ctx_tuple; Ctx_app ] in
+    let pars = list_mem adt_eq ctx [ Ctx_binop; Ctx_tuple; Ctx_app ] in
     fprintf
       oc
       (if pars then "(%a)" else "%a")
       (pp_tuple (pp_expression Ctx_tuple))
       (e1, e2, es)
   | Pexpr_fun (p, e) ->
-    let pars = list_mem ctx [ Ctx_binop; Ctx_tuple; Ctx_app ] in
+    let pars = list_mem adt_eq ctx [ Ctx_binop; Ctx_tuple; Ctx_app ] in
     fprintf
       oc
       (if pars then "(fun %a -> %a)" else "fun %a -> %a")
@@ -232,7 +234,7 @@ let rec pp_expression ctx oc expr =
       (pp_expression Ctx_fun_rhs)
       e
   | Pexpr_app (e1, e2) ->
-    let pars = list_mem ctx [ Ctx_app ] in
+    let pars = list_mem adt_eq ctx [ Ctx_app ] in
     fprintf
       oc
       (if pars then "(%a %a)" else "%a %a")
@@ -241,7 +243,9 @@ let rec pp_expression ctx oc expr =
       (pp_expression Ctx_app)
       e2
   | Pexpr_let (rec_flag, lhs, rhs, body) ->
-    let pars = list_mem ctx [ Ctx_binop; Ctx_tuple; Ctx_app; Ctx_ite; Ctx_let_rhs ] in
+    let pars =
+      list_mem adt_eq ctx [ Ctx_binop; Ctx_tuple; Ctx_app; Ctx_ite; Ctx_let_rhs ]
+    in
     fprintf
       oc
       (match (pars, rec_flag) with
@@ -588,8 +592,3 @@ let parse_expression s =
   | Prez_success (ast, _state) -> Ok ast
   | Prez_error err -> Error err
 ;;
-
-let fprintf = Stdlib.Printf.fprintf
-let a = fprintf stdout "%a"
-let aa = fprintf stdout "%a %a"
-let aaa = fprintf stdout "%a %a"
