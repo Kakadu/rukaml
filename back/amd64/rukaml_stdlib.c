@@ -709,6 +709,8 @@ void *rukaml_fprintf_wrap(int a0, int a1, int a2, int a3, int a4, int a5, void *
   return NULL;
 }
 
+// arity stands for amount of arguments which fprintf (or other format printer) expects after a format string
+// for example, arity for "123" is equal to 0, for "%a" is equal to 2, for "%a %s" is equal to 3
 uint64_t eval_fmt_arity(void **fmt)
 {
   if (fmt == NULL)
@@ -763,9 +765,18 @@ void *rukaml_alloc_printf_closure(int a0, int a1, int a2, int a3, int a4, int a5
     mk_err_fatal("unexpected null");
   }
 
-  uint64_t arity = 2 + eval_fmt_arity(fmt); // stdout and fmt cause + 2
+  uint64_t arity = eval_fmt_arity(fmt);
 
-  rukaml_closure *closure = rukaml_alloc_closure(rukaml_fprintf_wrap, arity);
+  if (arity == 0)
+  {
+    // TODO: either this is a minor cludge, or an edge case that needs to be handled explicitly
+    // for format strings without format specifiers, a closure is not created
+    // instead, the call is made immediately
+    // without explicit handling of this case, segfault occurs
+    return rukaml_fprintf_wrap(0, 0, 0, 0, 0, 0, stdout, fmt);
+  }
+
+  rukaml_closure *closure = rukaml_alloc_closure(rukaml_fprintf_wrap, 2 + arity);
 
   printf("<< closure after rukaml_alloc_closure: { argc = %ld, args_received = %ld } >>\n", closure->argsc, closure->args_received);
 
