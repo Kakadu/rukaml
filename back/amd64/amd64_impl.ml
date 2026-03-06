@@ -261,7 +261,14 @@ let generate_body is_toplevel ppf body =
       | AConst (PConst_bool true) -> pp_access 1
       | AConst (PConst_int n) -> pp_access ~doc:"constant" n
       | AConst (PConst_char c) -> pp_access ~doc:"constant" (Char.code c)
-      | AConst (PConst_string _) -> failwith "TODO : not implemented"
+      | AConst (PConst_string s) ->
+        printfn ppf "  mov rdi, %d" (String.length s);
+        printfn ppf "  call rukaml_alloc_array ; allocates string \"%s\"" s;
+        List.iteri
+          (fun j ch ->
+             printfn ppf "  mov qword [rax+8*%d], %d ; '%c'" j (Char.code ch) ch)
+          (Base.String.to_list s);
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar vname when Option.is_some (is_toplevel vname) ->
         (match is_toplevel vname with
          | Some arity ->
@@ -295,6 +302,17 @@ let generate_body is_toplevel ppf body =
       | AVar { Ident.hum_name = "stdin"; _ } ->
         printfn ppf "  call rukaml_array_stdin";
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar { Ident.hum_name = "stdout"; _ } ->
+        printfn ppf "  call rukaml_stdout";
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar { Ident.hum_name = "printf"; _ } ->
+        (* 1 stands for fmt here *)
+        emit_alloc_closure ppf (Ident.of_string "rukaml_printf_closure") 1;
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar { Ident.hum_name = "fprintf"; _ } ->
+        (* 2 stands for out_channel and fmt here *)
+        emit_alloc_closure ppf (Ident.of_string "rukaml_fprintf_closure") 2;
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar vname ->
         printfn
           ppf
@@ -309,7 +327,7 @@ let generate_body is_toplevel ppf body =
         emit_alloc_closure ppf (Ident.of_string "rukaml_print_int_kaml") parity;
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AConstruct _ -> assert false
-      | APrimitive _ as arg -> failwiths "Primitive %a is not supported" ANF.pp_a arg
+      | APrimitive _ -> assert false
       | ATuple _ -> assert false
       | AArray _ -> assert false);
     count + _stack_padding
@@ -357,6 +375,13 @@ let generate_body is_toplevel ppf body =
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
       printfn ppf "  call rukaml_array_stdin";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | CAtom (AVar f)
+    (* TODO(Kakadu): change to builtin *)
+      when f.Ident.hum_name = "stdout"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      printfn ppf "  call rukaml_stdout";
       printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (APrimitive ("print", 1), AVar arg, []) ->
       printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn arg;
@@ -414,6 +439,31 @@ let generate_body is_toplevel ppf body =
          Addr_of_local.remove_local name2;
          Addr_of_local.remove_local name1
        | _ -> failwith "Should not happen")
+    | CApp (AVar f, arg, [])
+      when f.Ident.hum_name = "printf"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg with
+       | AVar fmt when Addr_of_local.has_key fmt ->
+         printfn ppf "  sub rsp, 8*2 ; allocate space and padding for fmt";
+         printfn ppf "  mov qword [rsp], %a ; push fmt" Addr_of_local.pp_local_exn fmt;
+         printfn ppf "  call rukaml_alloc_printf_closure";
+         (* printfn ppf "  mov al, 0";
+         printfn ppf "  call rukaml_applyN"; *)
+         printfn ppf "  add rsp, 8*2 ; deallocate space and padding for fmt";
+         printfn ppf "  mov %a, rax" pp_dest dest
+       | AConst (PConst_string _) ->
+         helper_a (DReg "r11") arg;
+         printfn ppf "  sub rsp, 8*2 ; allocate space and padding for fmt";
+         printfn ppf "  mov qword [rsp], r11 ; push fmt (from r11)";
+         printfn ppf "  call rukaml_alloc_printf_closure";
+         (* printfn ppf "  mov al, 0";
+         printfn ppf "  call rukaml_applyN"; *)
+         printfn ppf "  add rsp, 8*2 ; deallocate space and padding for fmt";
+         printfn ppf "  mov %a, rax" pp_dest dest
+       | _ -> failwiths "Should not happen")
+    | CApp (AVar f, _, args) when f.hum_name = "fprintf" ->
+      failwiths "<< printf called with %d args >>@." (1 + List.length args)
     | CApp (AVar f, arg1, [])
     (* TODO(Kakadu): change to builtin *)
       when f.Ident.hum_name = "get"
@@ -482,6 +532,30 @@ let generate_body is_toplevel ppf body =
          printfn ppf "  mov %a, rax" pp_dest dest
        | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
+      when f.Ident.hum_name = "open_out"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar v when Addr_of_local.has_key v ->
+         let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+         let name2 = Ident.of_string @@ gen_name ~prefix:"open_out arg" () in
+         Addr_of_local.extend name1;
+         Addr_of_local.extend name2;
+         printfn ppf "  add rsp, -8*2";
+         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+         printfn ppf "  mov qword [rsp], r11";
+         printfn ppf "  call rukaml_open_out";
+         printfn ppf "  mov %a, rax" pp_dest dest;
+         printfn ppf "  add rsp, 8*2";
+         Addr_of_local.remove_local name2;
+         Addr_of_local.remove_local name1
+       | AConst (PConst_string _) ->
+         helper_a (DReg "r11") arg1;
+         printfn ppf "  mov qword [rsp], r11";
+         printfn ppf "  call rukaml_open_out";
+         printfn ppf "  mov %a, rax" pp_dest dest
+       | _ -> failwith "Should not happen")
+    | CApp (AVar f, arg1, [])
     (* TODO(Kakadu): change to builtin *)
       when f.Ident.hum_name = "print"
            && is_toplevel f = None
@@ -512,11 +586,7 @@ let generate_body is_toplevel ppf body =
          Addr_of_local.remove_local name2;
          Addr_of_local.remove_local name1;
          printfn ppf "  mov %a, rax" pp_dest dest
-       | AConst _ | AVar _ | APrimitive _ | AConstruct _
-       | ATuple (_, _, _)
-       | AArray _
-       | ALam (_, _)
-       | AUnit -> failwith "Should not happen")
+       | _ -> failwith "Should not happen")
     | CApp (APrimitive ("=", 2), AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
       if l = r
       then printfn ppf "  mov qword %a, 1" pp_dest dest
@@ -760,7 +830,7 @@ let generate_body is_toplevel ppf body =
       List.iteri
         (fun i x ->
            helper_a (DReg "rdi") x;
-           printfn ppf "  mov [rax+8*%d], rdi" i)
+           printfn ppf "  mov qword [rax+8*%d], rdi" i)
         args;
       printfn ppf "  mov %a, rax" pp_dest dest
     | ATuple (a, b, []) ->
@@ -778,8 +848,15 @@ let generate_body is_toplevel ppf body =
       List.iteri
         (fun i x ->
            helper_a (DReg "rdi") x;
-           printfn ppf "  mov [rax+8*%d], rdi" i)
+           printfn ppf "  mov qword [rax+8*%d], rdi" i)
         (List.rev r);
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | AConst (PConst_string s) ->
+      printfn ppf "  mov rdi, %d ; length of \"%s\"" (String.length s) s;
+      printfn ppf "  call rukaml_alloc_array ; allocates buffer for string \"%s\"" s;
+      List.iteri
+        (fun i ch -> printfn ppf "  mov qword [rax+8*%d], %d ; '%c'" i (Char.code ch) ch)
+        (Base.String.to_list s);
       printfn ppf "  mov %a, rax" pp_dest dest
     | atom ->
       printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
@@ -890,6 +967,11 @@ let codegen ?(wrap_main_into_start = true) anf file =
       ; "rukaml_gc_compact"
       ; "rukaml_gc_print_stats"
       ; "rukaml_print_alloc_closure_count"
+      ; "rukaml_open_out"
+      ; "rukaml_close_out"
+      ; "rukaml_alloc_printf_closure"
+      ; "rukaml_alloc_fprintf_closure"
+      ; "rukaml_stdout"
       ];
     printfn ppf "";
     if use_custom_main

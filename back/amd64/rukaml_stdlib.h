@@ -14,8 +14,18 @@ void rukaml_print_alloc_closure_count(void);
 void rukaml_print_int(int64_t);
 void rukaml_print_int_kaml(int, int, int, int, int, int, int64_t);
 
-uint64_t rukaml_array_length(int, int, int, int, int, int, void **arr);
 void **rukaml_array_stdin(void);
+void *rukaml_stdout(void);
+void *rukaml_open_out(int, int, int, int, int, int, void **);
+void rukaml_close_out(int, int, int, int, int, int, void *);
+void rukaml_printf(int, int, int, int, int, int, void **, ...);
+void rukaml_fprintf(int, int, int, int, int, int, void *, void **, ...);
+
+void *rukaml_alloc_printf_closure(int, int, int, int, int, int, void **fmt);
+void *rukaml_alloc_fprintf_closure(int, int, int, int, int, int, void *out_channel, void **fmt);
+
+uint64_t rukaml_array_length(int, int, int, int, int, int, void **arr);
+
 void *rukaml_array_get(int, int, int, int, int, int, void **arr,
                        uint64_t n);
 void rukaml_array_set(int, int, int, int, int, int, void **arr, uint64_t n,

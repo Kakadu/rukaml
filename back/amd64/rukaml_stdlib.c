@@ -384,6 +384,8 @@ typedef struct
 
 rukaml_closure *copy_closure(rukaml_closure *src)
 {
+  printf("<< copy closure called with { argsc = %ld, args_received = %ld } >>\n", src->argsc, src->args_received);
+
   size_t size = sizeof(rukaml_closure) + sizeof(void *) * src->argsc;
   rukaml_closure *dst = (rukaml_closure *)malloc(size);
 #ifdef DEBUG
@@ -558,4 +560,237 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
     }
   }
   return f_closure;
+}
+
+void __mk_err_fatal(const char *file, int line, const char *msg)
+{
+  fprintf(stderr, "[fatal] file=%s line=%d msg=\"%s\"\n", file, line, msg);
+  fflush(stderr);
+  exit(1);
+}
+
+void __mk_err_warning(const char *file, int line, const char *msg)
+{
+  fprintf(stderr, "[warning] file=%s line=%d msg=\"%s\"\n", file, line, msg);
+}
+
+#define mk_err_fatal(msg) __mk_err_fatal(__FILE__, __LINE__, msg)
+#define mk_err_warning(msg) __mk_err_warning(__FILE__, __LINE__, msg)
+
+#define rukaml_str_nth(str, n) (char)((uint64_t)(str[n]))
+
+void *
+rukaml_stdout(void)
+{
+  return (void *)stdout;
+}
+
+void *rukaml_open_out(int a0, int a1, int a2, int a3, int a4, int a5, void **path)
+{
+  size_t len = 0;
+  while (path[len++] != 0) // counts amount of symbols in path
+    ;
+
+  char *path_cstr = malloc(len + 1);
+  if (path_cstr == NULL)
+  {
+    mk_err_fatal("memory allocation failed");
+  }
+
+  for (size_t i = 0; i < len; i++) // copies path symbols to buffer
+  {
+    path_cstr[i] = (char)(uint64_t)path[i];
+  }
+
+  path_cstr[len] = '\0';
+
+  FILE *fp = fopen(path_cstr, "w");
+  free(path_cstr);
+
+  if (fp == NULL)
+  {
+    mk_err_fatal("fopen failed");
+  }
+
+  return (void *)fp;
+}
+
+void rukaml_close_out(int a0, int a1, int a2, int a3, int a4, int a5, void *channel)
+{
+  if (channel == NULL)
+  {
+    mk_err_warning("unexpected null");
+  }
+  else
+  {
+    fclose((FILE *)channel);
+  }
+}
+
+static void rukaml_fprintf_impl(FILE *dest, void **fmt, va_list args)
+{
+  for (size_t pos = 0; pos < SIZE(fmt); ++pos)
+  {
+    if (rukaml_str_nth(fmt, pos) != '%')
+    {
+      fputc(rukaml_str_nth(fmt, pos), dest);
+      continue;
+    }
+
+    pos++;
+
+    switch (rukaml_str_nth(fmt, pos))
+    {
+    case 'b':
+    {
+      int64_t v = va_arg(args, int64_t);
+      fprintf(dest, "%s", v ? "true" : "false");
+      break;
+    }
+    case 'c':
+    {
+      int64_t v = va_arg(args, int64_t);
+      fprintf(dest, "%c", (char)v);
+      break;
+    }
+    case 'd':
+    {
+      int64_t v = va_arg(args, int64_t);
+      fprintf(dest, "%ld", v);
+      break;
+    }
+    case 's':
+    {
+      void **str = va_arg(args, void **);
+      for (size_t n = 0; n < SIZE(str); ++n)
+      {
+        fputc(rukaml_str_nth(str, n), dest);
+      }
+      break;
+    }
+    case 'a':
+    {
+      void *formatter = va_arg(args, void *); // pp_item closure
+      void *value = va_arg(args, void *);     // item
+      rukaml_apply2(formatter, dest, value);  // applies pp_item to item
+      break;
+    }
+    case '%':
+    {
+      fputc('%', dest);
+      break;
+    }
+
+    default:
+    {
+      mk_err_fatal("invalid fmt");
+      break;
+    }
+    }
+  }
+}
+
+void *rukaml_fprintf_wrap(int a0, int a1, int a2, int a3, int a4, int a5, void *out_channel, void **fmt, ...)
+{
+  if (out_channel == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  va_list args;
+  va_start(args, fmt);
+  rukaml_fprintf_impl((FILE *)out_channel, fmt, args);
+  va_end(args);
+  return NULL;
+}
+
+uint64_t eval_fmt_arity(void **fmt)
+{
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+
+  uint64_t arity_cnt = 0;
+
+  for (size_t pos = 0; pos < SIZE(fmt) - 1; ++pos)
+  {
+    if (rukaml_str_nth(fmt, pos) != '%')
+    {
+      continue;
+    }
+
+    ++pos;
+
+    switch (rukaml_str_nth(fmt, pos))
+    {
+    case 'a':
+      arity_cnt += 2;
+      break;
+    case 'b':
+    case 'c':
+    case 'd':
+    case 's':
+    case 'x':
+      ++arity_cnt;
+      break;
+    case '%':
+      break;
+
+    default:
+      mk_err_fatal("invalid fmt");
+    }
+  }
+
+  if (rukaml_str_nth(fmt, SIZE(fmt) - 1) == '%')
+  {
+    mk_err_fatal("invalid fmt");
+  }
+
+  printf("<< eval_fmt_arity returned %zu >>\n", arity_cnt);
+  return arity_cnt;
+}
+
+void *rukaml_alloc_printf_closure(int a0, int a1, int a2, int a3, int a4, int a5, void **fmt)
+{
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+
+  uint64_t arity = 2 + eval_fmt_arity(fmt); // stdout and fmt cause + 2
+
+  rukaml_closure *closure = rukaml_alloc_closure(rukaml_fprintf_wrap, arity);
+
+  printf("<< closure after rukaml_alloc_closure: { argc = %ld, args_received = %ld } >>\n", closure->argsc, closure->args_received);
+
+  closure = rukaml_applyN(closure, 2, stdout, fmt);
+
+  printf("<< closure after rukaml_applyN: { argc = %ld, args_received = %ld } >>\n", closure->argsc, closure->args_received);
+
+  return closure;
+}
+
+void *rukaml_alloc_fprintf_closure(int a0, int a1, int a2, int a3, int a4, int a5, void *out_channel, void **fmt)
+{
+  if (out_channel == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+
+  uint64_t fprintf_arity = 2 + eval_fmt_arity(fmt); // out_channel and fmt cause + 2
+
+  void *closure = rukaml_alloc_closure(rukaml_fprintf_wrap, fprintf_arity);
+
+  return rukaml_applyN(closure, 2, out_channel, fmt);
 }
