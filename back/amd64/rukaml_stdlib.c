@@ -384,8 +384,6 @@ typedef struct
 
 rukaml_closure *copy_closure(rukaml_closure *src)
 {
-  printf("<< copy closure called with { argsc = %ld, args_received = %ld } >>\n", src->argsc, src->args_received);
-
   size_t size = sizeof(rukaml_closure) + sizeof(void *) * src->argsc;
   rukaml_closure *dst = (rukaml_closure *)malloc(size);
 #ifdef DEBUG
@@ -579,6 +577,19 @@ void __mk_err_warning(const char *file, int line, const char *msg)
 
 #define rukaml_str_nth(str, n) (char)((uint64_t)(str[n]))
 
+void __fprintf_rukaml_str(FILE *dest, void **str)
+{
+  if (str == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  for (size_t k = 0; k < SIZE(str); k++)
+  {
+    fputc(rukaml_str_nth(str, k), dest);
+  }
+}
+
 void *
 rukaml_stdout(void)
 {
@@ -670,9 +681,9 @@ static void rukaml_fprintf_impl(FILE *dest, void **fmt, va_list args)
     }
     case 'a':
     {
-      void *formatter = va_arg(args, void *); // pp_item closure
-      void *value = va_arg(args, void *);     // item
-      rukaml_apply2(formatter, dest, value);  // applies pp_item to item
+      void *pp_item_closure = va_arg(args, void *);
+      void *item = va_arg(args, void *);
+      rukaml_applyN(pp_item_closure, 2, dest, item);
       break;
     }
     case '%':
@@ -718,7 +729,7 @@ uint64_t eval_fmt_arity(void **fmt)
     mk_err_fatal("unexpected null");
   }
 
-  uint64_t arity_cnt = 0;
+  uint64_t arity_acc = 0;
 
   for (size_t pos = 0; pos < SIZE(fmt) - 1; ++pos)
   {
@@ -732,14 +743,14 @@ uint64_t eval_fmt_arity(void **fmt)
     switch (rukaml_str_nth(fmt, pos))
     {
     case 'a':
-      arity_cnt += 2;
+      arity_acc += 2;
       break;
     case 'b':
     case 'c':
     case 'd':
     case 's':
     case 'x':
-      ++arity_cnt;
+      ++arity_acc;
       break;
     case '%':
       break;
@@ -754,8 +765,7 @@ uint64_t eval_fmt_arity(void **fmt)
     mk_err_fatal("invalid fmt");
   }
 
-  printf("<< eval_fmt_arity returned %zu >>\n", arity_cnt);
-  return arity_cnt;
+  return arity_acc;
 }
 
 void *rukaml_alloc_printf_closure(int a0, int a1, int a2, int a3, int a4, int a5, void **fmt)
@@ -778,13 +788,7 @@ void *rukaml_alloc_printf_closure(int a0, int a1, int a2, int a3, int a4, int a5
 
   rukaml_closure *closure = rukaml_alloc_closure(rukaml_fprintf_wrap, 2 + arity);
 
-  printf("<< closure after rukaml_alloc_closure: { argc = %ld, args_received = %ld } >>\n", closure->argsc, closure->args_received);
-
-  closure = rukaml_applyN(closure, 2, stdout, fmt);
-
-  printf("<< closure after rukaml_applyN: { argc = %ld, args_received = %ld } >>\n", closure->argsc, closure->args_received);
-
-  return closure;
+  return rukaml_applyN(closure, 2, stdout, fmt);
 }
 
 void *rukaml_alloc_fprintf_closure(int a0, int a1, int a2, int a3, int a4, int a5, void *out_channel, void **fmt)
@@ -799,9 +803,18 @@ void *rukaml_alloc_fprintf_closure(int a0, int a1, int a2, int a3, int a4, int a
     mk_err_fatal("unexpected null");
   }
 
-  uint64_t fprintf_arity = 2 + eval_fmt_arity(fmt); // out_channel and fmt cause + 2
+  uint64_t arity = eval_fmt_arity(fmt);
 
-  void *closure = rukaml_alloc_closure(rukaml_fprintf_wrap, fprintf_arity);
+  if (arity == 0)
+  {
+    // TODO: either this is a minor cludge, or an edge case that needs to be handled explicitly
+    // for format strings without format specifiers, a closure is not created
+    // instead, the call is made immediately
+    // without explicit handling of this case, segfault occurs
+    return rukaml_fprintf_wrap(0, 0, 0, 0, 0, 0, out_channel, fmt);
+  }
+
+  void *closure = rukaml_alloc_closure(rukaml_fprintf_wrap, 2 + arity);
 
   return rukaml_applyN(closure, 2, out_channel, fmt);
 }

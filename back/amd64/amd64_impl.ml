@@ -303,6 +303,7 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  call rukaml_array_stdin";
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar { Ident.hum_name = "stdout"; _ } ->
+        Printf.printf "<< stdout >>@.";
         printfn ppf "  call rukaml_stdout";
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar { Ident.hum_name = "printf"; _ } ->
@@ -439,6 +440,35 @@ let generate_body is_toplevel ppf body =
          Addr_of_local.remove_local name2;
          Addr_of_local.remove_local name1
        | _ -> failwith "Should not happen")
+    | CApp (AVar f, arg1, [])
+    (* TODO(Kakadu): change to builtin *)
+      when f.Ident.hum_name = "fprintf"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (match arg1 with
+       | AVar arr when Addr_of_local.has_key arr ->
+         printfn ppf "  mov rdi, rukaml_alloc_fprintf_closure";
+         printfn ppf "  mov rsi, 2";
+         printfn ppf "  call rukaml_alloc_closure";
+         printfn ppf "  mov rdi, rax";
+         printfn ppf "  mov rsi, 1";
+         printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arr;
+         printfn ppf "  mov al, 0";
+         printfn ppf "  call rukaml_applyN";
+         printfn ppf "  mov %a, rax" pp_dest dest
+       | out_channel ->
+         helper_a (DReg "r11") out_channel;
+         printfn ppf "  mov rdi, rukaml_alloc_fprintf_closure";
+         printfn ppf "  mov rsi, 2";
+         printfn ppf "  call rukaml_alloc_closure";
+         printfn ppf "  mov rdi, rax";
+         printfn ppf "  mov rsi, 1";
+         (* TODO: > is abi OK here? *)
+         printfn ppf "  mov rdx, r11";
+         (* < *)
+         printfn ppf "  mov al, 0";
+         printfn ppf "  call rukaml_applyN";
+         printfn ppf "  mov %a, rax" pp_dest dest)
     | CApp (AVar f, arg, [])
       when f.Ident.hum_name = "printf"
            && is_toplevel f = None
@@ -804,6 +834,9 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov qword %a,  %d" pp_dest dest (Char.code c)
     | AVar ({ Ident.hum_name = "print"; _ } as v) when None = is_toplevel v ->
       alloc_closure ppf (Ident.of_string "rukaml_print_int") 1;
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | AVar ({ Ident.hum_name = "stdout"; _ } as v) when None = is_toplevel v ->
+      printfn ppf "  call rukaml_stdout";
       printfn ppf "  mov %a, rax" pp_dest dest
     | AVar vname ->
       (match is_toplevel vname with
