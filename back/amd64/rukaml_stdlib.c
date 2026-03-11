@@ -42,7 +42,7 @@ static uint64_t log_level = 0;
 
 #define MAX_STRING_FROM_STDIN (2 << 15)
 
-int HEAP_SIZE = 160;
+int HEAP_SIZE = 256 * 1024 * 1024; // 256 MiB
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
@@ -223,21 +223,16 @@ void rukaml_print_int_kaml(int a0, int a1, int a2, int a3, int a4, int a5, int64
   rukaml_print_int(x);
 }
 
-uint64_t rukaml_array_length(int a0, int a1, int a2, int a3, int a4, int a5, void **arr)
-{
-  return SIZE(arr);
-}
-
 void **rukaml_array_stdin(void)
 {
   char buf[MAX_STRING_FROM_STDIN];
   int code = scanf("%s", buf);
   if (!code)
   {
-    return rukaml_alloc_array(0);
+    return rukaml_alloc_block(0, Array_tag);
   }
   size_t size = strlen(buf);
-  void **arr = rukaml_alloc_array(size);
+  void **arr = rukaml_alloc_block(size, Array_tag);
 
   for (int i = 0; i < size; i++)
   {
@@ -261,14 +256,14 @@ void **rukaml_array_read_in(int a0, int a1, int a2, int a3, int a4, int a5,
   FILE *fp = fopen(path, "r");
   if (!fp)
   {
-    return rukaml_alloc_array(0);
+    return rukaml_alloc_block(0, Array_tag);
   }
 
   fseek(fp, 0, SEEK_END);
   size_t size = ftell(fp);
   fseek(fp, 0, SEEK_SET);
 
-  void **arr = rukaml_alloc_array(size);
+  void **arr = rukaml_alloc_block(size, Array_tag);
 
   for (int i = 0; i < size; i++)
   {
@@ -280,17 +275,20 @@ void **rukaml_array_read_in(int a0, int a1, int a2, int a3, int a4, int a5,
   return arr;
 }
 
-void *rukaml_array_get(int a0, int a1, int a2, int a3, int a4, int a5,
-                       void **arr, uint64_t n)
+void __mk_err_fatal(const char *file, int line, const char *msg)
 {
-  assert(TAG(arr) == Array_tag);
-  if (n >= SIZE(arr))
-  {
-    fprintf(stderr, "Index out of bounds");
-    exit(1);
-  }
-  return arr[n];
+  fprintf(stderr, "[fatal] file=%s line=%d msg=\"%s\"\n", file, line, msg);
+  fflush(stderr);
+  exit(1);
 }
+
+void __mk_err_warning(const char *file, int line, const char *msg)
+{
+  fprintf(stderr, "[warning] file=%s line=%d msg=\"%s\"\n", file, line, msg);
+}
+
+#define mk_err_fatal(msg) __mk_err_fatal(__FILE__, __LINE__, msg)
+#define mk_err_warning(msg) __mk_err_warning(__FILE__, __LINE__, msg)
 
 void rukaml_array_set(int a0, int a1, int a2, int a3, int a4, int a5,
                       void **arr, uint64_t n, void *a)
@@ -303,34 +301,6 @@ void rukaml_array_set(int a0, int a1, int a2, int a3, int a4, int a5,
   }
   arr[n] = a;
   return;
-}
-
-uint64_t rukaml_constructor_tag(int a0, int a1, int a2, int a3, int a4, int a5, void **constr)
-{
-  return TAG(constr);
-}
-
-uint64_t rukaml_constructor_arity(int a0, int a1, int a2, int a3, int a4, int a5, void **constr)
-{
-  return SIZE(constr);
-}
-
-void *rukaml_constructor_arg(int a0, int a1, int a2, int a3, int a4, int a5, uint64_t n, void **constr)
-{
-  if (n >= SIZE(constr))
-  {
-    fprintf(stderr, "Index out of arity");
-    exit(1);
-  }
-
-  return constr[n];
-}
-
-// TODO: add line and file information here
-void rukaml_match_failure()
-{
-  fprintf(stderr, "Match failure\n");
-  exit(1);
 }
 
 void *rukaml_apply0(fun0 f)
@@ -393,55 +363,20 @@ rukaml_closure *copy_closure(rukaml_closure *src)
   return memcpy(dst, src, size);
 }
 
-void *rukaml_alloc_pair(void *l, void *r)
-{
-  if (GC.allocated_words + 3 > HEAP_SIZE)
-  {
-    fprintf(stderr, "Not enough memory\n");
-    exit(1);
-  }
-  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
-  GC.allocated_words += 3;
-  GC.stats.gs_allocated_words += 3;
-  rez[0] = (uint64_t *)HEADER(2, Tuple_tag);
-  assert(TAG(rez + 1) == Tuple_tag);
-
-  (rez)[1] = l;
-  (rez)[2] = r;
-  logGC("A pair %lX created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
-  return rez + 1;
-}
-
-void *rukaml_alloc_array(int32_t size)
+void *rukaml_alloc_block(uint64_t size, uint64_t tag)
 {
   if (GC.allocated_words + size + 1 > HEAP_SIZE)
   {
-    fprintf(stderr, "Not enough memory\n");
-    exit(1);
+    mk_err_fatal("Not enough memory");
   }
   uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
   GC.allocated_words += size + 1;
   GC.stats.gs_allocated_words += size + 1;
-  rez[0] = (uint64_t *)HEADER(size, Array_tag);
-  assert(TAG(rez + 1) == Array_tag);
+  *rez = (uint64_t *)HEADER(size, tag);
   assert(SIZE(rez + 1) == size);
-  logGC("An array %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
-  return rez + 1;
-}
+  assert(TAG(rez + 1) == tag);
 
-void *rukaml_alloc_constructor(int32_t arity, int32_t tag)
-{
-  if (GC.allocated_words + arity + 1 > HEAP_SIZE)
-  {
-    fprintf(stderr, "Not enough memory\n");
-    exit(1);
-  }
-  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
-  GC.allocated_words += arity + 1;
-  GC.stats.gs_allocated_words += arity + 1;
-  rez[0] = (uint64_t *)HEADER(arity, tag);
-  assert(SIZE(rez + 1) == arity);
-  logGC("A constructor %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
+  logGC("A block %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
 
   return rez + 1;
 }
@@ -449,6 +384,31 @@ void *rukaml_alloc_constructor(int32_t arity, int32_t tag)
 void *rukaml_field(int n, void **r)
 {
   return r[n];
+}
+
+uint64_t rukaml_tag(void **obj)
+{
+  return TAG(obj);
+}
+
+uint64_t rukaml_size(void **obj)
+{
+  return SIZE(obj);
+}
+
+uint64_t rukaml_block_tag(int, int, int, int, int, int, void **obj)
+{
+  return TAG(obj);
+}
+
+uint64_t rukaml_block_size(int, int, int, int, int, int, void **obj)
+{
+  return SIZE(obj);
+}
+
+void *rukaml_block_nth(int, int, int, int, int, int, void **obj, uint64_t n)
+{
+  return obj[n];
 }
 
 /* int64_t myadd(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t a, int64_t b)
@@ -560,20 +520,10 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
   return f_closure;
 }
 
-void __mk_err_fatal(const char *file, int line, const char *msg)
+void rukaml_match_failure()
 {
-  fprintf(stderr, "[fatal] file=%s line=%d msg=\"%s\"\n", file, line, msg);
-  fflush(stderr);
-  exit(1);
+  mk_err_fatal("Match failure");
 }
-
-void __mk_err_warning(const char *file, int line, const char *msg)
-{
-  fprintf(stderr, "[warning] file=%s line=%d msg=\"%s\"\n", file, line, msg);
-}
-
-#define mk_err_fatal(msg) __mk_err_fatal(__FILE__, __LINE__, msg)
-#define mk_err_warning(msg) __mk_err_warning(__FILE__, __LINE__, msg)
 
 #define rukaml_str_nth(str, n) (char)((uint64_t)(str[n]))
 
@@ -650,6 +600,11 @@ static void rukaml_fprintf_impl(FILE *dest, void **fmt, va_list args)
 
     pos++;
 
+    if (pos >= SIZE(fmt))
+    {
+      mk_err_fatal("invalid fmt");
+    }
+
     switch (rukaml_str_nth(fmt, pos))
     {
     case 'b':
@@ -673,10 +628,7 @@ static void rukaml_fprintf_impl(FILE *dest, void **fmt, va_list args)
     case 's':
     {
       void **str = va_arg(args, void **);
-      for (size_t n = 0; n < SIZE(str); ++n)
-      {
-        fputc(rukaml_str_nth(str, n), dest);
-      }
+      __fprintf_rukaml_str(dest, str);
       break;
     }
     case 'a':

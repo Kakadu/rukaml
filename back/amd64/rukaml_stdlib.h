@@ -18,23 +18,20 @@ void **rukaml_array_stdin(void);
 void *rukaml_stdout(void);
 void *rukaml_open_out(int, int, int, int, int, int, void **);
 void rukaml_close_out(int, int, int, int, int, int, void *);
-void rukaml_printf(int, int, int, int, int, int, void **, ...);
-void rukaml_fprintf(int, int, int, int, int, int, void *, void **, ...);
 
 void *rukaml_alloc_printf_closure(int, int, int, int, int, int, void **fmt);
 void *rukaml_alloc_fprintf_closure(int, int, int, int, int, int, void *out_channel, void **fmt);
 
-uint64_t rukaml_array_length(int, int, int, int, int, int, void **arr);
+void *rukaml_alloc_block(uint64_t size, uint64_t tag);
+uint64_t rukaml_block_size(int, int, int, int, int, int, void **obj);
+uint64_t rukaml_block_tag(int, int, int, int, int, int, void **obj);
 
-void *rukaml_array_get(int, int, int, int, int, int, void **arr,
+void *rukaml_block_nth(int, int, int, int, int, int, void **obj,
                        uint64_t n);
 void rukaml_array_set(int, int, int, int, int, int, void **arr, uint64_t n,
                       void *a);
 
-uint64_t rukaml_constructor_tag(int, int, int, int, int, int, void **constr);
-uint64_t rukaml_constructor_arity(int, int, int, int, int, int, void **constr);
 void rukaml_match_failure();
-void *rukaml_constructor_arg(int, int, int, int, int, int, uint64_t n, void **constr);
 
 typedef void *(*fun0)(void);
 typedef void *(*fun1)(void *);
@@ -55,11 +52,10 @@ void *rukaml_apply1(fun7 foo, void *arg1);
 void *rukaml_apply2(fun8 f, void *arg1, void *arg2);
 
 void *rukaml_alloc_pair(void *l, void *r);
-void *rukaml_alloc_array(int32_t size);
 
 void *rukaml_field(int n, void **r);
+uint64_t rukaml_tag(void **obj);
 void *rukaml_alloc_closure(void *func, int32_t argsc);
-void *rukaml_alloc_constructor(int32_t arity, int32_t tag);
 
 void *rukaml_applyN(void *f, int64_t argc, ...);
 
