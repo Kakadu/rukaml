@@ -106,7 +106,9 @@ let start_glob_envs =
       |> extend "+"
       |> extend "-"
       |> extend "*"
-      |> extend "/") )
+      |> extend "/"
+      |> extend "&&"
+      |> extend "||") )
 ;;
 
 let upd id k counts no_refs ref_once =

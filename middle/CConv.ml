@@ -157,7 +157,11 @@ let gensym =
     Format.sprintf "%s_%d" prefix !last
 ;;
 
-let standart_globals = String_set.of_list [ "+"; "="; "<"; "*"; "-" ]
+let standart_globals =
+  String_set.of_list
+    [ "+"; "="; "<"; "*"; "-"; "printf"; "fprintf"; "sprintf"; "stdin"; "stdout" ]
+;;
+
 let elams = List.fold_right Parsetree.elam
 
 (** Returns [Some ] when there are arguments coming from closure *)
