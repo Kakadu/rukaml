@@ -32,10 +32,6 @@ type imm_expr =
   | AConstruct of int * imm_expr list
   | AArray of imm_expr list
   | ALam of apat * expr
-  | AFormat of
-      { afmt_arity : int
-      ; afmt_str : string
-      }
 
 (* TODO(Kakadu): array, lambda, constructor and tuple are not immediates *)
 and c_expr =
@@ -73,7 +69,7 @@ let group_abstractions =
 [@@@ocaml.warnerror "-11"]
 
 let is_infix_binop = function
-  | "=" | "+" | "-" | "*" | "/" | "<" | "<=" | ">" | ">=" -> true
+  | "=" | "+" | "-" | "*" | "/" | "<" | "<=" | ">" | ">=" | "&&" | "||" -> true
   | _ -> false
 ;;
 
@@ -156,7 +152,6 @@ include struct
       fprintf ppf "@[(fun %a %a -> %a)@]" pp_apat arg1 pp_apat arg2 helper e
     | ALam (name, e) -> fprintf ppf "(fun %a -> %a)" pp_apat name helper e
     | AConst c -> Pprint.pp_const ppf c
-    | AFormat { afmt_arity = _; afmt_str = s } -> fprintf ppf "\"%s\"" s
     | APrimitive (s, _arity) -> fprintf ppf "%s" s
     | AVar s -> Ident.pp ppf s
     | ATuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
@@ -212,7 +207,7 @@ let used_once_as_function ~where name =
     | CAtom i -> helper_i i
   and helper_i = function
     | AVar id when Ident.equal id name -> incr used
-    | APrimitive _ | AUnit | AConst _ | AVar _ | AFormat _ -> ()
+    | APrimitive _ | AUnit | AConst _ | AVar _ -> ()
     | ALam (_, e) -> helper e
     | AArray xs -> List.iter helper_i xs
     | ATuple (a, b, cs) ->
@@ -252,7 +247,7 @@ let used_once_in_if ~where name =
     | CAtom i -> helper_i i
   and helper_i = function
     | AVar id when Ident.equal id name -> incr used
-    | APrimitive _ | AUnit | AConst _ | AVar _ | AFormat _ -> ()
+    | APrimitive _ | AUnit | AConst _ | AVar _ -> ()
     | ALam (_, e) -> helper e
     | AArray xs -> List.iter helper_i xs
     | ATuple (a, b, cs) ->
@@ -533,13 +528,7 @@ let anf =
   let rec helper e (k : imm_expr -> expr) =
     match e with
     | Typedtree.TConst n -> k @@ AConst n
-    | TFormat (s, ty) ->
-      let rec eval_arity (ty : Typedtree.ty) =
-        match ty.typ_desc with
-        | Typedtree.Arrow (_lty, rty) -> 1 + eval_arity rty
-        | _ -> 0
-      in
-      k @@ AFormat { afmt_arity = eval_arity ty; afmt_str = s }
+    | TFormat (s, _ty) -> k @@ AConst (PConst_string s)
     | TApp (TApp (TVar (varname, _, Builtin (bname, 2), _), arg1, _), arg2, _)
       when is_infix_binop varname ->
       helper arg1 (fun arg1 ->
@@ -606,11 +595,18 @@ let anf =
     | TVar (_, name, User, _) -> k (AVar name)
     | TVar (_, _, Builtin (_name, _arity), _) -> k (APrimitive (_name, _arity))
     | TUnit -> k AUnit
-    | TTuple (ea, eb, [], _) ->
+    | TTuple (ea, eb, es, _) ->
       helper ea (fun aimm ->
         helper eb (fun bimm ->
-          let name = gensym_id () in
-          make_let_nonrec name (CAtom (ATuple (aimm, bimm, []))) (k (AVar name))))
+          let rec helper_fold es imms =
+            match es with
+            | hd :: tl -> helper hd (fun imm -> helper_fold tl (imm :: imms))
+            | [] ->
+              let name = gensym_id () in
+              let atuple = ATuple (aimm, bimm, List.rev imms) in
+              make_let_nonrec name (CAtom atuple) (k (AVar name))
+          in
+          helper_fold es []))
     | TArray (xs, _) ->
       let name = gensym_id () in
       let rec helper_fold xs ys =
@@ -619,15 +615,6 @@ let anf =
         | [] -> make_let_nonrec name (CAtom (AArray ys)) (k (AVar name))
       in
       helper_fold xs []
-    | TTuple (_, _, _ :: _, _) as m ->
-      Format.eprintf "%a\n%!" Typedtree.pp_expr m;
-      Format.kasprintf
-        failwith
-        "Not implemented (%s %d); '%a'"
-        __FUNCTION__
-        __LINE__
-        Pprinttyped.pp_hum
-        m
     | TConstruct (ident, [], _) ->
       let name = gensym_id () in
       let rhs = CAtom (AConstruct (ident.id, [])) in
@@ -643,8 +630,8 @@ let anf =
       aux (args, [])
     (* converts TMatch into if-then-else *)
     | TMatch (scrutinee, (case1, cases), _) ->
-      let prim_field = APrimitive ("get_arg", 2) in
-      let prim_tag = APrimitive ("get_tag", 2) in
+      let prim_field = APrimitive ("block_field_imm", 2) in
+      let prim_tag = APrimitive ("block_tag_imm", 2) in
       let match_failure = APrimitive ("match_failure", 0) in
       let access n x = CApp (prim_field, AConst (PConst_int n), [ x ]) in
       let cmp a b = CApp (APrimitive ("=", 2), a, [ b ]) in
