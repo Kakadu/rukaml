@@ -262,12 +262,15 @@ let generate_body is_toplevel ppf body =
       | AConst (PConst_int n) -> pp_access ~doc:"constant" n
       | AConst (PConst_char c) -> pp_access ~doc:"constant" (Char.code c)
       | AConst (PConst_string s) ->
-        printfn ppf "  mov rdi, %d ; string length" (String.length s);
-        printfn ppf "  mov rsi, 255 ; string tag";
+        let payload_words_n = (String.length s + 7) / 8 in
+        (* +1 to store String.length s in the last word *)
+        printfn ppf "  mov rdi, %d ; size of block for string" (payload_words_n + 1);
+        printfn ppf "  mov rsi, 252 ; string tag";
         printfn ppf "  call rukaml_alloc_block";
         List.iteri
-          (fun j ch -> printfn ppf "  mov qword [rax+8*%d], %d" j (Char.code ch))
+          (fun i ch -> printfn ppf "  mov qword [rax+%d], %d" i (Char.code ch))
           (Base.String.to_list s);
+        printfn ppf "  mov qword [rax+8*%d], %d" payload_words_n (String.length s);
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar vname when Option.is_some (is_toplevel vname) ->
         (match is_toplevel vname with
@@ -469,6 +472,17 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  sub rsp, 8*2 ; space and padding for fmt";
       printfn ppf "  mov qword [rsp], r11 ; push fmt";
       printfn ppf "  call rukaml_alloc_printf_closure";
+      printfn ppf "  add rsp, 8*2 ; space and padding for fmt";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | CApp (AVar f, arg, [])
+      when f.Ident.hum_name = "sprintf"
+           && is_toplevel f = None
+           && not (Addr_of_local.has_key f) ->
+      (* TODO: rewrite it using DStackvar *)
+      helper_a (DReg "r11") arg;
+      printfn ppf "  sub rsp, 8*2 ; space and padding for fmt";
+      printfn ppf "  mov qword [rsp], r11 ; push fmt";
+      printfn ppf "  call rukaml_alloc_sprintf_closure";
       printfn ppf "  add rsp, 8*2 ; space and padding for fmt";
       printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (AVar f, arg1, [])
@@ -898,12 +912,15 @@ let generate_body is_toplevel ppf body =
         (List.rev r);
       printfn ppf "  mov %a, rax" pp_dest dest
     | AConst (PConst_string s) ->
-      printfn ppf "  mov rdi, %d ; string length" (String.length s);
-      printfn ppf "  mov rsi, 255 ; string tag";
+      let payload_words_n = (String.length s + 7) / 8 in
+      (* +1 to store String.length s in the last word *)
+      printfn ppf "  mov rdi, %d ; size of block for string" (payload_words_n + 1);
+      printfn ppf "  mov rsi, 252 ; string tag";
       printfn ppf "  call rukaml_alloc_block";
       List.iteri
-        (fun i ch -> printfn ppf "  mov qword [rax+8*%d], %d" i (Char.code ch))
+        (fun i ch -> printfn ppf "  mov qword [rax+%d], %d" i (Char.code ch))
         (Base.String.to_list s);
+      printfn ppf "  mov qword [rax+8*%d], %d" payload_words_n (String.length s);
       printfn ppf "  mov %a, rax" pp_dest dest
     | atom ->
       printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
@@ -1016,6 +1033,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
       ; "rukaml_close_out"
       ; "rukaml_alloc_printf_closure"
       ; "rukaml_alloc_fprintf_closure"
+      ; "rukaml_alloc_sprintf_closure"
       ; "rukaml_stdout"
       ; "rukaml_struct_equal"
       ];

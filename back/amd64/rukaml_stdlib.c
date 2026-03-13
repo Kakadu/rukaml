@@ -46,6 +46,7 @@ int HEAP_SIZE = 256 * 1024 * 1024; // 256 MiB
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
+const uint8_t String_tag = 252;
 
 struct gc_stats
 {
@@ -520,28 +521,82 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
   return f_closure;
 }
 
-void rukaml_match_failure()
-{
-  mk_err_fatal("Match failure");
-}
-
-#define rukaml_str_nth(str, n) (char)((uint64_t)(str[n]))
-
-void __fprintf_rukaml_str(FILE *dest, void **str)
+uint64_t rukaml_string_length(void **str)
 {
   if (str == NULL)
   {
     mk_err_fatal("unexpected null ptr");
   }
 
-  for (size_t k = 0; k < SIZE(str); k++)
+  if (TAG(str) != String_tag)
   {
-    fputc(rukaml_str_nth(str, k), dest);
+    mk_err_fatal("tag mismatch");
+  }
+
+  return (uint64_t)(str[SIZE(str) - 1]);
+}
+
+char rukaml_string_nth(void **str, uint64_t n)
+{
+  if (str == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(str) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  uint64_t str_len = rukaml_string_length(str);
+
+  if (n >= str_len)
+  {
+    mk_err_fatal("index out of bounds");
+  }
+
+  return ((char *)str)[n];
+}
+
+void rukaml_fprintf_string(FILE *dest, void **str)
+{
+  if (dest == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (str == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(str) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  uint64_t str_len = rukaml_string_length(str);
+
+  uint64_t n = fwrite((void *)(str), sizeof(char), str_len, dest);
+
+  if (n != str_len)
+  {
+    mk_err_warning("fwrite failed");
   }
 }
 
-void *
-rukaml_stdout(void)
+void rukaml_match_failure()
+{
+  fprintf(stderr, "Match failure");
+  exit(1);
+}
+
+void *rukaml_stderr(void)
+{
+  return (void *)stderr;
+}
+
+void *rukaml_stdout(void)
 {
   return (void *)stdout;
 }
@@ -590,23 +645,51 @@ void rukaml_close_out(int a0, int a1, int a2, int a3, int a4, int a5, void *chan
 
 static void rukaml_fprintf_impl(FILE *dest, void **fmt, va_list args)
 {
-  for (size_t pos = 0; pos < SIZE(fmt); ++pos)
+  if (dest == NULL)
   {
-    if (rukaml_str_nth(fmt, pos) != '%')
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(fmt) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  uint64_t fmt_len = rukaml_string_length(fmt);
+
+  for (size_t pos = 0; pos < fmt_len; ++pos)
+  {
+    char ch = rukaml_string_nth(fmt, pos);
+
+    if (ch != '%')
     {
-      fputc(rukaml_str_nth(fmt, pos), dest);
+      fputc(ch, dest);
       continue;
     }
 
     pos++;
 
-    if (pos >= SIZE(fmt))
+    if (pos >= fmt_len)
     {
       mk_err_fatal("invalid fmt");
     }
 
-    switch (rukaml_str_nth(fmt, pos))
+    ch = rukaml_string_nth(fmt, pos);
+
+    switch (ch)
     {
+    case 'a':
+    {
+      void *pp_item_closure = va_arg(args, void *);
+      void *item = va_arg(args, void *);
+      rukaml_applyN(pp_item_closure, 2, dest, item);
+      break;
+    }
     case 'b':
     {
       int64_t v = va_arg(args, int64_t);
@@ -628,16 +711,10 @@ static void rukaml_fprintf_impl(FILE *dest, void **fmt, va_list args)
     case 's':
     {
       void **str = va_arg(args, void **);
-      __fprintf_rukaml_str(dest, str);
+      rukaml_fprintf_string(dest, str);
       break;
     }
-    case 'a':
-    {
-      void *pp_item_closure = va_arg(args, void *);
-      void *item = va_arg(args, void *);
-      rukaml_applyN(pp_item_closure, 2, dest, item);
-      break;
-    }
+
     case '%':
     {
       fputc('%', dest);
@@ -665,6 +742,11 @@ void *rukaml_fprintf_wrap(int a0, int a1, int a2, int a3, int a4, int a5, void *
     mk_err_fatal("unexpected null ptr");
   }
 
+  if (TAG(fmt) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
   va_list args;
   va_start(args, fmt);
   rukaml_fprintf_impl((FILE *)out_channel, fmt, args);
@@ -681,18 +763,34 @@ uint64_t eval_fmt_arity(void **fmt)
     mk_err_fatal("unexpected null");
   }
 
+  if (TAG(fmt) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  uint64_t fmt_len = rukaml_string_length(fmt);
+
   uint64_t arity_acc = 0;
 
-  for (size_t pos = 0; pos < SIZE(fmt) - 1; ++pos)
+  for (size_t pos = 0; pos < fmt_len; ++pos)
   {
-    if (rukaml_str_nth(fmt, pos) != '%')
+    char ch = rukaml_string_nth(fmt, pos);
+
+    if (ch != '%')
     {
       continue;
     }
 
-    ++pos;
+    pos++;
 
-    switch (rukaml_str_nth(fmt, pos))
+    if (pos >= fmt_len)
+    {
+      mk_err_fatal("invalid fmt");
+    }
+
+    ch = rukaml_string_nth(fmt, pos);
+
+    switch (ch)
     {
     case 'a':
       arity_acc += 2;
@@ -702,7 +800,7 @@ uint64_t eval_fmt_arity(void **fmt)
     case 'd':
     case 's':
     case 'x':
-      ++arity_acc;
+      arity_acc++;
       break;
     case '%':
       break;
@@ -710,11 +808,6 @@ uint64_t eval_fmt_arity(void **fmt)
     default:
       mk_err_fatal("invalid fmt");
     }
-  }
-
-  if (rukaml_str_nth(fmt, SIZE(fmt) - 1) == '%')
-  {
-    mk_err_fatal("invalid fmt");
   }
 
   return arity_acc;
@@ -732,6 +825,11 @@ void *rukaml_alloc_fprintf_closure(int a0, int a1, int a2, int a3, int a4, int a
     mk_err_fatal("unexpected null");
   }
 
+  if (TAG(fmt) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
   uint64_t arity = eval_fmt_arity(fmt);
 
   if (arity == 0)
@@ -746,4 +844,78 @@ void *rukaml_alloc_fprintf_closure(int a0, int a1, int a2, int a3, int a4, int a
   void *closure = rukaml_alloc_closure(rukaml_fprintf_wrap, 2 + arity);
 
   return rukaml_applyN(closure, 2, out_channel, fmt);
+}
+
+void *rukaml_alloc_printf_closure(int a0, int a1, int a2, int a3, int a4, int a5, void **fmt)
+{
+  return rukaml_alloc_fprintf_closure(0, 0, 0, 0, 0, 0, stdout, fmt);
+}
+
+void *rukaml_sprintf_wrap(int a0, int a1, int a2, int a3, int a4, int a5, void **fmt, ...)
+{
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(fmt) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  FILE *tmp = tmpfile();
+
+  if (tmp == NULL)
+  {
+    mk_err_fatal("file creating error");
+  }
+
+  va_list args;
+  va_start(args, fmt);
+  rukaml_fprintf_impl(tmp, fmt, args);
+  va_end(args);
+
+  uint64_t bytes_n = ftell(tmp); // amount of bytes which fprintf_impl have stored to temp file
+  rewind(tmp);
+
+  uint64_t payload_words_n = (bytes_n + 7) / 8;                     // amount of (64-bits) words required to store bytes of string and pading
+  void **obj = rukaml_alloc_block(payload_words_n + 1, String_tag); // +1 stands for additional word at the end to store String.length
+  obj[payload_words_n] = (void *)bytes_n;                           // stores String.length
+
+  uint64_t n = fread((void *)obj, sizeof(char), bytes_n, tmp);
+
+  if (n != bytes_n)
+  {
+    mk_err_fatal("fread failed");
+  }
+
+  return obj;
+}
+
+void *rukaml_alloc_sprintf_closure(int a0, int a1, int a2, int a3, int a4, int a5, void **fmt)
+{
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+
+  if (TAG(fmt) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  uint64_t arity = eval_fmt_arity(fmt);
+
+  if (arity == 0)
+  {
+    // TODO: either this is a minor cludge, or an edge case that needs to be handled explicitly
+    // for format strings without format specifiers, a closure is not created
+    // instead, the call is made immediately
+    // without explicit handling of this case, segfault occurs
+    return rukaml_sprintf_wrap(0, 0, 0, 0, 0, 0, fmt);
+  }
+
+  void *closure = rukaml_alloc_closure(rukaml_sprintf_wrap, 1 + arity);
+
+  return rukaml_applyN(closure, 1, fmt);
 }

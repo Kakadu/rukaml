@@ -21,6 +21,7 @@ void rukaml_close_out(int, int, int, int, int, int, void *);
 
 void *rukaml_alloc_printf_closure(int, int, int, int, int, int, void **fmt);
 void *rukaml_alloc_fprintf_closure(int, int, int, int, int, int, void *out_channel, void **fmt);
+void *rukaml_alloc_sprintf_closure(int, int, int, int, int, int, void **fmt);
 
 void *rukaml_alloc_block(uint64_t size, uint64_t tag);
 uint64_t rukaml_block_size(int, int, int, int, int, int, void **obj);
