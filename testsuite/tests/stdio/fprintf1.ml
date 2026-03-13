@@ -1,7 +1,7 @@
 (*
 test
   (targets amd64)
-  (run (stdout "rukaml_print_int 1"))
+  (run (stdout "hello world!"))
 *)
 
 let main =

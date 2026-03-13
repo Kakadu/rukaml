@@ -1,9 +1,10 @@
-
 (*
-test
+   test
   (targets amd64)
-  (run (stdout "rukaml_print_int 1"))
+  (run (stdout "true 1 a foo"))
 *)
 
 let main =
-  let t = printf "%d" 42 in 0
+  let t = printf "%b %d %c %s" true 1 'a' "foo" in
+  0
+;;
