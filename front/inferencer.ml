@@ -632,6 +632,7 @@ let infer_format3_of_string ~level s =
     | 'a' :: '%' :: tl ->
       let* fresh = fresh_var ~level in
       helper tl (tarrow (tarrow dest_ty (tarrow fresh out_ty)) (tarrow fresh acc_ty))
+    | '%' :: '%' :: tl -> helper tl acc_ty
     | _ :: '%' :: _ -> fail (`InvalidFormatString s)
     | _ :: tl -> helper tl acc_ty
   in
