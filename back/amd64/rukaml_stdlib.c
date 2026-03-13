@@ -720,29 +720,6 @@ uint64_t eval_fmt_arity(void **fmt)
   return arity_acc;
 }
 
-void *rukaml_alloc_printf_closure(int a0, int a1, int a2, int a3, int a4, int a5, void **fmt)
-{
-  if (fmt == NULL)
-  {
-    mk_err_fatal("unexpected null");
-  }
-
-  uint64_t arity = eval_fmt_arity(fmt);
-
-  if (arity == 0)
-  {
-    // TODO: either this is a minor cludge, or an edge case that needs to be handled explicitly
-    // for format strings without format specifiers, a closure is not created
-    // instead, the call is made immediately
-    // without explicit handling of this case, segfault occurs
-    return rukaml_fprintf_wrap(0, 0, 0, 0, 0, 0, stdout, fmt);
-  }
-
-  rukaml_closure *closure = rukaml_alloc_closure(rukaml_fprintf_wrap, 2 + arity);
-
-  return rukaml_applyN(closure, 2, stdout, fmt);
-}
-
 void *rukaml_alloc_fprintf_closure(int a0, int a1, int a2, int a3, int a4, int a5, void *out_channel, void **fmt)
 {
   if (out_channel == NULL)

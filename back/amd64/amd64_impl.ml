@@ -311,6 +311,10 @@ let generate_body is_toplevel ppf body =
         (* 1 stands for fmt here *)
         emit_alloc_closure ppf (Ident.of_string "rukaml_printf_closure") 1;
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar { Ident.hum_name = "sprintf"; _ } ->
+        (* 1 stands for fmt here *)
+        emit_alloc_closure ppf (Ident.of_string "rukaml_sprintf_closure") 1;
+        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar { Ident.hum_name = "fprintf"; _ } ->
         (* 2 stands for out_channel and fmt here *)
         emit_alloc_closure ppf (Ident.of_string "rukaml_fprintf_closure") 2;
@@ -444,53 +448,29 @@ let generate_body is_toplevel ppf body =
       when f.Ident.hum_name = "fprintf"
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
-      (match arg1 with
-       | AVar arr when Addr_of_local.has_key arr ->
-         printfn ppf "  mov rdi, rukaml_alloc_fprintf_closure";
-         printfn ppf "  mov rsi, 2";
-         printfn ppf "  call rukaml_alloc_closure";
-         printfn ppf "  mov rdi, rax";
-         printfn ppf "  mov rsi, 1";
-         printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arr;
-         printfn ppf "  mov al, 0";
-         printfn ppf "  call rukaml_applyN";
-         printfn ppf "  mov %a, rax" pp_dest dest
-       | out_channel ->
-         helper_a (DReg "r11") out_channel;
-         printfn ppf "  mov rdi, rukaml_alloc_fprintf_closure";
-         printfn ppf "  mov rsi, 2";
-         printfn ppf "  call rukaml_alloc_closure";
-         printfn ppf "  mov rdi, rax";
-         printfn ppf "  mov rsi, 1";
-         (* TODO: > is abi OK here? *)
-         printfn ppf "  mov rdx, r11";
-         (* < *)
-         printfn ppf "  mov al, 0";
-         printfn ppf "  call rukaml_applyN";
-         printfn ppf "  mov %a, rax" pp_dest dest)
+      printfn ppf "  mov rdi, rukaml_alloc_fprintf_closure";
+      printfn ppf "  mov rsi, 2";
+      printfn ppf "  call rukaml_alloc_closure";
+      printfn ppf "  sub rsp, 8*2";
+      printfn ppf "  mov [rsp], rax";
+      helper_a (DReg "rdx") arg1;
+      printfn ppf "  mov rdi, [rsp]";
+      printfn ppf "  add rsp, 8*2";
+      printfn ppf "  mov rsi, 1";
+      printfn ppf "  mov al, 0";
+      printfn ppf "  call rukaml_applyN";
+      printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (AVar f, arg, [])
       when f.Ident.hum_name = "printf"
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
-      (match arg with
-       | AVar fmt when Addr_of_local.has_key fmt ->
-         printfn ppf "  sub rsp, 8*2 ; allocate space and padding for fmt";
-         printfn ppf "  mov qword [rsp], %a ; push fmt" Addr_of_local.pp_local_exn fmt;
-         printfn ppf "  call rukaml_alloc_printf_closure";
-         (* printfn ppf "  mov al, 0";
-         printfn ppf "  call rukaml_applyN"; *)
-         printfn ppf "  add rsp, 8*2 ; deallocate space and padding for fmt";
-         printfn ppf "  mov %a, rax" pp_dest dest
-       | AConst (PConst_string _) ->
-         helper_a (DReg "r11") arg;
-         printfn ppf "  sub rsp, 8*2 ; allocate space and padding for fmt";
-         printfn ppf "  mov qword [rsp], r11 ; push fmt (from r11)";
-         printfn ppf "  call rukaml_alloc_printf_closure";
-         (* printfn ppf "  mov al, 0";
-         printfn ppf "  call rukaml_applyN"; *)
-         printfn ppf "  add rsp, 8*2 ; deallocate space and padding for fmt";
-         printfn ppf "  mov %a, rax" pp_dest dest
-       | _ -> failwiths "Should not happen")
+      (* TODO: rewrite it using DStackvar *)
+      helper_a (DReg "r11") arg;
+      printfn ppf "  sub rsp, 8*2 ; space and padding for fmt";
+      printfn ppf "  mov qword [rsp], r11 ; push fmt";
+      printfn ppf "  call rukaml_alloc_printf_closure";
+      printfn ppf "  add rsp, 8*2 ; space and padding for fmt";
+      printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (AVar f, arg1, [])
     (* TODO(Kakadu): change to builtin *)
       when f.Ident.hum_name = "get"
@@ -874,12 +854,12 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  call rukaml_alloc_block";
       List.iteri
         (fun i x ->
-           (* IT DO REQUIRE SAVING rax BEFORE CALLING helper_a *)
-           printfn ppf "  sub rsp, 8";
+           (* TODO: rewrite using stack once *)
+           printfn ppf "  sub rsp, 8*2";
            printfn ppf "  mov qword [rsp], rax";
            helper_a (DReg "rdi") x;
-           printfn ppf "  mov qword [rsp], rax";
-           printfn ppf "  add rsp, 8";
+           printfn ppf "  mov rax, [rsp]";
+           printfn ppf "  add rsp, 8*2";
            printfn ppf "  mov qword [rax+8*%d], rdi" i)
         args;
       printfn ppf "  mov %a, rax" pp_dest dest
@@ -889,12 +869,12 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  call rukaml_alloc_block";
       List.iteri
         (fun i x ->
-           (* IT DO REQUIRE SAVING rax BEFORE CALLING helper_a *)
-           printfn ppf "  sub rsp, 8";
+           (* TODO: rewrite using stack once *)
+           printfn ppf "  sub rsp, 8*2";
            printfn ppf "  mov qword [rsp], rax";
            helper_a (DReg "rdi") x;
            printfn ppf "  mov rax, [rsp]";
-           printfn ppf "  add rsp, 8";
+           printfn ppf "  add rsp, 8*2";
            printfn ppf "  mov qword [rax+8*%d], rdi" i)
         (x1 :: x2 :: xs);
       printfn ppf "  mov %a, rax" pp_dest dest
@@ -908,11 +888,12 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  call rukaml_alloc_block";
       List.iteri
         (fun i x ->
-           printfn ppf "  sub rsp, 8";
+           (* TODO: rewrite using stack once *)
+           printfn ppf "  sub rsp, 8*2";
            printfn ppf "  mov qword [rsp], rax";
            helper_a (DReg "rdi") x;
-           printfn ppf "  mov qword [rsp], rax";
-           printfn ppf "  add rsp, 8";
+           printfn ppf "  mov rax, [rsp]";
+           printfn ppf "  add rsp, 8*2";
            printfn ppf "  mov qword [rax+8*%d], rdi" i)
         (List.rev r);
       printfn ppf "  mov %a, rax" pp_dest dest
