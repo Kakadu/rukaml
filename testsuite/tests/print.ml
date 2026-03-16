@@ -1,6 +1,6 @@
 (*
 test
-  (targets amd64)
+  (targets amd64 son)
   (run (stdout "rukaml_print_int 20"))
 *)
 
