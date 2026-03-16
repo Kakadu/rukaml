@@ -1,0 +1,3 @@
+[submodule "back/son/irml/ir"]
+	path = back/son/irml/ir
+	url = https://github.com/ns-58/son_c

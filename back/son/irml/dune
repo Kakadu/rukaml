@@ -1,0 +1,20 @@
+(data_only_dirs ir)
+
+(library
+ (name irml)
+ (modules bindings consts)
+ (libraries ctypes ctypes-foreign compile_lib)
+ (foreign_archives ir)
+ (c_library_flags -lm -ldl -lcapstone))
+
+(rule
+ (deps
+  (source_tree ir))
+ (targets libir.a)
+ (action
+  (no-infer
+   (progn
+    (chdir
+     ir
+     (run make all))
+    (copy ir/libir.a libir.a)))))
