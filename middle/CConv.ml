@@ -158,8 +158,11 @@ let gensym =
 ;;
 
 let standart_globals =
-  String_set.of_list
-    [ "+"; "="; "<"; "*"; "-"; "printf"; "fprintf"; "sprintf"; "stdin"; "stdout" ]
+  [ "+"; "="; "<"; "*"; "-" ]
+  @ [ "printf"; "fprintf"; "sprintf" ]
+  @ [ "stdin"; "stdout"; "open_in"; "open_out"; "close_in"; "close_out" ]
+  @ [ "input_all"; "input_char" ]
+  |> String_set.of_list
 ;;
 
 let elams = List.fold_right Parsetree.elam
