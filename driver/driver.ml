@@ -155,13 +155,17 @@ module Target = struct
     ; cps : bool
     ; caa : bool
     ; cconv : bool
+    ; ppx : bool
     }
 
   open Compiler
 
   (** Intermediate targets *)
   module Intermediate = struct
-    let parsetree (p : params) = parse p.text
+    let parsetree (p : params) =
+      parse (if p.ppx then Parsing.make_preprocessing_exn p.text else p.text)
+    ;;
+
     let cpstree p = (parsetree p) (if p.cps then cps ~caa:p.caa else ( |> ))
     let cconvtree p = (cpstree p) (if p.cconv then cconv else ( |> ))
     let typedtree table p = (cconvtree p) (infer table)
@@ -213,6 +217,7 @@ let () =
   let cps = ref false in
   let caa = ref false in
   let cconv = ref true in
+  let ppx = ref true in
   let open Stdlib.Arg in
   let args =
     [ "-o", Set_string out_path, " output file"
@@ -221,6 +226,7 @@ let () =
     ; "--cps", Set cps, " enable cps conversion"
     ; "--caa", Set caa, " enable call arity analysis"
     ; "--no-cconv", Clear cconv, " disable cconv"
+    ; "--no-ppx", Set ppx, " disable preprocessing"
     ]
   in
   parse args (fun s -> inp_path := Some s) "rukaml";
@@ -231,7 +237,8 @@ let () =
     | None -> In_channel.input_all stdin
   in
   let params =
-    Target.{ text; out_path = !out_path; cps = !cps; caa = !caa; cconv = !cconv }
+    Target.
+      { text; out_path = !out_path; cps = !cps; caa = !caa; cconv = !cconv; ppx = !ppx }
   in
   match Map.find (Target.targets Typedtree.empty_table) !target with
   | Some target -> target params

@@ -13,14 +13,7 @@ let log fmt =
 ;;
 
 let pp_list eta = Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf " ") eta
-let skip_ws = skip_while Base.Char.is_whitespace
-
-let skip_comments =
-  let scomment = string "(*" *> many_till any_char (string "*)") in
-  sep_by skip_ws scomment *> return ()
-;;
-
-let ws = skip_ws *> skip_comments *> skip_ws
+let ws = skip_while Base.Char.is_whitespace
 let failf fmt = Format.kasprintf fail fmt
 
 let trace_pos msg =
@@ -568,7 +561,7 @@ let type_declaration =
 ;;
 
 let value_binding = letdef (pack.expr pack) <* ws
-let skip_separator = option () (char ';' *> char ';' *> return ())
+let skip_separator = option () (ws *> string ";;" *> return ())
 
 let structure =
   many1
@@ -581,6 +574,26 @@ let structure =
 let parse_structure str =
   parse_string ~consume:All (structure <* ws <* end_of_input) str
   |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
+;;
+
+(** TODO: make preprocessing more flexible (and maybe move it to separated module) *)
+
+let preprocessing =
+  let comment p = string "(*" *> ws *> p <* ws <* string "*)" in
+  let rule_skip =
+    let* _ = comment (string "[begin skip]") in
+    let* _ = many_till any_char (comment (string "[end skip]")) in
+    return ()
+  in
+  let rule_default = string "(*" *> many_till any_char (string "*)") *> return () in
+  let any_rule = rule_skip <|> rule_default <|> return () in
+  many_till (any_rule *> any_char) end_of_input >>| Base.String.of_list
+;;
+
+let make_preprocessing_exn str =
+  match parse_string ~consume:All preprocessing str with
+  | Error err -> failwith (Format.sprintf "preprocessing error: %s" err)
+  | Ok s -> s
 ;;
 
 (** {1} Testing stuff *)
