@@ -977,6 +977,9 @@ let start_env =
   |> extend_s
        "string_nth"
        (Scheme.make_mono (tarrow int_typ (tarrow string_typ char_typ)))
+  |> extend_s
+       "string_of_char_list"
+       (Scheme.make_mono (tarrow (list_typ char_typ) string_typ))
   (* GC stuff *)
   |> extend_s "gc_compact" (Scheme.make_mono (tarrow unit_typ unit_typ))
   |> extend_s "gc_stats" (Scheme.make_mono (tarrow unit_typ unit_typ))
@@ -1061,10 +1064,39 @@ let rec infer_core_type (env : Type_env.t) param_map = function
     <*> infer_core_type env param_map a
     <*> infer_core_type env param_map b
     <*> fold_infer_core_type env param_map xs
-  | Ptyp_constr (name, args) ->
+  (* | Ptyp_constr (name, args) ->
     let* () = check_constr_arity env name args in
     let* tys = fold_infer_core_type env param_map args in
-    return (tconstr tys name)
+    return (tconstr tys name) *)
+  | Ptyp_constr (name, args) ->
+    (* TODO: it is not OCaml typing actually. it loses nominal types for aliases here. *)
+    (match Ident.Ident_map.find_by_string_opt name env.env_types with
+     | None -> fail (`Unbound_type name)
+     | Some type_decl when List.length args <> List.length type_decl.tty_params ->
+       fail (`Type_arity_mismatch name)
+     | Some type_decl ->
+       let* args_tys = fold_infer_core_type env param_map args in
+       (match type_decl.tty_manifest with
+        | None -> return (tconstr args_tys name)
+        | Some ty ->
+          (* expands aliases like [ type ('a, 'b) pair = 'a * 'b ] *)
+          let substitute ty formal_param exact_arg =
+            let rec helper ty =
+              match ty.typ_desc with
+              | V { binder; _ } when binder = formal_param -> exact_arg
+              | V _ as typ_desc -> { typ_desc }
+              | Weak _ -> failwith "TODO: idk what should happen here"
+              | Arrow (ty1, ty2) -> { typ_desc = Arrow (helper ty1, helper ty2) }
+              | TLink ty -> helper ty
+              | TProd (ty1, ty2, tys) ->
+                { typ_desc = TProd (helper ty1, helper ty2, List.map ~f:helper tys) }
+              | TConstr (args, name) ->
+                { typ_desc = TConstr (List.map ~f:helper args, name) }
+            in
+            helper ty
+          in
+          (* it will not raise because i compared arities above, but you can handle it explicitly if u want *)
+          return (List.fold2_exn type_decl.tty_params args_tys ~init:ty ~f:substitute)))
 
 and fold_infer_core_type (env : Type_env.t) param_map items =
   List.fold (List.rev items) ~init:(return []) ~f:(fun acc item ->

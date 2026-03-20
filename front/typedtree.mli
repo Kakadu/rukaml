@@ -55,6 +55,7 @@ val bool_typ : ty
 val unit_typ : ty
 val string_typ : ty
 val array_typ : ty -> ty
+val list_typ : ty -> ty
 val in_channel_typ : ty
 val out_channel_typ : ty
 val format3_typ : arg_ty:ty -> dest_ty:ty -> out_ty:ty -> ty
