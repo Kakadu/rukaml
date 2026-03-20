@@ -94,6 +94,8 @@ let list_take n xs =
 type dest =
   | DReg of string
   | DStack_var of Frontend.Ident.t
+    (* DStatic_var's are allocated in .bss and access to them is performed via labels *)
+  | DStatic_var of Frontend.Ident.t
 
 module Addr_of_local = struct
   let store : (Frontend.Ident.t, _) Hashtbl.t = Hashtbl.create 13
@@ -126,14 +128,7 @@ module Addr_of_local = struct
   let size = count
   let contains name = Hashtbl.mem store name
   let has_key = contains
-
-  let find_exn name =
-    match Hashtbl.find store name with
-    | v -> v
-    | exception Not_found ->
-      failwiths "Can't find location of a variable %a" Ident.pp name
-  ;;
-
+  let find_exn name = Hashtbl.find store name
   let lookup_exn = find_exn
 
   let add_arg ~argc i name =
@@ -163,9 +158,85 @@ module Addr_of_local = struct
   ;;
 end
 
+type toplevel =
+  | TopLevelConstant
+  | TopLevelFunction of { arity : int }
+  | IsNotTopLevel
+
+module Toplevels = struct
+  (* it is important to evaluate constants in order of declaration, so it stores them separately *)
+  let __constants : Ident.t Queue.t = Queue.create ()
+  let iter_constants f = Queue.iter f __constants
+  let store : (Ident.t, toplevel) Hashtbl.t = Hashtbl.create 13
+
+  let contains ident =
+    match Hashtbl.find_opt store ident with
+    | Some _ -> true
+    | None -> false
+  ;;
+
+  let has_key = contains
+  let is_toplevel = contains
+
+  let find ident =
+    match Hashtbl.find_opt store ident with
+    | Some x -> x
+    | None -> IsNotTopLevel
+  ;;
+
+  let find_label_exn (ident : Ident.t) =
+    if has_key ident then ident.hum_name else raise Not_found
+  ;;
+
+  let extend ident toplevel =
+    Hashtbl.add store ident toplevel;
+    match toplevel with
+    | TopLevelConstant -> Queue.add ident __constants
+    | _ -> ()
+  ;;
+
+  let pp_label_exn ppf ident =
+    let label = find_label_exn ident in
+    Format.fprintf ppf "%s" label
+  ;;
+
+  let pp_toplevel_exn ppf ident =
+    let label = find_label_exn ident in
+    Format.fprintf ppf "[%s]" label
+  ;;
+
+  let is_toplevel_constant ident =
+    match Hashtbl.find_opt store ident with
+    | Some TopLevelConstant -> true
+    | _ -> false
+  ;;
+
+  let is_toplevel_function ident =
+    match Hashtbl.find_opt store ident with
+    | Some (TopLevelFunction _) -> true
+    | _ -> false
+  ;;
+end
+
+module Addr_of_var = struct
+  (* TODO: Addr_of_var functions look for both top-level constants and local vars. In some cases we need to check only local ones using Addr_of_local. I'm not sure if it is truly correct for now. *)
+  let pp_var_exn ppf ident =
+    match Addr_of_local.pp_local_exn ppf ident with
+    | () -> log "Found local variable %s" ident.hum_name
+    | exception Not_found ->
+      (match Toplevels.pp_toplevel_exn ppf ident with
+       | () -> log "Found global variable %s" ident.hum_name
+       | exception Not_found ->
+         failwiths "Can't find location of a variable %s" ident.hum_name)
+  ;;
+
+  let has_key ident = Addr_of_local.has_key ident || Toplevels.has_key ident
+end
+
 let pp_dest ppf = function
   | DReg s -> fprintf ppf "%s" s
   | DStack_var name -> Addr_of_local.pp_local_exn ppf name
+  | DStatic_var name -> Toplevels.pp_toplevel_exn ppf name
 ;;
 
 let alloc_closure ppf name arity =
@@ -232,9 +303,8 @@ let list_iter_revindex ~f xs =
   List.iteri (fun n x -> f (l - n - 1) x) xs
 ;;
 
-(**
-    Argument [is_toplevel] returns None or Some arity. *)
-let generate_body is_toplevel ppf body =
+let generate_body ppf body =
+  let is_toplevel = Toplevels.is_toplevel in
   let open Frontend.Parsetree in
   let allocate_args args =
     (* log "XXX %s: [ %a ]" __FUNCTION__
@@ -272,9 +342,9 @@ let generate_body is_toplevel ppf body =
           (Base.String.to_list s);
         printfn ppf "  mov qword [rax+8*%d], %d" payload_words_n (String.length s);
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
-      | AVar vname when Option.is_some (is_toplevel vname) ->
-        (match is_toplevel vname with
-         | Some arity ->
+      | AVar vname when is_toplevel vname ->
+        (match Toplevels.find vname with
+         | TopLevelFunction { arity } ->
            emit_alloc_closure ppf vname arity;
            printfn
              ppf
@@ -282,7 +352,10 @@ let generate_body is_toplevel ppf body =
              (count - 1 - i)
              Ident.pp
              vname
-         | None -> assert false)
+         | TopLevelConstant ->
+           printfn ppf "  mov rax, %a" Toplevels.pp_toplevel_exn vname;
+           printfn ppf "  mov qword [rsp+%d*8], rax" (count - 1 - i)
+         | IsNotTopLevel -> assert false)
       | AVar { Ident.hum_name = "print"; _ } ->
         emit_alloc_closure ppf (Ident.of_string "rukaml_print_int_kaml") 1;
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
@@ -298,7 +371,7 @@ let generate_body is_toplevel ppf body =
       | AVar { Ident.hum_name = "block_tag_imm"; _ } ->
         emit_alloc_closure ppf (Ident.of_string "rukaml_tag") 1;
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
-      | AVar { Ident.hum_name = "get"; _ } ->
+      | AVar { Ident.hum_name = "string_nth"; _ } | AVar { Ident.hum_name = "get"; _ } ->
         emit_alloc_closure ppf (Ident.of_string "rukaml_block_nth") 2;
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar { Ident.hum_name = "set"; _ } ->
@@ -326,7 +399,7 @@ let generate_body is_toplevel ppf body =
         printfn
           ppf
           "  mov qword r8, %a  ; arg \"%a\""
-          Addr_of_local.pp_local_exn
+          Addr_of_var.pp_var_exn
           vname
           Ident.pp
           vname;
@@ -366,9 +439,8 @@ let generate_body is_toplevel ppf body =
         , bel ) ->
       (* This is not entirely correct, because OCaml number and target could be different *)
       helper dest (if l = r then bth else bel)
-    | CIte (CAtom (AVar econd), bth, bel) when Addr_of_local.contains econd ->
-      (* if on global or local variable  *)
-      printfn ppf "  mov qword rdx, %a" Addr_of_local.pp_local_exn econd;
+    | CIte (CAtom (AVar econd), bth, bel) ->
+      printfn ppf "  mov qword rdx, %a" Addr_of_var.pp_var_exn econd;
       printfn ppf "  cmp rdx, 0";
       let el_lab = Printf.sprintf "lab_then_%d" (gensym ()) in
       let fin_lab = Printf.sprintf "lab_endif_%d" (gensym ()) in
@@ -380,35 +452,29 @@ let generate_body is_toplevel ppf body =
       printfn ppf "%s:" fin_lab
     | CAtom (AVar f)
     (* TODO(Kakadu): change to builtin *)
-      when f.Ident.hum_name = "stdin"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
+      when f.Ident.hum_name = "stdin" && not (Addr_of_var.has_key f) ->
       printfn ppf "  call rukaml_array_stdin";
       printfn ppf "  mov %a, rax" pp_dest dest
     | CAtom (AVar f)
     (* TODO(Kakadu): change to builtin *)
-      when f.Ident.hum_name = "stdout"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
+      when f.Ident.hum_name = "stdout" && not (Addr_of_var.has_key f) ->
       printfn ppf "  call rukaml_stdout";
       printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (APrimitive ("print", 1), AVar arg, []) ->
-      printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn arg;
+      printfn ppf "  mov rdi, %a" Addr_of_var.pp_var_exn arg;
       printfn ppf "  call rukaml_print_int";
       printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (AVar f, arg, [])
     (* TODO(Kakadu): change to builtin *)
-      when f.Ident.hum_name = "length"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
+      when f.Ident.hum_name = "length" && not (Addr_of_var.has_key f) ->
       (match arg with
-       | AVar v when Addr_of_local.has_key v ->
+       | AVar v when Addr_of_var.has_key v ->
          let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
          let name2 = Ident.of_string @@ gen_name ~prefix:"array" () in
          Addr_of_local.extend name1;
          Addr_of_local.extend name2;
          printfn ppf "  add rsp, -8*2";
-         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+         printfn ppf "  mov r11, %a" Addr_of_var.pp_var_exn v;
          printfn ppf "  mov qword [rsp], r11";
          printfn ppf "  call rukaml_block_size";
          printfn ppf "  mov %a, rax" pp_dest dest;
@@ -422,13 +488,13 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (APrimitive ("get_arity", _), arg, []) ->
       (match arg with
-       | AVar v when Addr_of_local.has_key v ->
+       | AVar v when Addr_of_var.has_key v ->
          let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
          let name2 = Ident.of_string @@ gen_name ~prefix:"constr" () in
          Addr_of_local.extend name1;
          Addr_of_local.extend name2;
          printfn ppf "  add rsp, -8*2";
-         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+         printfn ppf "  mov r11, %a" Addr_of_var.pp_var_exn v;
          printfn ppf "  mov qword [rsp], r11";
          printfn ppf "  call rukaml_block_size";
          printfn ppf "  mov %a, rax" pp_dest dest;
@@ -438,19 +504,47 @@ let generate_body is_toplevel ppf body =
        | _ -> failwith "Should not happen")
     | CApp (AVar f, arg, [])
       when (f.Ident.hum_name = "rukaml_block_size" || f.Ident.hum_name = "string_length")
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
+           && not (Addr_of_var.has_key f) ->
       helper_a (DReg "r11") arg;
       printfn ppf "  sub rsp, 8*2";
       printfn ppf "  mov qword [rsp], r11";
       printfn ppf "  call rukaml_block_size";
       printfn ppf "  add rsp, 8*2";
       printfn ppf "  mov %a, rax" pp_dest dest
+    (* TODO: i think that printf and sprintf may be simplified as follows (but fprintf can not be)
+  | CApp (AVar f, arg, [])
+      when f.Ident.hum_name = "printf"
+           && (not (is_toplevel f))
+           && not (Addr_of_var.has_key f) ->
+      helper_a (DReg "rdi") arg;
+      printfn ppf "  call rukaml_alloc_printf_closure";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | CApp (AVar f, arg, [])
+      when f.Ident.hum_name = "sprintf"
+           && (not (is_toplevel f))
+           && not (Addr_of_var.has_key f) ->
+      helper_a (DReg "rdi") arg;
+      printfn ppf "  call rukaml_alloc_sprintf_closure";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    *)
+    | CApp (AVar f, arg, [])
+      when f.Ident.hum_name = "printf" && not (Addr_of_var.has_key f) ->
+      helper_a (DReg "r11") arg;
+      printfn ppf "  sub rsp, 8*2 ; space and padding for fmt";
+      printfn ppf "  mov qword [rsp], r11 ; push fmt";
+      printfn ppf "  call rukaml_alloc_printf_closure";
+      printfn ppf "  add rsp, 8*2 ; space and padding for fmt";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | CApp (AVar f, arg, [])
+      when f.Ident.hum_name = "sprintf" && not (Addr_of_var.has_key f) ->
+      helper_a (DReg "r11") arg;
+      printfn ppf "  sub rsp, 8*2 ; space and padding for fmt";
+      printfn ppf "  mov qword [rsp], r11 ; push fmt";
+      printfn ppf "  call rukaml_alloc_sprintf_closure";
+      printfn ppf "  add rsp, 8*2 ; space and padding for fmt";
+      printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (AVar f, arg1, [])
-    (* TODO(Kakadu): change to builtin *)
-      when f.Ident.hum_name = "fprintf"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
+      when f.Ident.hum_name = "fprintf" && not (Addr_of_var.has_key f) ->
       printfn ppf "  mov rdi, rukaml_alloc_fprintf_closure";
       printfn ppf "  mov rsi, 2";
       printfn ppf "  call rukaml_alloc_closure";
@@ -463,83 +557,55 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov al, 0";
       printfn ppf "  call rukaml_applyN";
       printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar f, arg, [])
-      when f.Ident.hum_name = "printf"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
-      (* TODO: rewrite it using DStackvar *)
-      helper_a (DReg "r11") arg;
-      printfn ppf "  sub rsp, 8*2 ; space and padding for fmt";
-      printfn ppf "  mov qword [rsp], r11 ; push fmt";
-      printfn ppf "  call rukaml_alloc_printf_closure";
-      printfn ppf "  add rsp, 8*2 ; space and padding for fmt";
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar f, arg, [])
-      when f.Ident.hum_name = "sprintf"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
-      (* TODO: rewrite it using DStackvar *)
-      helper_a (DReg "r11") arg;
-      printfn ppf "  sub rsp, 8*2 ; space and padding for fmt";
-      printfn ppf "  mov qword [rsp], r11 ; push fmt";
-      printfn ppf "  call rukaml_alloc_sprintf_closure";
-      printfn ppf "  add rsp, 8*2 ; space and padding for fmt";
-      printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (AVar f, arg1, [])
     (* TODO(Kakadu): change to builtin *)
-      when f.Ident.hum_name = "get"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
+      when f.Ident.hum_name = "get" && not (Addr_of_var.has_key f) ->
       (match arg1 with
-       | AVar arr when Addr_of_local.has_key arr ->
+       | AVar arr when Addr_of_var.has_key arr ->
          printfn ppf "  mov rdi, rukaml_block_nth";
          printfn ppf "  mov rsi, 2";
          printfn ppf "  call rukaml_alloc_closure";
          printfn ppf "  mov rdi, rax";
          printfn ppf "  mov rsi, 1";
-         printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arr;
+         printfn ppf "  mov rdx, %a" Addr_of_var.pp_var_exn arr;
          printfn ppf "  mov al, 0";
          printfn ppf "  call rukaml_applyN";
          printfn ppf "  mov %a, rax" pp_dest dest
        | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
     (* TODO(Kakadu): change to builtin *)
-      when f.Ident.hum_name = "set"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
+      when f.Ident.hum_name = "set" && not (Addr_of_var.has_key f) ->
       (match arg1 with
-       | AVar arr when Addr_of_local.has_key arr ->
+       | AVar arr when Addr_of_var.has_key arr ->
          printfn ppf "  mov rdi, rukaml_array_set";
          printfn ppf "  mov rsi, 3";
          printfn ppf "  call rukaml_alloc_closure";
          printfn ppf "  mov rdi, rax";
          printfn ppf "  mov rsi, 1";
-         printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arr;
+         printfn ppf "  mov rdx, %a" Addr_of_var.pp_var_exn arr;
          printfn ppf "  mov al, 0";
          printfn ppf "  call rukaml_applyN";
          printfn ppf "  mov %a, rax" pp_dest dest
        | _ -> failwith "Should not happen")
     | CApp (APrimitive ("char_code", 1), arg1, []) ->
       (match arg1 with
-       | AVar v when Addr_of_local.has_key v ->
-         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+       | AVar v when Addr_of_var.has_key v ->
+         printfn ppf "  mov r11, %a" Addr_of_var.pp_var_exn v;
          printfn ppf "  mov %a, r11" pp_dest dest
        | AConst (PConst_char c) ->
          printfn ppf "  mov qword %a, %d" pp_dest dest (Char.code c)
        | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
     (* TODO(Kakadu): change to builtin *)
-      when f.Ident.hum_name = "open_in"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
+      when f.Ident.hum_name = "open_in" && not (Addr_of_var.has_key f) ->
       (match arg1 with
-       | AVar v when Addr_of_local.has_key v ->
+       | AVar v when Addr_of_var.has_key v ->
          let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
          let name2 = Ident.of_string @@ gen_name ~prefix:"open_in arg" () in
          Addr_of_local.extend name1;
          Addr_of_local.extend name2;
          printfn ppf "  add rsp, -8*2";
-         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+         printfn ppf "  mov r11, %a" Addr_of_var.pp_var_exn v;
          printfn ppf "  mov qword [rsp], r11";
          printfn ppf "  call rukaml_array_read_in";
          printfn ppf "  mov %a, rax" pp_dest dest;
@@ -553,17 +619,15 @@ let generate_body is_toplevel ppf body =
          printfn ppf "  mov %a, rax" pp_dest dest
        | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
-      when f.Ident.hum_name = "open_out"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
+      when f.Ident.hum_name = "open_out" && not (Addr_of_var.has_key f) ->
       (match arg1 with
-       | AVar v when Addr_of_local.has_key v ->
+       | AVar v when Addr_of_var.has_key v ->
          let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
          let name2 = Ident.of_string @@ gen_name ~prefix:"open_out arg" () in
          Addr_of_local.extend name1;
          Addr_of_local.extend name2;
          printfn ppf "  add rsp, -8*2";
-         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+         printfn ppf "  mov r11, %a" Addr_of_var.pp_var_exn v;
          printfn ppf "  mov qword [rsp], r11";
          printfn ppf "  call rukaml_open_out";
          printfn ppf "  mov %a, rax" pp_dest dest;
@@ -578,17 +642,15 @@ let generate_body is_toplevel ppf body =
        | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
     (* TODO(Kakadu): change to builtin *)
-      when f.Ident.hum_name = "print"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
+      when f.Ident.hum_name = "print" && not (Addr_of_var.has_key f) ->
       (match arg1 with
-       | AVar v when Addr_of_local.has_key v ->
+       | AVar v when Addr_of_var.has_key v ->
          let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
          let name2 = Ident.of_string @@ gen_name ~prefix:"print_arg" () in
          Addr_of_local.extend name1;
          Addr_of_local.extend name2;
          printfn ppf "  add rsp, -8*2";
-         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+         printfn ppf "  mov r11, %a" Addr_of_var.pp_var_exn v;
          printfn ppf "  mov qword [rsp], r11";
          printfn ppf "  call rukaml_print_int ; short";
          printfn ppf "  add rsp, 8*2";
@@ -601,7 +663,7 @@ let generate_body is_toplevel ppf body =
          Addr_of_local.extend name1;
          Addr_of_local.extend name2;
          printfn ppf "  add rsp, -8*2";
-         printfn ppf "  mov qword %a, %d" Addr_of_local.pp_local_exn name2 n;
+         printfn ppf "  mov qword %a, %d" Addr_of_var.pp_var_exn name2 n;
          printfn ppf "  call rukaml_print_int";
          printfn ppf "  add rsp, 8*2";
          Addr_of_local.remove_local name2;
@@ -614,7 +676,7 @@ let generate_body is_toplevel ppf body =
       else printfn ppf "  mov qword %a, 0" pp_dest dest
     | CApp (APrimitive ("=", 2), AConst (PConst_int n), [ AVar vname ])
     | CApp (APrimitive ("=", 2), AVar vname, [ AConst (PConst_int n) ]) ->
-      printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
+      printfn ppf "  mov qword r11, %a" Addr_of_var.pp_var_exn vname;
       printfn ppf "  mov qword r12, %d" n;
       printfn ppf "  cmp r11, r12";
       let eq_lab = Printf.sprintf "lab_%d" (gensym ()) in
@@ -659,47 +721,23 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  call rukaml_struct_equal";
       printfn ppf "  add rsp, 8*4";
       printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (APrimitive ("-", 2), AVar vname, [ AConst (PConst_int 1) ]) ->
-      (match is_toplevel vname with
-       | None ->
-         printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
-         printfn ppf "  dec r11";
-         printfn ppf "  mov qword %a, r11" pp_dest dest
-       | Some _ ->
-         (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
-         failwiths "not implemented %d" __LINE__)
+    | CApp (APrimitive ((("+" | "*") as op), 2), AVar vname, [ AConst (PConst_int n) ])
+    | CApp (APrimitive ((("+" | "*") as op), 2), AConst (PConst_int n), [ AVar vname ]) ->
+      printfn ppf "  mov qword r11, %a" Addr_of_var.pp_var_exn vname;
+      (match op with
+       | "+" -> if n = 1 then printfn ppf "  inc r11" else printfn ppf "  add r11, %d" n
+       | "*" -> printfn ppf "  imul r11, %d" n
+       | _ -> assert false);
+      printfn ppf "  mov qword %a, r11" pp_dest dest
     | CApp (APrimitive ("-", 2), AVar vname, [ AConst (PConst_int n) ]) ->
-      (match is_toplevel vname with
-       | None ->
-         printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
-         printfn ppf "  sub r11, %d" n;
-         printfn ppf "  mov qword %a, r11" pp_dest dest
-       | Some _ ->
-         (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
-         failwiths "not implemented %d" __LINE__)
-    | CApp (APrimitive ((("+" | "*") as prim), _), AVar vname, [ AConst (PConst_int n) ])
-    | CApp (APrimitive ((("+" | "*") as prim), _), AConst (PConst_int n), [ AVar vname ])
-      ->
-      (match is_toplevel vname with
-       | None ->
-         printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
-         printfn
-           ppf
-           "  %s r11, %d"
-           (match prim with
-            | "+" -> "add "
-            | "*" -> "imul"
-            | op -> Format.asprintf ";;; TODO %s. %s %d" op __FUNCTION__ __LINE__)
-           n;
-         printfn ppf "  mov qword %a, r11" pp_dest dest
-       | Some _ ->
-         (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
-         failwiths "not implemented %d" __LINE__)
+      printfn ppf "  mov qword r11, %a" Addr_of_var.pp_var_exn vname;
+      if n = 1 then printfn ppf "  dec r11" else printfn ppf "  sub r11, %d" n;
+      printfn ppf "  mov qword %a, r11" pp_dest dest
     | CApp
         (APrimitive ((("+" | "*" | "-" | "&&" | "||") as prim), _), AVar vl, [ AVar vr ])
       ->
-      printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vl;
-      printfn ppf "  mov qword r12, %a" Addr_of_local.pp_local_exn vr;
+      printfn ppf "  mov qword r11, %a" Addr_of_var.pp_var_exn vl;
+      printfn ppf "  mov qword r12, %a" Addr_of_var.pp_var_exn vr;
       printfn
         ppf
         "  %s r11, r12"
@@ -712,8 +750,8 @@ let generate_body is_toplevel ppf body =
          | op -> failwiths "not_implemeted  %S. %d" op __LINE__);
       printfn ppf "  mov %a, r11" pp_dest dest
     | CApp (APrimitive ((("<" | ">" | "<=" | ">=") as prim), _), AVar vl, [ AVar vr ]) ->
-      printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vl;
-      printfn ppf "  mov qword r12, %a" Addr_of_local.pp_local_exn vr;
+      printfn ppf "  mov qword r11, %a" Addr_of_var.pp_var_exn vl;
+      printfn ppf "  mov qword r12, %a" Addr_of_var.pp_var_exn vr;
       printfn ppf "  cmp qword r11, r12";
       printfn
         ppf
@@ -726,10 +764,14 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  and r11, 1";
       printfn ppf "mov qword %a, r11" pp_dest dest
       (* TODO: Maybe move this specialization to the case below  *)
-    | CApp (AVar f, arg1, args) as _cexpr when Option.is_some (is_toplevel f) ->
+    | CApp (AVar f, arg1, args) as _cexpr when Toplevels.is_toplevel_function f ->
       (* Callig a rukaml function uses custom calling convention.
            CDECL convention: all arguments on stack, LTR *)
-      let expected_arity = Option.get (is_toplevel f) in
+      let expected_arity =
+        match Toplevels.find f with
+        | TopLevelFunction { arity } -> arity
+        | _ -> assert false
+      in
       let formal_arity = 1 + List.length args in
       (* printfn
         ppf
@@ -768,7 +810,6 @@ let generate_body is_toplevel ppf body =
     | CApp (AVar f, (AConst _ as arg), [])
     | CApp (AVar f, (APrimitive _ as arg), [])
     | CApp (AVar f, (AVar _ as arg), []) ->
-      assert (Option.is_none (is_toplevel f));
       let arg =
         match arg with
         (* TODO(Kakadu): change to builtin *)
@@ -784,9 +825,11 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  sub rsp, 8 ; first arg of a function %a" Ident.pp f;
       helper_a (DStack_var arg1) arg;
       printfn ppf "  mov rax, 0  ; no float arguments";
-      printfn ppf "  mov rdi, %a" pp_dest (DStack_var f);
+      (* "f" may global constans, so it uses pp_var_exn *)
+      printfn ppf "  mov rdi, %a" Addr_of_var.pp_var_exn f;
       printfn ppf "  mov rsi, 1";
-      printfn ppf "  mov rdx, %a" pp_dest (DStack_var arg1);
+      (* arg1 is local variable, so it uses pp_local_exn (but pp_var_exn would work too) *)
+      printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arg1;
       printfn ppf "  call rukaml_applyN";
       Addr_of_local.remove_local arg1;
       Addr_of_local.remove_local temp_padding;
@@ -838,30 +881,39 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov qword %a,  %d" pp_dest dest n
     | AConst (Frontend.Parsetree.PConst_char c) ->
       printfn ppf "  mov qword %a,  %d" pp_dest dest (Char.code c)
-    | AVar ({ Ident.hum_name = "print"; _ } as v) when None = is_toplevel v ->
+    | AVar ({ Ident.hum_name = "print"; _ } as v) when not (Addr_of_var.has_key v) ->
       alloc_closure ppf (Ident.of_string "rukaml_print_int") 1;
       printfn ppf "  mov %a, rax" pp_dest dest
-    | AVar ({ Ident.hum_name = "stdout"; _ } as v) when None = is_toplevel v ->
+    | AVar ({ Ident.hum_name = "stdout"; _ } as v) when not (Addr_of_var.has_key v) ->
       printfn ppf "  call rukaml_stdout";
       printfn ppf "  mov %a, rax" pp_dest dest
+    | AVar ({ Ident.hum_name = "stderr"; _ } as v) when not (Addr_of_var.has_key v) ->
+      printfn ppf "  call rukaml_stderr";
+      printfn ppf "  mov %a, rax" pp_dest dest
     | AVar vname ->
-      (match is_toplevel vname with
-       | None ->
+      (match Toplevels.find vname with
+       | IsNotTopLevel ->
+         assert (Addr_of_local.has_key vname);
          printfn
            ppf
-           "  mov qword rdx, %a ; use temp rdx to move from stack to stack"
+           "  mov qword rdx, %a ; access local var \"%a\" [1/2]"
            Addr_of_local.pp_local_exn
+           vname
+           Ident.pp
            vname;
          printfn
            ppf
-           "  mov qword %a, rdx ; access a var \"%a\""
+           "  mov qword %a, rdx  ; access local var \"%a\" [2/2]"
            pp_dest
            dest
            Ident.pp
            vname
-       | Some arity ->
+       | TopLevelFunction { arity } ->
          alloc_closure ppf vname arity;
-         printfn ppf "  mov %a, rax" pp_dest dest)
+         printfn ppf "  mov %a, rax ; arity" pp_dest dest
+       | TopLevelConstant ->
+         printfn ppf "  mov rax, %a" Toplevels.pp_toplevel_exn vname;
+         printfn ppf "  mov qword %a, rax" pp_dest dest)
     | AConstruct (tag, args) ->
       printfn ppf "  mov rdi, %d ; adt variant arity" (List.length args);
       printfn ppf "  mov rsi, %d ; adt variant tag" tag;
@@ -947,6 +999,8 @@ let put_print_hex ppf =
   printfn
     ppf
     {|
+section .text
+
 print_hex:
   mov rax, rdi
   mov rdi, 1
@@ -974,23 +1028,79 @@ iterate:
 
 let use_custom_main = false
 
+let stdlib_externs =
+  [ "rukaml_alloc_closure"
+  ; "rukaml_print_int"
+  ; "rukaml_print_int_kaml"
+  ; "rukaml_applyN"
+  ; "rukaml_field"
+  ; "rukaml_tag"
+  ; "rukaml_size"
+  ; "rukaml_alloc_pair"
+  ; "rukaml_alloc_block"
+  ; "rukaml_array_stdin"
+  ; "rukaml_array_set"
+  ; "rukaml_array_read_in"
+  ; "rukaml_block_size"
+  ; "rukaml_block_tag"
+  ; "rukaml_block_nth"
+  ; "rukaml_match_failure"
+  ; "rukaml_initialize"
+  ; "rukaml_gc_compact"
+  ; "rukaml_gc_print_stats"
+  ; "rukaml_print_alloc_closure_count"
+  ; "rukaml_open_out"
+  ; "rukaml_close_out"
+  ; "rukaml_alloc_printf_closure"
+  ; "rukaml_alloc_fprintf_closure"
+  ; "rukaml_alloc_sprintf_closure"
+  ; "rukaml_stdout"
+  ; "rukaml_struct_equal"
+  ]
+;;
+
+(* TODO: handle top-level shadowing here *)
+let emit_global_constant ppf ident expr generate_body =
+  printfn ppf "section .bss";
+  printfn ppf "  global %a" Toplevels.pp_label_exn ident;
+  printfn ppf "  %a:    resq 1" Toplevels.pp_label_exn ident;
+  printfn ppf "section .text";
+  printfn ppf "init_%a:" Toplevels.pp_label_exn ident;
+  printfn ppf "  push rbp";
+  printfn ppf "  mov rbp, rsp";
+  printfn ppf "  ; begin generate body for %a" Ident.pp ident;
+  generate_body ppf expr;
+  printfn ppf "  ; end generate body for %a" Ident.pp ident;
+  printfn ppf "  mov qword %a, rax" Toplevels.pp_toplevel_exn ident;
+  printfn ppf "  pop rbp";
+  printfn ppf "  ret"
+;;
+
+let put_init_global_constants ppf =
+  printfn ppf "section .text";
+  printfn ppf "rukaml_init_global_constants:";
+  printfn ppf "  push rbp";
+  printfn ppf "  mov rbp, rsp";
+  Toplevels.iter_constants (fun ident ->
+    printfn ppf "  call init_%a" Toplevels.pp_label_exn ident);
+  printfn ppf "  pop rbp";
+  printfn ppf "  ret"
+;;
+
+let init_toplevel_table anf =
+  List.iter
+    (fun (_, (ident : Ident.t), body) ->
+       let pats, _ = Compile_lib.ANF.group_abstractions body in
+       match List.length pats with
+       | 0 when ident.hum_name <> "main" -> Toplevels.extend ident TopLevelConstant
+       | arity -> Toplevels.extend ident (TopLevelFunction { arity }))
+    anf
+;;
+
 let codegen ?(wrap_main_into_start = true) anf file =
   (* log "Going to generate code here %s %d" __FUNCTION__ __LINE__; *)
   log "ANF: @[%a@]" Compile_lib.ANF.pp_stru anf;
-  let is_toplevel =
-    let hash = Hashtbl.create (List.length anf) in
-    List.iter
-      (fun (_, name, body) ->
-         let pats, _ = Compile_lib.ANF.group_abstractions body in
-         let argc = List.length pats in
-         assert (argc >= 1 || name.Ident.hum_name = "main");
-         Hashtbl.add hash name argc)
-      anf;
-    fun name ->
-      match Hashtbl.find hash name with
-      | n -> Some n
-      | exception Not_found -> None
-  in
+  init_toplevel_table anf;
   Stdio.Out_channel.with_file file ~f:(fun ch ->
     let ppf = Format.formatter_of_out_channel ch in
     printfn ppf "section .note.GNU-stack noalloc noexec nowrite progbits";
@@ -1001,42 +1111,15 @@ let codegen ?(wrap_main_into_start = true) anf file =
         {|section .data
             newline_char: db 10
             codes: db '0123456789abcdef' |};
-    printfn ppf "section .text";
+    printfn ppf "";
     if use_custom_main
     then (
       put_print_newline ppf;
       put_print_hex ppf);
-    (* externs *)
-    List.iter
-      (printfn ppf "extern %s")
-      [ "rukaml_alloc_closure"
-      ; "rukaml_print_int"
-      ; "rukaml_print_int_kaml"
-      ; "rukaml_applyN"
-      ; "rukaml_field"
-      ; "rukaml_tag"
-      ; "rukaml_size"
-      ; "rukaml_alloc_pair"
-      ; "rukaml_alloc_block"
-      ; "rukaml_array_stdin"
-      ; "rukaml_array_set"
-      ; "rukaml_array_read_in"
-      ; "rukaml_block_size"
-      ; "rukaml_block_tag"
-      ; "rukaml_block_nth"
-      ; "rukaml_match_failure"
-      ; "rukaml_initialize"
-      ; "rukaml_gc_compact"
-      ; "rukaml_gc_print_stats"
-      ; "rukaml_print_alloc_closure_count"
-      ; "rukaml_open_out"
-      ; "rukaml_close_out"
-      ; "rukaml_alloc_printf_closure"
-      ; "rukaml_alloc_fprintf_closure"
-      ; "rukaml_alloc_sprintf_closure"
-      ; "rukaml_stdout"
-      ; "rukaml_struct_equal"
-      ];
+    printfn ppf "section .text";
+    List.iter (printfn ppf "extern %s") stdlib_externs;
+    printfn ppf "";
+    put_init_global_constants ppf;
     printfn ppf "";
     if use_custom_main
     then
@@ -1084,7 +1167,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
 
       (* printfn ppf "  sub rsp, %d" (8 * Loc_of_ident.size ()); *)
       if use_custom_main && name.Ident.hum_name = "main"
-      then
+      then (
+        printfn ppf "section .text";
         printfn
           ppf
           {|_start:
@@ -1102,10 +1186,12 @@ let codegen ?(wrap_main_into_start = true) anf file =
                     call print_newline
                     mov rax, 60
                     xor rdi, rdi
-                    syscall|}
-      else (
-        let () = printfn ppf "GLOBAL %a" Ident.pp name in
-        let () = printfn ppf "@[<h>%a:@]" Ident.pp name in
+                    syscall|})
+      else if Toplevels.is_toplevel_function name
+      then (
+        printfn ppf "section .text";
+        printfn ppf "GLOBAL %a" Ident.pp name;
+        printfn ppf "@[<h>%a:@]" Ident.pp name;
         let pats, body = ANF.group_abstractions expr in
         let argc = List.length pats in
         let names =
@@ -1122,10 +1208,14 @@ let codegen ?(wrap_main_into_start = true) anf file =
         if name.hum_name = "main"
         then (
           printfn ppf "  mov rdi, rsp";
-          printfn ppf "  call rukaml_initialize");
-        generate_body is_toplevel ppf body;
+          printfn ppf "  call rukaml_initialize";
+          printfn ppf "  call rukaml_init_global_constants");
+        generate_body ppf body;
         Addr_of_local.remove_args names;
-        print_epilogue ppf name.hum_name);
+        print_epilogue ppf name.hum_name)
+      else if Toplevels.is_toplevel_constant name
+      then emit_global_constant ppf name expr generate_body
+      else assert false;
       ());
     Format.pp_print_flush ppf ());
   Result.Ok ()
