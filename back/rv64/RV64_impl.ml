@@ -373,15 +373,15 @@ let generate_body is_toplevel body =
         emit_alloc_closure "rukaml_identity" 1;
         (* Result is in a0 *)
         emit sd a0 (ROffset (SP, 8 * i))
-      | AVar { Ident.hum_name = "length"; _ } ->
+      | AVar { Ident.hum_name = "array_len"; _ } ->
         emit_alloc_closure "rukaml_array_length" 1;
         (* Result is in a0 *)
         emit sd a0 (ROffset (SP, 8 * i))
-      | AVar { Ident.hum_name = "get"; _ } ->
+      | AVar { Ident.hum_name = "array_get"; _ } ->
         emit_alloc_closure "rukaml_array_get" 2;
         (* Result is in a0 *)
         emit sd a0 (ROffset (SP, 8 * i))
-      | AVar { Ident.hum_name = "set"; _ } ->
+      | AVar { Ident.hum_name = "array_set"; _ } ->
         emit_alloc_closure "rukaml_array_set" 3;
         (* Result is in a0 *)
         emit sd a0 (ROffset (SP, 8 * i))
@@ -525,7 +525,7 @@ let generate_body is_toplevel body =
        | ALam (_, _)
        | AUnit -> failwith "Should not happen: print_int")
     | CApp (AVar f, arg1, [])
-      when f.Ident.hum_name = "length"
+      when f.Ident.hum_name = "array_len"
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
       (match arg1 with
@@ -541,7 +541,7 @@ let generate_body is_toplevel body =
            emit addi SP SP 16)
        | AArray _ | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
-      when f.Ident.hum_name = "get"
+      when f.Ident.hum_name = "array_get"
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
       (match arg1 with
@@ -553,7 +553,7 @@ let generate_body is_toplevel body =
          emit sd_dest a0 dest
        | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
-      when f.Ident.hum_name = "set"
+      when f.Ident.hum_name = "array_set"
            && is_toplevel f = None
            && not (Addr_of_local.has_key f) ->
       (match arg1 with
