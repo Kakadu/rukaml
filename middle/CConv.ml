@@ -158,10 +158,16 @@ let gensym =
 ;;
 
 let standart_globals =
-  [ "+"; "="; "<"; "*"; "-" ]
+  [ "+"; "<"; "*"; "-" ]
+  @ [ "&&"; "||" ]
+  @ [ "="; "<>"; ">"; ">="; "<"; "<=" ]
   @ [ "printf"; "fprintf"; "sprintf" ]
   @ [ "stdin"; "stdout"; "open_in"; "open_out"; "close_in"; "close_out" ]
   @ [ "input_all"; "input_char" ]
+  @ [ "field"; "block_nth"; "block_tag"; "block_size" ]
+  @ [ "string_nth"; "string_len"; "string_of_char_list" ]
+  @ [ "array_get"; "array_set"; "array_len" ]
+  @ [ "char_code" ]
   |> String_set.of_list
 ;;
 
@@ -189,6 +195,32 @@ let conv ?(standart_globals = standart_globals)
     let* old = get in
     put (x :: old)
   in
+  let rec rename_vars ~prefix (isrec, lhs, rhs, wher) =
+    (* TODO: i'm not sure that it doesn't break anything *)
+    let rename_many ~prefix (isrec, ps, rhs, wher) =
+      Base.List.fold_right
+        ~init:([], rhs, wher)
+        ~f:(fun p (ps, rhs, wher) ->
+          let p, rhs, wher = rename_vars ~prefix (isrec, p, rhs, wher) in
+          p :: ps, rhs, wher)
+        ps
+    in
+    match lhs with
+    | PAny | PUnit | PConst _ -> lhs, rhs, wher
+    | PVar name ->
+      let fresh = gensym ~prefix () ^ "_" ^ name in
+      let rename = subst name ~by:(EVar fresh) in
+      let rhs = if isrec = Recursive then rename rhs else rhs in
+      PVar fresh, rhs, rename wher
+    | PTuple (p1, p2, ps) ->
+      let p1, rhs, wher = rename_vars ~prefix (isrec, p1, rhs, wher) in
+      let p2, rhs, wher = rename_vars ~prefix (isrec, p2, rhs, wher) in
+      let ps, rhs, wher = rename_many ~prefix (isrec, ps, rhs, wher) in
+      PTuple (p1, p2, ps), rhs, wher
+    | PConstruct (constr, fields) ->
+      let fields, rhs, wher = rename_many ~prefix (isrec, fields, rhs, wher) in
+      PConstruct (constr, fields), rhs, wher
+  in
   let is_abstraction = function
     | ELam _ -> true
     | _ -> false
@@ -215,13 +247,13 @@ let conv ?(standart_globals = standart_globals)
           | None ->
             (* TODO(Kakadu): Create a new lambda here too *)
             log "None : %d" __LINE__;
-            let new_f = gensym () in
+            let new_f = gensym ~prefix:"__lifted_lam" () in
             let* rhs = helper (SS.union (vars_from_patterns arg_pats) globals) rhs in
             let* () = save (NonRecursive, PVar new_f, elams arg_pats rhs) in
             return (EVar new_f)
           | Some extra ->
             log "Some %d, %a" __LINE__ SS.pp extra;
-            let new_f = gensym () in
+            let new_f = gensym ~prefix:"__lifted_lam" () in
             (* TODO: maybe call on e too? *)
             let es = SS.to_seq extra |> List.of_seq in
             let* rhs = helper (SS.union (vars_from_patterns arg_pats) globals) rhs in
@@ -272,7 +304,11 @@ let conv ?(standart_globals = standart_globals)
          (match args with
           | [] -> return (elet ~isrec pat (elams args rhs) body)
           | _ ->
-            let* () = save (isrec, pat, elams args rhs) in
+            let rhs = elams args rhs in
+            (* TODO: check if renaming here is really required *)
+            let prefix = "__lifted_let" in
+            let pat, rhs, body = rename_vars ~prefix (isrec, pat, rhs, body) in
+            let* () = save (isrec, pat, rhs) in
             return body)
        | Some extra ->
          log "classify says Some %a" String_set.pp extra;
@@ -309,6 +345,9 @@ let conv ?(standart_globals = standart_globals)
          let wher = subst name ~by wher in
          log "next where = %a" Pprint.pp_expr wher;
          let* wher = helper (String_set.add name globals) wher in
+         (* TODO: check if renaming here is really required *)
+         let prefix = "__lifted_let" in
+         let pat, rhs, wher = rename_vars ~prefix (isrec, pat, rhs, wher) in
          let* () = save (isrec, pat, rhs) in
          return wher)
     | ELet (Recursive, PTuple _, _, _) -> failwith "not implemented 2"
@@ -338,7 +377,7 @@ let conv ?(standart_globals = standart_globals)
       let* case = conv_case case in
       let* cases = Base.List.fold ~f ~init:(return []) cases in
       return (ematch scrut case (List.rev cases))
-    | ELet (isrec, ((PUnit | PAny | PConst _) as pat), rhs, wher) ->
+    | ELet (isrec, ((PUnit | PAny | PConst _ | PConstruct (_, [])) as pat), rhs, wher) ->
       (* TODO : is it correct ? *)
       log "ELet with pattern %a" Pprint.pp_pattern pat;
       let* rhs = helper globals rhs in

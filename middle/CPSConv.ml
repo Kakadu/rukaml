@@ -81,7 +81,16 @@ let start_glob_envs =
     let ident = Frontend.Ident.of_string v in
     SMap.add ident.hum_name ident.id
   in
-  let idents = [ "print"; "closure_count"; "length"; "get"; "set" ] in
+  let idents =
+    [ "print"
+    ; "closure_count"
+    ; "array_len"
+    ; "array_get"
+    ; "array_set"
+    ; "string_nth"
+    ; "string_len"
+    ]
+  in
   let idents = List.map (fun x -> Frontend.Ident.of_string x) idents in
   let imap =
     List.fold_right
