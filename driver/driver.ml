@@ -226,7 +226,7 @@ let () =
     ; "--cps", Set cps, " enable cps conversion"
     ; "--caa", Set caa, " enable call arity analysis"
     ; "--no-cconv", Clear cconv, " disable cconv"
-    ; "--no-ppx", Set ppx, " disable preprocessing"
+    ; "--no-ppx", Clear ppx, " disable preprocessing"
     ]
   in
   parse args (fun s -> inp_path := Some s) "rukaml";

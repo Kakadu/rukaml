@@ -299,13 +299,11 @@ let rec pp_expr ctx ppf = function
 ;;
 
 let pp_value_binding ppf (is_rec, pat, rhs) =
-  let () =
-    (match is_rec with
-     | Parsetree.Recursive -> fprintf ppf "@[<v 2>@[let rec %a "
-     | NonRecursive -> fprintf ppf "@[<v 2>@[let %a ")
-      (pp_pattern CtxLeftSideLet)
-      pat
-  in
+  (match is_rec with
+   | Parsetree.Recursive -> fprintf ppf "@[<v 2>@[let rec %a "
+   | NonRecursive -> fprintf ppf "@[<v 2>@[let %a ")
+    (pp_pattern CtxLeftSideLet)
+    pat;
   match group_lams rhs with
   | args, rhs ->
     List.iter (fprintf ppf "%a@ " (pp_pattern CtxLeftSideLet)) args;
@@ -435,7 +433,7 @@ let pp_stru ppf vbs =
   let open Format in
   open_vbox 0;
   pp_print_list
-    ~pp_sep:(fun ppf () -> fprintf ppf "@ ")
+    ~pp_sep:(fun ppf () -> fprintf ppf "@.")
     (fun ppf -> fprintf ppf "@[%a@]" pp_structure_item)
     ppf
     vbs;

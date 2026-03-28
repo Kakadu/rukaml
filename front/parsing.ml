@@ -355,8 +355,9 @@ let pack : dispatch =
            <* char ')'
            >>= (fun i ->
            string " <- " *> d.expr d
-           >>= (fun e -> return @@ eapp (evar "set") [ evar v; econst (const_int i); e ])
-           <|> return @@ eapp (evar "get") [ evar v; econst (const_int i) ])
+           >>= (fun e ->
+           return @@ eapp (evar "array_set") [ evar v; econst (const_int i); e ])
+           <|> return @@ eapp (evar "array_get") [ evar v; econst (const_int i) ])
            <|> return (evar v))
       <|> (let parse_case =
              let* () = ws <* char '|' in
