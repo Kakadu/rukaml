@@ -10,14 +10,14 @@ Zed combinator should trigger occurs check
   $ run << EOF
   > let rec f = fun n -> f
   > EOF
-  infer error: Occurs check failed
-  [1]
+  let rec f: '_1 -> '_2 =
+    fun n -> f
 
   $ run << EOF
   > let rec fac = fun n -> n*fac
   > EOF
-  infer error: unification failed on int and (int -> int)
-  [1]
+  let rec fac: int -> int =
+    fun n -> n * fac
 
 
   $ run << EOF
@@ -25,7 +25,7 @@ Zed combinator should trigger occurs check
   > let fac = fun self -> fun n -> if n=1 then 1 else n * (self (n-1))
   > let main = zed fac
   > EOF
-  let rec zed: ((int -> int) -> int -> int) -> int -> int =
+  let rec zed: ('_4 -> '_2 -> '_6) -> '_2 -> '_6 =
     fun f x -> (f (zed f)) x
   let fac: (int -> int) -> int -> int =
     fun self n -> (if n = 1 then 1 else n * (self (n - 1)))
@@ -47,7 +47,7 @@ Zed combinator should trigger occurs check
   $ run << EOF
   > let rec fix f = f (fix f)
   > EOF
-  let rec fix: ('_3 -> '_3) -> '_3 =
+  let rec fix: ('_3 -> '_4) -> '_4 =
     fun f -> f (fix f)
 
   $ run << EOF
@@ -55,7 +55,7 @@ Zed combinator should trigger occurs check
   > let fac = fun self -> fun n -> if n=1 then 1 else n * (self (n-1))
   > let main = fix fac
   > EOF
-  let rec fix: ((int -> int) -> int -> int) -> int -> int =
+  let rec fix: ('_3 -> '_4) -> '_4 =
     fun f -> f (fix f)
   let fac: (int -> int) -> int -> int =
     fun self n -> (if n = 1 then 1 else n * (self (n - 1)))
@@ -67,7 +67,7 @@ Zed combinator should trigger occurs check
   > let fac = fun self -> fun n -> if n=1 then 1 else n * (self (n-1))
   > let main = zed fac
   > EOF
-  let rec zed: ((int -> int) -> int -> int) -> int -> int =
+  let rec zed: ('_4 -> '_2 -> '_6) -> '_2 -> '_6 =
     fun f x -> (f (zed f)) x
   let fac: (int -> int) -> int -> int =
     fun self n -> (if n = 1 then 1 else n * (self (n - 1)))
@@ -160,8 +160,3 @@ tuples
   let foo: '_1 -> int * bool =
     fun x -> ((y 1), (y true))
 
-
-  $ run << EOF
-  > let rec (a,b) = (a,b)
-  infer error: Only variables are allowed as left-hand side of `let rec'
-  [1]

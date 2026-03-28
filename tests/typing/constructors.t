@@ -106,3 +106,72 @@ should pass
   let f: t -> int =
     fun x -> match x with
                | Bar (a, b, c) -> (a + b) + c
+
+
+
+  $ infer << EOF
+  > type t = Foo of int * int
+  > let x = Foo (1, 2)
+  > EOF
+  type t =
+    | Foo of int * int
+  let x: t =
+    Foo (1, 2)
+
+
+  $ infer << EOF
+  > type t = Foo of (int * int)
+  > let x = Foo (1, 2)
+  > EOF
+  type t =
+    | Foo of (int * int)
+  let x: t =
+    Foo (1, 2)
+
+
+should fail
+  $ infer << EOF
+  > type t = Foo of int * int
+  > let x = 1, 2
+  > let y = Foo x
+  > EOF
+  infer error: unification failed on int and (int * int)
+  [1]
+
+should pass
+  $ infer << EOF
+  > type t = Foo of (int * int)
+  > let x = 1, 2
+  > let y = Foo x
+  > EOF
+  type t =
+    | Foo of (int * int)
+  let x: int * int =
+    (1, 2)
+  let y: t =
+    Foo x
+
+  $ infer << EOF
+  > type t = int
+  > type foo = Foo of t
+  > let x = Foo 1
+  > EOF
+  type t = int
+    
+  type foo =
+    | Foo of int
+  let x: foo =
+    Foo 1
+
+
+  $ infer << EOF
+  > type ('a, 'b) pair = 'a * 'b
+  > type foo = Foo of (int, string) pair
+  > let x = Foo (1, "string")
+  > EOF
+  type ('_0, '_1) pair = '_0 * '_1
+    
+  type foo =
+    | Foo of (int * string)
+  let x: foo =
+    Foo (1, "string")

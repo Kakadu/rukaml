@@ -313,8 +313,8 @@ assert int * int and (int * int) ARE equivalent
   > EOF
   Parsed: type t = int * int
           
-          type t = int * int
-          
+  type t = int * int
+  
 
 should pass
   $ cat << EOF | ./run.exe -stru -

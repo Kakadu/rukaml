@@ -34,14 +34,14 @@ CPS Factorial
   > let rec fack n k =
   >  if n=1 then k 1 else fack (n-1) (fun m -> k (n*m))
   > EOF
-  let fresh_1 n k m =
+  let __lifted_lam_1 n k m =
     let temp1 = (n * m) in
       k temp1 
   let rec fack n k =
     (if (n = 1)
     then k 1 
     else let temp5 = (n - 1) in
-           let temp8 = fresh_1 n k in
+           let temp8 = __lifted_lam_1 n k in
              fack temp5 temp8)
 
 CPS Fibonacci
@@ -49,19 +49,19 @@ CPS Fibonacci
   > let rec fibk n k =
   >  if n<1 then k 1 else fibk (n-1) (fun p -> fibk (n-2) (fun q -> k (p + q)))
   > EOF
-  let fresh_2 p k q =
+  let __lifted_lam_2 p k q =
     let temp1 = (p + q) in
       k temp1 
-  let fresh_1 n k fibk p =
+  let __lifted_lam_1 n k fibk p =
     let temp3 = (n - 2) in
       let temp4 = fibk temp3  in
-        let temp6 = fresh_2 p k in
+        let temp6 = __lifted_lam_2 p k in
           temp4 temp6 
   let rec fibk n k =
     (if (n < 1)
     then k 1 
     else let temp10 = (n - 1) in
-           let temp14 = fresh_1 n k fibk in
+           let temp14 = __lifted_lam_1 n k fibk in
              fibk temp10 temp14)
 
 Polyvariadic uncurrying
@@ -105,11 +105,11 @@ Polyvariadic currying
   let two f a b =
     let temp1 = (a, b) in
       f temp1 
-  let fresh_1 f arg rest =
+  let __lifted_lam_1 f arg rest =
     let temp3 = (arg, rest) in
       f temp3 
   let succ prev f arg =
-    let temp6 = fresh_1 f arg in
+    let temp6 = __lifted_lam_1 f arg in
       prev temp6 
   let three =
     succ two 
@@ -141,11 +141,11 @@ Polyvariadic map
     succ two 
   let four =
     succ three 
-  let fresh_1 x =
+  let __lifted_lam_1 x =
     x
   let temp =
     let temp13 = (1, 2) in
-      two fresh_1 temp13
+      two __lifted_lam_1 temp13
 
   $ run << EOF #-vcc -vanf
   > let foo f x = x

@@ -112,7 +112,7 @@
                                                                     then hd :: acc
                                                                     else acc 
                                                          in filter p tl acc2))
-          let filter p items = filter p items []
+  let filter p items = filter p items []
 
   $ cat << EOF | ./run.exe -stru -
   > let rec rev items = 
