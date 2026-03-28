@@ -382,19 +382,19 @@ void *rukaml_alloc_block(uint64_t size, uint64_t tag)
   return rez + 1;
 }
 
-void *rukaml_field(int n, void **r)
-{
-  return r[n];
-}
-
-uint64_t rukaml_tag(void **obj)
+uint64_t rukaml_block_tag_imm(void **obj)
 {
   return TAG(obj);
 }
 
-uint64_t rukaml_size(void **obj)
+uint64_t rukaml_block_size_imm(void **obj)
 {
   return SIZE(obj);
+}
+
+void *rukaml_block_nth_imm(void **obj, uint64_t n)
+{
+  return obj[n];
 }
 
 uint64_t rukaml_block_tag(int, int, int, int, int, int, void **obj)
@@ -408,6 +408,11 @@ uint64_t rukaml_block_size(int, int, int, int, int, int, void **obj)
 }
 
 void *rukaml_block_nth(int, int, int, int, int, int, void **obj, uint64_t n)
+{
+  return obj[n];
+}
+
+void *rukaml_field(void **obj, uint64_t n)
 {
   return obj[n];
 }
@@ -521,7 +526,7 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
   return f_closure;
 }
 
-uint64_t rukaml_string_length(void **str)
+uint64_t rukaml_string_len_imm(void **str)
 {
   if (str == NULL)
   {
@@ -536,7 +541,7 @@ uint64_t rukaml_string_length(void **str)
   return (uint64_t)(str[SIZE(str) - 1]);
 }
 
-char rukaml_string_nth(void **str, uint64_t n)
+char rukaml_string_nth_imm(void **str, uint64_t n)
 {
   if (str == NULL)
   {
@@ -548,7 +553,7 @@ char rukaml_string_nth(void **str, uint64_t n)
     mk_err_fatal("tag mismatch");
   }
 
-  uint64_t str_len = rukaml_string_length(str);
+  uint64_t str_len = rukaml_string_len_imm(str);
 
   if (n >= str_len)
   {
@@ -556,6 +561,16 @@ char rukaml_string_nth(void **str, uint64_t n)
   }
 
   return ((char *)str)[n];
+}
+
+char rukaml_string_nth(int r0, int r1, int r2, int r3, int r4, int r5, void **str, uint64_t n)
+{
+  return rukaml_string_nth_imm(str, n);
+}
+
+char rukaml_string_len(int r0, int r1, int r2, int r3, int r4, int r5, void **str)
+{
+  return rukaml_string_len_imm(str);
 }
 
 void rukaml_fprintf_string(FILE *dest, void **str)
@@ -575,7 +590,7 @@ void rukaml_fprintf_string(FILE *dest, void **str)
     mk_err_fatal("tag mismatch");
   }
 
-  uint64_t str_len = rukaml_string_length(str);
+  uint64_t str_len = rukaml_string_len_imm(str);
 
   uint64_t n = fwrite((void *)(str), sizeof(char), str_len, dest);
 
@@ -585,10 +600,103 @@ void rukaml_fprintf_string(FILE *dest, void **str)
   }
 }
 
+uint64_t rukaml_list_length(int r0, int r1, int r2, int r3, int r4, int r5, void **ls)
+{
+  for (uint64_t size = 0;; ++size)
+  {
+    if (ls == NULL)
+    {
+      mk_err_fatal("unexpected null ptr");
+    }
+
+    if (((TAG(ls) == 0)) && (SIZE(ls) == 0)) // []
+    {
+      return size;
+    }
+    else if ((TAG(ls) == 1) && (SIZE(ls) == 2)) // ( :: ) of 'a * 'a list
+    {
+      ls = (void **)(ls[1]);
+    }
+    else
+    {
+      mk_err_fatal("tag mismatch (list expected)");
+    }
+  }
+}
+
+void **rukaml_string_of_char_list(int r0, int r1, int r2, int r3, int r4, int r5, void **chs)
+{
+  if (chs == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  uint64_t chars_n = rukaml_list_length(0, 0, 0, 0, 0, 0, chs);
+
+  uint64_t payload_words_n = (chars_n + 7) / 8;
+
+  uint64_t *block = (uint64_t *)rukaml_alloc_block(payload_words_n + 1, String_tag);
+
+  block[payload_words_n] = chars_n;
+  assert(rukaml_string_len_imm((void **)block) == chars_n);
+
+  for (size_t n = 0; n < chars_n; ++n)
+  {
+    assert(TAG(chs) == 1); // tag of ( :: )
+    ((char *)(block))[n] = (char)(chs[0]);
+    chs = (void **)(chs[1]);
+  }
+
+  return (void **)block;
+}
+
+bool rukaml_string_equal(int r0, int r1, int r2, int r3, int r4, int r5, void **left, void **right)
+{
+  if (left == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+
+  if (right == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+
+  if (TAG(left) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  if (TAG(right) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  if (rukaml_string_len_imm(left) != rukaml_string_len_imm(right))
+  {
+    return false;
+  }
+
+  for (size_t n = 0; n < rukaml_string_len_imm(left); ++n)
+  {
+    if (rukaml_string_nth_imm(left, n) != rukaml_string_nth_imm(right, n))
+    {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 void rukaml_match_failure()
 {
   fprintf(stderr, "Match failure");
   exit(1);
+}
+
+void *rukaml_stdin(void)
+{
+  return (void *)stdin;
 }
 
 void *rukaml_stderr(void)
@@ -601,37 +709,59 @@ void *rukaml_stdout(void)
   return (void *)stdout;
 }
 
-void *rukaml_open_out(int a0, int a1, int a2, int a3, int a4, int a5, void **path)
+void *rukaml_open_impl(void **path, const char *mode)
 {
-  size_t len = 0;
-  while (path[len++] != 0) // counts amount of symbols in path
-    ;
+  if (path == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(path) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  if (mode == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  uint64_t len = rukaml_string_len_imm(path);
 
   char *path_cstr = malloc(len + 1);
+
   if (path_cstr == NULL)
   {
     mk_err_fatal("memory allocation failed");
   }
 
-  for (size_t i = 0; i < len; i++) // copies path symbols to buffer
-  {
-    path_cstr[i] = (char)(uint64_t)path[i];
-  }
+  memcpy(path_cstr, (const void *)path, len);
 
   path_cstr[len] = '\0';
 
-  FILE *fp = fopen(path_cstr, "w");
-  free(path_cstr);
+  FILE *file = fopen(path_cstr, mode);
 
-  if (fp == NULL)
+  if (file == NULL)
   {
     mk_err_fatal("fopen failed");
   }
 
-  return (void *)fp;
+  free(path_cstr);
+
+  return (void *)file;
 }
 
-void rukaml_close_out(int a0, int a1, int a2, int a3, int a4, int a5, void *channel)
+void *rukaml_open_in(void **path)
+{
+  return rukaml_open_impl(path, "r");
+}
+
+void *rukaml_open_out(void **path)
+{
+  return rukaml_open_impl(path, "w");
+}
+
+void rukaml_close_channel(void *channel)
 {
   if (channel == NULL)
   {
@@ -643,7 +773,17 @@ void rukaml_close_out(int a0, int a1, int a2, int a3, int a4, int a5, void *chan
   }
 }
 
-static void rukaml_fprintf_impl(FILE *dest, void **fmt, va_list args)
+int64_t rukaml_input_char(void *channel)
+{
+  return fgetc((FILE *)channel);
+}
+
+int64_t rukaml_end_of_input(void *channel)
+{
+  return fgetc((FILE *)channel) == EOF;
+}
+
+void rukaml_fprintf_impl(FILE *dest, void **fmt, va_list args)
 {
   if (dest == NULL)
   {
@@ -660,11 +800,11 @@ static void rukaml_fprintf_impl(FILE *dest, void **fmt, va_list args)
     mk_err_fatal("tag mismatch");
   }
 
-  uint64_t fmt_len = rukaml_string_length(fmt);
+  uint64_t fmt_len = rukaml_string_len_imm(fmt);
 
   for (size_t pos = 0; pos < fmt_len; ++pos)
   {
-    char ch = rukaml_string_nth(fmt, pos);
+    char ch = rukaml_string_nth_imm(fmt, pos);
 
     if (ch != '%')
     {
@@ -679,7 +819,7 @@ static void rukaml_fprintf_impl(FILE *dest, void **fmt, va_list args)
       mk_err_fatal("invalid fmt");
     }
 
-    ch = rukaml_string_nth(fmt, pos);
+    ch = rukaml_string_nth_imm(fmt, pos);
 
     switch (ch)
     {
@@ -768,13 +908,13 @@ uint64_t eval_fmt_arity(void **fmt)
     mk_err_fatal("tag mismatch");
   }
 
-  uint64_t fmt_len = rukaml_string_length(fmt);
+  uint64_t fmt_len = rukaml_string_len_imm(fmt);
 
   uint64_t arity_acc = 0;
 
   for (size_t pos = 0; pos < fmt_len; ++pos)
   {
-    char ch = rukaml_string_nth(fmt, pos);
+    char ch = rukaml_string_nth_imm(fmt, pos);
 
     if (ch != '%')
     {
@@ -788,7 +928,7 @@ uint64_t eval_fmt_arity(void **fmt)
       mk_err_fatal("invalid fmt");
     }
 
-    ch = rukaml_string_nth(fmt, pos);
+    ch = rukaml_string_nth_imm(fmt, pos);
 
     switch (ch)
     {
@@ -918,4 +1058,54 @@ void *rukaml_alloc_sprintf_closure(int a0, int a1, int a2, int a3, int a4, int a
   void *closure = rukaml_alloc_closure(rukaml_sprintf_wrap, 1 + arity);
 
   return rukaml_applyN(closure, 1, fmt);
+}
+
+// TODO: implement tagged int's to distinguish immediate values from block objects properly
+
+// good implementation:
+// #define IS_IMM(v) (((uint64_t)(v) & 1) == 1)
+// #define IS_BLOCK(v) (((uint64_t)(v) & 1) == 0)
+// #define BOX_IMM(v) (((int64_t)(v) << 1) | 1)
+// #define UNBOX_IMM(v) (((int64_t)(v) >> 1))
+
+// bad implementation:
+#define IS_BLOCK(v) (is_backup_bank((uint64_t *)v) || is_old_bank((uint64_t *)v))
+#define IS_IMM(v) (!IS_BLOCK(v))
+
+uint64_t rukaml_equal_struct(void **left, void **right)
+{
+  if (IS_IMM(left) && IS_IMM(right))
+  {
+    return left == right;
+  }
+
+  if (IS_IMM(left) || IS_IMM(right))
+  {
+    return false;
+  }
+
+  if (left == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+
+  if (right == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+
+  if ((TAG(left) != TAG(right)) || (SIZE(left) != SIZE(right)))
+  {
+    return false;
+  }
+
+  for (size_t n = 0; n < SIZE(left); n++)
+  {
+    if (!rukaml_equal_struct((void **)(left[n]), (void **)(right[n])))
+    {
+      return false;
+    }
+  }
+
+  return true;
 }

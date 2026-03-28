@@ -15,24 +15,45 @@ void rukaml_print_int(int64_t);
 void rukaml_print_int_kaml(int, int, int, int, int, int, int64_t);
 
 void **rukaml_array_stdin(void);
+
+void *rukaml_stdin(void);
 void *rukaml_stdout(void);
-void *rukaml_open_out(int, int, int, int, int, int, void **);
-void rukaml_close_out(int, int, int, int, int, int, void *);
+void *rukaml_stderr(void);
+
+void *rukaml_open_in(void **path);
+void *rukaml_open_out(void **path);
+void rukaml_close_channel(void *channel);
+
+int64_t rukaml_input_char(void *channel);
+
+void **rukaml_string_of_char_list(int, int, int, int, int, int, void **chs);
+bool rukaml_string_equal(int, int, int, int, int, int, void **left, void **right);
+char rukaml_string_nth(int r0, int r1, int r2, int r3, int r4, int r5, void **str, uint64_t n);
 
 void *rukaml_alloc_printf_closure(int, int, int, int, int, int, void **fmt);
 void *rukaml_alloc_fprintf_closure(int, int, int, int, int, int, void *out_channel, void **fmt);
 void *rukaml_alloc_sprintf_closure(int, int, int, int, int, int, void **fmt);
 
 void *rukaml_alloc_block(uint64_t size, uint64_t tag);
+
 uint64_t rukaml_block_size(int, int, int, int, int, int, void **obj);
 uint64_t rukaml_block_tag(int, int, int, int, int, int, void **obj);
-
 void *rukaml_block_nth(int, int, int, int, int, int, void **obj,
                        uint64_t n);
+
+uint64_t rukaml_block_tag_imm(void **obj);
+uint64_t rukaml_block_size_imm(void **obj);
+void *rukaml_block_nth_imm(void **obj, uint64_t n);
+
+void *rukaml_field(void **obj, uint64_t n);
+
+uint64_t rukaml_equal_struct(void **left, void **right);
+
 void rukaml_array_set(int, int, int, int, int, int, void **arr, uint64_t n,
                       void *a);
 
 void rukaml_match_failure();
+void rukaml_failure(void **msg);
 
 typedef void *(*fun0)(void);
 typedef void *(*fun1)(void *);
@@ -54,8 +75,6 @@ void *rukaml_apply2(fun8 f, void *arg1, void *arg2);
 
 void *rukaml_alloc_pair(void *l, void *r);
 
-void *rukaml_field(int n, void **r);
-uint64_t rukaml_tag(void **obj);
 void *rukaml_alloc_closure(void *func, int32_t argsc);
 
 void *rukaml_applyN(void *f, int64_t argc, ...);
