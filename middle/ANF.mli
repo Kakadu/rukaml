@@ -23,29 +23,25 @@ and expr =
   | ELet of Frontend.Parsetree.rec_flag * Frontend.Typedtree.pattern * c_expr * expr
   | EComplex of c_expr
 
+type vb = Parsetree.rec_flag * Ident.t * expr
+
+type stru_item =
+  | ANF_vb of vb
+  | ANF_match of (Parsetree.const * Ident.t)
+  | ANF_eval of expr
+
+type stru = stru_item list
+
 val show_c_expr : c_expr -> string
 val pp_a : Format.formatter -> imm_expr -> unit
 val pp_c : Format.formatter -> c_expr -> unit
 val pp : Format.formatter -> expr -> unit
-
-type vb = Frontend.Parsetree.rec_flag * Frontend.Ident.t * expr
-
-val pp_vb
-  :  Format.formatter
-  -> Frontend.Parsetree.rec_flag * Frontend.Ident.t * expr
-  -> unit
-
-val pp_stru
-  :  Format.formatter
-  -> (Frontend.Parsetree.rec_flag * Frontend.Ident.t * expr) list
-  -> unit
-
+val pp_stru : Format.formatter -> stru -> unit
 val is_infix_binop : string -> bool
 val group_abstractions : expr -> apat list * expr
-val simplify_stru : vb list -> vb list
+val simplify_stru : stru -> stru
 val anf : Typedtree.expr -> expr
-val anf_vb : Typedtree.value_binding -> vb
-val anf_stru : Typedtree.structure_item list -> vb list
+val anf_stru : Typedtree.structure_item list -> stru
 
 (** Gensym stuff *)
 val anf_pat

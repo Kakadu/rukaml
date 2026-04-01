@@ -40,12 +40,21 @@ and c_expr =
   | CAtom of imm_expr
 
 and expr =
-  | ELet of Parsetree.rec_flag * Typedtree.pattern * c_expr * expr
   (* Maybe recursive flag is not required? *)
+  | ELet of Parsetree.rec_flag * Typedtree.pattern * c_expr * expr
   | EComplex of c_expr
 [@@deriving show { with_path = false }]
 
 type vb = Parsetree.rec_flag * Ident.t * expr
+
+type stru_item =
+  | ANF_vb of vb (* let x = 42 *)
+  | ANF_match of (Parsetree.const * Ident.t)
+    (* let 42 = 40 + 2; comparison of adt variants tags which occurs in vbs like let [ x ] = [ 42 ] *)
+  | ANF_eval of expr (* let () = print_int 42; let _ = printf "42" *)
+
+type stru = stru_item list
+
 (* TODO: only complex expression should be there *)
 
 let complex_of_atom x = EComplex (CAtom x)
@@ -175,14 +184,20 @@ include struct
     helper []
   ;;
 
-  let pp_vb ppf (flg, name, expr) =
-    let pats, body = group_abstractions expr in
-    fprintf ppf "@[<v 2>@[let %a%a " Pprint.pp_flg flg Ident.pp name;
-    List.iter (fprintf ppf "%a " pp_apat) pats;
-    fprintf ppf "=@]@ @[%a@]@]" pp body
+  let pp_stru_item ppf = function
+    | ANF_vb (flg, name, expr) ->
+      let pats, body = group_abstractions expr in
+      fprintf ppf "@[<v 2>@[let %a%a " Pprint.pp_flg flg Ident.pp name;
+      List.iter (fprintf ppf "%a " pp_apat) pats;
+      fprintf ppf "=@]@ @[%a@]@]" pp body
+    | ANF_match (const, name) ->
+      fprintf ppf "@[<v 2>@[let %a = %a@]@]" Pprint.pp_const const Ident.pp name
+    | ANF_eval body -> fprintf ppf "@[<v 2>@[let _ = %a@]@]" pp body
   ;;
 
-  let pp_stru ppf xs = fprintf ppf "@[<v>%a@]" (pp_print_list pp_vb) xs
+  let pp_stru ppf (items : stru) =
+    fprintf ppf "@[<v>%a@]" (pp_print_list pp_stru_item) items
+  ;;
 end
 
 let used_once_as_function ~where name =
@@ -473,8 +488,17 @@ let simplify_vb acc (flag, name, body) =
     new_acc, (flag, name, simplify acc body)
 ;;
 
-let simplify_stru : vb list -> vb list =
-  fun stru -> Stdppx.List.fold_left_map ~f:simplify_vb ~init:Arity_map.empty stru |> snd
+(* TODO? should ANF_eval and ANF_match be simplified ? *)
+let simplify_stru_item acc = function
+  | ANF_vb vb ->
+    let new_acc, new_vb = simplify_vb acc vb in
+    new_acc, ANF_vb new_vb
+  | ANF_eval _ as x -> acc, x
+  | ANF_match _ as x -> acc, x
+;;
+
+let simplify_stru (stru : stru) : stru =
+  Stdppx.List.fold_left_map ~f:simplify_stru_item ~init:Arity_map.empty stru |> snd
 ;;
 
 let reset_gensym, gensym =
@@ -494,33 +518,57 @@ let gensym_s : _ =
 let gensym_id ?(prefix = "temp") () = Ident.of_string (gensym_s ~prefix ())
 
 let anf_pat pat ?(kbefore = fun _ -> Fun.id) k =
-  let access n e = CApp (APrimitive ("field", 2), AConst (PConst_int n), [ e ]) in
+  let access n e = CApp (APrimitive ("block_nth", 2), AConst (PConst_int n), [ e ]) in
+  let compare_tag ~scrut ~expected k =
+    let fresh = gensym_id ~prefix:"tag" () in
+    let get_tag k =
+      ELet
+        ( Parsetree.NonRecursive
+        , Typedtree.Tpat_var fresh
+        , CApp (APrimitive ("get_tag", 1), AVar scrut, [])
+        , k )
+    in
+    get_tag
+      (EComplex
+         (CIte
+            ( CApp (APrimitive ("=", 2), AVar fresh, [ AConst (PConst_int expected) ])
+            , k
+            , EComplex (CAtom (APrimitive ("match_failure", 0))) )))
+  in
   (* TODO: the use of continuation here is weird, revisit it later. *)
-  let rec helper pat ident_name k =
+  let rec access_fields lhs_patts rhs_ident k =
+    let rec loop i = function
+      | [] -> k ()
+      | Typedtree.Tpat_var name_a :: tl ->
+        make_let_nonrec name_a (access i (AVar rhs_ident)) (loop (1 + i) tl)
+      | h :: tl ->
+        let name_a = Ident.of_string (gensym_s ~prefix:"field" ()) in
+        make_let_nonrec
+          name_a
+          (access i (AVar rhs_ident))
+          (helper h name_a (fun _ -> loop (1 + i) tl))
+    in
+    loop 0 lhs_patts
+  and helper pat ident_name k =
     match pat with
+    | Tpat_const _ | Tpat_unit | Tpat_any ->
+      elet Parsetree.NonRecursive pat (cvar ident_name) @@ k ()
     | Typedtree.Tpat_var s -> make_let_nonrec s (cvar ident_name) @@ k ()
-    | Tpat_tuple (a, b, xs) ->
-      let rec loop i ps =
-        match ps with
-        | [] -> k ()
-        | Typedtree.Tpat_var name_a :: tl ->
-          make_let_nonrec name_a (access i (AVar ident_name)) (loop (1 + i) tl)
-        | h :: tl ->
-          let name_a = Ident.of_string (gensym_s ()) in
-          make_let_nonrec
-            name_a
-            (access i (AVar ident_name))
-            (helper h name_a (fun _ -> loop (1 + i) tl))
-      in
-      loop 0 (a :: b :: xs)
-    | _ -> failwith "not implemented"
+    | Tpat_tuple (p1, p2, ps) -> access_fields (p1 :: p2 :: ps) ident_name k
+    | Tpat_constr (name, ps) ->
+      compare_tag ~scrut:ident_name ~expected:name.id (access_fields ps ident_name k)
   in
   match pat with
   | Typedtree.Tpat_var s -> kbefore s (k s)
   | Tpat_tuple _ ->
-    let name_p = Ident.of_string (gensym_s ()) in
+    let name_p = Ident.of_string (gensym_s ~prefix:"tuple" ()) in
     kbefore name_p (helper pat name_p (fun () -> k name_p))
-  | _ -> failwith "not implemented"
+  | Tpat_constr _ ->
+    let name_p = Ident.of_string (gensym_s ~prefix:"adt" ()) in
+    kbefore name_p (helper pat name_p (fun () -> k name_p))
+  | _ ->
+    let name_p = Ident.of_string (gensym_s ~prefix:"weird" ()) in
+    kbefore name_p (helper pat name_p (fun () -> k name_p))
 ;;
 
 let anf =
@@ -572,16 +620,16 @@ let anf =
                       (NonRecursive, Tpat_var name, CAtom imm, complex_of_atom (AVar name)))
                 )))
         , helper wher complex_of_atom )
-    | TLet (_, (Tpat_tuple _ as pat), _typ, rhs, wher) ->
+    | TLet (_, pat, _typ, rhs, wher) ->
       helper rhs (fun imm_rhs ->
         anf_pat
           ~kbefore:(fun name -> make_let_nonrec name (CAtom imm_rhs))
           pat
           (fun _ -> helper wher k))
-    | TLet (flag, name, _typ, rhs, wher) ->
+      (* | TLet (flag, name, _typ, rhs, wher) -> *)
       (* NOTE: CPS in this part is tricky *)
       (* TODO: should we merge this case to the upper one? *)
-      helper rhs (fun imm_rhs -> ELet (flag, name, CAtom imm_rhs, helper wher k))
+      (* helper rhs (fun imm_rhs -> ELet (flag, name, CAtom imm_rhs, helper wher k)) *)
     | TIf (econd, eth, el, _) ->
       helper econd (fun eimm ->
         let name = gensym_id () in
@@ -615,10 +663,7 @@ let anf =
         | [] -> make_let_nonrec name (CAtom (AArray ys)) (k (AVar name))
       in
       helper_fold xs []
-    | TConstruct (ident, [], _) ->
-      let name = gensym_id () in
-      let rhs = CAtom (AConstruct (ident.id, [])) in
-      make_let_nonrec name rhs (k (AVar name))
+    | TConstruct (ident, [], _) -> k (AConstruct (ident.id, []))
     | TConstruct (ident, args, _) ->
       let rec aux = function
         | hd :: tl, acc -> helper hd (fun x -> aux (tl, x :: acc))
@@ -690,24 +735,75 @@ let anf =
   fun e -> helper e complex_of_atom
 ;;
 
-let anf_vb vb : vb =
-  let anf_body = anf vb.Typedtree.tvb_body in
-  let name =
-    match vb.tvb_pat with
-    | Tpat_var s -> s
-    | Tpat_tuple _ -> assert false
-    | _ -> failwith "not implemented"
+let anf_non_rec_vb ident body k = ANF_vb (Parsetree.NonRecursive, ident, body) :: k
+let anf_match const var k = ANF_match (const, var) :: k
+let anf_eval body k = ANF_eval body :: k
+
+let anf_stru_item (vb : Typedtree.value_binding) : stru_item list =
+  let access n e =
+    EComplex (CApp (APrimitive ("block_nth", 2), AConst (PConst_int n), [ e ]))
   in
-  vb.tvb_flag, name, anf_body
+  let compare_tag expected_tag obj_ident k : stru_item list =
+    let get_tag = CApp (APrimitive ("block_tag", 1), AVar obj_ident, []) in
+    let fresh = gensym_id ~prefix:"tag" () in
+    anf_non_rec_vb fresh (EComplex get_tag) (anf_match (PConst_int expected_tag) fresh k)
+  in
+  let rec access_fields (lhs_fields : Typedtree.pattern list) (rhs_ident : Ident.t) n k =
+    match lhs_fields with
+    | [] -> []
+    | (Tpat_any | Tpat_unit) :: tail ->
+      anf_eval (access n (AVar rhs_ident)) (access_fields tail rhs_ident (n + 1) k)
+    | Tpat_var name :: tail ->
+      anf_non_rec_vb
+        name
+        (access n (AVar rhs_ident))
+        (access_fields tail rhs_ident (n + 1) k)
+    | Tpat_const const :: tail ->
+      let fresh = gensym_id ~prefix:"match" () in
+      anf_non_rec_vb
+        fresh
+        (access n (AVar rhs_ident))
+        (anf_match const fresh (access_fields tail rhs_ident (n + 1) k))
+    | Tpat_tuple (p1, p2, ps) :: tail ->
+      let fresh = gensym_id ~prefix:"tuple" () in
+      anf_non_rec_vb
+        fresh
+        (access n (AVar rhs_ident))
+        (access_fields (p1 :: p2 :: ps) fresh 0 (access_fields tail rhs_ident (n + 1) k))
+    | Tpat_constr (variant, ps) :: tail ->
+      let fresh = gensym_id ~prefix:"adt" () in
+      anf_non_rec_vb
+        fresh
+        (access n (AVar rhs_ident))
+        (compare_tag
+           variant.id
+           fresh
+           (access_fields ps fresh 0 (access_fields tail rhs_ident (n + 1) k)))
+  in
+  let access_fields lhs rhs = access_fields lhs rhs 0 [] in
+  let anf_body = anf vb.Typedtree.tvb_body in
+  let k x = [ x ] in
+  match vb.tvb_pat with
+  | Tpat_any | Tpat_unit -> k (ANF_eval anf_body)
+  | Tpat_var name -> k (ANF_vb (vb.tvb_flag, name, anf_body))
+  | Tpat_const const ->
+    let fresh = gensym_id ~prefix:"match" () in
+    anf_non_rec_vb fresh anf_body (k (ANF_match (const, fresh)))
+  | Tpat_constr (variant, ps) ->
+    let fresh = gensym_id ~prefix:"adt" () in
+    anf_non_rec_vb fresh anf_body (compare_tag variant.id fresh (access_fields ps fresh))
+  | Tpat_tuple (p1, p2, ps) ->
+    let fresh = gensym_id ~prefix:"tuple" () in
+    anf_non_rec_vb fresh anf_body (access_fields (p1 :: p2 :: ps) fresh)
 ;;
 
 let anf_stru stru =
   let open Typedtree in
   let rec aux items acc =
     match items with
-    | [] -> List.rev acc
+    | [] -> List.concat (List.rev acc)
     | Tstr_type _ :: xs -> aux xs acc
-    | Tstr_value vb :: xs -> aux xs (anf_vb vb :: acc)
+    | Tstr_value vb :: xs -> aux xs (anf_stru_item vb :: acc)
   in
   aux stru []
 ;;
