@@ -328,7 +328,7 @@ let rec pp_typ ppf { typ_desc } =
   | TConstr ([], name) -> fprintf ppf "%s" name
   | TConstr ([ ty ], name) -> fprintf ppf "@[%a %s@]" pp_typ ty name
   | TConstr (tys, name) ->
-    fprintf ppf "[@(";
+    fprintf ppf "@[(";
     pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp_typ ppf tys;
     fprintf ppf ") %s@]" name
 ;;

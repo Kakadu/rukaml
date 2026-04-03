@@ -350,14 +350,14 @@ let conv ?(standart_globals = standart_globals)
          let pat, rhs, wher = rename_vars ~prefix (isrec, pat, rhs, wher) in
          let* () = save (isrec, pat, rhs) in
          return wher)
-    | ELet (Recursive, PTuple _, _, _) -> failwith "not implemented 2"
     | ELet (isrec, (PVar _name as pat), rhs, wher) ->
       assert (not (is_abstraction rhs));
       let new_env = String_set.union (vars_from_pattern pat) globals in
       let* rhs = helper new_env rhs in
       let* body = helper new_env wher in
       return (elet ~isrec pat rhs body)
-    | ELet (NonRecursive, (PTuple _ as pat), rhs, wher) ->
+    | ELet (Recursive, _, _, _) -> failwith "should not happen"
+    | ELet (NonRecursive, ((PTuple _ | PConstruct (_, _ :: _)) as pat), rhs, wher) ->
       let new_env = String_set.union (vars_from_pattern pat) globals in
       let* rhs = helper new_env rhs in
       let* body = helper new_env wher in
@@ -383,7 +383,6 @@ let conv ?(standart_globals = standart_globals)
       let* rhs = helper globals rhs in
       let* body = helper globals wher in
       return (elet ~isrec pat rhs body)
-    | ELet (_, PConstruct _, _, _) -> failwith "not implemented 3"
   and helper_list globals es =
     let* es =
       List.fold_left
@@ -404,7 +403,7 @@ let conv ?(standart_globals = standart_globals)
     let saved, last_rhs = Monads.Store.run (helper enriched_globals rhs) [] in
     List.rev_append saved [ is_rec, pat, elams args last_rhs ]
     (* |> List.map simplify_vb *)
-  | is_rec, (PTuple _ as pat), root ->
+  | is_rec, ((PTuple _ | PConstruct _) as pat), root ->
     let saved, rhs =
       Monads.Store.run
         (helper (SS.union (vars_from_pattern pat) standart_globals) root)
@@ -416,7 +415,6 @@ let conv ?(standart_globals = standart_globals)
     log "%s %d, is_rec = %a, discard pattern" __FUNCTION__ __LINE__ pp_rec_flag is_rec;
     let saved, rhs = Monads.Store.run (helper standart_globals root) [] in
     List.rev_append saved [ is_rec, pat, rhs ] |> List.map simplify_vb
-  | _ -> failwith "not implemented 4"
 ;;
 
 let value_binding = conv

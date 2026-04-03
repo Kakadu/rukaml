@@ -26,7 +26,7 @@ module Compiler = struct
   type _ t =
     | Parsetree : Parsetree.structure -> Parsetree.structure t
     | Typedtree : Typedtree.structure -> Typedtree.structure t
-    | ANF : ANF.vb list -> ANF.vb list t
+    | ANF : ANF.stru -> ANF.stru t
     | Code : code -> code t
 
   let k x = fun k -> k x
@@ -109,8 +109,15 @@ module Compiler = struct
 
   (** Generate code for RV64 *)
   let rv64 (ANF stru) =
+    let vbs =
+      List.map
+        ~f:(function
+          | ANF.ANF_vb vb -> vb
+          | _ -> failwith "not implemented")
+        stru
+    in
     let f ~path =
-      RV64_impl.codegen ~wrap_main_into_start:false stru path |> Result.ok_or_failwith
+      RV64_impl.codegen ~wrap_main_into_start:false vbs path |> Result.ok_or_failwith
     in
     k (Code f)
   ;;
@@ -125,7 +132,14 @@ module Compiler = struct
 
   (** Generate code for LLVM *)
   let llvm (ANF stru) =
-    let f ~path = LLVM_impl.codegen stru path |> Result.ok_or_failwith in
+    let vbs =
+      List.map
+        ~f:(function
+          | ANF.ANF_vb vb -> vb
+          | _ -> failwith "not implemented")
+        stru
+    in
+    let f ~path = LLVM_impl.codegen vbs path |> Result.ok_or_failwith in
     k (Code f)
   ;;
 

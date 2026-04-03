@@ -106,7 +106,7 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
       let accessor, accessor_typ = top_look_exn "rukaml_print_int" in
       LL.build_call accessor_typ accessor [ LL.const_int i64_typ n ]
     (* | CApp (APrimitive "length", AArray r, []) ->  *)
-    | CApp (APrimitive ("field", _), AConst (PConst_int n), [ what ]) ->
+    | CApp (APrimitive ("block_nth", _), what, [ AConst (PConst_int n) ]) ->
       let source = gen_a what in
       (* let accessor = LL.lookup_func_exn "rukaml_field" in
            LL.build_call accessor [ LL.const_int i64_typ n; source ] *)
