@@ -213,6 +213,18 @@ void rukaml_print_alloc_closure_count(void)
   fflush(stdout);
 }
 
+// TODO: implement tagged int's to distinguish immediate values from block objects properly
+
+// good implementation:
+// #define IS_IMM(v) (((uint64_t)(v) & 1) == 1)
+// #define IS_BLOCK(v) (((uint64_t)(v) & 1) == 0)
+// #define BOX_IMM(v) (((int64_t)(v) << 1) | 1)
+// #define UNBOX_IMM(v) (((int64_t)(v) >> 1))
+
+// bad implementation:
+#define IS_BLOCK(v) (is_backup_bank((uint64_t *)v) || is_old_bank((uint64_t *)v))
+#define IS_IMM(v) (!IS_BLOCK(v))
+
 void rukaml_print_int(int64_t x)
 {
   printf("%s %d\n", __func__, x);
@@ -384,6 +396,13 @@ void *rukaml_alloc_block(uint64_t size, uint64_t tag)
 
 uint64_t rukaml_block_tag_imm(void **obj)
 {
+  // constant constructors are represented as int's (for now just ints, not tagged ones)
+  // TODO: i'm not sure is this works as expected
+  if (IS_IMM(obj))
+  {
+    return (uint64_t)(obj);
+  }
+
   return TAG(obj);
 }
 
@@ -1059,18 +1078,6 @@ void *rukaml_alloc_sprintf_closure(int a0, int a1, int a2, int a3, int a4, int a
 
   return rukaml_applyN(closure, 1, fmt);
 }
-
-// TODO: implement tagged int's to distinguish immediate values from block objects properly
-
-// good implementation:
-// #define IS_IMM(v) (((uint64_t)(v) & 1) == 1)
-// #define IS_BLOCK(v) (((uint64_t)(v) & 1) == 0)
-// #define BOX_IMM(v) (((int64_t)(v) << 1) | 1)
-// #define UNBOX_IMM(v) (((int64_t)(v) >> 1))
-
-// bad implementation:
-#define IS_BLOCK(v) (is_backup_bank((uint64_t *)v) || is_old_bank((uint64_t *)v))
-#define IS_IMM(v) (!IS_BLOCK(v))
 
 uint64_t rukaml_equal_struct(void **left, void **right)
 {
