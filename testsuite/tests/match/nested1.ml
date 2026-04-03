@@ -4,7 +4,7 @@
   (run (stdout "test passed"))
 *)
 
-let test () =
+let test t =
   match [ [ 0; 1 ]; [ 2 ] ] with
   | [] -> printf "test failed 1"
   | [ _ ] -> printf "test failed 2"

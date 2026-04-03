@@ -1,7 +1,7 @@
 (*
    test
   (targets amd64)
-  (run (stdout "(hello world!)"))
+  (run (stdout "(helloworld!)"))
 *)
 
 let lp = '('
