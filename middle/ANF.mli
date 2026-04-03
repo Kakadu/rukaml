@@ -27,7 +27,7 @@ type vb = Parsetree.rec_flag * Ident.t * expr
 
 type stru_item =
   | ANF_vb of vb
-  | ANF_match of (Parsetree.const * Ident.t)
+  | ANF_match of (Parsetree.const * c_expr)
   | ANF_eval of expr
 
 type stru = stru_item list

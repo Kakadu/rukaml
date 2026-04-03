@@ -49,7 +49,7 @@ type vb = Parsetree.rec_flag * Ident.t * expr
 
 type stru_item =
   | ANF_vb of vb (* let x = 42 *)
-  | ANF_match of (Parsetree.const * Ident.t)
+  | ANF_match of (Parsetree.const * c_expr)
     (* let 42 = 40 + 2; comparison of adt variants tags which occurs in vbs like let [ x ] = [ 42 ] *)
   | ANF_eval of expr (* let () = print_int 42; let _ = printf "42" *)
 
@@ -190,8 +190,8 @@ include struct
       fprintf ppf "@[<v 2>@[let %a%a " Pprint.pp_flg flg Ident.pp name;
       List.iter (fprintf ppf "%a " pp_apat) pats;
       fprintf ppf "=@]@ @[%a@]@]" pp body
-    | ANF_match (const, name) ->
-      fprintf ppf "@[<v 2>@[let %a = %a@]@]" Pprint.pp_const const Ident.pp name
+    | ANF_match (const, cexpr) ->
+      fprintf ppf "@[<v 2>@[let %a = %a@]@]" Pprint.pp_const const pp_c cexpr
     | ANF_eval body -> fprintf ppf "@[<v 2>@[let _ = %a@]@]" pp body
   ;;
 
@@ -518,7 +518,7 @@ let gensym_s : _ =
 let gensym_id ?(prefix = "temp") () = Ident.of_string (gensym_s ~prefix ())
 
 let anf_pat pat ?(kbefore = fun _ -> Fun.id) k =
-  let access n e = CApp (APrimitive ("block_nth", 2), AConst (PConst_int n), [ e ]) in
+  let access n e = CApp (APrimitive ("block_nth", 2), e, [ AConst (PConst_int n) ]) in
   let compare_tag ~scrut ~expected k =
     let fresh = gensym_id ~prefix:"tag" () in
     let get_tag k =
@@ -675,7 +675,9 @@ let anf =
       aux (args, [])
     (* converts TMatch into if-then-else *)
     | TMatch (scrutinee, (case1, cases), _) ->
-      let access x n = CApp (APrimitive ("block_nth", 2), x, [ AConst (PConst_int n) ]) in
+      let access obj n =
+        CApp (APrimitive ("block_nth", 2), obj, [ AConst (PConst_int n) ])
+      in
       let get_tag x = CApp (APrimitive ("block_tag", 1), x, []) in
       let match_failure = APrimitive ("match_failure", 0) in
       let cmp a b = CApp (APrimitive ("=", 2), a, [ b ]) in
@@ -735,66 +737,73 @@ let anf =
   fun e -> helper e complex_of_atom
 ;;
 
+(* TODO: cps here is silly *)
+
 let anf_non_rec_vb ident body k = ANF_vb (Parsetree.NonRecursive, ident, body) :: k
 let anf_match const var k = ANF_match (const, var) :: k
 let anf_eval body k = ANF_eval body :: k
 
 let anf_stru_item (vb : Typedtree.value_binding) : stru_item list =
-  let access n e =
-    EComplex (CApp (APrimitive ("block_nth", 2), AConst (PConst_int n), [ e ]))
+  let access_c obj n =
+    CApp (APrimitive ("block_nth", 2), obj, [ AConst (PConst_int n) ])
   in
-  let compare_tag expected_tag obj_ident k : stru_item list =
-    let get_tag = CApp (APrimitive ("block_tag", 1), AVar obj_ident, []) in
-    let fresh = gensym_id ~prefix:"tag" () in
-    anf_non_rec_vb fresh (EComplex get_tag) (anf_match (PConst_int expected_tag) fresh k)
+  let access obj n = EComplex (access_c obj n) in
+  let compare_tag ~scrut ~tag k : stru_item list =
+    anf_match (PConst_int tag) (CApp (APrimitive ("block_tag", 1), AVar scrut, [])) k
   in
   let rec access_fields (lhs_fields : Typedtree.pattern list) (rhs_ident : Ident.t) n k =
     match lhs_fields with
     | [] -> []
     | (Tpat_any | Tpat_unit) :: tail ->
-      anf_eval (access n (AVar rhs_ident)) (access_fields tail rhs_ident (n + 1) k)
+      anf_eval (access (AVar rhs_ident) n) (access_fields tail rhs_ident (n + 1) k)
     | Tpat_var name :: tail ->
       anf_non_rec_vb
         name
-        (access n (AVar rhs_ident))
+        (access (AVar rhs_ident) n)
         (access_fields tail rhs_ident (n + 1) k)
     | Tpat_const const :: tail ->
-      let fresh = gensym_id ~prefix:"match" () in
-      anf_non_rec_vb
-        fresh
-        (access n (AVar rhs_ident))
-        (anf_match const fresh (access_fields tail rhs_ident (n + 1) k))
+      anf_match
+        const
+        (access_c (AVar rhs_ident) n)
+        (access_fields tail rhs_ident (n + 1) k)
     | Tpat_tuple (p1, p2, ps) :: tail ->
       let fresh = gensym_id ~prefix:"tuple" () in
       anf_non_rec_vb
         fresh
-        (access n (AVar rhs_ident))
+        (access (AVar rhs_ident) n)
         (access_fields (p1 :: p2 :: ps) fresh 0 (access_fields tail rhs_ident (n + 1) k))
     | Tpat_constr (variant, ps) :: tail ->
       let fresh = gensym_id ~prefix:"adt" () in
       anf_non_rec_vb
         fresh
-        (access n (AVar rhs_ident))
+        (access (AVar rhs_ident) n)
         (compare_tag
-           variant.id
-           fresh
+           ~scrut:fresh
+           ~tag:variant.id
            (access_fields ps fresh 0 (access_fields tail rhs_ident (n + 1) k)))
   in
   let access_fields lhs rhs = access_fields lhs rhs 0 [] in
   let anf_body = anf vb.Typedtree.tvb_body in
-  let k x = [ x ] in
-  match vb.tvb_pat with
-  | Tpat_any | Tpat_unit -> k (ANF_eval anf_body)
-  | Tpat_var name -> k (ANF_vb (vb.tvb_flag, name, anf_body))
-  | Tpat_const const ->
-    let fresh = gensym_id ~prefix:"match" () in
-    anf_non_rec_vb fresh anf_body (k (ANF_match (const, fresh)))
-  | Tpat_constr (variant, ps) ->
-    let fresh = gensym_id ~prefix:"adt" () in
-    anf_non_rec_vb fresh anf_body (compare_tag variant.id fresh (access_fields ps fresh))
-  | Tpat_tuple (p1, p2, ps) ->
-    let fresh = gensym_id ~prefix:"tuple" () in
-    anf_non_rec_vb fresh anf_body (access_fields (p1 :: p2 :: ps) fresh)
+  (fun k ->
+     match vb.tvb_pat with
+     | Tpat_any | Tpat_unit -> k (ANF_eval anf_body)
+     | Tpat_var name -> k (ANF_vb (vb.tvb_flag, name, anf_body))
+     | Tpat_const const ->
+       (match anf_body with
+        | EComplex cexpr -> k (ANF_match (const, cexpr))
+        | _ ->
+          let fresh = gensym_id ~prefix:"match" () in
+          anf_non_rec_vb fresh anf_body (k (ANF_match (const, CAtom (AVar fresh)))))
+     | Tpat_constr (variant, ps) ->
+       let fresh = gensym_id ~prefix:"adt" () in
+       anf_non_rec_vb
+         fresh
+         anf_body
+         (compare_tag ~scrut:fresh ~tag:variant.id (access_fields ps fresh))
+     | Tpat_tuple (p1, p2, ps) ->
+       let fresh = gensym_id ~prefix:"tuple" () in
+       anf_non_rec_vb fresh anf_body (access_fields (p1 :: p2 :: ps) fresh))
+    (fun x -> [ x ])
 ;;
 
 let anf_stru stru =

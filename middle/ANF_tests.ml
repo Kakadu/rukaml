@@ -64,11 +64,11 @@ let test_anf ?(print_before = false) text =
     if print_before
     then (
       Format.printf "Before simplify:\n%!";
-      Format.printf "@[<v>%a@]\n\n%!" (Format.pp_print_list pp_vb) anf);
+      Format.printf "@[<v>%a@]\n\n%!" pp_stru anf);
     anf |> simplify_stru |> Result.ok
   with
   | Result.Error err -> Format.printf "%a\n%!" Inferencer.pp_error err
-  | Ok anf -> Format.printf "@[<v>%a@]\n%!" (Format.pp_print_list pp_vb) anf
+  | Ok anf -> Format.printf "@[<v>%a@]\n%!" pp_stru anf
 ;;
 
 let%expect_test "CPS factorial" =
