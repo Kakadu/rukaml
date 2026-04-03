@@ -762,7 +762,8 @@ let generate_body is_toplevel body =
           16
           ~comm:(sprintf "DEalloc for pad and arg 1 of function %S" f.hum_name));
       if dest <> DReg "a0" then emit sd_dest (RU "a0") dest
-    | CApp (APrimitive ("field", _), AConst (PConst_int _n), [ AVar _ ]) ->
+    | CApp (APrimitive (("field" | "block_nth"), _), AConst (PConst_int _n), [ AVar _ ])
+      ->
       failwiths "Not implemented"
       (* helper_a (DReg "rsi") cont;
            printfn ppf "  mov rdi, %d" n;
@@ -782,7 +783,7 @@ let generate_body is_toplevel body =
     | CApp (APrimitive ("char_code", 1), AVar arg, []) ->
       emit ld t0 (pp_to_mach arg);
       emit sd_dest t0 dest
-    | CApp (APrimitive ("get_tag", _), AVar arg, []) ->
+    | CApp (APrimitive ("block_tag", _), AVar arg, []) ->
       emit ld a0 (pp_to_mach arg);
       emit call "rukaml_tag0";
       emit sd_dest a0 dest ~comm:(Format.asprintf "got tag of '%a'" Ident.pp arg)

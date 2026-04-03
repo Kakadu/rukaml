@@ -525,7 +525,7 @@ let anf_pat pat ?(kbefore = fun _ -> Fun.id) k =
       ELet
         ( Parsetree.NonRecursive
         , Typedtree.Tpat_var fresh
-        , CApp (APrimitive ("get_tag", 1), AVar scrut, [])
+        , CApp (APrimitive ("block_tag", 1), AVar scrut, [])
         , k )
     in
     get_tag
