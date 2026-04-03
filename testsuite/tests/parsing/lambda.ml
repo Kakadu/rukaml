@@ -1,7 +1,25 @@
 (*
    test
   (targets amd64)
-  (run (stdout "rukaml_print_int 20"))
+  (run (stdout
+          "(0) parsed var: x"
+          "(1) parsed var: x"
+          "(2) parsed var: x"
+          "(3) parsed expr: x"
+          "(4) parsed expr: (x y)"
+          "(5) parsed expr: (> x . x y)"
+          "(6) parsed expr: (> f . > x . > y . f (x y))"
+          "(7) parsed expr: (> f . > x . > y . f (x y))"
+          "(8) parsed expr: ((> x . x) a)"
+          "(9) parsed expr: ((> f . > x . f x) (> y . y))"
+          "(17) parsed expr: ((> x . > y . > z . x (z (y z))) (a (b c)))"
+          "(18) parsed expr: ((> k . > x . k) (> x . > y . x))"
+          "(27) Omega: ((> x . x x) (> x . x x))"
+          "(32) Church 2: (> f . > x . f (f x))"
+          "(34) plus: (> m . > n . > f . > x . m (f (n (f x))))"
+          "(35) mult: (> m . > n . > f . m (n f))"
+          "(37) chain: (a (b (c (d (e f)))))"
+          "(38) nested: (> x . (> y . y) x)"))
 *)
 
 (* TODO: remove this example before merge *)
