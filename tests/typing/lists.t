@@ -65,23 +65,23 @@ assert that type of cat is 'a list -> 'a list -> 'a list
   >    in
   >  aux (rev xs) ys   
   > EOF
-  let rec aux: '_3 list -> '_3 list -> '_3 list =
+  let rec __lifted_let_1_aux: '_3 list -> '_3 list -> '_3 list =
     fun ls acc -> match ls with
                     | [] -> acc
-                    | hd :: tl -> (aux tl) (hd :: acc)
+                    | hd :: tl -> (__lifted_let_1_aux tl) (hd :: acc)
   let rev: '_4 list -> '_4 list =
-    fun ls -> (aux ls) []
+    fun ls -> (__lifted_let_1_aux ls) []
   let rec join: '_3 list -> '_7 list -> ('_3 * '_7) list =
     fun xs ys -> match (xs, ys) with
                    | ([], _) -> []
                    | (_, []) -> []
                    | (xhd :: xtl, yhd :: ytl) -> (xhd, yhd) :: ((join xtl) ytl)
-  let rec aux: '_3 list -> '_3 list -> '_3 list =
+  let rec __lifted_let_2_aux: '_3 list -> '_3 list -> '_3 list =
     fun xs ys -> match (xs, ys) with
                    | ([], acc) -> acc
-                   | (hd :: tl, acc) -> (aux tl) (hd :: acc)
+                   | (hd :: tl, acc) -> (__lifted_let_2_aux tl) (hd :: acc)
   let cat: '_5 list -> '_5 list -> '_5 list =
-    fun xs ys -> (aux (rev xs)) ys
+    fun xs ys -> (__lifted_let_2_aux (rev xs)) ys
 
 assert that type of is_empty is 'a list -> bool
 assert that type of exists is ('a -> bool) -> 'a list -> bool

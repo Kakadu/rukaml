@@ -41,11 +41,11 @@
   >     match (f, x) with
   >     | (f, x) -> f x
   > EOF
-  let f: int -> int =
+  let __lifted_let_1_f: int -> int =
     fun x -> x + 1
   let main: int =
     let x : int = 1 in
-    match (f, x) with
+    match (__lifted_let_1_f, x) with
       | (f, x) -> f x
 
   $ run << EOF
@@ -54,10 +54,10 @@
   >   match swap (true, 1) with
   >   | (a, b) -> b
   > EOF
-  let swap: '_1 * '_2 -> '_2 * '_1 =
+  let __lifted_let_1_swap: '_1 * '_2 -> '_2 * '_1 =
     fun (x, y) -> (y, x)
   let main: bool =
-    match swap (true, 1) with
+    match __lifted_let_1_swap (true, 1) with
       | (a, b) -> b
 
   $ run << EOF
@@ -66,10 +66,10 @@
   >     match scnd (1, true) with
   >     | x -> x
   > EOF
-  let scnd: '_1 * '_2 -> '_2 =
+  let __lifted_let_1_scnd: '_1 * '_2 -> '_2 =
     fun (x, y) -> y
   let main: bool =
-    match scnd (1, true) with
+    match __lifted_let_1_scnd (1, true) with
       | x -> x
   $ run << EOF
   > let main x =
@@ -126,7 +126,7 @@
   >   match (1, 2) with
   >   | (a, b, c) -> a + b + c
   > EOF
-  infer error: unification failed on (int, int, '_3) and (int, int)
+  infer error: unification failed on (int * int * '_3) and (int * int)
   [1]
   $ run << EOF
   > let main =
@@ -149,7 +149,7 @@
   >     match 1 with
   >     | (a, b) -> a + b
   > EOF
-  infer error: unification failed on ('_1, '_2) and int
+  infer error: unification failed on ('_1 * '_2) and int
   [1]
 
   $ run << EOF
@@ -185,6 +185,6 @@
   >     | (a, b) -> a + b
   >     | (a, b, c) -> a + b + c
   > EOF
-  infer error: unification failed on (int, int, int) and (int, int)
+  infer error: unification failed on (int * int * int) and (int * int)
   [1]
 #

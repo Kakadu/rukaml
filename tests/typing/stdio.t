@@ -205,14 +205,14 @@ should fail
   > let fmt = "%s"
   > let u = printf fmt "hello world"
   > EOF
-  infer error: unification failed on '_1, out_channel, unit format3 and string
+  infer error: unification failed on ('_1, out_channel, unit) format3 and string
   [1]
 
 should fail
   $ run << EOF
   > let u = printf (let fmt = "%s" in fmt) "hello world"
   > EOF
-  infer error: unification failed on '_1, out_channel, unit format3 and string
+  infer error: unification failed on ('_1, out_channel, unit) format3 and string
   [1]
 
 should pass

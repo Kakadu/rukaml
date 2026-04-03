@@ -54,14 +54,14 @@
   type ('_0, '_1) arrows =
     | Normal of ('_0 -> '_1)
     | Reversed of ('_1 -> '_0)
-  let fresh_1: ('_2 -> int -> '_4) -> '_2 -> '_4 =
-    fun > x -> x > 0
+  let __lifted_lam_1: int -> bool =
+    fun x -> x > 0
   let a: (int, bool) arrows =
-    Normal (fresh_1 >)
-  let fresh_2: ('_2 -> int -> '_4) -> '_2 -> '_4 =
-    fun > x -> x > 0
+    Normal __lifted_lam_1
+  let __lifted_lam_2: int -> bool =
+    fun x -> x > 0
   let b: (bool, int) arrows =
-    Reversed (fresh_2 >)
+    Reversed __lifted_lam_2
   $ run << EOF
   > type 'a pair =
   >   | Pair of 'a * 'a
@@ -83,10 +83,10 @@
   > EOF
   type '_0 box =
     | Box of '_0
-  let fresh_1: int -> int =
+  let __lifted_lam_1: int -> int =
     fun a -> a + 1
   let x: (int -> int) box =
-    Box fresh_1
+    Box __lifted_lam_1
   let y: (int -> int) box box =
     Box x
 
@@ -179,7 +179,7 @@
   >   match Pair (1, 2) with
   >   | Pair (a, b, c) -> a + 1
   > EOF
-  infer error: unification failed on ('_4, '_4) and ('_4, '_4, '_5)
+  infer error: unification failed on ('_4 * '_4) and ('_4 * '_4 * '_5)
   [1]
 #
 
@@ -251,12 +251,12 @@
   type '_0 list =
     | Cons of '_0 * '_0 list
     | Nil
-  let rec aux: '_3 list -> '_3 list -> '_3 list =
+  let rec __lifted_let_1_aux: '_3 list -> '_3 list -> '_3 list =
     fun ls acc -> match ls with
                     | Nil -> acc
-                    | Cons (hd, tl) -> (aux tl) (Cons (hd, acc))
+                    | Cons (hd, tl) -> (__lifted_let_1_aux tl) (Cons (hd, acc))
   let rev: '_4 list -> '_4 list =
-    fun ls -> (aux ls) Nil
+    fun ls -> (__lifted_let_1_aux ls) Nil
   let is_empty: '_3 list -> bool =
     fun ls -> match ls with
                 | Cons (_, _) -> false
@@ -359,12 +359,12 @@
     fun ls -> match ls with
                 | [] -> []
                 | x :: xs -> (Some x) :: (wrap ls)
-  let rec aux: '_6 option list -> '_6 list -> '_6 list option =
+  let rec __lifted_let_1_aux: '_6 option list -> '_6 list -> '_6 list option =
     fun ls acc -> match ls with
                     | [] -> Some acc
                     | None :: _ -> None
-                    | Some x :: xs -> (aux xs) (x :: acc)
+                    | Some x :: xs -> (__lifted_let_1_aux xs) (x :: acc)
   let unwrap: '_4 option list -> '_4 list option =
-    fun ls -> (aux ls) []
+    fun ls -> (__lifted_let_1_aux ls) []
 
 #

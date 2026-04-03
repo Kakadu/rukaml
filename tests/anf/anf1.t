@@ -12,9 +12,9 @@
   > let sum x = let (a, b) = x in a+b
   > EOF
   let sum x =
-    let temp1 = x in
-      let a = field 0 temp1 in
-        let b = field 1 temp1 in
+    let tuple1 = x in
+      let a = block_nth tuple1 0 in
+        let b = block_nth tuple1 1 in
           (a + b)
 
   $ run << EOF
@@ -71,14 +71,14 @@ Polyvariadic uncurrying
   > let three = succ two
   > let four = succ three
   > EOF
-  let two f temp1 =
-    let a = field 0 temp1 in
-      let b = field 1 temp1 in
+  let two f tuple1 =
+    let a = block_nth tuple1 0 in
+      let b = block_nth tuple1 1 in
         let temp2 = f a  in
           temp2 b 
-  let succ prev f temp4 =
-    let a = field 0 temp4 in
-      let rest = field 1 temp4 in
+  let succ prev f tuple4 =
+    let a = block_nth tuple4 0 in
+      let rest = block_nth tuple4 1 in
         let temp5 = f a  in
           let temp6 = prev temp5  in
             temp6 rest 
@@ -124,15 +124,15 @@ Polyvariadic map
   > let four = succ three
   > let temp = two (fun x -> x) (1,2)
   > EOF
-  let two f temp1 =
-    let a = field 0 temp1 in
-      let b = field 1 temp1 in
+  let two f tuple1 =
+    let a = block_nth tuple1 0 in
+      let b = block_nth tuple1 1 in
         let temp2 = f a  in
           let temp3 = f b  in
             (temp2, temp3)
-  let succ prev f temp5 =
-    let a = field 0 temp5 in
-      let rest = field 1 temp5 in
+  let succ prev f tuple5 =
+    let a = block_nth tuple5 0 in
+      let rest = block_nth tuple5 1 in
         let temp6 = f a  in
           let temp7 = prev f  in
             let temp8 = temp7 rest  in
