@@ -93,15 +93,16 @@ let list_take n xs =
 ;;
 
 type dest =
-  (* rukaml_discard is reserved word in .bss where garbage of '_' pattern is discarded. i think it makes logic of generated code clearer than placing the result into rax *)
+  (* rukaml_discard is reserved word in .bss where result of vb with '_' pattern is discarded *)
   | DDiscard
   | DReg of string
+  (* DStack_var's are allocated in stack and access to them is performed via offset of rbp *)
   | DStack_var of Frontend.Ident.t
     (* DStatic_var's are allocated in .bss and access to them is performed via labels *)
   | DStatic_var of Frontend.Ident.t
 
 module Addr_of_local = struct
-  let store : (Frontend.Ident.t, _) Hashtbl.t = Hashtbl.create 100
+  let store : (Frontend.Ident.t, _) Hashtbl.t = Hashtbl.create 13
   let last_pos = ref 0
   let get_locals_count () = !last_pos
 
@@ -169,12 +170,12 @@ module Addr_of_local = struct
   ;;
 end
 
-(* warning:
-    DO NOT access toplevel constants and functions using Ident.pp
+(* notice:
+    DO NOT access toplevel constants and functions using Ident.pp or .hum_name
     use Toplevel.pp_label_exn instead of it
     global labels should be unique and this module provides it *)
 module Toplevel = struct
-  (* everything that needs to be evaluated before control flow enters main *)
+  (* immediate is anything that needs to be evaluated before control flow enters main *)
   type immediate =
     | Constant (* let x = <expr which is not a lambda> *)
     | Match (* let 42 = <expr> *)
@@ -239,7 +240,6 @@ module Toplevel = struct
     | Immediate Match -> Format.fprintf ppf "%s__3%d" name id
   ;;
 
-  (* TODO: names are pretty dumb here *)
   let pp_label_exn ppf (ident : Ident.t) =
     let toplevel = find_exn ident in
     pp_toplevel_label ppf toplevel
@@ -274,7 +274,7 @@ module Addr_of_var = struct
         Addr_of_var looks for
             1. local variables
             2. global labels (.bss, .text, externs and externs' aliases)
-        In some cases we need to check only local ones using Addr_of_local.
+        In some cases we need to check only local ones using Addr_of_local.pp_local_exn
         I'm not sure if it is truly correct for now. *)
   let pp_var_exn ppf ident =
     match Addr_of_local.pp_local_exn ppf ident with
@@ -295,10 +295,10 @@ module Addr_of_var = struct
   ;;
 
   (* resolves aliases *)
-  let builtin_real_name_exn (ident : Ident.t) = (Toplevel.find_exn ident).name
+  let real_name_exn (ident : Ident.t) = (Toplevel.find_exn ident).name
 end
 
-let is_builtin, builtin_real_name_exn = Addr_of_var.(is_builtin, builtin_real_name_exn)
+let is_builtin, real_name_exn = Addr_of_var.(is_builtin, real_name_exn)
 
 let pp_dest ppf = function
   | DDiscard -> fprintf ppf "[rukaml_discard]"
@@ -414,7 +414,7 @@ let rec generate_body ppf body =
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar vname when is_toplevel vname ->
         (match Toplevel.find_exn vname with
-         (* notice : does not use vname below (because of aliases) *)
+         (* notice : do not use vname below (because of aliases) *)
          | { kind = Function { argc }; name; id } ->
            (* TODO: what about functions with argc = 0 ??? *)
            emit_alloc_closure ppf (Ident.ident name id) ~argc;
@@ -433,13 +433,13 @@ let rec generate_body ppf body =
          | { kind = Main; _ } -> assert false
          | { kind = Immediate Eval; _ } -> assert false
          | { kind = Immediate Match; _ } -> assert false)
-      | AVar v when is_builtin v && builtin_real_name_exn v = "rukaml_stdin" ->
+      | AVar v when is_builtin v && real_name_exn v = "rukaml_stdin" ->
         printfn ppf "  call rukaml_stdin";
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
-      | AVar v when is_builtin v && builtin_real_name_exn v = "rukaml_stdout" ->
+      | AVar v when is_builtin v && real_name_exn v = "rukaml_stdout" ->
         printfn ppf "  call rukaml_stdout";
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
-      | AVar v when is_builtin v && builtin_real_name_exn v = "rukaml_stderr" ->
+      | AVar v when is_builtin v && real_name_exn v = "rukaml_stderr" ->
         printfn ppf "  call rukaml_stderr";
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar vname ->
@@ -504,17 +504,17 @@ let rec generate_body ppf body =
       printfn ppf "%s:" fin_lab
     | CAtom (AVar f)
     (* TODO? : should it be replaced with APrimitive *)
-      when is_builtin f && builtin_real_name_exn f = "rukaml_stdin" ->
+      when is_builtin f && real_name_exn f = "rukaml_stdin" ->
       printfn ppf "  call rukaml_stdin";
       printfn ppf "  mov %a, rax" pp_dest dest
     | CAtom (AVar f)
     (* TODO? : should it be replaced with APrimitive *)
-      when is_builtin f && builtin_real_name_exn f = "rukaml_stdout" ->
+      when is_builtin f && real_name_exn f = "rukaml_stdout" ->
       printfn ppf "  call rukaml_stdout";
       printfn ppf "  mov %a, rax" pp_dest dest
     | CAtom (AVar f)
     (* TODO? : should it be replaced with APrimitive *)
-      when is_builtin f && builtin_real_name_exn f = "rukaml_stderr" ->
+      when is_builtin f && real_name_exn f = "rukaml_stderr" ->
       printfn ppf "  call rukaml_stderr";
       printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (APrimitive ("print", 1), AVar arg, []) ->
@@ -522,107 +522,47 @@ let rec generate_body ppf body =
       printfn ppf "  call rukaml_print_int";
       printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (APrimitive ("block_tag", _), obj, []) ->
-      (* TODO? : it is not cdecl but emits less code *)
-      helper_a (DReg "rdi") obj;
-      printfn ppf "  call rukaml_block_tag_imm";
+      helper_a (DReg "rsi") obj;
+      printfn ppf "  mov rdi, rukaml_block_tag";
+      printfn ppf "  call rukaml_apply1";
       printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (APrimitive ("block_size", _), obj, []) ->
-      (* TODO? : it is not cdecl but emits less code *)
-      helper_a (DReg "rdi") obj;
-      printfn ppf "  call rukaml_block_size_imm";
+      helper_a (DReg "rsi") obj;
+      printfn ppf "  mov rdi, rukaml_block_size";
+      printfn ppf "  call rukaml_apply1";
       printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (APrimitive ("block_nth", _), obj, [ AConst (PConst_int n) ]) ->
-      (* TODO? : it is not cdecl but emits less code *)
-      helper_a (DReg "rdi") obj;
-      printfn ppf "  mov rsi, %d" n;
-      printfn ppf "  call rukaml_block_nth_imm";
+      helper_a (DReg "rsi") obj;
+      printfn ppf "  mov rdx, %d" n;
+      printfn ppf "  mov rdi, rukaml_block_nth";
+      printfn ppf "  call rukaml_apply2";
       printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (APrimitive ("block_nth", _), obj, [ AVar v ]) when Addr_of_var.is_defined v ->
-      (* TODO? : it is not cdecl but emits less code *)
       helper_a (DReg "rdi") obj;
       printfn ppf "  mov rsi, %a" Addr_of_var.pp_var_exn v;
       printfn ppf "  call rukaml_block_nth_imm";
       printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar f, arg, [])
-      when is_builtin f && builtin_real_name_exn f = "rukaml_alloc_printf_closure" ->
-      helper_a (DReg "rsi") arg;
-      printfn ppf "  mov rdi, rukaml_alloc_printf_closure";
-      printfn ppf "  call rukaml_apply1";
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar f, arg, [])
-      when is_builtin f && builtin_real_name_exn f = "rukaml_alloc_sprintf_closure" ->
-      helper_a (DReg "rsi") arg;
-      printfn ppf "  mov rdi, rukaml_alloc_sprintf_closure";
-      printfn ppf "  call rukaml_apply1";
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar f, arg1, [ arg2 ])
-      when is_builtin f && builtin_real_name_exn f = "rukaml_alloc_fprintf_closure" ->
-      helper_a (DReg "rsi") arg1;
-      printfn ppf "  add rsp, -8*2 ; fprintf first arg";
-      printfn ppf "  mov qword [rsp], rsi";
-      helper_a (DReg "rdx") arg2;
-      printfn ppf "  mov qword rdi, rukaml_alloc_fprintf_closure";
-      printfn ppf "  mov qword rsi, [rsp]";
-      printfn ppf "  call rukaml_apply2";
-      printfn ppf "  add rsp, 8*2 ; fprintf first arg";
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar f, arg1, [])
-      when is_builtin f && builtin_real_name_exn f = "rukaml_alloc_fprintf_closure" ->
-      printfn ppf "  mov rdi, rukaml_alloc_fprintf_closure";
-      printfn ppf "  mov rsi, 2";
-      printfn ppf "  call rukaml_alloc_closure";
-      printfn ppf "  add rsp, -8*2 ; fprintf closure";
-      printfn ppf "  mov qword [rsp], rax";
-      helper_a (DReg "rdx") arg1;
-      printfn ppf "  mov rdi, [rsp]";
-      printfn ppf "  mov rsi, 1";
-      printfn ppf "  mov rax, 0";
-      printfn ppf "  call rukaml_applyN";
-      printfn ppf "  add rsp, 8*2 ; fprintf closure ";
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar (ident : Ident.t), AVar v, [])
-    (* TODO? : it is not cdecl but emits less code *)
-      when is_builtin ident && builtin_real_name_exn ident = "rukaml_string_len" ->
-      printfn ppf "  mov rdi, rukaml_string_len";
-      printfn ppf "  mov rsi, %a" Addr_of_var.pp_var_exn v;
-      printfn ppf "  call rukaml_apply1";
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar (ident : Ident.t), arg, [])
-    (* TODO? : it is not cdecl but emits less code *)
-      when is_builtin ident && builtin_real_name_exn ident = "rukaml_string_len" ->
-      helper_a (DReg "rsi") arg;
-      printfn ppf "  mov rdi, rukaml_string_len";
-      printfn ppf "  call rukaml_apply1";
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar (ident : Ident.t), AVar v, [])
-    (* TODO? : it is not cdecl but emits less code *)
-      when is_builtin ident && builtin_real_name_exn ident = "rukaml_block_size" ->
-      printfn ppf "  mov rdi, rukaml_block_size";
-      printfn ppf "  mov rsi, %a" Addr_of_var.pp_var_exn v;
-      printfn ppf "  call rukaml_apply1";
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar (ident : Ident.t), arg, [])
-    (* TODO? : it is not cdecl but emits less code *)
-      when is_builtin ident && builtin_real_name_exn ident = "rukaml_block_size" ->
-      helper_a (DReg "rsi") arg;
-      printfn ppf "  mov rdi, rukaml_block_size";
-      printfn ppf "  call rukaml_apply1";
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar (ident : Ident.t), arg, [])
-      when is_builtin ident && builtin_real_name_exn ident = "rukaml_block_nth" ->
-      helper_a (DReg "r11") arg;
-      printfn ppf "  add rsp, -8*2";
-      printfn ppf "  mov qword [rsp], r11";
-      printfn ppf "  mov rdi, rukaml_block_nth";
-      printfn ppf "  mov rsi, 2";
-      printfn ppf "  call rukaml_alloc_closure";
-      printfn ppf "  mov rdi, rax";
-      printfn ppf "  mov rsi, 1";
-      printfn ppf "  mov rdx, [rsp]";
-      printfn ppf "  mov al, 0";
-      printfn ppf "  call rukaml_applyN";
-      printfn ppf "  add rsp, 8*2";
-      printfn ppf "  mov %a, rax" pp_dest dest
+    | CApp (AVar fname, arg, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_alloc_printf_closure" ->
+      emit_rukaml_apply1 dest ~fname ~arg
+    | CApp (AVar fname, arg, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_alloc_sprintf_closure" ->
+      emit_rukaml_apply1 dest ~fname ~arg
+    | CApp (AVar fname, arg1, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_alloc_fprintf_closure" ->
+      emit_rukaml_applyN dest ~fname ~argc:2 ~arg1
+    | CApp (AVar fname, arg, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_string_len" ->
+      emit_rukaml_apply1 dest ~fname ~arg
+    | CApp (AVar fname, arg, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_block_tag" ->
+      emit_rukaml_apply1 dest ~fname ~arg
+    | CApp (AVar fname, arg, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_block_size" ->
+      emit_rukaml_apply1 dest ~fname ~arg
+    | CApp (AVar fname, arg1, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_block_nth" ->
+      emit_rukaml_applyN dest ~fname ~argc:2 ~arg1
     | CApp (APrimitive ("field", 2), AVar n, [ AVar v ])
     (* TODO? : it is not cdecl but emits less code *)
       when Addr_of_var.is_defined v && Addr_of_var.is_defined n ->
@@ -637,56 +577,33 @@ let rec generate_body ppf body =
       printfn ppf "  mov rsi, %d" n;
       printfn ppf "  call rukaml_block_nth_imm";
       printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar (ident : Ident.t), arg, [])
-      when is_builtin ident && builtin_real_name_exn ident = "rukaml_string_nth" ->
-      helper_a (DReg "r11") arg;
-      printfn ppf "  add rsp, -8*2";
-      printfn ppf "  mov qword [rsp], r11";
-      printfn ppf "  mov rdi, rukaml_string_nth";
-      printfn ppf "  mov rsi, 2";
-      printfn ppf "  call rukaml_alloc_closure";
-      printfn ppf "  mov rdi, rax";
-      printfn ppf "  mov rsi, 1";
-      printfn ppf "  mov rdx, [rsp]";
-      printfn ppf "  mov al, 0";
-      printfn ppf "  call rukaml_applyN";
-      printfn ppf "  add rsp, 8*2";
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar f, arg1, [])
-      when is_builtin f && builtin_real_name_exn f = "rukaml_string_equal" ->
-      printfn ppf "  mov rdi, rukaml_string_equal";
-      printfn ppf "  mov rsi, 2";
-      printfn ppf "  call rukaml_alloc_closure";
-      printfn ppf "  add rsp, -8*2";
-      printfn ppf "  mov [rsp], rax";
-      helper_a (DReg "rdx") arg1;
-      printfn ppf "  mov rdi, [rsp]";
-      printfn ppf "  add rsp, 8*2";
-      printfn ppf "  mov rsi, 1";
-      printfn ppf "  mov al, 0";
-      printfn ppf "  call rukaml_applyN";
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar f, arg, [])
-      when is_builtin f && builtin_real_name_exn f = "rukaml_string_of_char_list" ->
-      helper_a (DReg "rsi") arg;
-      printfn ppf "  mov rdi, rukaml_string_of_char_list";
-      printfn ppf "  call rukaml_apply1";
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar f, arg1, [])
-    (* TODO(Kakadu): change to builtin *)
-      when is_builtin f && builtin_real_name_exn f = "rukaml_array_set" ->
-      (match arg1 with
-       | AVar arr when Addr_of_var.is_defined arr ->
-         printfn ppf "  mov rdi, rukaml_array_set";
-         printfn ppf "  mov rsi, 3";
-         printfn ppf "  call rukaml_alloc_closure";
-         printfn ppf "  mov rdi, rax";
-         printfn ppf "  mov rsi, 1";
-         printfn ppf "  mov rdx, %a" Addr_of_var.pp_var_exn arr;
-         printfn ppf "  mov al, 0";
-         printfn ppf "  call rukaml_applyN";
-         printfn ppf "  mov %a, rax" pp_dest dest
-       | _ -> failwith "Should not happen")
+    | CApp (AVar fname, arg1, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_string_nth" ->
+      emit_rukaml_applyN dest ~fname ~argc:2 ~arg1
+    | CApp (AVar fname, arg1, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_string_equal" ->
+      emit_rukaml_applyN dest ~fname ~argc:2 ~arg1
+    | CApp (AVar fname, arg, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_string_of_char_list" ->
+      emit_rukaml_apply1 dest ~fname ~arg
+    | CApp (AVar fname, arg, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_open_in" ->
+      emit_rukaml_apply1 dest ~fname ~arg
+    | CApp (AVar fname, arg, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_open_out" ->
+      emit_rukaml_apply1 dest ~fname ~arg
+    | CApp (AVar fname, arg, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_input_char" ->
+      emit_rukaml_apply1 dest ~fname ~arg
+    | CApp (AVar fname, arg, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_end_of_input" ->
+      emit_rukaml_apply1 dest ~fname ~arg
+    | CApp (AVar fname, arg, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_close_channel" ->
+      emit_rukaml_apply1 dest ~fname ~arg
+    | CApp (AVar fname, arg1, [])
+      when is_builtin fname && real_name_exn fname = "rukaml_array_set" ->
+      emit_rukaml_applyN dest ~fname ~argc:3 ~arg1
     | CApp (APrimitive ("char_code", 1), arg1, []) ->
       (match arg1 with
        | AVar v ->
@@ -694,51 +611,6 @@ let rec generate_body ppf body =
          printfn ppf "  mov %a, r11" pp_dest dest
        | AConst (PConst_char c) ->
          printfn ppf "  mov qword %a, %d" pp_dest dest (Char.code c)
-       | _ -> failwith "Should not happen")
-    | CApp (AVar f, arg1, [])
-    (* TODO(Kakadu): change to builtin *)
-      when f.Ident.hum_name = "open_in" && Addr_of_var.is_builtin f ->
-      (match arg1 with
-       | AVar v when Addr_of_var.is_defined v ->
-         let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
-         let name2 = Ident.of_string @@ gen_name ~prefix:"open_in arg" () in
-         Addr_of_local.extend name1;
-         Addr_of_local.extend name2;
-         printfn ppf "  add rsp, -8*2";
-         printfn ppf "  mov r11, %a" Addr_of_var.pp_var_exn v;
-         printfn ppf "  mov qword [rsp], r11";
-         printfn ppf "  call rukaml_array_read_in";
-         printfn ppf "  mov %a, rax" pp_dest dest;
-         printfn ppf "  add rsp, 8*2";
-         Addr_of_local.remove_local name2;
-         Addr_of_local.remove_local name1
-       | AArray _ ->
-         helper_a (DReg "r11") arg1;
-         printfn ppf "  mov qword [rsp], r11";
-         printfn ppf "  call rukaml_array_read_in";
-         printfn ppf "  mov %a, rax" pp_dest dest
-       | _ -> failwith "Should not happen")
-    | CApp (AVar f, arg1, [])
-      when f.Ident.hum_name = "open_out" && Addr_of_var.is_builtin f ->
-      (match arg1 with
-       | AVar v when Addr_of_var.is_defined v ->
-         let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
-         let name2 = Ident.of_string @@ gen_name ~prefix:"open_out arg" () in
-         Addr_of_local.extend name1;
-         Addr_of_local.extend name2;
-         printfn ppf "  add rsp, -8*2";
-         printfn ppf "  mov r11, %a" Addr_of_var.pp_var_exn v;
-         printfn ppf "  mov qword [rsp], r11";
-         printfn ppf "  call rukaml_open_out";
-         printfn ppf "  mov %a, rax" pp_dest dest;
-         printfn ppf "  add rsp, 8*2";
-         Addr_of_local.remove_local name2;
-         Addr_of_local.remove_local name1
-       | AConst (PConst_string _) ->
-         helper_a (DReg "r11") arg1;
-         printfn ppf "  mov qword [rsp], r11";
-         printfn ppf "  call rukaml_open_out";
-         printfn ppf "  mov %a, rax" pp_dest dest
        | _ -> failwith "Should not happen")
     | CApp (AVar f, arg1, [])
     (* TODO(Kakadu): change to builtin *)
@@ -956,6 +828,7 @@ let rec generate_body ppf body =
       printfn ppf "  mov rsi, 1 ; argc";
       printfn ppf "  call rukaml_applyN";
       printfn ppf "  mov %a, rax" pp_dest dest
+    (* TODO: | CApp (AVar f, (AUnit as arg), []) *)
     | CApp (AVar f, (AConst _ as arg), [])
     | CApp (AVar f, (AConstruct _ as arg), [])
     | CApp (AVar f, (APrimitive _ as arg), [])
@@ -1065,16 +938,13 @@ let rec generate_body ppf body =
     | AVar ({ Ident.hum_name = "print"; _ } as v) when Addr_of_var.is_builtin v ->
       emit_alloc_closure ppf (Ident.of_string "rukaml_print_int") ~argc:1;
       printfn ppf "  mov %a, rax" pp_dest dest
-    | AVar v
-      when Addr_of_var.is_builtin v && Addr_of_var.builtin_real_name_exn v = "stdin" ->
+    | AVar v when Addr_of_var.is_builtin v && Addr_of_var.real_name_exn v = "stdin" ->
       printfn ppf "  call rukaml_stdin";
       printfn ppf "  mov %a, rax" pp_dest dest
-    | AVar v
-      when Addr_of_var.is_builtin v && Addr_of_var.builtin_real_name_exn v = "stdout" ->
+    | AVar v when Addr_of_var.is_builtin v && Addr_of_var.real_name_exn v = "stdout" ->
       printfn ppf "  call rukaml_stdout";
       printfn ppf "  mov %a, rax" pp_dest dest
-    | AVar v
-      when Addr_of_var.is_builtin v && Addr_of_var.builtin_real_name_exn v = "stderr" ->
+    | AVar v when Addr_of_var.is_builtin v && Addr_of_var.real_name_exn v = "stderr" ->
       printfn ppf "  call rukaml_stderr";
       printfn ppf "  mov %a, rax" pp_dest dest
     | AVar vname when Addr_of_local.has_key vname ->
@@ -1097,14 +967,18 @@ let rec generate_body ppf body =
       (match Toplevel.find_exn vname with
        (* notice: do not use vname below (because of aliases) *)
        | { kind = Function { argc }; name; id } ->
-         (* TODO: what about functions with arity = 0 ?? *)
+         assert (argc > 0);
          emit_alloc_closure ppf (Ident.ident name id) ~argc;
          printfn ppf "  mov %a, rax" pp_dest dest
        | { kind = Immediate Constant; name; id } ->
          printfn ppf "  mov rax, %a" Toplevel.pp_toplevel_exn (Ident.ident name id);
          printfn ppf "  mov qword %a, rax" pp_dest dest
+       | { kind = Extern { argc = 0 }; name; _ } ->
+         (* TODO: it is weird *)
+         printfn ppf "  call %s" name;
+         printfn ppf "  mov %a, rax" pp_dest dest
        | { kind = Extern { argc }; name; id } ->
-         (* TODO: what about externs with argc = 0 ?? *)
+         assert (argc > 0);
          emit_alloc_closure ppf (Ident.ident name id) ~argc;
          printfn ppf "  mov %a, rax" pp_dest dest
        | { kind = Alias _; _ } -> assert false
@@ -1169,6 +1043,46 @@ let rec generate_body ppf body =
     printfn ppf "  mov rax, [rsp]";
     printfn ppf "  add rsp, 8*2 ; pop %s" name;
     printfn ppf "  mov %a, rax" pp_dest dest
+  and emit_rukaml_apply1 dest ~fname ~arg =
+    assert (Toplevel.is_toplevel_function fname || Addr_of_var.is_builtin fname);
+    match arg with
+    | ANF.AVar v when Addr_of_var.is_defined v ->
+      printfn ppf "  mov rdi, %a" Toplevel.pp_label_exn fname;
+      printfn ppf "  mov rsi, %a" Addr_of_var.pp_var_exn v;
+      printfn ppf "  call rukaml_apply1";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | _ ->
+      helper_a (DReg "rsi") arg;
+      printfn ppf "  mov rdi, %a" Toplevel.pp_label_exn fname;
+      printfn ppf "  call rukaml_apply1";
+      printfn ppf "  mov %a, rax" pp_dest dest
+  and emit_rukaml_applyN dest ~fname ~argc ~arg1 =
+    assert (Toplevel.is_toplevel_function fname || Addr_of_var.is_builtin fname);
+    assert (argc > 1);
+    match arg1 with
+    | ANF.AVar v when Addr_of_var.is_defined v ->
+      printfn ppf "  mov rdi, %a" Toplevel.pp_label_exn fname;
+      printfn ppf "  mov rsi, %d" argc;
+      printfn ppf "  call rukaml_alloc_closure";
+      printfn ppf "  mov rdi, rax";
+      printfn ppf "  mov rsi, 1";
+      printfn ppf "  mov rdx, %a" Addr_of_var.pp_var_exn v;
+      printfn ppf "  mov rax, 0";
+      printfn ppf "  call rukaml_applyN";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | _ ->
+      printfn ppf "  mov rdi, %a" Toplevel.pp_label_exn fname;
+      printfn ppf "  mov rsi, %d" argc;
+      printfn ppf "  call rukaml_alloc_closure";
+      printfn ppf "  add rsp, -8*2 ; closure";
+      printfn ppf "  mov [rsp], rax";
+      helper_a (DReg "rdx") arg1;
+      printfn ppf "  mov rdi, [rsp]";
+      printfn ppf "  add rsp, 8*2 ; closure";
+      printfn ppf "  mov rsi, 1";
+      printfn ppf "  mov rax, 0";
+      printfn ppf "  call rukaml_applyN";
+      printfn ppf "  mov %a, rax" pp_dest dest
   in
   let dealloc_locals = allocate_locals ppf body in
   helper (DReg "rax") body;
@@ -1244,8 +1158,6 @@ let stdlib_externs =
   ; 1, "rukaml_gc_compact"
   ; 0, "rukaml_gc_print_stats"
   ; 0, "rukaml_print_alloc_closure_count"
-  ; 1, "rukaml_open_out"
-  ; 1, "rukaml_close_channel"
   ; 7, "rukaml_alloc_printf_closure"
   ; 8, "rukaml_alloc_fprintf_closure"
   ; 7, "rukaml_alloc_sprintf_closure"
@@ -1256,9 +1168,15 @@ let stdlib_externs =
   ; 8, "rukaml_string_nth"
   ; 7, "rukaml_string_len"
   ; 2, "rukaml_apply1"
+  ; 3, "rukaml_apply2"
   ; 0, "rukaml_stdin"
   ; 0, "rukaml_stdout"
   ; 0, "rukaml_stderr"
+  ; 7, "rukaml_open_in"
+  ; 7, "rukaml_open_out"
+  ; 7, "rukaml_close_channel"
+  ; 7, "rukaml_end_of_input"
+  ; 7, "rukaml_input_char"
   ]
 ;;
 
@@ -1279,8 +1197,14 @@ let stdlib_aliases =
   ; "stdin", "rukaml_stdin"
   ; "stdout", "rukaml_stdout"
   ; "stderr", "rukaml_stderr"
+  ; "end_of_input", "rukaml_end_of_input"
+  ; "input_char", "rukaml_input_char"
   ; "gc_stats", "rukaml_gc_print_stats"
   ; "gc_compact", "rukaml_gc_compact"
+  ; "open_in", "rukaml_open_in"
+  ; "open_out", "rukaml_open_out"
+  ; "close_in", "rukaml_close_channel"
+  ; "close_out", "rukaml_close_channel"
   ]
 ;;
 
