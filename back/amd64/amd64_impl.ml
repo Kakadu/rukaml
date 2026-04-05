@@ -231,6 +231,8 @@ module Toplevel = struct
 
   (* TODO: figure out how to guarantee label uniqueness *)
   let pp_toplevel_label ppf { id; name; kind } =
+    (* TODO?: can names collide after this replacement ? *)
+    let name = Str.global_replace (Str.regexp "'") "_" name in
     match kind with
     | Alias { aliasee } -> Format.fprintf ppf "%s" aliasee
     | Extern _ | Main -> Format.fprintf ppf "%s" name
