@@ -531,16 +531,18 @@ let rec generate_body ppf body =
       printfn ppf "  mov rdi, rukaml_block_size";
       printfn ppf "  call rukaml_apply1";
       printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (APrimitive ("block_nth", _), obj, [ AConst (PConst_int n) ]) ->
+    | CApp (APrimitive (("block_nth" | "field"), _), obj, [ AConst (PConst_int n) ]) ->
       helper_a (DReg "rsi") obj;
-      printfn ppf "  mov rdx, %d" n;
       printfn ppf "  mov rdi, rukaml_block_nth";
+      printfn ppf "  mov rdx, %d" n;
       printfn ppf "  call rukaml_apply2";
       printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (APrimitive ("block_nth", _), obj, [ AVar v ]) when Addr_of_var.is_defined v ->
-      helper_a (DReg "rdi") obj;
-      printfn ppf "  mov rsi, %a" Addr_of_var.pp_var_exn v;
-      printfn ppf "  call rukaml_block_nth_imm";
+    | CApp (APrimitive (("block_nth" | "field"), _), obj, [ AVar v ])
+      when Addr_of_var.is_defined v ->
+      helper_a (DReg "rsi") obj;
+      printfn ppf "  mov rdi, rukaml_block_nth";
+      printfn ppf "  mov rdx, %a" Addr_of_var.pp_var_exn v;
+      printfn ppf "  call rukaml_apply2";
       printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (AVar fname, arg, [])
       when is_builtin fname && real_name_exn fname = "rukaml_alloc_printf_closure" ->
@@ -563,20 +565,6 @@ let rec generate_body ppf body =
     | CApp (AVar fname, arg1, [])
       when is_builtin fname && real_name_exn fname = "rukaml_block_nth" ->
       emit_rukaml_applyN dest ~fname ~argc:2 ~arg1
-    | CApp (APrimitive ("field", 2), AVar n, [ AVar v ])
-    (* TODO? : it is not cdecl but emits less code *)
-      when Addr_of_var.is_defined v && Addr_of_var.is_defined n ->
-      printfn ppf "  mov rdi, %a" Addr_of_var.pp_var_exn v;
-      printfn ppf "  mov rsi, %a" Addr_of_var.pp_var_exn n;
-      printfn ppf "  call rukaml_block_nth_imm";
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (APrimitive ("field", 2), AConst (PConst_int n), [ AVar v ])
-    (* TODO? : it is not cdecl but emits less code *)
-      when Addr_of_var.is_defined v ->
-      printfn ppf "  mov rdi, %a" Addr_of_var.pp_var_exn v;
-      printfn ppf "  mov rsi, %d" n;
-      printfn ppf "  call rukaml_block_nth_imm";
-      printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (AVar fname, arg1, [])
       when is_builtin fname && real_name_exn fname = "rukaml_string_nth" ->
       emit_rukaml_applyN dest ~fname ~argc:2 ~arg1
@@ -1150,9 +1138,6 @@ let stdlib_externs =
   ; 7, "rukaml_block_size"
   ; 7, "rukaml_block_tag"
   ; 8, "rukaml_block_nth"
-  ; 1, "rukaml_block_size_imm"
-  ; 1, "rukaml_block_tag_imm"
-  ; 2, "rukaml_block_nth_imm"
   ; 0, "rukaml_match_failure"
   ; 1, "rukaml_initialize"
   ; 1, "rukaml_gc_compact"
