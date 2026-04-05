@@ -42,7 +42,7 @@ static uint64_t log_level = 0;
 
 #define MAX_STRING_FROM_STDIN (2 << 15)
 
-int HEAP_SIZE = 256 * 1024 * 1024; // 256 MiB
+int HEAP_SIZE = 256 * 1024 * 1024; // 1 GiB
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
@@ -213,7 +213,7 @@ void rukaml_print_alloc_closure_count(void)
   fflush(stdout);
 }
 
-// TODO: implement tagged int's to distinguish immediate values from block objects properly
+// TODO: implement tagged int's to distinguish immediate values from heap blocks properly
 
 // good implementation:
 // #define IS_IMM(v) (((uint64_t)(v) & 1) == 1)
@@ -418,6 +418,12 @@ void *rukaml_block_nth_imm(void **obj, uint64_t n)
 
 uint64_t rukaml_block_tag(int, int, int, int, int, int, void **obj)
 {
+  // constant constructors are represented as int's (TODO: adjust for tagged ones)
+  if (IS_IMM(obj))
+  {
+    return (uint64_t)(obj);
+  }
+
   return TAG(obj);
 }
 
@@ -623,16 +629,11 @@ uint64_t rukaml_list_length(int r0, int r1, int r2, int r3, int r4, int r5, void
 {
   for (uint64_t size = 0;; ++size)
   {
-    if (ls == NULL)
-    {
-      mk_err_fatal("unexpected null ptr");
-    }
-
-    if (((TAG(ls) == 0)) && (SIZE(ls) == 0)) // []
+    if (ls == 0) // [] lowered to int. TODO: adjust for tagged ints
     {
       return size;
     }
-    else if ((TAG(ls) == 1) && (SIZE(ls) == 2)) // ( :: ) of 'a * 'a list
+    else if (IS_BLOCK(ls) && (TAG(ls) == 1) && (SIZE(ls) == 2)) // ( :: ) of 'a * 'a list
     {
       ls = (void **)(ls[1]);
     }
@@ -645,12 +646,8 @@ uint64_t rukaml_list_length(int r0, int r1, int r2, int r3, int r4, int r5, void
 
 void **rukaml_string_of_char_list(int r0, int r1, int r2, int r3, int r4, int r5, void **chs)
 {
-  if (chs == NULL)
-  {
-    mk_err_fatal("unexpected null ptr");
-  }
-
-  uint64_t chars_n = rukaml_list_length(0, 0, 0, 0, 0, 0, chs);
+  // chs == 0 means [] lowered to int. TODO: adjust for tagged ints
+  uint64_t chars_n = chs == 0 ? 0 : rukaml_list_length(0, 0, 0, 0, 0, 0, chs);
 
   uint64_t payload_words_n = (chars_n + 7) / 8;
 
@@ -770,17 +767,17 @@ void *rukaml_open_impl(void **path, const char *mode)
   return (void *)file;
 }
 
-void *rukaml_open_in(void **path)
+void *rukaml_open_in(int r0, int r1, int r2, int r3, int r4, int r5, void **path)
 {
   return rukaml_open_impl(path, "r");
 }
 
-void *rukaml_open_out(void **path)
+void *rukaml_open_out(int r0, int r1, int r2, int r3, int r4, int r5, void **path)
 {
   return rukaml_open_impl(path, "w");
 }
 
-void rukaml_close_channel(void *channel)
+void rukaml_close_channel(int r0, int r1, int r2, int r3, int r4, int r5, void *channel)
 {
   if (channel == NULL)
   {
@@ -792,14 +789,23 @@ void rukaml_close_channel(void *channel)
   }
 }
 
-int64_t rukaml_input_char(void *channel)
+int64_t rukaml_input_char(int r0, int r1, int r2, int r3, int r4, int r5, void *channel)
 {
   return fgetc((FILE *)channel);
 }
 
-int64_t rukaml_end_of_input(void *channel)
+int64_t rukaml_end_of_input(int r0, int r1, int r2, int r3, int r4, int r5, void *channel)
 {
-  return fgetc((FILE *)channel) == EOF;
+  int ch = fgetc((FILE *)channel);
+
+  if (ch == EOF)
+  {
+    return true;
+  }
+
+  ungetc(ch, (FILE *)channel);
+
+  return false;
 }
 
 void rukaml_fprintf_impl(FILE *dest, void **fmt, va_list args)

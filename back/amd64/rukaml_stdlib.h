@@ -20,15 +20,16 @@ void *rukaml_stdin(void);
 void *rukaml_stdout(void);
 void *rukaml_stderr(void);
 
-void *rukaml_open_in(void **path);
-void *rukaml_open_out(void **path);
-void rukaml_close_channel(void *channel);
+void *rukaml_open_in(int, int, int, int, int, int, void **path);
+void *rukaml_open_out(int, int, int, int, int, int, void **path);
+void rukaml_close_channel(int, int, int, int, int, int, void *channel);
 
-int64_t rukaml_input_char(void *channel);
+int64_t rukaml_input_char(int, int, int, int, int, int, void *channel);
+int64_t rukaml_end_of_input(int, int, int, int, int, int, void *channel);
 
 void **rukaml_string_of_char_list(int, int, int, int, int, int, void **chs);
 bool rukaml_string_equal(int, int, int, int, int, int, void **left, void **right);
-char rukaml_string_nth(int r0, int r1, int r2, int r3, int r4, int r5, void **str, uint64_t n);
+char rukaml_string_nth(int, int, int, int, int, int, void **str, uint64_t n);
 
 void *rukaml_alloc_printf_closure(int, int, int, int, int, int, void **fmt);
 void *rukaml_alloc_fprintf_closure(int, int, int, int, int, int, void *out_channel, void **fmt);
@@ -53,7 +54,6 @@ void rukaml_array_set(int, int, int, int, int, int, void **arr, uint64_t n,
                       void *a);
 
 void rukaml_match_failure();
-void rukaml_failure(void **msg);
 
 typedef void *(*fun0)(void);
 typedef void *(*fun1)(void *);
