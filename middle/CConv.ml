@@ -162,7 +162,7 @@ let standart_globals =
   @ [ "&&"; "||" ]
   @ [ "="; "<>"; ">"; ">="; "<"; "<=" ]
   @ [ "printf"; "fprintf"; "sprintf" ]
-  @ [ "stdin"; "stdout"; "open_in"; "open_out"; "close_in"; "close_out" ]
+  @ [ "stdin"; "stdout"; "open_in"; "open_out"; "close_in"; "close_out"; "end_of_input" ]
   @ [ "input_all"; "input_char" ]
   @ [ "field"; "block_nth"; "block_tag"; "block_size" ]
   @ [ "string_nth"; "string_len"; "string_of_char_list" ]

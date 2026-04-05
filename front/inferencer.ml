@@ -917,7 +917,7 @@ let start_env =
   (* Stdio reading primitives *)
   |> extend_s "input_char" (Scheme.make_mono (tarrow in_channel_typ char_typ))
   |> extend_s "input_line" (Scheme.make_mono (tarrow in_channel_typ string_typ))
-  |> extend_s "end_of_file" (Scheme.make_mono (tarrow in_channel_typ bool_typ))
+  |> extend_s "end_of_input" (Scheme.make_mono (tarrow in_channel_typ bool_typ))
   (* Stdio writing primitives *)
   |> extend_s
        "output_char"
