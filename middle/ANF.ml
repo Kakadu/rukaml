@@ -49,8 +49,7 @@ type vb = Parsetree.rec_flag * Ident.t * expr
 
 type stru_item =
   | ANF_vb of vb (* let x = 42 *)
-  | ANF_match of (Parsetree.const * c_expr)
-    (* let 42 = 40 + 2; comparison of adt variants tags which occurs in vbs like let [ x ] = [ 42 ] *)
+  | ANF_match of (Parsetree.const * c_expr) (* let 42 = 40 + 2 *)
   | ANF_eval of expr (* let () = print_int 42; let _ = printf "42" *)
 
 type stru = stru_item list

@@ -19,7 +19,6 @@ type error =
   | `NoVariable of string
   | `UnificationFailed of ty * ty
   | `Only_varibles_on_the_left_of_letrec
-  | `Non_variable_pattern
   | `Unbound_constructor of string
   | `Type_arity_mismatch of string
   | `Type_param_duplicates of string
@@ -29,7 +28,6 @@ type error =
   | `Constructor_arity_mismatch of string
   | `Constructor_name_duplicates of string
   | `InvalidFormatString of string
-  | `Unification_Failed
   ]
 
 let pp_error ppf : error -> _ = function
@@ -40,7 +38,6 @@ let pp_error ppf : error -> _ = function
     Format.fprintf ppf "unification failed on %a and %a" Pprint.pp_typ l Pprint.pp_typ r
   | `Only_varibles_on_the_left_of_letrec ->
     Format.fprintf ppf "Only variables are allowed as left-hand side of `let rec'"
-  | `Non_variable_pattern -> Format.fprintf ppf "non-variable pattern in let binding"
   | `Unbound_constructor name -> Format.fprintf ppf "unbound constructror: %s" name
   | `Type_arity_mismatch name -> Format.fprintf ppf "type arity mismatch: %s" name
   | `Type_param_duplicates tyname ->
@@ -53,7 +50,6 @@ let pp_error ppf : error -> _ = function
   | `Constructor_name_duplicates name ->
     Format.fprintf ppf "constructor name duplicates in declaration of type %s" name
   | `InvalidFormatString fmt -> Format.fprintf ppf "\"%s\" is not a valid formatter" fmt
-  | `Unification_Failed -> Format.fprintf ppf "unification failed"
 ;;
 
 type fresh_counter = int
@@ -265,11 +261,10 @@ module Type = struct
   let apply subs t = Subst.apply subs t
 end
 
-let scheme vs ty = S (vs, ty)
-
 module Scheme = struct
   type t = scheme
 
+  let scheme vs ty = S (vs, ty)
   let make_mono ty = S (Var_set.empty, ty)
 
   let occurs_in info = function
@@ -531,7 +526,7 @@ let rec check_pat ~level env table = function
     (* delayed adt constructor arity calculating *)
     (match args, constr_info.constr_args with
      | ([ Parsetree.PTuple _ ] as actual), ty1 :: ty2 :: tys ->
-       (* here the case of (ty1 * ... * tyN) is explicitly distinguished from the case of ty1 * ... * tyN *)
+       (* here the case "of (ty1 * ... * tyN)" is explicitly distinguished from the case "of ty1 * ... * tyN" *)
        let expected = [ { typ_desc = TProd (ty1, ty2, tys) } ] in
        aux env actual expected []
      | _ -> aux env args constr_info.constr_args [])
@@ -865,7 +860,7 @@ let infer env table expr =
         (* delayed adt constructor arity calculating *)
         (match args, constr_info.constr_args with
          | arg1 :: arg2 :: args, ([ { typ_desc = TProd _ } ] as expected) ->
-           (* here the case of (ty1 * ... * tyN) is explicitly distinguished from the case of ty1 * ... * tyN *)
+           (* here the case "of (ty1 * ... * tyN)" is explicitly distinguished from the case "of ty1 * ... * tyN" *)
            let actual = [ Parsetree.ETuple (arg1, arg2, args) ] in
            aux actual expected []
          | _ -> aux args constr_info.constr_args [])
@@ -879,11 +874,7 @@ let infer env table expr =
 let ( @-> ) = tarrow
 
 let start_env =
-  let cmp_scheme =
-    scheme
-      (Var_set.of_list [ -1 ])
-      (tarrow (tv (-1) ~level:(-1)) (tarrow (tv (-1) ~level:(-1)) bool_typ))
-  in
+  let int_cmp_scheme = Scheme.make_mono (tarrow int_typ (tarrow int_typ bool_typ)) in
   let int_arith_scheme = Scheme.make_mono (tarrow int_typ (tarrow int_typ int_typ)) in
   let bool_arith_scheme = Scheme.make_mono (tarrow bool_typ (tarrow bool_typ bool_typ)) in
   let extend_s ?(kind = User) varname =
@@ -929,7 +920,7 @@ let start_env =
        "fprintf"
        (let arg_ty = tv 0 ~level:(-1) in
         (* forall '_0 . out_channel -> ('_0, out_channel, unit) format3 -> '_0 *)
-        scheme
+        Scheme.scheme
           (Var_set.singleton 0)
           (tarrow
              out_channel_typ
@@ -940,23 +931,27 @@ let start_env =
        "printf"
        (let arg_ty = tv 0 ~level:(-1) in
         (* forall '_0 . ('_0, out_channel, unit) format -> 'a *)
-        scheme
+        Scheme.scheme
           (Var_set.singleton 0)
           (tarrow (format3_typ ~arg_ty ~dest_ty:out_channel_typ ~out_ty:unit_typ) arg_ty))
   |> extend_s
        "sprintf"
        (let arg_ty = tv 0 ~level:(-1) in
         (* forall '_0 . ('_0, unit, string) format3 -> '_0 *)
-        scheme
+        Scheme.scheme
           (Var_set.singleton 0)
           (tarrow (format3_typ ~arg_ty ~dest_ty:unit_typ ~out_ty:string_typ) arg_ty))
   |> extend_s "flush" (Scheme.make_mono (tarrow out_channel_typ unit_typ))
   (* Built-in binops *)
-  |> extend_binop "<" cmp_scheme
-  |> extend_binop ">" cmp_scheme
-  |> extend_binop "<=" cmp_scheme
-  |> extend_binop ">=" cmp_scheme
-  |> extend_binop "=" cmp_scheme
+  |> extend_binop "<" int_cmp_scheme
+  |> extend_binop ">" int_cmp_scheme
+  |> extend_binop "<=" int_cmp_scheme
+  |> extend_binop ">=" int_cmp_scheme
+  |> extend_binop
+       "="
+       (Scheme.scheme
+          (Var_set.of_list [ -1 ])
+          (tarrow (tv (-1) ~level:(-1)) (tarrow (tv (-1) ~level:(-1)) bool_typ)))
   |> extend_binop "+" int_arith_scheme
   |> extend_binop "-" int_arith_scheme
   |> extend_binop "*" int_arith_scheme
@@ -1003,23 +998,12 @@ let w e =
   |> Result.map_error ~f:(function #error as x -> x)
 ;;
 
-let rec has_only_vars_in_tuple = function
-  | Parsetree.PVar _ -> true
-  | Parsetree.PAny -> true
-  | Parsetree.PUnit -> true
-  | Parsetree.PConst _ -> false
-  | Parsetree.PTuple (p1, p2, ps) ->
-    has_only_vars_in_tuple p1
-    && has_only_vars_in_tuple p2
-    && List.for_all ~f:has_only_vars_in_tuple ps
-  | Parsetree.PConstruct _ -> true
-;;
-
 let vb ?(env = start_env) table (flg, pat, body) : (_, [> error ]) Result.t =
   let level = -1 in
   let comp =
     match flg, pat with
     | Parsetree.NonRecursive, _ ->
+      (* TODO: is ~level:0 OK here? *)
       let* env, tpat, _pat_ty = check_pat ~level:0 env table pat in
       let* rhs_ty, typed_rhs = infer env table body in
       return (env, rhs_ty, tpat, typed_rhs)
@@ -1029,10 +1013,7 @@ let vb ?(env = start_env) table (flg, pat, body) : (_, [> error ]) Result.t =
       let env = Type_env.extend_string name (S (Var_set.singleton binder, tv)) env in
       let* ty, tbody = infer env table body in
       return (env, ty, Tpat_var (Type_env.ident_of_string name env), tbody)
-    | Recursive, pat ->
-      if not (has_only_vars_in_tuple pat)
-      then fail `Non_variable_pattern
-      else fail `Only_varibles_on_the_left_of_letrec
+    | Recursive, _ -> fail `Only_varibles_on_the_left_of_letrec
   in
   run comp
   |> Result.map ~f:(fun (env, ty, tpat, body) ->
@@ -1072,10 +1053,6 @@ let rec infer_core_type (env : Type_env.t) param_map = function
     <*> infer_core_type env param_map a
     <*> infer_core_type env param_map b
     <*> fold_infer_core_type env param_map xs
-  (* | Ptyp_constr (name, args) ->
-    let* () = check_constr_arity env name args in
-    let* tys = fold_infer_core_type env param_map args in
-    return (tconstr tys name) *)
   | Ptyp_constr (name, args) ->
     (* TODO: it is not OCaml typing actually. it loses nominal types for aliases here. *)
     (match Ident.Ident_map.find_by_string_opt name env.env_types with
@@ -1103,7 +1080,7 @@ let rec infer_core_type (env : Type_env.t) param_map = function
             in
             helper ty
           in
-          (* it will not raise because i compared arities above, but you can handle it explicitly if u want *)
+          (* it won't raise because arities have been compared above *)
           return (List.fold2_exn type_decl.tty_params args_tys ~init:ty ~f:substitute)))
 
 and fold_infer_core_type (env : Type_env.t) param_map items =
@@ -1152,6 +1129,10 @@ let td ?(env = start_env) { Parsetree.pty_name; pty_params; pty_kind; pty_manife
       | Some core_type -> infer_core_type env params_map core_type >>| Option.some
     in
     match pty_kind with
+    | Parsetree.Ptype_abstract ->
+      let td = { tty_kind = Ttype_abstract; tty_ident; tty_params; tty_manifest } in
+      let env = Type_env.extend_types td env in
+      return (env, td)
     | Parsetree.Ptype_variant (v1, vs) ->
       let* () = check_constructors_names_uniqueness pty_name (v1 :: vs) in
       (* > temporarily adds type to env to use it in recursive type declarations *)
@@ -1172,10 +1153,6 @@ let td ?(env = start_env) { Parsetree.pty_name; pty_params; pty_kind; pty_manife
       let* env, variants, _ = List.fold ~init:(return (env, [], 0)) ~f:aux (v1 :: vs) in
       let tty_kind = Ttype_variants (List.rev variants) in
       let td = { tty_kind; tty_ident; tty_params; tty_manifest = None } in
-      let env = Type_env.extend_types td env in
-      return (env, td)
-    | Parsetree.Ptype_abstract ->
-      let td = { tty_kind = Ttype_abstract; tty_ident; tty_params; tty_manifest } in
       let env = Type_env.extend_types td env in
       return (env, td)
   in

@@ -4,7 +4,6 @@ type error =
   | `NoVariable of string
   | `UnificationFailed of Typedtree.ty * Typedtree.ty
   | `Only_varibles_on_the_left_of_letrec
-  | `Non_variable_pattern
   | `Unbound_constructor of string
   | `Type_arity_mismatch of string
   | `Type_param_duplicates of string
@@ -14,7 +13,6 @@ type error =
   | `Constructor_arity_mismatch of string
   | `Constructor_name_duplicates of string
   | `InvalidFormatString of string
-  | `Unification_Failed
   ]
 
 val pp_error : Format.formatter -> error -> unit

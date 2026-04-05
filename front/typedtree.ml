@@ -165,10 +165,8 @@ type value_binding =
 
 type constructor_info =
   { constr_ident : Ident.t
-  ; (* is used to implement constructors shadowing.
-       allows the type in which the constructor was declared to be unambiguously determined,
-       even if another constructor with the same name is declared (and the constructor table is updated accordingly) *)
-    constr_type_ident : Ident.t
+  ; constr_type_ident : Ident.t
+    (* reference to the type in which the variant was declared *)
   ; constr_args : ty list
   }
 

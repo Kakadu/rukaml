@@ -88,7 +88,7 @@ type type_declaration =
 [@@deriving show { with_path = false }]
 
 and type_kind =
-  | Ptype_abstract
+  | Ptype_abstract (** [ type t = int * bool ] *)
   | Ptype_variant of (string * core_type list) list1
   (** [ type t = Some of int | None ]  *)
 [@@deriving show { with_path = false }]

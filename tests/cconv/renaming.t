@@ -1,7 +1,8 @@
-i think it is required to rename the lifted lambda or let‑in during lifting in cconv, otherwise it may shadow the global declaration
-(TODO? it could be improved by maintaining table of globals and keeping the original name if it shadows nothing (but then the generated code would be less consistent) )
+i think it is required to rename the let‑in during lifting in cconv, otherwise it may shadow the global declaration
 
   $ run () { ../../driver/driver.exe $1 --target cconv -o a.ml && cat a.ml; }
+
+---
 
 before fix
 (global qwe should not be shadowed by the local one)
@@ -31,60 +32,6 @@ after fix
   let __lifted_let_1_qwe () = 1
   let asd () = 2
   let main = qwe ()
-
-before fix
-(local aux should not shadow the global one)
-$ run << EOF
-> let string expected (str, pos) =
->   let rec aux i =
->     if i >= string_len expected
->     then return expected (str, pos + i)
->     else if pos + i >= string_len str
->     then Prez_error Perr_unexpected_eof
->     else if string_nth (pos + i) str = string_nth i expected
->     then aux (i + 1)
->     else Prez_error (Perr_message "unexpected string")
->   in
->   aux 0
-> ;;
-> EOF
-let rec aux string_nth string_len str return pos expected i =
-if i >= string_len expected
-then return expected (
-str, pos + i) 
-else if (pos + i) >= string_len str
-then Prez_error Perr_unexpected_eof
-else 
-if string_nth (pos + i) str = string_nth i expected
-then aux string_nth string_len str return pos expected (i + 1)
-else Prez_error (Perr_message "unexpected string")
-let string expected (str, pos) = aux string_nth string_len str return pos expected 0
-
-after fix
-  $ run << EOF
-  > let string expected (str, pos) =
-  >   let rec aux i =
-  >     if i >= string_len expected
-  >     then return expected (str, pos + i)
-  >     else if pos + i >= string_len str
-  >     then Prez_error Perr_unexpected_eof
-  >     else if string_nth (pos + i) str = string_nth i expected
-  >     then aux (i + 1)
-  >     else Prez_error (Perr_message "unexpected string")
-  >   in
-  >   aux 0
-  > ;;
-  > EOF
-  let rec __lifted_let_1_aux str return pos expected i = if i >= string_len expected
-                                                         then return expected (
-                                                         str, pos + i) 
-                                                         else if (pos + i) >= string_len str
-                                                              then Prez_error Perr_unexpected_eof
-                                                              else if string_nth (pos + i) str = string_nth i expected
-                                                                   then __lifted_let_1_aux str return pos expected (i + 1)
-                                                                   else Prez_error (Perr_message "unexpected string")
-  let string expected (str, pos) = __lifted_let_1_aux str return pos expected 0
-
 
 ---
 
@@ -148,11 +95,3 @@ nested lambdas
   let __lifted_lam_1 f x = f x
   let __lifted_let_2_f x = 0
   let main = __lifted_lam_1 __lifted_let_2_f
-
-
-  $ run << EOF
-  > let call f () () = f ()
-  > let call f () = call ()
-  > EOF
-  let call f () () = f ()
-  let call f () = call ()

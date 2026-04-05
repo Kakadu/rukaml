@@ -209,24 +209,10 @@ let rec pp_expr ctx ppf = function
       fprintf ppf "@]"
     in
     fprintf ppf fmt pp_let ()
-  | EArray [] ->
-    (* an empty array is indistinguishable from an empty string *)
-    fprintf ppf "[| |]"
+  | EArray [] -> fprintf ppf "[| |]"
   | EArray r ->
-    let rec aux acc = function
-      (* pretty-prints arrays when they are strings. in most cases it works well but it slows down weird incorrect programs *)
-      | [] ->
-        (* prints array as string literal *)
-        fprintf ppf "\"%s\"" (Base.String.of_list (List.rev acc))
-      | EConst (PConst_char ch) :: tail ->
-        (* collects chars *)
-        aux (ch :: acc) tail
-      | _ ->
-        (* realizing that the array is not a string literal, it prints it as usual *)
-        let pp_sep ppf () = fprintf ppf "; " in
-        Format.fprintf ppf "[| %a |]" (pp_print_list ~pp_sep (pp_expr CtxContainer)) r
-    in
-    aux [] r
+    let pp_sep ppf () = fprintf ppf "; " in
+    Format.fprintf ppf "[| %a |]" (pp_print_list ~pp_sep (pp_expr CtxContainer)) r
   | ETuple (h1, h2, hs) ->
     let fmt : _ format =
       match ctx with
