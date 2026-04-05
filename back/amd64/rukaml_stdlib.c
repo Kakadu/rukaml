@@ -42,7 +42,7 @@ static uint64_t log_level = 0;
 
 #define MAX_STRING_FROM_STDIN (2 << 15)
 
-int HEAP_SIZE = 256 * 1024 * 1024; // 1 GiB
+int HEAP_SIZE = 256 * 1024 * 1024; // 256 MiB
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
@@ -392,28 +392,6 @@ void *rukaml_alloc_block(uint64_t size, uint64_t tag)
   logGC("A block %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
 
   return rez + 1;
-}
-
-uint64_t rukaml_block_tag_imm(void **obj)
-{
-  // constant constructors are represented as int's (for now just ints, not tagged ones)
-  // TODO: i'm not sure is this works as expected
-  if (IS_IMM(obj))
-  {
-    return (uint64_t)(obj);
-  }
-
-  return TAG(obj);
-}
-
-uint64_t rukaml_block_size_imm(void **obj)
-{
-  return SIZE(obj);
-}
-
-void *rukaml_block_nth_imm(void **obj, uint64_t n)
-{
-  return obj[n];
 }
 
 uint64_t rukaml_block_tag(int, int, int, int, int, int, void **obj)

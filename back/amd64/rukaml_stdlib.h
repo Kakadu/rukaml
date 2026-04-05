@@ -42,10 +42,6 @@ uint64_t rukaml_block_tag(int, int, int, int, int, int, void **obj);
 void *rukaml_block_nth(int, int, int, int, int, int, void **obj,
                        uint64_t n);
 
-uint64_t rukaml_block_tag_imm(void **obj);
-uint64_t rukaml_block_size_imm(void **obj);
-void *rukaml_block_nth_imm(void **obj, uint64_t n);
-
 void *rukaml_field(void **obj, uint64_t n);
 
 uint64_t rukaml_equal_struct(void **left, void **right);
