@@ -179,7 +179,7 @@
   >   match Pair (1, 2) with
   >   | Pair (a, b, c) -> a + 1
   > EOF
-  infer error: unification failed on ('_4 * '_4) and ('_4 * '_4 * '_5)
+  infer error: constructor arity mistmatch: Pair
   [1]
 #
 
