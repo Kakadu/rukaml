@@ -525,10 +525,9 @@ let rec check_pat ~level env table = function
     in
     (* delayed adt constructor arity calculating *)
     (match args, constr_info.constr_args with
-     | ([ Parsetree.PTuple _ ] as actual), ty1 :: ty2 :: tys ->
+     | [ Parsetree.PTuple (p1, p2, ps) ], ty1 :: ty2 :: tys ->
        (* here the case "of (ty1 * ... * tyN)" is explicitly distinguished from the case "of ty1 * ... * tyN" *)
-       let expected = [ { typ_desc = TProd (ty1, ty2, tys) } ] in
-       aux env actual expected []
+       aux env (p1 :: p2 :: ps) (ty1 :: ty2 :: tys) []
      | _ -> aux env args constr_info.constr_args [])
 ;;
 
