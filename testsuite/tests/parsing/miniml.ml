@@ -706,13 +706,9 @@ let test_fact =
   run_single "let rec fact n = if n < 1 then 1 else n * fact (n - 1) in fact 5"
 ;;
 
-(* minimal examples which do not work
 let testx001 = run_single "x y z"
-let testx002 = run_single "x + y + z"
-let testx003 = run_single "fun x -> fun y -> 0"
-let testx004 = run_single "let x = 1 in let y = 2 in 0"
-let testx005 = run_single "(x, y), (1, 2)"
-*)
+
+
 
 (*
    TODO: SIGILL
