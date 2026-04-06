@@ -389,6 +389,7 @@ let simplify : _ Arity_map.t -> expr -> expr =
     let rez =
       match e with
       | EComplex e -> EComplex (helper_c acc e)
+      (* inline for variable application *)
       | ELet
           ( Parsetree.NonRecursive
           , Tpat_var name1
@@ -396,6 +397,16 @@ let simplify : _ Arity_map.t -> expr -> expr =
           , where_ )
         when used_once_as_function name1 ~where:where_
              && Arity_map.is_under fname (1 + List.length args) acc
+             && cfg.opt_arity_inline ->
+        helper acc (substitute ~where:where_ name1 rhs)
+        (* inline for primitive application *)
+      | ELet
+          ( Parsetree.NonRecursive
+          , Tpat_var name1
+          , (CApp (APrimitive (_fname, parity), _arg1, args) as rhs)
+          , where_ )
+        when used_once_as_function name1 ~where:where_
+             && 1 + List.length args < parity
              && cfg.opt_arity_inline -> helper acc (substitute ~where:where_ name1 rhs)
       | ELet (Parsetree.NonRecursive, Tpat_var name1, body, EComplex (CAtom (AVar name2)))
         when Ident.equal name1 name2 ->
