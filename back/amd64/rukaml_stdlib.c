@@ -977,10 +977,6 @@ void *rukaml_alloc_fprintf_closure(int a0, int a1, int a2, int a3, int a4, int a
 
   if (arity == 0)
   {
-    // TODO: either this is a minor cludge, or an edge case that needs to be handled explicitly
-    // for format strings without format specifiers, a closure is not created
-    // instead, the call is made immediately
-    // without explicit handling of this case, segfault occurs
     return rukaml_fprintf_wrap(0, 0, 0, 0, 0, 0, out_channel, fmt);
   }
 
@@ -1051,10 +1047,6 @@ void *rukaml_alloc_sprintf_closure(int a0, int a1, int a2, int a3, int a4, int a
 
   if (arity == 0)
   {
-    // TODO: either this is a minor cludge, or an edge case that needs to be handled explicitly
-    // for format strings without format specifiers, a closure is not created
-    // instead, the call is made immediately
-    // without explicit handling of this case, segfault occurs
     return rukaml_sprintf_wrap(0, 0, 0, 0, 0, 0, fmt);
   }
 
@@ -1073,16 +1065,6 @@ uint64_t rukaml_equal_struct(void **left, void **right)
   if (IS_IMM(left) || IS_IMM(right))
   {
     return false;
-  }
-
-  if (left == NULL)
-  {
-    mk_err_fatal("unexpected null");
-  }
-
-  if (right == NULL)
-  {
-    mk_err_fatal("unexpected null");
   }
 
   if ((TAG(left) != TAG(right)) || (SIZE(left) != SIZE(right)))
