@@ -787,6 +787,7 @@ let generate_body is_toplevel body =
       emit ld a0 (pp_to_mach arg);
       emit call "rukaml_tag0";
       emit sd_dest a0 dest ~comm:(Format.asprintf "got tag of '%a'" Ident.pp arg)
+    | CApp (APrimitive ("block_nth", _), AVar from, [ AConst (PConst_int idx) ])
     | CApp (APrimitive ("get_arg", _), AConst (PConst_int idx), [ AVar from ])
       when Addr_of_local.has_key from ->
       emit li a0 idx;
