@@ -396,7 +396,7 @@ void *rukaml_alloc_block(uint64_t size, uint64_t tag)
 
 uint64_t rukaml_block_tag(int, int, int, int, int, int, void **obj)
 {
-  // constant constructors are represented as int's (TODO: adjust for tagged ones)
+  // constant adt variants are lowered to int (TODO: adjust for tagged ones)
   if (IS_IMM(obj))
   {
     return (uint64_t)(obj);
