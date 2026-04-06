@@ -676,31 +676,33 @@ let rec generate_body ppf body =
            dealloc_var ppf left_name *)
     | CApp (APrimitive ("=", 2), AVar v1, [ AVar v2 ])
       when Addr_of_var.(is_defined v1 && is_defined v2) ->
-      (* TODO? : it is not cdecl but emits less code *)
       printfn ppf "  mov qword rdi, %a" Addr_of_var.pp_var_exn v1;
       printfn ppf "  mov qword rsi, %a" Addr_of_var.pp_var_exn v2;
       printfn ppf "  call rukaml_equal_struct";
       printfn ppf "  mov qword %a, rax" pp_dest dest
     | CApp (APrimitive ("=", 2), AVar var, [ obj ]) when Addr_of_var.is_defined var ->
-      (* TODO? : it is not cdecl but emits less code *)
       helper_a (DReg "rdi") obj;
       printfn ppf "  mov qword rsi, %a" Addr_of_var.pp_var_exn var;
       printfn ppf "  call rukaml_equal_struct";
       printfn ppf "  mov qword %a, rax" pp_dest dest
     | CApp (APrimitive ("=", 2), obj, [ AVar var ]) when Addr_of_var.is_defined var ->
-      (* TODO? : it is not cdecl but emits less code *)
       helper_a (DReg "rdi") obj;
       printfn ppf "  mov qword rsi, %a" Addr_of_var.pp_var_exn var;
       printfn ppf "  call rukaml_equal_struct";
       printfn ppf "  mov qword %a, rax" pp_dest dest
     | CApp (APrimitive ("=", 2), a1, [ a2 ]) ->
-      (* TODO? : it is not cdecl but emits less code *)
       helper_a (DReg "rdi") a1;
-      printfn ppf "  add rsp, 8*2";
+      let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+      let name2 = Ident.of_string @@ gen_name ~prefix:"arg1" () in
+      Addr_of_local.extend name1;
+      Addr_of_local.extend name2;
+      printfn ppf "  add rsp, -8*2";
       printfn ppf "  mov qword [rsp], rdi";
       helper_a (DReg "rsi") a2;
       printfn ppf "  mov qword rdi, [rsp]";
-      printfn ppf "  add rsp, -8*2";
+      printfn ppf "  add rsp, 8*2";
+      Addr_of_local.remove_local name2;
+      Addr_of_local.remove_local name1;
       printfn ppf "  call rukaml_equal_struct";
       printfn ppf "  mov qword %a, rax" pp_dest dest
     | CApp (APrimitive ("+", 2), AVar vname, [ AConst (PConst_int n) ])
@@ -1022,6 +1024,10 @@ let rec generate_body ppf body =
     printfn ppf "  mov rdi, %d ; %s size" (List.length fields) name;
     printfn ppf "  mov rsi, %d ; %s tag" tag name;
     printfn ppf "  call rukaml_alloc_block";
+    let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+    let name2 = Ident.of_string @@ gen_name ~prefix:name () in
+    Addr_of_local.extend name1;
+    Addr_of_local.extend name2;
     printfn ppf "  add rsp, -8*2 ; push %s" name;
     printfn ppf "  mov qword [rsp], rax";
     List.iteri
@@ -1032,6 +1038,8 @@ let rec generate_body ppf body =
       fields;
     printfn ppf "  mov rax, [rsp]";
     printfn ppf "  add rsp, 8*2 ; pop %s" name;
+    Addr_of_local.remove_local name2;
+    Addr_of_local.remove_local name1;
     printfn ppf "  mov %a, rax" pp_dest dest
   and emit_rukaml_apply1 dest ~fname ~arg =
     assert (Toplevel.is_toplevel_function fname || Addr_of_var.is_builtin fname);
@@ -1064,11 +1072,17 @@ let rec generate_body ppf body =
       printfn ppf "  mov rdi, %a" Toplevel.pp_label_exn fname;
       printfn ppf "  mov rsi, %d" argc;
       printfn ppf "  call rukaml_alloc_closure";
+      let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+      let name2 = Ident.of_string @@ gen_name ~prefix:"arg1" () in
+      Addr_of_local.extend name1;
+      Addr_of_local.extend name2;
       printfn ppf "  add rsp, -8*2 ; closure";
       printfn ppf "  mov [rsp], rax";
       helper_a (DReg "rdx") arg1;
       printfn ppf "  mov rdi, [rsp]";
       printfn ppf "  add rsp, 8*2 ; closure";
+      Addr_of_local.remove_local name2;
+      Addr_of_local.remove_local name1;
       printfn ppf "  mov rsi, 1";
       printfn ppf "  mov rax, 0";
       printfn ppf "  call rukaml_applyN";
@@ -1257,6 +1271,12 @@ let emit_global_match ppf ident const cexpr =
   (* result in rax *)
   generate_body ppf ANF.(EComplex (CAtom (AConst const)));
   printfn ppf "  ; end eval matching rhs";
+  (*
+     TODO: for now some assert fails with this one
+  let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+  let name2 = Ident.of_string @@ gen_name ~prefix:"lhs" () in
+  Addr_of_local.extend name1;
+  Addr_of_local.extend name2; *)
   printfn ppf "  add rsp, -8*2 ; matching lhs";
   printfn ppf "  mov qword [rsp], rax";
   printfn ppf "  ; begin eval matching rhs";
@@ -1270,6 +1290,8 @@ let emit_global_match ppf ident const cexpr =
   (* TODO? : make call here *)
   printfn ppf "  je rukaml_match_failure";
   printfn ppf "  add rsp, 8*2 ; matching lhs";
+  (* Addr_of_local.remove_local name2;
+  Addr_of_local.remove_local name1; *)
   printfn ppf "  pop rbp";
   printfn ppf "  ret ;;; init_%a" Toplevel.pp_label_exn ident
 ;;
