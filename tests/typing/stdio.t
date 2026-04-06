@@ -33,7 +33,7 @@
   let u: unit =
     ((printf "%a") pp_print_string) "hello world"
 
-example:
+usage example
   $ run << EOF
   > let main =
   >   let in_channel = open_in "in.txt" in
@@ -262,3 +262,39 @@ should fail
   > EOF
   infer error: unification failed on string and int
   [1]
+
+
+unsorted
+  $ run << EOF
+  > let s = sprintf "%s" "hello world"
+  > EOF
+  let s: string =
+    (sprintf "%s") "hello world"
+
+
+  $ run << EOF
+  > let s = sprintf "%d %b %s"
+  > EOF
+  let s: int -> bool -> string -> string =
+    sprintf "%d %b %s"
+
+
+  $ run << EOF
+  > let s = sprintf "%d %b %s" 1
+  > EOF
+  let s: bool -> string -> string =
+    (sprintf "%d %b %s") 1
+
+
+  $ run << EOF
+  > let s = sprintf "%d %b %s" 1 true
+  > EOF
+  let s: string -> string =
+    ((sprintf "%d %b %s") 1) true
+
+
+  $ run << EOF
+  > let s = sprintf "%d %b %s" 1 true "one"
+  > EOF
+  let s: string =
+    (((sprintf "%d %b %s") 1) true) "one"
