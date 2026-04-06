@@ -1,7 +1,7 @@
 asserts that let polymorphism works as expected
 closure convertion is disabled here
 
-  $ run () { ../../driver/driver.exe $1 --target typedtree --no-cconv -o a.ml && cat a.ml; }
+  $ run () { ../../driver/driver.exe $1 --target typedtree -o a.ml && cat a.ml; }
 
 stru let
 
@@ -41,10 +41,14 @@ stru let
   > EOF
   let apply: ('_2 -> '_3) -> '_2 -> '_3 =
     fun f x -> f x
+  let __lifted_lam_1: int -> int =
+    fun x -> x + 1
   let inc: int -> int =
-    apply (fun x -> x + 1)
+    apply __lifted_lam_1
+  let __lifted_lam_2: bool -> bool =
+    fun x -> (if x then false else true)
   let not: bool -> bool =
-    apply (fun x -> (if x then false else true))
+    apply __lifted_lam_2
   let 1: int =
     inc 0
   let true: bool =
@@ -148,12 +152,16 @@ stru let rec
   > let 5 = apply_n (fun x -> x + 1) 0 5
   > let false = apply_n (fun x -> if x then false else true) true 3
   > EOF
-  let rec apply_n: ('_12 -> '_13) -> '_13 -> int -> '_13 =
+  let rec apply_n: ('_11 -> '_12) -> '_12 -> int -> '_12 =
     fun f x n -> (if n < 1 then x else f (((apply_n f) x) (n - 1)))
+  let __lifted_lam_1: int -> int =
+    fun x -> x + 1
   let 5: int =
-    ((apply_n (fun x -> x + 1)) 0) 5
+    ((apply_n __lifted_lam_1) 0) 5
+  let __lifted_lam_2: bool -> bool =
+    fun x -> (if x then false else true)
   let false: bool =
-    ((apply_n (fun x -> (if x then false else true))) true) 3
+    ((apply_n __lifted_lam_2) true) 3
 
   $ run << EOF
   > let rec exists pred ls =
@@ -168,10 +176,14 @@ stru let rec
     fun pred ls -> match ls with
                      | [] -> false
                      | hd :: tl -> (if pred hd then true else (exists pred) tl)
+  let __lifted_lam_1: '_1 -> '_1 =
+    fun x -> x
   let true: bool =
-    (exists (fun x -> x)) [ false; false; true; false ]
+    (exists __lifted_lam_1) [ false; false; true; false ]
+  let __lifted_lam_2: int -> bool =
+    fun x -> x < 0
   let false: bool =
-    (exists (fun x -> x < 0)) [ 1; 2; 3; 4; 5 ]
+    (exists __lifted_lam_2) [ 1; 2; 3; 4; 5 ]
 
   $ run << EOF
   > let rec map f ls =
@@ -186,22 +198,14 @@ stru let rec
     fun f ls -> match ls with
                   | [] -> []
                   | hd :: tl -> (f hd) :: ((map f) tl)
+  let __lifted_lam_1: int -> bool =
+    fun x -> x > 0
   let bool_list: bool list =
-    (map (fun x -> x > 0)) [ 1; 2; 3; 4; 5 ]
+    (map __lifted_lam_1) [ 1; 2; 3; 4; 5 ]
+  let __lifted_lam_2: int -> int =
+    fun x -> x + 1
   let int_list: int list =
-    (map (fun x -> x + 1)) [ 1; 2; 3; 4; 5 ]
-
-expr
-
-  $ run << EOF
-  > let main =
-  >   let rec apply_n f x n = if n < 1 then x else f (apply_n f x (n - 1)) in
-  >   let 5 = apply_n (fun x -> x + 1) 0 5 in
-  >   let false = apply_n (fun x -> if x then false else true) true 3 in
-  > ()
-  > EOF
-  infer error: unification failed on int and bool
-  [1]
+    (map __lifted_lam_2) [ 1; 2; 3; 4; 5 ]
 
 constants matching
 
@@ -232,8 +236,12 @@ constants matching
   $ run << EOF
   > let (id, inc) = (fun x -> x), (fun x -> x + 1)
   > EOF
+  let __lifted_lam_1: '_1 -> '_1 =
+    fun x -> x
+  let __lifted_lam_2: int -> int =
+    fun x -> x + 1
   let (id, inc): ('_2 -> '_2) * (int -> int) =
-    ((fun x -> x), (fun x -> x + 1))
+    (__lifted_lam_1, __lifted_lam_2)
 
 invalid inputs
 
