@@ -331,6 +331,13 @@ type def_kind =
   | `Local
   ]
 
+let pp_def_kind ppf = function
+  | `Func n -> Format.fprintf ppf "Func %d" n
+  | `Val -> Format.fprintf ppf "Val"
+  | `External -> Format.fprintf ppf "External"
+  | `Local -> Format.fprintf ppf "`Local"
+;;
+
 (**
     Argument [is_toplevel] returns None or Some arity. *)
 let generate_body is_toplevel body =
@@ -375,7 +382,15 @@ let generate_body is_toplevel body =
       | AConst (PConst_bool true) -> pp_access 1 i
       | AConst (PConst_int n) -> pp_access ~doc:"constant" n i
       | AConst (PConst_char c) -> pp_access ~doc:"constant" (Char.code c) i
-      | AConst (PConst_string _) -> failwith "TODO: not implemented"
+      | AConst (PConst_string _) ->
+        log
+          "%s %a"
+          (match f with
+           | None -> "?"
+           | Some id -> Ident.to_string id)
+          (pp_space_list ANF.pp_a)
+          args;
+        failwith "TODO: not implemented"
       | AVar vname when is_toplevel_func vname ->
         (match is_toplevel vname with
          | `Func arity ->
@@ -682,7 +697,7 @@ let generate_body is_toplevel body =
     | CApp (APrimitive ((("+" | "*") as prim), _), AConst (PConst_int n), [ AVar vname ])
       ->
       (match is_toplevel vname with
-       | `External ->
+       | `Local ->
          emit ld t0 (Addr_of_local.pp_to_mach vname);
          emit li t1 n;
          emit comment "going to do some arithmetic";
@@ -695,8 +710,9 @@ let generate_body is_toplevel body =
            t0
            t1;
          emit sd_dest t2 dest
-       | _ ->
+       | dk ->
          (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
+         log "def_kind=%a" pp_def_kind dk;
          failwiths "not implemented %d" __LINE__)
     | CApp (APrimitive (">=", info), vl, [ vr ]) ->
       helper_c dest (ANF.CApp (ANF.APrimitive ("<=", info), vr, [ vl ]))
@@ -843,6 +859,10 @@ let generate_body is_toplevel body =
            printfn ppf "  mov rsi, 0";
            printfn ppf "  call rukaml_gc_print_stats" *)
     | CAtom atom -> helper_a dest atom
+    | CApp (APrimitive ("string_len", 1), AVar arg, []) ->
+      emit ld a0 (pp_to_mach arg);
+      emit call "rukaml_string_len";
+      emit sd_dest a0 dest
     | CApp (APrimitive ("char_code", 1), AVar arg, []) ->
       emit ld t0 (pp_to_mach arg);
       emit sd_dest t0 dest
@@ -863,6 +883,11 @@ let generate_body is_toplevel body =
     | CApp (APrimitive ("char_code", _), AConst (PConst_char c), []) ->
       emit li t0 (Char.code c);
       emit sd_dest a0 dest
+    | CApp (APrimitive ("string_nth", parity), AVar arg1, [ AVar arg2 ]) ->
+      assert (parity = 2);
+      emit ld a0 (pp_to_mach arg1);
+      emit ld a0 (pp_to_mach arg2);
+      emit call "string_nth0"
     | CApp (APrimitive (pname, partiy), arg1, args) ->
       Format.eprintf "At %s:%d\n%!" __FILE__ __LINE__;
       Format.eprintf "Unsupported primitive call: %s/%d\n%!" pname partiy;

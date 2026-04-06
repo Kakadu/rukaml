@@ -978,7 +978,10 @@ let start_env =
         Typedtree.S
           (Var_set.singleton 0, array_typ param @-> int_typ @-> param @-> unit_typ))
   (* strings stuff *)
-  |> extend_s "string_len" (Scheme.make_mono (tarrow string_typ int_typ))
+  |> extend_s
+       "string_len"
+       ~kind:(Builtin ("string_len", 1))
+       (Scheme.make_mono (tarrow string_typ int_typ))
   |> extend_s
        "string_nth"
        ~kind:(Builtin ("string_nth", 2))
@@ -988,6 +991,7 @@ let start_env =
        (Scheme.make_mono (tarrow (list_typ char_typ) string_typ))
   |> extend_s
        "string_equal"
+       ~kind:(Builtin ("string_equal", 2))
        (Scheme.make_mono (tarrow string_typ (tarrow string_typ bool_typ)))
   (* GC stuff *)
   |> extend_s "gc_compact" (Scheme.make_mono (tarrow unit_typ unit_typ))
