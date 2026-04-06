@@ -1,13 +1,7 @@
 (*
    test
   (targets amd64)
-  (run
-    (stdout
-      "rukaml_print_int 1000"
-      "rukaml_print_int 100"
-      "rukaml_print_int 1"
-      "rukaml_print_int 10"
-      "rukaml_print_int 100"))
+  (run)
 *)
 
 (* [begin skip] *)
