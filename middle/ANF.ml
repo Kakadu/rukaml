@@ -641,7 +641,7 @@ let anf =
       k (APrimitive ("=", 2))
     | TVar (_, name, User, _) -> k (AVar name)
     | TVar (_, _, Builtin (_name, _arity), _) -> k (APrimitive (_name, _arity))
-    | TUnit -> k AUnit
+    | TUnit -> k (AConst (PConst_int 0))
     | TTuple (ea, eb, es, _) ->
       helper ea (fun aimm ->
         helper eb (fun bimm ->
@@ -721,7 +721,7 @@ let anf =
         | Typedtree.Tpat_any -> success
         | Tpat_var var -> make_let_nonrec var (CAtom scrut_var) success
         | Tpat_const c -> compare_with_constant (AConst c)
-        | Tpat_unit -> compare_with_constant AUnit
+        | Tpat_unit -> compare_with_constant (AConst (PConst_int 0))
         | Tpat_constr (ident, []) -> compare_tag ident success (* TODO? : delete it *)
         | Tpat_constr (ident, args) -> compare_tag ident @@ match_many args
         | Tpat_tuple (p1, p2, ps) -> match_many (p1 :: p2 :: ps)

@@ -922,6 +922,7 @@ let start_env =
        (Scheme.make_mono (tarrow out_channel_typ (tarrow string_typ unit_typ)))
   |> extend_s
        "fprintf"
+       ~kind:(Builtin ("fprintf", 1))
        (let arg_ty = tv 0 ~level:(-1) in
         (* forall '_0 . out_channel -> ('_0, out_channel, unit) format3 -> '_0 *)
         Scheme.scheme
@@ -980,6 +981,7 @@ let start_env =
   |> extend_s "string_len" (Scheme.make_mono (tarrow string_typ int_typ))
   |> extend_s
        "string_nth"
+       ~kind:(Builtin ("string_nth", 2))
        (Scheme.make_mono (tarrow string_typ (tarrow int_typ char_typ)))
   |> extend_s
        "string_of_char_list"
