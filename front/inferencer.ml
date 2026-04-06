@@ -647,6 +647,9 @@ let expects_format3 ty =
   | _ -> false
 ;;
 
+(* context that determines the type assigned to string literals.
+   the default is TypeString.
+   context changes during inference of formatted output primitives' arguments. *)
 type string_inference_mode =
   | TypeString
   | TypeFormat3
@@ -656,6 +659,8 @@ type inferencer_state =
   ; infer_strings_as : string_inference_mode
   }
 
+(** sometimes the context needs to be reset.
+   for example, to correctly infer strings inside tuples/arrays/adts: [ fprintf "%a" pp_string_list  [ "string1"; "string2" ] ] *)
 let clean_state { restriction_state; _ } =
   { restriction_state; infer_strings_as = TypeString }
 ;;

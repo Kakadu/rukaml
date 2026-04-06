@@ -165,6 +165,7 @@ type value_binding =
 
 type constructor_info =
   { constr_ident : Ident.t
+    (* number of constructor in declaration (counting from zero) and it's name *)
   ; constr_type_ident : Ident.t
     (* reference to the type in which the variant was declared *)
   ; constr_args : ty list
