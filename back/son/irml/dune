@@ -16,5 +16,9 @@
    (progn
     (chdir
      ir
-     (run make all))
+     (run
+      make
+      all
+      ; on error run `git submodule update --init`
+      ))
     (copy ir/libir.a libir.a)))))
