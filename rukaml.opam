@@ -44,7 +44,7 @@ depexts: [
   [ "nasm" "gcc-13" "pkg-config"
     "llvm-16-dev" "clang-16"
     "binutils-riscv64-linux-gnu" "gcc-13-riscv64-linux-gnu"
-    "libcunit1-dev"
+    "libcunit1-dev" "libcapstone-dev"
   ] { os-distribution = "ubuntu" }
   [ "qemu-user-static" ] { os-distribution = "ubuntu" & os-version <= "25.04" }
   [ "qemu-user" ] { os-distribution = "ubuntu" & os-version >= "25.10" }
