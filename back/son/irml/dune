@@ -2,7 +2,7 @@
 
 (library
  (name irml)
- (modules bindings consts)
+ (modules bindings consts helpers)
  (libraries ctypes ctypes-foreign)
  (foreign_archives ir)
  (c_library_flags -lm -ldl -lcapstone))
