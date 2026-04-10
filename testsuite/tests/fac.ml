@@ -1,6 +1,6 @@
 (*
 test
-  (targets rv64 amd64)
+  (targets rv64 amd64 son)
   (flags () (--cps) (--cps --caa))
   (run (stdout "rukaml_print_int 24"))
 *)

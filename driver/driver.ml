@@ -121,6 +121,12 @@ module Compiler = struct
     k (Code f)
   ;;
 
+  (** Generate code for AMD64 via sea-of-nodes *)
+  let son (ANF stru) =
+    let f ~path = Son_impl.codegen stru path in
+    k (Code f)
+  ;;
+
   (** Generate code for LLVM *)
   let llvm (ANF stru) =
     let f ~path = LLVM_impl.codegen stru path |> Result.ok_or_failwith in
@@ -167,6 +173,8 @@ module Target = struct
 
   let rv64 table p = (Intermediate.anftree table p) rv64
   let amd64 table p = (Intermediate.anftree table p) amd64
+  let son table p = (Intermediate.anftree table p) son
+
   let llvm table p = (Intermediate.anftree table p) llvm
 
   let finish target p = (target p) (to_file p.out_path)
@@ -176,6 +184,7 @@ module Target = struct
       (module String)
       [ "rv64", finish (rv64 table)
       ; "amd64", finish (amd64 table)
+      ; "son", finish (son table)
       ; "llvm", finish (llvm table)
       ; "parsetree", finish Intermediate.parsetree
       ; ("cps", fun p -> finish Intermediate.cpstree { p with cps = true })

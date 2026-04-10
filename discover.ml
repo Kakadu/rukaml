@@ -142,5 +142,16 @@ let () =
   in
   let toolchain_llvm = discover_toolchain cfg defaults_llvm ~suffix:"llvm" in
   export_toolchain toolchain_llvm ~suffix:"llvm";
-  print_toolchain toolchain_llvm
+  print_toolchain toolchain_llvm;
+
+  let defaults_son =
+    { cc = { path = gcc_amd64; flags = "-g -fPIC -Wall -Wpedantic" }
+    ; as_ = { path = gcc_amd64; flags = "-x assembler -c" }
+    ; ld = { path = gcc_amd64; flags = "" }
+    ; run = { path = ""; flags = "" }
+    }
+  in
+  let toolchain_son = discover_toolchain cfg defaults_son ~suffix:"son" in
+  export_toolchain toolchain_son ~suffix:"son";
+  print_toolchain toolchain_son
 ;;

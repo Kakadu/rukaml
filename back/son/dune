@@ -1,0 +1,15 @@
+(library
+ (name son_impl)
+ (modules son_impl)
+ (wrapped false)
+ (libraries cconv compile_lib irml))
+
+(rule
+ (target rukaml_stdlib.o)
+ (enabled_if
+  (not
+   (= none %{read:../../cc_son})))
+ (deps
+  (:src rukaml_stdlib.c))
+ (action
+  (system "%{read:../../cc_son} -c %{src} -o %{target}")))

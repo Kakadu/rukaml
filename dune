@@ -15,6 +15,10 @@
   as_amd64
   ld_amd64
   run_amd64
+  cc_son
+  as_son
+  ld_son
+  run_son
   cc_rv64
   as_rv64
   ld_rv64

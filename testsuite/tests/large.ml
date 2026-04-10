@@ -1,6 +1,6 @@
 (*
 test
-  (targets (anf promote) (amd64 promote))
+  (targets (anf promote) (amd64 promote) son)
   (run (stdout "rukaml_print_int 42" "rukaml_print_int 0"))
 *)
 
