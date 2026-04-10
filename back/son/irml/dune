@@ -3,7 +3,7 @@
 (library
  (name irml)
  (modules bindings consts)
- (libraries ctypes ctypes-foreign compile_lib)
+ (libraries ctypes ctypes-foreign)
  (foreign_archives ir)
  (c_library_flags -lm -ldl -lcapstone))
 
