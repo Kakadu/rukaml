@@ -29,3 +29,5 @@ let ir_call_i64 = of_int 2890
 (*flags*)
 let ir_function = of_int 256
 let ir_opt_folding = of_int 1048576
+let ir_opt_cfg = of_int 2097152
+let ir_opt_codegen = of_int 8388608

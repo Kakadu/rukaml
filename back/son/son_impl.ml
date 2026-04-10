@@ -145,7 +145,10 @@ let compile_vb env name b =
   assert (argc >= 1 || name = "main");
   let ctx = ir_create_ctx () in
   ir_consistency_check ();
-  let flags = Unsigned.UInt32.add Consts.ir_function Consts.ir_opt_folding in
+  let flags =
+    let ( + ) = Unsigned.UInt32.add in
+    Consts.(ir_function + ir_opt_folding + ir_opt_cfg + ir_opt_codegen)
+  in
   (* init sizes for due buffers*)
   let consts, insns = 16l, 48l in
   ir_init ctx flags consts insns;
