@@ -206,12 +206,15 @@ let allocate_locals input_anf : (now:unit -> unit) * _ =
       local_names := Ident.Ident_set.add name !local_names;
       helper_c rhs;
       helper where_
-    | ELet _ -> assert false
+    | ELet (_flg, Tpat_unit, rhs, where_) ->
+      helper_c rhs;
+      helper where_
+    | ELet _ as anf -> failwiths "Not implemented: @[%a@]" ANF.pp anf
   and helper_c = function
     | CIte (_, th, el) ->
       helper th;
       helper el
-    | CApp _ | CAtom _ -> ()
+    | CString_const _ | CApp _ | CAtom _ -> ()
   in
   helper input_anf;
   let local_names = Ident.Ident_set.to_list !local_names in
@@ -424,9 +427,10 @@ let generate_body is_toplevel body =
         emit_alloc_closure "rukaml_print_int_kaml" parity;
         emit sd a0 (ROffset (SP, 8 * i))
       | APrimitive _ as arg -> failwiths "Primitive %a is not supported" ANF.pp_a arg
-      | ATuple _ -> assert false
-      | AArray _ -> assert false
-      | AConstruct _ -> assert false
+      | ATuple _ -> failwiths "Can't handle argument '%a'" ANF.pp_a arg
+      | AArray _ -> failwiths "Can't handle argument '%a'" ANF.pp_a arg
+      | AConstruct (tag, []) -> pp_access tag i
+      | AConstruct _ -> failwiths "Can't handle argument '%a'" ANF.pp_a arg
     in
     ListLabels.iteri args ~f:on_arg;
     (* printfn ppf "  addi sp, sp, -8*%d # fun %S arguments" count (Option.get f); *)
@@ -442,7 +446,8 @@ let generate_body is_toplevel body =
            (Addr_of_local.find_exn name); *)
       helper_c local rhs;
       helper dest wher
-    | ELet _ -> assert false
+    | ELet (_, Tpat_unit, _rhs, wher) -> helper dest wher
+    | ELet _ as anf -> failwiths "Not implemented: @[%a@]" ANF.pp anf
   and helper_c (dest : dest) = function
     | CIte (CAtom (AConst (Parsetree.PConst_bool true)), bth, _bel) -> helper dest bth
     | CIte (CAtom (AConst (Parsetree.PConst_bool false)), _bth, bel) -> helper dest bel
@@ -685,12 +690,15 @@ let generate_body is_toplevel body =
       (match is_toplevel vname with
        | `External ->
          emit ld t5 (pp_to_mach vname);
-         (* printfn ppf "  ld t5, %a #" Addr_of_local.pp_local_exn vname; *)
          emit addi t5 t5 (-n);
-         (* printfn ppf "  addi t5, t5, -%d" n; *)
-         (* printfn ppf "  sd t5, %a" Addr_of_local.pp_dest dest *)
          emit sd_dest t5 dest
-       | _ ->
+       | `Local ->
+         emit ld t5 (pp_to_mach vname);
+         emit addi t5 t5 (-n);
+         emit sd_dest t5 dest
+       | _dk ->
+         (* Format.eprintf "dk : %a\n%!" pp_def_kind dk; *)
+         (* Format.eprintf "complex: @[%a@]\n%!" ANF.pp_c complex; *)
          (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
          failwiths "not implemented %d" __LINE__)
     | CApp (APrimitive ((("+" | "*") as prim), _), AVar vname, [ AConst (PConst_int n) ])
@@ -880,14 +888,21 @@ let generate_body is_toplevel body =
       emit li a0 idx;
       emit ld a1 (pp_to_mach from);
       emit call "rukaml_field"
-    | CApp (APrimitive ("char_code", _), AConst (PConst_char c), []) ->
-      emit li t0 (Char.code c);
+    | CApp (APrimitive ("char_code", _), AConst (PConst_int c), []) ->
+      emit li t0 c;
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("char_code", _), AVar v, []) ->
+      emit ld a0 (pp_to_mach v);
+      emit call "char_code";
       emit sd_dest a0 dest
     | CApp (APrimitive ("string_nth", parity), AVar arg1, [ AVar arg2 ]) ->
       assert (parity = 2);
       emit ld a0 (pp_to_mach arg1);
-      emit ld a0 (pp_to_mach arg2);
+      emit ld a1 (pp_to_mach arg2);
       emit call "string_nth0"
+    | CApp (APrimitive ("||", 2), AVar arg1, [ AVar arg2 ]) ->
+      emit or_ t0 (pp_to_mach arg1) (pp_to_mach arg2);
+      emit sd_dest t0 dest
     | CApp (APrimitive (pname, partiy), arg1, args) ->
       Format.eprintf "At %s:%d\n%!" __FILE__ __LINE__;
       Format.eprintf "Unsupported primitive call: %s/%d\n%!" pname partiy;
@@ -896,6 +911,21 @@ let generate_body is_toplevel body =
     | CApp _ as anf ->
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_c anf;
       failwiths "Not implemented %d" __LINE__
+    | CString_const s ->
+      let payload_words_n = (String.length s + 7) / 8 in
+      emit li a0 (payload_words_n + 1) ~comm:"; size of block for string";
+      emit li a1 252 ~comm:"; string tag";
+      emit call "rukaml_alloc_block";
+      emit sd_dest a0 dest;
+      String.iter
+        (fun ch ->
+           (* TODO: This creation of strings is full of shit *)
+           emit li t0 (Char.code ch);
+           emit sb t0 a0;
+           emit addi a0 a0 1)
+        s;
+      emit li t0 (String.length s) ~comm:"string length ";
+      emit sd t0 a0
     | _rest ->
       Format.eprintf "@[%a@]\n%!" Compile_lib.ANF.pp_c _rest;
       failwiths "Not implemented %s %d" __FILE__ __LINE__
@@ -969,22 +999,7 @@ let generate_body is_toplevel body =
       emit li t0 1;
       emit sd_dest t0 dest
     | AConst (PConst_bool false) | AUnit -> emit sd_dest zero dest
-    | AConst (PConst_string s) ->
-      let payload_words_n = (String.length s + 7) / 8 in
-      emit li a0 (payload_words_n + 1) ~comm:"; size of block for string";
-      emit li a1 252 ~comm:"; string tag";
-      emit call "rukaml_alloc_block";
-      emit sd_dest a0 dest;
-      String.iter
-        (fun ch ->
-           (* TODO: This creation of strings is full of shit *)
-           emit li t0 (Char.code ch);
-           emit sb t0 a0;
-           emit addi a0 a0 1)
-        s;
-      emit li t0 (String.length s) ~comm:"string length ";
-      emit sd t0 a0
-      (* printfn ppf "  mov qword [rax+8*%d], %d" payload_words_n (String.length s) *)
+    | AConst (PConst_string s) -> assert false
     | APrimitive ("match_failure", _) -> emit call "rukaml_match_failure"
     | _atom ->
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_a _atom;
@@ -1057,9 +1072,13 @@ iterate:
 
 let use_custom_main = false
 
+module String_set = Set.Make (String)
+
 let codegen ?(wrap_main_into_start = true) anf file =
-  (* log "Going to generate code here %s %d" __FUNCTION__ __LINE__; *)
-  (* log "ANF: @[%a@]" Compile_lib.ANF.pp_stru anf; *)
+  let string_constants =
+    let iter = ANF.default_iterator in
+    List.iter (fun (_, _, e) -> iter.on_expr iter e) anf
+  in
   let is_toplevel : Ident.t -> def_kind =
     let hash = Hashtbl.create (List.length anf) in
     List.iter

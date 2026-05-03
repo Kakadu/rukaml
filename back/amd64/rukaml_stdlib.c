@@ -985,8 +985,18 @@ void *rukaml_alloc_fprintf_closure(int a0, int a1, int a2, int a3, int a4, int a
   return rukaml_applyN(closure, 2, out_channel, fmt);
 }
 
+void *rukaml_alloc_printf_closure0(void **fmt)
+{
+  return rukaml_alloc_fprintf_closure(0, 0, 0, 0, 0, 0, stdout, fmt);
+}
+
 void *rukaml_alloc_printf_closure(int a0, int a1, int a2, int a3, int a4, int a5, void **fmt)
 {
+
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null fmt");
+  }
   return rukaml_alloc_fprintf_closure(0, 0, 0, 0, 0, 0, stdout, fmt);
 }
 
