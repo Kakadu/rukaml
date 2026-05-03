@@ -27,8 +27,9 @@ let%expect_test _ =
   [%expect
     {|
     (fun tuple1 -> let x = block_nth tuple1 0 in
-                     let y = block_nth tuple1 1 in
-                       use_pattern_vars_here) |}]
+                   let y = block_nth tuple1 1 in
+                   use_pattern_vars_here)
+    |}]
 ;;
 
 let%expect_test _ =
@@ -36,9 +37,10 @@ let%expect_test _ =
   [%expect
     {|
     (fun tuple1 -> let x = block_nth tuple1 0 in
-                     let y = block_nth tuple1 1 in
-                       let z = block_nth tuple1 2 in
-                         use_pattern_vars_here) |}]
+                   let y = block_nth tuple1 1 in
+                   let z = block_nth tuple1 2 in
+                   use_pattern_vars_here)
+    |}]
 ;;
 
 let%expect_test _ =
@@ -46,10 +48,11 @@ let%expect_test _ =
   [%expect
     {|
     (fun tuple1 -> let field2 = block_nth tuple1 0 in
-                     let x = block_nth field2 0 in
-                       let y = block_nth field2 1 in
-                         let z = block_nth tuple1 1 in
-                           use_pattern_vars_here) |}]
+                   let x = block_nth field2 0 in
+                   let y = block_nth field2 1 in
+                   let z = block_nth tuple1 1 in
+                   use_pattern_vars_here)
+    |}]
 ;;
 
 let test_anf ?(print_before = false) ?(simplify = true) text =
@@ -82,13 +85,13 @@ let%expect_test "CPS factorial" =
     {|
     let __lifted_lam_1 n k p =
       let temp1 = (p * n) in
-        k temp1
+      k temp1
     let rec fack n k =
       (if (n = 0)
       then k 1
       else let temp5 = (n - 1) in
-             let temp8 = __lifted_lam_1 n k in
-               fack temp5 temp8)
+           let temp8 = __lifted_lam_1 n k in
+           fack temp5 temp8)
     |}]
 ;;
 
@@ -98,7 +101,7 @@ let%expect_test _ =
     {|
     let double =
       let b = 1 in
-        (b, 2)
+      (b, 2)
     |}]
 ;;
 
@@ -125,9 +128,9 @@ let%expect_test "Check string literal is put to separate let" =
     {|
     let main =
       let temp1 = output_string stdout  in
-        let temp2 = "hello world!" in
-          let t = temp1 temp2  in
-            0
+      let temp2 = "hello world!" in
+      let t = temp1 temp2  in
+      0
     |}]
 ;;
 
@@ -146,13 +149,13 @@ let%expect_test "Check string literal is put to separate let" =
     {|
     let __lifted_let_4_is_keyword s =
       let temp1 = s in
-        let temp4 = "true" in
-          (if (temp1 = temp4)
-          then 1
-          else let temp2 = "false" in
-                 (if (temp1 = temp2)
-                 then 1
-                 else 0))
+      let temp4 = "true" in
+      (if (temp1 = temp4)
+      then 1
+      else let temp2 = "false" in
+           (if (temp1 = temp2)
+           then 1
+           else 0))
     let main =
       0
     |}];
@@ -182,9 +185,9 @@ let%expect_test _ =
     {|
     let pp_tuple pp_item oc x =
       let temp1 = fprintf oc  in
-        let temp2 = ", %a" in
-          let temp3 = temp1 temp2  in
-            let temp4 = temp3 pp_item  in
-              temp4 x
+      let temp2 = ", %a" in
+      let temp3 = temp1 temp2  in
+      let temp4 = temp3 pp_item  in
+      temp4 x
     |}]
 ;;

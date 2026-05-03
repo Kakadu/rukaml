@@ -153,6 +153,11 @@ include struct
     | APname s -> Ident.pp ppf s
   ;;
 
+  let is_simple_rhs = function
+    | CString_const _ | CAtom _ | CApp _ -> true
+    | _ -> false
+  ;;
+
   let rec helper ppf = function
     | ELet (flg, name, CAtom (ALam (arg1, rhs)), wher) ->
       fprintf
@@ -165,6 +170,11 @@ include struct
         pp_apat
         arg1;
       fprintf ppf "@[%a@]@ in@]@ @[%a@]@]" helper rhs helper wher
+    | ELet (_, name, rhs, wher) when is_simple_rhs rhs ->
+      fprintf ppf "@[<v>";
+      fprintf ppf "@[let %a = %a in@]@ " Pprinttyped.pp_pattern name helper_c rhs;
+      fprintf ppf "@[%a@]" helper wher;
+      fprintf ppf "@]"
     | ELet (_, name, rhs, wher) ->
       fprintf
         ppf
@@ -418,7 +428,8 @@ let%expect_test _ =
   [%expect
     {|
     let v7 = vf in
-      vf 1 v9 |}]
+    vf 1 v9
+    |}]
 ;;
 
 module Arity_map = struct
