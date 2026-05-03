@@ -298,10 +298,18 @@ let used_once_in_if ~where name =
 
 (* TODO: Why we substitute by complex expression only? *)
 let substitute ~where ident1 (rhs : c_expr) : expr =
-  let rec helper = function
+  let rec helper x =
+    (* log " SubstituteE %a ~~> %a" Ident.pp ident1 pp_c rhs;
+    log " inside @[%a@]" pp x; *)
+    match x with
     | EComplex c -> ecomplex (helper_c c)
-    | ELet (flg, pat, cexpr, expr) -> elet flg pat (helper_c cexpr) (helper expr)
-  and helper_c = function
+    | ELet (flg, pat, cexpr, expr) ->
+      let new_rhs = helper_c cexpr in
+      elet flg pat new_rhs (helper expr)
+  and helper_c ce =
+    (* log " SubstituteC %a ~~> %a" Ident.pp ident1 pp_c rhs;
+    log " inside @[%a@]" pp_c ce; *)
+    match ce with
     | CAtom (AVar x) when Ident.equal x ident1 -> rhs
     | CAtom (AVar _) as c -> c
     | CAtom i -> catom (helperi i)
@@ -312,15 +320,19 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
       (match rhs with
        | CApp (f, arg0, arg_mid) -> CApp (f, arg0, arg_mid @ (arg1 :: args))
        | _ -> assert false)
-    | ( CApp ((APrimitive _ as _f), _arg1, _args)
-      | CApp ((AVar _ as _f), _arg1, _args) (* not ident1 *) ) as is ->
+    | CApp ((APrimitive _ as f), _arg1, _args) ->
+      CApp (f, helperi _arg1, List.map helperi _args)
+    | CApp ((AVar _ as _f), _arg1, _args) (* not ident1 *) as is ->
       (* TODO: Do we  need to lookup inside args? *)
       is
     | c ->
       Format.eprintf "%a\n%!" pp_c c;
       Format.eprintf "can't substitute %a -> %a\n%!" Ident.pp ident1 pp_c rhs;
       assert false
-  and helperi = function
+  and helperi x =
+    log "  SubstituteI %a ~~> %a" Ident.pp ident1 pp_c rhs;
+    log "  inside @[%a@]" pp_a x;
+    match x with
     | AConst (PConst_bool true) -> AConst (PConst_int 1)
     | AConst (PConst_bool false) -> AConst (PConst_int 0)
     | (APrimitive _ | AConst _ | AUnit) as i -> i
@@ -328,24 +340,22 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
     | AArray is -> AArray (List.map helperi is)
     | AConstruct (tag, is) -> AConstruct (tag, List.map helperi is)
     | AVar name when Ident.equal ident1 name ->
-      Format.eprintf "Possible missing substitution. %s %d\n%!" __FILE__ __LINE__;
-      AVar name
+      (match rhs with
+       | CAtom a -> a
+       | _ ->
+         Format.eprintf "Possible missing substitution. %s %d\n%!" __FILE__ __LINE__;
+         let _ = failwith "not implemented" in
+         AVar name)
     | AVar _ as i -> i
     | i ->
       Format.eprintf "%a\n%!" pp_a i;
       failwiths "%s: unsupported case" __FUNCTION__
   in
+  (* log "Substitute %a ~~> %a START" Ident.pp ident1 pp_c rhs; *)
   let ans = helper where in
-  log
-    "@[<v>@[  %a |-> %a@]@ @[%a@] ~~~> @[%a@]@]"
-    Ident.pp
-    ident1
-    pp_c
-    rhs
-    pp
-    where
-    pp
-    ans;
+  (* log "Substitute %a ~~> %a" Ident.pp ident1 pp_c rhs;
+  log "inside @[%a@]" pp where;
+  log "gives @[%a@] FIN" pp ans; *)
   ans
 ;;
 
@@ -451,6 +461,8 @@ let simplify : _ Arity_map.t -> expr -> expr =
       | ELet (NonRecursive, Apat_var v1, rhs, where)
         when used_once_in_if v1 ~where && is_comparison rhs && cfg.opt_cmp_into_if_inline
         -> helper acc (substitute ~where v1 rhs)
+      | ELet (NonRecursive, Apat_var v1, (CAtom (AVar _v2) as rhs), where) ->
+        helper acc (substitute ~where v1 rhs)
       | ELet (flg, name, body, wher) ->
         ELet (flg, name, helper_c acc body, helper acc wher)
     in
@@ -624,16 +636,7 @@ let anf =
             , Apat_var name
             , CApp (APrimitive (bname, 2), arg1, [ arg2 ])
             , k (AVar name) )))
-    (* | TApp (TApp (TVar ("fresh", _), arg1, _), arg2, _) ->
-       helper arg1 (fun arg1 ->
-       helper arg2 (fun arg2 ->
-       let name = gensym_id () in
-       ELet
-       ( NonRecursive
-       , Tpat_var name
-       , CApp (AVar "fresh", arg1, [ arg2 ])
-       , k (AVar name) ))) *)
-    | TApp (f, arg1, _) ->
+    | TApp (f, arg1, _ty) ->
       helper f (fun f ->
         helper arg1 (fun arg1 ->
           let name = gensym_id () in

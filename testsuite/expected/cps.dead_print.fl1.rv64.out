@@ -43,21 +43,17 @@ f:
 
 .globl __lifted_lam_3
 __lifted_lam_3:
-  addi sp, sp, -16 # allocate for RA, and 1 locals y
-  sd ra, 8(sp)
-  ld t5, 16(sp)
-  sd t5, (sp) # access a var "t4"
+  addi sp, sp, -16 # allocate for Pad, RA, and 0 locals 
+  sd ra, (sp)
   li a0, 0
-  ld ra, 8(sp)
-  addi sp, sp, 16 # DEallocate for RA, and 1 locals y
+  ld ra, (sp)
+  addi sp, sp, 16 # DEallocate for Pad, RA and 0 locals variables 
   ret # __lifted_lam_3
 
 .globl __lifted_lam_2
 __lifted_lam_2:
-  addi sp, sp, -16 # allocate for RA, and 1 locals x
-  sd ra, 8(sp)
-  ld t5, 16(sp)
-  sd t5, (sp) # access a var "t3"
+  addi sp, sp, -16 # allocate for Pad, RA, and 0 locals 
+  sd ra, (sp)
 # Allocate args to call fun "f" with args
   addi sp, sp, -16 # last_pos = 4
   li t0, 1
@@ -69,8 +65,8 @@ __lifted_lam_2:
   call f
   addi sp, sp, 16 # deallocate 2 args
   mv a0, a0
-  ld ra, 8(sp)
-  addi sp, sp, 16 # DEallocate for RA, and 1 locals x
+  ld ra, (sp)
+  addi sp, sp, 16 # DEallocate for Pad, RA and 0 locals variables 
   ret # __lifted_lam_2
 
 .globl main

@@ -146,10 +146,9 @@ let%expect_test "Check string literal is put to separate let" =
   [%expect
     {|
     let __lifted_let_4_is_keyword s =
-      let temp1 = s in
-      (if (temp1 = "true")
+      (if (s = "true")
       then 1
-      else (if (temp1 = "false")
+      else (if (s = "false")
            then 1
            else 0))
     let main =
@@ -183,5 +182,20 @@ let%expect_test _ =
       let temp2 = fprintf oc ", %a" in
       let temp3 = temp2 pp_item  in
       temp3 x
+    |}]
+;;
+
+let%expect_test "Substitution of variable renames" =
+  test_anf
+    ~simplify:true
+    {|
+    let f x =
+      let z = x in
+      z+1
+    |};
+  [%expect
+    {|
+    let f x =
+      (x + 1)
     |}]
 ;;
