@@ -36,6 +36,7 @@ type imm_expr =
 (* TODO(Kakadu): array, lambda, constructor and tuple are not immediates *)
 and c_expr =
   | CApp of imm_expr * imm_expr * imm_expr list
+  | CString_const of string
   | CIte of c_expr * expr * expr
   | CAtom of imm_expr
 
@@ -44,6 +45,65 @@ and expr =
   | ELet of Parsetree.rec_flag * Typedtree.pattern * c_expr * expr
   | EComplex of c_expr
 [@@deriving show { with_path = false }]
+
+type iterator =
+  { aconst : iterator -> Parsetree.const -> unit
+  ; avar : iterator -> Ident.t -> unit
+  ; aprimitive : iterator -> string -> int -> unit
+  ; atuple : iterator -> imm_expr -> imm_expr -> imm_expr list -> unit
+  ; aconstruct : iterator -> int -> imm_expr list -> unit
+  ; aarray : iterator -> imm_expr list -> unit
+  ; alam : iterator -> apat -> expr -> unit
+  ; catom : iterator -> imm_expr -> unit
+  ; cite : iterator -> c_expr -> expr -> expr -> unit
+  ; capp : iterator -> imm_expr -> imm_expr -> imm_expr list -> unit
+  ; elet : iterator -> Parsetree.rec_flag -> Typedtree.pattern -> c_expr -> expr -> unit
+  ; on_expr : iterator -> expr -> unit
+  ; on_cexpr : iterator -> c_expr -> unit
+  ; on_imm : iterator -> imm_expr -> unit
+  }
+
+let default_iterator =
+  { avar = (fun _self _ -> ())
+  ; aconst = (fun _self _ -> ())
+  ; aprimitive = (fun _self _ _ -> ())
+  ; atuple = (fun self a1 a2 ass -> List.iter (self.on_imm self) (a1 :: a2 :: ass))
+  ; aconstruct = (fun self _tag es -> List.iter (self.on_imm self) es)
+  ; aarray = (fun self es -> List.iter (self.on_imm self) es)
+  ; alam = (fun self _ e -> self.on_expr self e)
+  ; catom = (fun self -> self.on_imm self)
+  ; cite =
+      (fun self c th el ->
+        self.on_cexpr self c;
+        self.on_expr self th;
+        self.on_expr self el)
+  ; capp = (fun self a1 a2 ass -> List.iter (self.on_imm self) (a1 :: a2 :: ass))
+  ; elet =
+      (fun self _flg _pat cexpr expr ->
+        self.on_cexpr self cexpr;
+        self.on_expr self expr)
+  ; on_expr =
+      (fun self -> function
+         | EComplex c -> self.on_cexpr self c
+         | ELet (flg, _pat, c, e) -> self.elet self flg _pat c e)
+  ; on_cexpr =
+      (fun self -> function
+         | CAtom imm -> self.catom self imm
+         | CIte (c, th, el) -> self.cite self c th el
+         | CString_const _ -> ()
+         | CApp (f, arg1, args) -> self.capp self f arg1 args)
+  ; on_imm =
+      (fun self -> function
+         | AUnit -> ()
+         | AConst c -> self.aconst self c
+         | AVar v -> self.avar self v
+         | APrimitive (name, arity) -> self.aprimitive self name arity
+         | ATuple (a1, a2, ass) -> self.atuple self a1 a2 ass
+         | AConstruct (tag, ass) -> self.aconstruct self tag ass
+         | AArray xs -> self.aarray self xs
+         | ALam (pat, e) -> self.alam self pat e)
+  }
+;;
 
 type vb = Parsetree.rec_flag * Ident.t * expr
 
@@ -132,6 +192,7 @@ include struct
         (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " ") helper_a)
         args
     | CAtom a -> helper_a ppf a
+    | CString_const s -> fprintf ppf "\"%s\"" s
     | CIte (acond, th, el) ->
       fprintf
         ppf
@@ -144,6 +205,8 @@ include struct
         el
 
   and helper_a ppf = function
+    | AConst (Parsetree.PConst_string s) ->
+      fprintf ppf "%S (* Strings should not be there *)" s
     | ALam (arg1, EComplex (CAtom (ALam (arg2, EComplex (CAtom (ALam (arg3, e))))))) ->
       fprintf
         ppf
@@ -219,6 +282,7 @@ let used_once_as_function ~where name =
       helper_i arg1;
       List.iter helper_i args
     | CAtom i -> helper_i i
+    | CString_const _ -> ()
   and helper_i = function
     | AVar id when Ident.equal id name -> incr used
     | APrimitive _ | AUnit | AConst _ | AVar _ -> ()
@@ -259,6 +323,7 @@ let used_once_in_if ~where name =
       List.iter helper_i args
     | CAtom (AVar id) when Ident.equal id name -> incr used
     | CAtom i -> helper_i i
+    | CString_const _ -> ()
   and helper_i = function
     | AVar id when Ident.equal id name -> incr used
     | APrimitive _ | AUnit | AConst _ | AVar _ -> ()
@@ -288,6 +353,7 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
   and helper_c = function
     | CAtom (AVar x) when Ident.equal x ident1 -> rhs
     | CAtom (AVar _) as c -> c
+    | CString_const _ as c -> c
     | CAtom i -> catom (helperi i)
     | CIte (CAtom (AVar name), ethen, eelse) when Ident.equal ident1 name ->
       cite rhs (helper ethen) (helper eelse)
@@ -374,6 +440,9 @@ let simplify : _ Arity_map.t -> expr -> expr =
   in
   let rec helper_a acc = function
     | ALam (name, e) -> ALam (name, helper acc e)
+    | AConst (Parsetree.PConst_char c) -> AConst (PConst_int (Char.code c))
+    | AConst (Parsetree.PConst_bool true) -> AConst (PConst_int 1)
+    | AConst (Parsetree.PConst_bool false) -> AConst (PConst_int 0)
     | x -> x
   and helper_c acc e =
     let rez =
@@ -382,6 +451,7 @@ let simplify : _ Arity_map.t -> expr -> expr =
       | CApp (f, arg1, args) ->
         CApp (helper_a acc f, helper_a acc arg1, List.map (helper_a acc) args)
       | CIte (cond, th, el) -> CIte (helper_c acc cond, helper acc th, helper acc el)
+      | CString_const _ -> e
     in
     (* log "Simpl_c: @[%a@] ~~> @[%a@] " pp_c e pp_c rez; *)
     rez
@@ -389,6 +459,8 @@ let simplify : _ Arity_map.t -> expr -> expr =
     let rez =
       match e with
       | EComplex e -> EComplex (helper_c acc e)
+      | ELet (flg, name, CString_const c, body) ->
+        ELet (flg, name, CString_const c, helper acc body)
       (* inline for variable application *)
       | ELet
           ( Parsetree.NonRecursive
@@ -585,8 +657,13 @@ let anf =
   (* Standard pitfall: forgot to call continuation *)
   let rec helper e (k : imm_expr -> expr) =
     match e with
+    | Typedtree.TConst (Parsetree.PConst_string s) ->
+      let name = gensym_id () in
+      ELet (NonRecursive, Tpat_var name, CString_const s, k (AVar name))
     | Typedtree.TConst n -> k @@ AConst n
-    | TFormat (s, _ty) -> k @@ AConst (PConst_string s)
+    | TFormat (s, _ty) ->
+      let name = gensym_id () in
+      ELet (NonRecursive, Tpat_var name, CString_const s, k (AVar name))
     | TApp (TApp (TVar (varname, _, Builtin (bname, 2), _), arg1, _), arg2, _)
       when is_infix_binop varname ->
       helper arg1 (fun arg1 ->
@@ -606,7 +683,7 @@ let anf =
        , Tpat_var name
        , CApp (AVar "fresh", arg1, [ arg2 ])
        , k (AVar name) ))) *)
-    | TApp (f, arg1, _) ->
+    | TApp (f, arg1, _ty) ->
       helper f (fun f ->
         helper arg1 (fun arg1 ->
           let name = gensym_id () in
@@ -731,6 +808,9 @@ let anf =
         match pat with
         | Typedtree.Tpat_any -> success
         | Tpat_var var -> make_let_nonrec var (CAtom scrut_var) success
+        | Tpat_const (Parsetree.PConst_string s) ->
+          let fresh = gensym_id () in
+          make_let_nonrec fresh (CString_const s) (compare_with_constant (AVar fresh))
         | Tpat_const c -> compare_with_constant (AConst c)
         | Tpat_unit -> compare_with_constant (AConst (PConst_int 0))
         | Tpat_constr (ident, []) -> compare_tag ident success (* TODO? : delete it *)

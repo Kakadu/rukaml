@@ -52,9 +52,10 @@ let%expect_test _ =
                            use_pattern_vars_here) |}]
 ;;
 
-let test_anf ?(print_before = false) text =
+let test_anf ?(print_before = false) ?(simplify = true) text =
   reset_gensym ();
   let ( let* ) x f = Result.bind x f in
+  let simplify_anf = if simplify then simplify_stru else Fun.id in
   match
     let stru = Frontend.Parsing.parse_vb_exn text in
     let vbs = CConv.structure [ Parsetree.Pstr_value stru ] in
@@ -65,7 +66,7 @@ let test_anf ?(print_before = false) text =
     then (
       Format.printf "Before simplify:\n%!";
       Format.printf "@[<v>%a@]\n\n%!" pp_stru anf);
-    anf |> simplify_stru |> Result.ok
+    anf |> simplify_anf |> Result.ok
   with
   | Result.Error err -> Format.printf "%a\n%!" Inferencer.pp_error err
   | Ok anf -> Format.printf "@[<v>%a@]\n%!" pp_stru anf
@@ -111,5 +112,79 @@ let%expect_test _ =
       y
     let foo =
       (__lifted_lam_2, __lifted_lam_3)
+    |}]
+;;
+
+let%expect_test "Check string literal is put to separate let" =
+  test_anf
+    ~simplify:true
+    {| let main =
+         let t =  output_string stdout "hello world!" in
+         0 |};
+  [%expect
+    {|
+    let main =
+      let temp1 = output_string stdout  in
+        let temp2 = "hello world!" in
+          let t = temp1 temp2  in
+            0
+    |}]
+;;
+
+let%expect_test "Check string literal is put to separate let" =
+  (* ANF.set_logging true; *)
+  test_anf
+    ~simplify:true
+    {| let main =
+         let is_keyword s =
+            match s with
+            | "true" -> true
+            | "false" -> true
+            | _ -> false in
+         0 |};
+  [%expect
+    {|
+    let __lifted_let_4_is_keyword s =
+      let temp1 = s in
+        let temp4 = "true" in
+          (if (temp1 = temp4)
+          then 1
+          else let temp2 = "false" in
+                 (if (temp1 = temp2)
+                 then 1
+                 else 0))
+    let main =
+      0
+    |}];
+  ANF.set_logging false
+;;
+
+let%expect_test "Test char equality" =
+  test_anf ~simplify:true "let main c =    if c = '0' then 1 else 2";
+  [%expect
+    {|
+    let main c =
+      (if (c = 48)
+      then 1
+      else 2)
+    |}]
+;;
+
+let%expect_test _ =
+  test_anf (* ~print_before:true *)
+    ~simplify:true
+    {|
+
+    let pp_tuple pp_item oc x =
+      fprintf oc ", %a" pp_item x
+    |};
+  [%expect
+    {|
+    let pp_tuple pp_item oc x =
+      let temp1 = fprintf oc  in
+        let temp2 = ", %a" in
+          let temp3 = temp1 temp2  in
+            let temp4 = temp3 pp_item  in
+              temp4 x
     |}]
 ;;

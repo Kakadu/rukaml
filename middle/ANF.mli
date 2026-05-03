@@ -16,6 +16,7 @@ type imm_expr =
 
 and c_expr =
   | CApp of imm_expr * imm_expr * imm_expr list
+  | CString_const of string
   | CIte of c_expr * expr * expr
   | CAtom of imm_expr
 
@@ -60,3 +61,22 @@ val gensym_id : ?prefix:string -> unit -> Frontend.Ident.t
 val disable_arity_inline : unit -> unit
 val disable_cmp_into_if_inline : unit -> unit
 val set_logging : bool -> unit
+
+type iterator =
+  { aconst : iterator -> Parsetree.const -> unit
+  ; avar : iterator -> Ident.t -> unit
+  ; aprimitive : iterator -> string -> int -> unit
+  ; atuple : iterator -> imm_expr -> imm_expr -> imm_expr list -> unit
+  ; aconstruct : iterator -> int -> imm_expr list -> unit
+  ; aarray : iterator -> imm_expr list -> unit
+  ; alam : iterator -> apat -> expr -> unit
+  ; catom : iterator -> imm_expr -> unit
+  ; cite : iterator -> c_expr -> expr -> expr -> unit
+  ; capp : iterator -> imm_expr -> imm_expr -> imm_expr list -> unit
+  ; elet : iterator -> Parsetree.rec_flag -> Typedtree.pattern -> c_expr -> expr -> unit
+  ; on_expr : iterator -> expr -> unit
+  ; on_cexpr : iterator -> c_expr -> unit
+  ; on_imm : iterator -> imm_expr -> unit
+  }
+
+val default_iterator : iterator
