@@ -161,24 +161,24 @@ let%expect_test "global constant shadowing" =
                   10
                 let f weird1 =
                   let () = weird1 in
-                    x
+                  x
                 let x =
                   20
                 let g weird2 =
                   let () = weird2 in
-                    x
+                  x
 
       mangled stru:
       let x_id53 =
-                                       10
-                                     let f_id54 weird1 =
-                                       let () = weird1 in
-                                         x_id53
-                                     let x_id55 =
-                                       20
-                                     let g_id56 weird2 =
-                                       let () = weird2 in
-                                         x_id55
+                                     10
+                                   let f_id54 weird1 =
+                                     let () = weird1 in
+                                     x_id53
+                                   let x_id55 =
+                                     20
+                                   let g_id56 weird2 =
+                                     let () = weird2 in
+                                     x_id55
 
       mangled names:
       {
@@ -202,26 +202,26 @@ let%expect_test "let rec" =
     anf stru:
     let rec fact n =
                 let temp3 = (n < 1) in
-                  let temp4 = (if temp3
-                              then 1
-                              else let temp5 = (n - 1) in
-                                     let temp6 = fact temp5  in
-                                       let temp7 = (n * temp6) in
-                                         temp7) in
-                    temp4
+                let temp4 = (if temp3
+                            then 1
+                            else let temp5 = (n - 1) in
+                                 let temp6 = fact temp5  in
+                                 let temp7 = (n * temp6) in
+                                 temp7) in
+                  temp4
               let main =
                 0
 
     mangled stru:
     let rec fact_id59 n =
                                    let temp3 = (n < 1) in
-                                     let temp4 = (if temp3
-                                                 then 1
-                                                 else let temp5 = (n - 1) in
-                                                        let temp6 = fact_id59 temp5  in
-                                                          let temp7 = (n * temp6) in
-                                                            temp7) in
-                                       temp4
+                                   let temp4 = (if temp3
+                                               then 1
+                                               else let temp5 = (n - 1) in
+                                                    let temp6 = fact_id59 temp5  in
+                                                    let temp7 = (n * temp6) in
+                                                    temp7) in
+                                     temp4
                                  let main =
                                    0
 
@@ -246,24 +246,24 @@ let%expect_test "replacing built-in print with user-defined one" =
     anf stru:
     let () =
                 let temp8 = print 1  in
-                  temp8
+                temp8
               let print weird9 =
                 let _ = weird9 in
-                  0
+                0
               let () =
                 let temp10 = print 2  in
-                  temp10
+                temp10
 
     mangled stru:
     let () =
-                                          let temp8 = print 1  in
-                                            temp8
-                                        let print_id67 weird9 =
-                                          let _ = weird9 in
-                                            0
-                                        let () =
-                                          let temp10 = print_id67 2  in
-                                            temp10
+                                        let temp8 = print 1  in
+                                        temp8
+                                      let print_id67 weird9 =
+                                        let _ = weird9 in
+                                        0
+                                      let () =
+                                        let temp10 = print_id67 2  in
+                                        temp10
 
     mangled names:
     {
@@ -292,21 +292,21 @@ let%expect_test "shadowing global function with local one" =
               let () =
                 let id y = y in
                   let temp11 = id 0  in
-                    temp11
+                  temp11
               let () =
                 let temp12 = id 0  in
-                  temp12
+                temp12
 
     mangled stru:
     let id_id71 x =
-                                          x
-                                        let () =
-                                          let id y = y in
-                                            let temp11 = id 0  in
-                                              temp11
-                                        let () =
-                                          let temp12 = id_id71 0  in
-                                            temp12
+                                        x
+                                      let () =
+                                        let id y = y in
+                                          let temp11 = id 0  in
+                                          temp11
+                                      let () =
+                                        let temp12 = id_id71 0  in
+                                        temp12
 
     mangled names:
     {

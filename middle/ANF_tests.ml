@@ -27,8 +27,9 @@ let%expect_test _ =
   [%expect
     {|
     (fun tuple1 -> let x = block_nth tuple1 0 in
-                     let y = block_nth tuple1 1 in
-                       use_pattern_vars_here) |}]
+                   let y = block_nth tuple1 1 in
+                   use_pattern_vars_here)
+    |}]
 ;;
 
 let%expect_test _ =
@@ -36,9 +37,10 @@ let%expect_test _ =
   [%expect
     {|
     (fun tuple1 -> let x = block_nth tuple1 0 in
-                     let y = block_nth tuple1 1 in
-                       let z = block_nth tuple1 2 in
-                         use_pattern_vars_here) |}]
+                   let y = block_nth tuple1 1 in
+                   let z = block_nth tuple1 2 in
+                   use_pattern_vars_here)
+    |}]
 ;;
 
 let%expect_test _ =
@@ -46,13 +48,15 @@ let%expect_test _ =
   [%expect
     {|
     (fun tuple1 -> let field2 = block_nth tuple1 0 in
-                     let x = block_nth field2 0 in
-                       let y = block_nth field2 1 in
-                         let z = block_nth tuple1 1 in
-                           use_pattern_vars_here) |}]
+                   let x = block_nth field2 0 in
+                   let y = block_nth field2 1 in
+                   let z = block_nth tuple1 1 in
+                   use_pattern_vars_here)
+    |}]
 ;;
 
-let test_anf ?(print_before = false) text =
+let test_anf ?(simplify = false) ?(print_before = false) text =
+  let _ = simplify in
   reset_gensym ();
   let ( let* ) x f = Result.bind x f in
   match
@@ -81,13 +85,13 @@ let%expect_test "CPS factorial" =
     {|
     let __lifted_lam_1 n k p =
       let temp1 = (p * n) in
-        k temp1
+      k temp1
     let rec fack n k =
       (if (n = 0)
       then k 1
       else let temp5 = (n - 1) in
-             let temp8 = __lifted_lam_1 n k in
-               fack temp5 temp8)
+           let temp8 = __lifted_lam_1 n k in
+           fack temp5 temp8)
     |}]
 ;;
 
@@ -97,7 +101,7 @@ let%expect_test _ =
     {|
     let double =
       let b = 1 in
-        (b, 2)
+      (b, 2)
     |}]
 ;;
 
@@ -111,5 +115,73 @@ let%expect_test _ =
       y
     let foo =
       (__lifted_lam_2, __lifted_lam_3)
+    |}]
+;;
+
+let%expect_test "Check string literal is put to separate let" =
+  test_anf
+    ~simplify:true
+    {| let main =
+         let t =  output_string stdout "hello world!" in
+         0 |};
+  [%expect
+    {|
+    let main =
+      let t = output_string stdout "hello world!" in
+      0
+    |}]
+;;
+
+let%expect_test "Check string literal is put to separate let" =
+  (* ANF.set_logging true; *)
+  test_anf
+    ~simplify:true
+    {| let main =
+         let is_keyword s =
+            match s with
+            | "true" -> true
+            | "false" -> true
+            | _ -> false in
+         0 |};
+  [%expect
+    {|
+    let __lifted_let_4_is_keyword s =
+      let temp1 = s in
+      (if (temp1 = "true")
+      then 1
+      else (if (temp1 = "false")
+           then 1
+           else 0))
+    let main =
+      0
+    |}];
+  ANF.set_logging false
+;;
+
+let%expect_test "Test char equality" =
+  test_anf ~simplify:true "let main c =    if c = '0' then 1 else 2";
+  [%expect
+    {|
+    let main c =
+      (if (c = '0')
+      then 1
+      else 2)
+    |}]
+;;
+
+let%expect_test _ =
+  test_anf (* ~print_before:true *)
+    ~simplify:true
+    {|
+
+    let pp_tuple pp_item oc x =
+      fprintf oc ", %a" pp_item x
+    |};
+  [%expect
+    {|
+    let pp_tuple pp_item oc x =
+      let temp2 = fprintf oc ", %a" in
+      let temp3 = temp2 pp_item  in
+      temp3 x
     |}]
 ;;

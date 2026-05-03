@@ -96,6 +96,11 @@ include struct
     | Apat_const c -> Pprint.pp_const ppf c
   ;;
 
+  let is_simple_rhs = function
+    | CAtom _ | CApp _ -> true
+    | _ -> false
+  ;;
+
   let rec helper ppf = function
     | ELet (flg, patt, CAtom (ALam (arg1, rhs)), wher) ->
       fprintf
@@ -108,6 +113,11 @@ include struct
         pp_apat
         arg1;
       fprintf ppf "@[%a@]@ in@]@ @[%a@]@]" helper rhs helper wher
+    | ELet (_, patt, rhs, wher) when is_simple_rhs rhs ->
+      fprintf ppf "@[<v>";
+      fprintf ppf "@[let %a = %a in@]@ " helper_p patt helper_c rhs;
+      fprintf ppf "@[%a@]" helper wher;
+      fprintf ppf "@]"
     | ELet (_, patt, rhs, wher) ->
       fprintf
         ppf
@@ -360,7 +370,8 @@ let%expect_test _ =
   [%expect
     {|
     let v7 = vf in
-      vf 1 v9 |}]
+    vf 1 v9
+    |}]
 ;;
 
 module Arity_map = struct
