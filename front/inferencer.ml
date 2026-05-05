@@ -902,7 +902,7 @@ let start_env =
        (Scheme.make_mono (tarrow (array_typ char_typ) (array_typ char_typ)))
   (* Stdio channels *)
   |> extend_s "stdin" (Scheme.make_mono in_channel_typ)
-  |> extend_s "stdout" (Scheme.make_mono out_channel_typ)
+  |> extend_s "stdout" ~kind:(Builtin ("stdout", 0)) (Scheme.make_mono out_channel_typ)
   |> extend_s "stderr" (Scheme.make_mono out_channel_typ)
   (* Stdio file access primitives *)
   |> extend_s "open_in" (Scheme.make_mono (tarrow string_typ in_channel_typ))
@@ -919,7 +919,12 @@ let start_env =
        (Scheme.make_mono (tarrow out_channel_typ (tarrow char_typ unit_typ)))
   |> extend_s
        "output_string"
+       ~kind:(Builtin ("output_string", 2))
        (Scheme.make_mono (tarrow out_channel_typ (tarrow string_typ unit_typ)))
+  |> extend_s
+       "print_newline"
+       ~kind:(Builtin ("print_newline", 1))
+       (Scheme.make_mono (tarrow unit_typ unit_typ))
   |> extend_s
        "fprintf"
        ~kind:(Builtin ("fprintf", 1))
@@ -988,6 +993,7 @@ let start_env =
        (Scheme.make_mono (tarrow string_typ (tarrow int_typ char_typ)))
   |> extend_s
        "string_of_char_list"
+       ~kind:(Builtin ("string_of_char_list", 1))
        (Scheme.make_mono (tarrow (list_typ char_typ) string_typ))
   |> extend_s
        "string_equal"
