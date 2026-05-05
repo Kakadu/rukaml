@@ -849,6 +849,10 @@ let generate_body is_toplevel body =
         emit ld a1 (pp_to_mach from);
         emit call "rukaml_field";
         emit sd_dest a0 dest)
+    | CApp (APrimitive ("match_failure", 1), _, []) ->
+      with_ra_saving (fun () ->
+        emit li a0 0;
+        emit call "rukaml_match_failure")
     | CApp (APrimitive (pname, partiy), _, _) ->
       Format.eprintf "Unsupported primitive call: %s/%d\n%!" pname partiy;
       failwiths "Not implemented %d" __LINE__

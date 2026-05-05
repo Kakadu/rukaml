@@ -898,6 +898,8 @@ let rec generate_body ppf body =
       printfn ppf "  mov rdi, 0";
       printfn ppf "  mov rsi, 0";
       printfn ppf "  call rukaml_print_alloc_closure_count"
+    | CApp (APrimitive ("match_failure", _), _, []) ->
+      printfn ppf "  call rukaml_match_failure"
     | CApp (AVar f, arg1, args) as _cexpr when Toplevel.is_toplevel_function f ->
       (* Callig a rukaml function uses custom calling convention.
            CDECL convention: all arguments on stack, LTR *)
@@ -1012,7 +1014,6 @@ let rec generate_body ppf body =
     | ATuple (x1, x2, xs) ->
       emit_initialize_block dest ~fields:(x1 :: x2 :: xs) ~tag:0 ~name:"tuple"
     | AArray fields -> emit_initialize_block dest ~fields ~tag:1 ~name:"array"
-    | APrimitive ("match_failure", _) -> printfn ppf "  call rukaml_match_failure"
     | AConst (PConst_string s) ->
       (* notice: DO NOT use emit_initialize_block here. strings representation differs *)
       let payload_words_n = (String.length s + 7) / 8 in

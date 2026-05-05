@@ -708,11 +708,15 @@ let anf =
         CApp (APrimitive ("block_nth", 2), obj, [ AConst (PConst_int n) ])
       in
       let get_tag x = CApp (APrimitive ("block_tag", 1), x, []) in
-      let match_failure = APrimitive ("match_failure", 0) in
+      let match_failure =
+        CApp (APrimitive ("match_failure", 1), AConst (Parsetree.PConst_int 666), [])
+      in
       let cmp a b = CApp (APrimitive ("=", 2), a, [ b ]) in
       let rec process_cases scrut cases k =
         match cases with
-        | [] -> k match_failure
+        | [] ->
+          let fresh = gensym_id () in
+          make_let_nonrec fresh match_failure (k (AVar fresh))
         | (pattern, expr) :: rest ->
           let success = helper expr k in
           let failure = process_cases scrut rest k in

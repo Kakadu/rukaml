@@ -5,7 +5,7 @@ main:
   call rukaml_initialize
 # this is main
   li a0, 0
-  addi sp, sp, -160 # allocate for RA, and 19 locals temp35, temp33, temp29, temp27, temp24, temp22, temp18, temp16, temp15, temp10, temp6, temp4, temp2, zs, z, xs, x, s1, s0
+  addi sp, sp, -160 # allocate for RA, and 19 locals temp39, temp37, temp32, temp30, temp26, temp24, temp19, temp17, temp16, temp10, temp6, temp4, temp2, zs, z, xs, x, s1, s0
   sd ra, 152(sp)
   addi sp, sp, -16
   sd ra, 8(sp)
@@ -115,18 +115,23 @@ main:
   ld a0, 80(sp)
   call rukaml_tag0
   sd a0, (sp) # got tag of 'temp6'
-  ld t0, (sp) # access temp35
+  ld t0, (sp) # access temp39
   li t1, 0
-  beq t0, t1, lab_then_53
+  beq t0, t1, lab_then_57
   ld a0, 80(sp)
   call rukaml_tag0
   sd a0, 8(sp) # got tag of 'temp6'
-  ld t0, 8(sp) # access temp33
+  ld t0, 8(sp) # access temp37
   li t1, 1
-  beq t0, t1, lab_then_55
+  beq t0, t1, lab_then_59
+  addi sp, sp, -16
+  sd ra, (sp)
+  li a0, 0
   call rukaml_match_failure
-  beq zero, zero, lab_fin_56
-lab_then_55:
+  ld ra, (sp)
+  addi sp, sp, 16
+  beq zero, zero, lab_fin_60
+lab_then_59:
   addi sp, sp, -16
   sd ra, (sp)
   li a0, 0
@@ -146,18 +151,23 @@ lab_then_55:
   ld a0, 128(sp)
   call rukaml_tag0
   sd a0, 16(sp) # got tag of 'x'
-  ld t0, 16(sp) # access temp29
+  ld t0, 16(sp) # access temp32
   li t1, 1
-  beq t0, t1, lab_then_61
+  beq t0, t1, lab_then_67
   ld a0, 128(sp)
   call rukaml_tag0
   sd a0, 24(sp) # got tag of 'x'
-  ld t0, 24(sp) # access temp27
+  ld t0, 24(sp) # access temp30
   li t1, 0
-  beq t0, t1, lab_then_63
+  beq t0, t1, lab_then_69
+  addi sp, sp, -16
+  sd ra, (sp)
+  li a0, 0
   call rukaml_match_failure
-  beq zero, zero, lab_fin_64
-lab_then_63:
+  ld ra, (sp)
+  addi sp, sp, 16
+  beq zero, zero, lab_fin_70
+lab_then_69:
   addi sp, sp, -16
   sd ra, (sp)
   li a0, 0
@@ -169,18 +179,23 @@ lab_then_63:
   ld a0, 72(sp)
   call rukaml_tag0
   sd a0, 32(sp) # got tag of 'temp10'
-  ld t0, 32(sp) # access temp24
+  ld t0, 32(sp) # access temp26
   li t1, 0
-  beq t0, t1, lab_then_67
+  beq t0, t1, lab_then_75
   ld a0, 72(sp)
   call rukaml_tag0
   sd a0, 40(sp) # got tag of 'temp10'
-  ld t0, 40(sp) # access temp22
+  ld t0, 40(sp) # access temp24
   li t1, 1
-  beq t0, t1, lab_then_69
+  beq t0, t1, lab_then_77
+  addi sp, sp, -16
+  sd ra, (sp)
+  li a0, 0
   call rukaml_match_failure
-  beq zero, zero, lab_fin_70
-lab_then_69:
+  ld ra, (sp)
+  addi sp, sp, 16
+  beq zero, zero, lab_fin_78
+lab_then_77:
   addi sp, sp, -16
   sd ra, (sp)
   li a0, 0
@@ -200,18 +215,23 @@ lab_then_69:
   ld a0, 112(sp)
   call rukaml_tag0
   sd a0, 48(sp) # got tag of 'z'
-  ld t0, 48(sp) # access temp18
+  ld t0, 48(sp) # access temp19
   li t1, 1
-  beq t0, t1, lab_then_75
+  beq t0, t1, lab_then_85
   ld a0, 112(sp)
   call rukaml_tag0
   sd a0, 56(sp) # got tag of 'z'
-  ld t0, 56(sp) # access temp16
+  ld t0, 56(sp) # access temp17
   li t1, 0
-  beq t0, t1, lab_then_77
+  beq t0, t1, lab_then_87
+  addi sp, sp, -16
+  sd ra, (sp)
+  li a0, 0
   call rukaml_match_failure
-  beq zero, zero, lab_fin_78
-lab_then_77:
+  ld ra, (sp)
+  addi sp, sp, 16
+  beq zero, zero, lab_fin_88
+lab_then_87:
   addi sp, sp, -16
   sd ra, (sp)
   li a0, 0
@@ -223,36 +243,36 @@ lab_then_77:
   li a0, 4
   call rukaml_print_int
   mv a0, zero
+lab_fin_88:
+  beq zero, zero, lab_fin_86
+lab_then_85:
+  li a0, 3
+  call rukaml_print_int
+  mv a0, zero
+lab_fin_86:
 lab_fin_78:
   beq zero, zero, lab_fin_76
 lab_then_75:
-  li a0, 3
+  li a0, 2
   call rukaml_print_int
   mv a0, zero
 lab_fin_76:
 lab_fin_70:
   beq zero, zero, lab_fin_68
 lab_then_67:
-  li a0, 2
-  call rukaml_print_int
-  mv a0, zero
-lab_fin_68:
-lab_fin_64:
-  beq zero, zero, lab_fin_62
-lab_then_61:
   li a0, 1
   call rukaml_print_int
   mv a0, zero
-lab_fin_62:
-lab_fin_56:
-  beq zero, zero, lab_fin_54
-lab_then_53:
+lab_fin_68:
+lab_fin_60:
+  beq zero, zero, lab_fin_58
+lab_then_57:
   li a0, 0
   call rukaml_print_int
   mv a0, zero
-lab_fin_54:
+lab_fin_58:
   ld ra, 152(sp)
-  addi sp, sp, 160 # DEallocate for RA, and 19 locals temp35, temp33, temp29, temp27, temp24, temp22, temp18, temp16, temp15, temp10, temp6, temp4, temp2, zs, z, xs, x, s1, s0
+  addi sp, sp, 160 # DEallocate for RA, and 19 locals temp39, temp37, temp32, temp30, temp26, temp24, temp19, temp17, temp16, temp10, temp6, temp4, temp2, zs, z, xs, x, s1, s0
 #  fin
   addi a0, x0, 0 # Use 0 return code
   addi a7, x0, 93 # Service command code 93 terminates
