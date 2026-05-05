@@ -129,12 +129,12 @@ module Addr_of_local = struct
     assert (i < argc);
     let loc = 1 - argc + i in
     assert (loc <= 0);
-    log "Location argument \"%a\" in [rbp+%d]" Ident.pp name (-loc);
+    (* log "Location argument \"%a\" in [rbp+%d]" Ident.pp name (-loc); *)
     Hashtbl.add store name loc
   ;;
 
   let remove_args xs =
-    log "Removing info about args [ %s ]" (Ident.concat_str xs);
+    (* log "Removing info about args [ %s ]" (Ident.concat_str xs); *)
     List.iter (Hashtbl.remove store) xs
   ;;
 
@@ -426,6 +426,7 @@ let generate_body is_toplevel body =
       | APrimitive ("print", (1 as parity)) ->
         emit_alloc_closure "rukaml_print_int_kaml" parity;
         emit sd a0 (ROffset (SP, 8 * i))
+      | APrimitive ("stdout", 0) -> emit li a0 1
       | APrimitive _ as arg -> failwiths "Primitive %a is not supported" ANF.pp_a arg
       | ATuple _ -> failwiths "Can't handle argument '%a'" ANF.pp_a arg
       | AArray _ -> failwiths "Can't handle argument '%a'" ANF.pp_a arg
@@ -814,7 +815,7 @@ let generate_body is_toplevel body =
       ->
       (* A 1 argument application *)
       set_verbose true;
-      log "cexpr = @[%a@]" ANF.pp_c cexpr;
+      (* log "cexpr = @[%a@]" ANF.pp_c cexpr; *)
       with_two_slots (fun arg0 arg1 ->
         emit addi SP SP (-16) ~comm:(sprintf "pad and 1st arg of function %s" f.hum_name);
         let floc =
@@ -851,13 +852,13 @@ let generate_body is_toplevel body =
         ( APrimitive (("get_arg" | "field" | "block_nth"), _)
         , AVar _from
         , [ AConst (PConst_int _idx) ] ) ->
-      failwiths "Not implemented"
+      failwiths "Not implemented: %s %d" __FILE__ __LINE__
       (* helper_a (DReg "rsi") cont;
            printfn ppf "  mov rdi, %d" n;
            printfn ppf "  call rukaml_field";
            printfn ppf "  mov %a, rax" Addr_of_local.pp_dest dest *)
     | CApp (AVar id, AUnit, []) when id.hum_name = "gc_compact" ->
-      failwiths "Not implemented"
+      failwiths "Not implemented: %s %d" __FILE__ __LINE__
       (* printfn ppf "  mov rdi, rsp";
            printfn ppf "  mov rsi, 0";
            printfn ppf "  call rukaml_gc_compact" *)
@@ -867,6 +868,20 @@ let generate_body is_toplevel body =
            printfn ppf "  mov rsi, 0";
            printfn ppf "  call rukaml_gc_print_stats" *)
     | CAtom atom -> helper_a dest atom
+    | CApp (APrimitive ("output_string", 2), AVar ch, [ AVar arg ]) ->
+      emit ld a0 (pp_to_mach ch);
+      emit ld a1 (pp_to_mach arg);
+      emit call "rukaml_output_string_sysv";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("output_string", 2), APrimitive ("stdout", 0), [ AVar arg ]) ->
+      emit li a0 0;
+      emit ld a1 (pp_to_mach arg);
+      emit call "rukaml_output_string_sysv";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("print_newline", 1), _arg_unit, []) ->
+      emit li a0 0;
+      emit call "rukaml_print_newline_sysv";
+      emit sd_dest zero dest
     | CApp (APrimitive ("string_len", 1), AVar arg, []) ->
       emit ld a0 (pp_to_mach arg);
       emit call "rukaml_string_len";
@@ -894,6 +909,14 @@ let generate_body is_toplevel body =
     | CApp (APrimitive ("char_code", _), AVar v, []) ->
       emit ld a0 (pp_to_mach v);
       emit call "char_code";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("match_failure", _), AConst (PConst_int c), []) ->
+      emit li a0 c;
+      emit call "rukaml_match_failure";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("string_of_char_list", 1), AVar v, []) ->
+      emit ld a0 (pp_to_mach v);
+      emit call "rukaml_string_of_char_list_sysv";
       emit sd_dest a0 dest
     | CApp (APrimitive ("string_nth", parity), AVar arg1, [ AVar arg2 ]) ->
       assert (parity = 2);
@@ -949,7 +972,7 @@ let generate_body is_toplevel body =
          emit sd_dest t0 dest)
     | AVar vname ->
       (match is_toplevel vname with
-       | `External -> failwith "only proimitives could be external"
+       | `External -> failwiths "Only primitives could be external"
        | `Local ->
          emit ld t5 (Addr_of_local.pp_to_mach vname);
          (* printfn ppf "  ld t5, %a" Addr_of_local.pp_local_exn vname; *)
@@ -966,7 +989,9 @@ let generate_body is_toplevel body =
          (* print_alloc_closure ppf vname arity; *)
          emit sd_dest (RU "a0") dest
        (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *)
-       | `Val -> failwith "Not implemented")
+       | `Val ->
+         Format.eprintf "helper_a. x = %a\n%!" ANF.pp_a x;
+         failwiths "Not implemented: %s %d" __FILE__ __LINE__)
     | AArray r ->
       emit li a0 (List.length r);
       emit call "rukaml_alloc_array";

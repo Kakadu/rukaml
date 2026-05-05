@@ -20,6 +20,21 @@
     assert(A);                   \
   } */
 
+void __mk_err_fatal(const char *file, int line, const char *msg)
+{
+  fprintf(stderr, "[fatal] file=%s line=%d msg=\"%s\"\n", file, line, msg);
+  fflush(stderr);
+  exit(1);
+}
+
+void __mk_err_warning(const char *file, int line, const char *msg)
+{
+  fprintf(stderr, "[warning] file=%s line=%d msg=\"%s\"\n", file, line, msg);
+}
+
+#define mk_err_fatal(msg) __mk_err_fatal(__FILE__, __LINE__, msg)
+#define mk_err_warning(msg) __mk_err_warning(__FILE__, __LINE__, msg)
+
 #define DEBUG
 #undef DEBUG
 
@@ -45,6 +60,7 @@ int HEAP_SIZE = 160;
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
+const uint8_t String_tag = 252;
 
 struct gc_stats
 {
@@ -587,4 +603,64 @@ void rukaml_trace_val(void *arg, unsigned int level)
   }
   fflush(stdout);
   #pragma GCC diagnostic pop
+}
+
+uint64_t rukaml_list_length(int r0, int r1, int r2, int r3, int r4, int r5, void **ls)
+{
+  for (uint64_t size = 0;; ++size)
+  {
+    if (ls == 0) // [] lowered to int. TODO: adjust for tagged ints
+    {
+      return size;
+    }
+    else if (IS_BLOCK(ls) && (TAG(ls) == 1) && (SIZE(ls) == 2)) // ( :: ) of 'a * 'a list
+    {
+      ls = (void **)(ls[1]);
+    }
+    else
+    {
+      mk_err_fatal("tag mismatch (list expected)");
+    }
+  }
+}
+
+uint64_t rukaml_string_len_imm(void **str)
+{
+  if (str == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(str) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  return (uint64_t)(str[SIZE(str) - 1]);
+}
+
+void **rukaml_string_of_char_list(int r0, int r1, int r2, int r3, int r4, int r5, void **chs)
+{
+  // chs == 0 means [] lowered to int. TODO: adjust for tagged ints
+  uint64_t chars_n = chs == 0 ? 0 : rukaml_list_length(0, 0, 0, 0, 0, 0, chs);
+
+  uint64_t payload_words_n = (chars_n + 7) / 8;
+
+  uint64_t *block = (uint64_t *)rukaml_alloc_block(payload_words_n + 1, String_tag);
+
+  block[payload_words_n] = chars_n;
+  assert(rukaml_string_len_imm((void **)block) == chars_n);
+
+  for (size_t n = 0; n < chars_n; ++n)
+  {
+    assert(TAG(chs) == 1); // tag of ( :: )
+    ((char *)(block))[n] = (char)(chs[0]);
+    chs = (void **)(chs[1]);
+  }
+
+  return (void **)block;
+}
+
+void** rukaml_string_of_char_list_sysv(void** chs) {
+  return rukaml_string_of_char_list(1,2,3,4,5,6,chs);
 }
