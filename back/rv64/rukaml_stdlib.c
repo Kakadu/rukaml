@@ -42,7 +42,7 @@ static uint64_t log_level = 0x0;
 
 #define logGC(...)       \
   if (log_level & 0x800) \
-  printf(__VA_ARGS__)
+  {printf(__VA_ARGS__); fflush(stdout); }
 
 #define HEADER(size, tag) ((uint64_t)((size << 10u) + (tag % 256u)))
 #define SIZE(ptr) (*((uint64_t *)ptr - 1) >> 10)
@@ -55,6 +55,10 @@ static uint64_t log_level = 0x0;
 #define MAKE_BLACK(ptr) (*ptr = (*ptr | (0b11 << 8)))
 
 #define MAX_STRING_FROM_STDIN (2 << 15)
+
+#define IS_BLOCK(v) (is_backup_bank((uint64_t *)v) || is_old_bank((uint64_t *)v))
+#define IS_IMM(v) (!IS_BLOCK(v))
+
 
 int HEAP_SIZE = 160;
 const uint8_t Tuple_tag = 0;
@@ -356,11 +360,14 @@ void *rukaml_alloc_block(int64_t size, uint8_t tag)
   GC.allocated_words += size + 1;
   GC.stats.gs_allocated_words += size + 1;
   rez[0] = (uint64_t *)HEADER(size, tag);
-  assert(TAG(rez + 1) == tag);
-  assert(SIZE(rez + 1) == size);
+  const uint64_t *ans = rez+1;
+  assert(TAG(ans) == tag);
+  assert(SIZE(ans) == size);
+
   logGC("A block %lX is created. Allocated words = %lu\n",
-        (uint64_t)(rez + 1), GC.allocated_words);
-  return rez + 1;
+        (uint64_t)ans, GC.allocated_words);
+  // printf("Header addr = %lX\n", rez);
+  return ans;
 }
 
 void *rukaml_alloc_array(int64_t size)
@@ -464,12 +471,6 @@ void *rukaml_field(int n, void **r)
 {
   return r[n];
 }
-
-/* int64_t myadd(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t a, int64_t b)
-{
-  printf("a = %ld, b = %ld\n", a, b);
-  return a * b;
-} */
 
 void *rukaml_alloc_closure(void *func, int32_t argsc)
 {
@@ -639,6 +640,23 @@ uint64_t rukaml_string_len_imm(void **str)
   return (uint64_t)(str[SIZE(str) - 1]);
 }
 
+void* rukaml_make_string_of_lit(const char* const s) {
+  // printf("%s, str = %s\n", __FUNCTION__, s); fflush(stdout);
+  const size_t len = strlen(s);
+  size_t payload_words_n = (len + 7) / 8;
+  void** block = (void*)rukaml_alloc_block(payload_words_n + 1, String_tag);
+  // printf("String created at addr = 0x%lX\n", block);
+  assert(TAG(block) == String_tag);
+  block[payload_words_n] = len;
+  assert(rukaml_string_len_imm((void **)block) == len);
+
+  for (size_t i = 0; i < len; ++i) {
+    ((char *)(block))[i] = s[i];
+  }
+  // printf("String created at addr = 0x%lX\n", block);
+  return (void*)block;
+}
+
 void **rukaml_string_of_char_list(int r0, int r1, int r2, int r3, int r4, int r5, void **chs)
 {
   // chs == 0 means [] lowered to int. TODO: adjust for tagged ints
@@ -663,4 +681,16 @@ void **rukaml_string_of_char_list(int r0, int r1, int r2, int r3, int r4, int r5
 
 void** rukaml_string_of_char_list_sysv(void** chs) {
   return rukaml_string_of_char_list(1,2,3,4,5,6,chs);
+}
+
+void* rukaml_output_string_sysv(int dest, void* str)
+{
+  assert(dest == STDOUT_FILENO);
+  // printf("str addr = 0x%lX\n", str);
+  if (TAG(str) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+  puts(str);
+  return 0;
 }

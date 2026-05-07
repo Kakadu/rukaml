@@ -13,4 +13,5 @@
    (= none %{read:../../cc_rv64})))
  (deps rukaml_stdlib.c)
  (action
-  (system "%{read:../../cc_rv64} -c %{deps}  -std=c99 -ggdb -o %{target}")))
+  (system
+   "%{read:../../cc_rv64} -march=rv64g -c %{deps} -ffreestanding  -nostdlib -std=c99 -ggdb -o %{target}")))

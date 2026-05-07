@@ -35,6 +35,23 @@ let pp_space_list eta =
   Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf " ") eta
 ;;
 
+module String_lit_hash = struct
+  include Hashtbl.Make (String)
+
+  let last = ref 0
+
+  let extend key hash =
+    if mem hash key
+    then ()
+    else (
+      incr last;
+      add hash key !last)
+  ;;
+end
+
+let string_list_hash = String_lit_hash.create 42
+let iter_string_lit_hash f = String_lit_hash.iter f string_list_hash
+
 (* let print_prologue ppf name =
    if name = "main" then (
      printfn ppf "global _start";
@@ -874,7 +891,7 @@ let generate_body is_toplevel body =
       emit call "rukaml_output_string_sysv";
       emit sd_dest a0 dest
     | CApp (APrimitive ("output_string", 2), APrimitive ("stdout", 0), [ AVar arg ]) ->
-      emit li a0 0;
+      emit li a0 1;
       emit ld a1 (pp_to_mach arg);
       emit call "rukaml_output_string_sysv";
       emit sd_dest a0 dest
@@ -935,7 +952,11 @@ let generate_body is_toplevel body =
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_c anf;
       failwiths "Not implemented %d" __LINE__
     | CString_const s ->
-      let payload_words_n = (String.length s + 7) / 8 in
+      let rukaml_val_loc n = sprintf "my_STRING_LIT_%d" n in
+      emit lla t0 (rukaml_val_loc (String_lit_hash.find string_list_hash s));
+      emit ld t0 (ROffset (Temp_reg 0, 0));
+      emit sd_dest t0 dest
+      (* let payload_words_n = (String.length s + 7) / 8 in
       emit li a0 (payload_words_n + 1) ~comm:"; size of block for string";
       emit li a1 252 ~comm:"; string tag";
       emit call "rukaml_alloc_block";
@@ -947,8 +968,8 @@ let generate_body is_toplevel body =
            emit sb t0 a0;
            emit addi a0 a0 1)
         s;
-      emit li t0 (String.length s) ~comm:"string length ";
-      emit sd t0 a0
+      emit li t0 (String.length s) ~comm:"string length "; *)
+      (* emit sd t0 a0 *)
     | _rest ->
       Format.eprintf "@[%a@]\n%!" Compile_lib.ANF.pp_c _rest;
       failwiths "Not implemented %s %d" __FILE__ __LINE__
@@ -1095,15 +1116,9 @@ iterate:
 |}
 ;;
 
-let use_custom_main = false
-
 module String_set = Set.Make (String)
 
 let codegen ?(wrap_main_into_start = true) anf file =
-  let string_constants =
-    let iter = ANF.default_iterator in
-    List.iter (fun (_, _, e) -> iter.on_expr iter e) anf
-  in
   let is_toplevel : Ident.t -> def_kind =
     let hash = Hashtbl.create (List.length anf) in
     List.iter
@@ -1122,19 +1137,30 @@ let codegen ?(wrap_main_into_start = true) anf file =
   in
   Stdio.Out_channel.with_file file ~f:(fun ch ->
     let ppf = Format.formatter_of_out_channel ch in
-    (* printfn ppf "section .note.GNU-stack noalloc noexec nowrite progbits"; *)
-    if use_custom_main
-    then
-      printfn
-        ppf
-        {|section .data
-            newline_char: db 10
-            codes: db '0123456789abcdef' |};
-    (* printfn ppf "section .text"; *)
-    if use_custom_main
-    then (
-      put_print_newline ppf;
-      put_print_hex ppf);
+    let do_string_init =
+      let () =
+        let iter =
+          { ANF.default_iterator with
+            cconst_string = (fun _ s -> String_lit_hash.extend s string_list_hash)
+          }
+        in
+        List.iter (fun (_, _, e) -> iter.on_expr iter e) anf
+      in
+      printfn ppf ".data";
+      let lit_name n = sprintf "STRING_LIT_%d" n in
+      let rukaml_val_loc n = sprintf "my_STRING_LIT_%d" n in
+      iter_string_lit_hash (fun k v ->
+        printfn ppf "STRING_LIT_%d: .asciz \"%s\"" v k;
+        printfn ppf ".equ STRING_LIT_%d_len, %d" v (1 + String.length k));
+      printfn ppf ".align 3   # Align to 8-byte boundary (2^3)";
+      iter_string_lit_hash (fun _ v -> printfn ppf "my_STRING_LIT_%d: .quad 0x0" v);
+      fun () ->
+        iter_string_lit_hash (fun _k v ->
+          emit lla a0 (lit_name v);
+          emit call "rukaml_make_string_of_lit";
+          emit lla t1 (rukaml_val_loc v);
+          emit sd a0 (ROffset (Temp_reg 1, 0)))
+    in
     (* externs *)
     let __ () =
       List.iter
@@ -1174,17 +1200,16 @@ let codegen ?(wrap_main_into_start = true) anf file =
                  mov rax, 60     ; exit syscall
                  syscall|}
          else *)
-    if wrap_main_into_start
-    then
-      printfn
-        ppf
-        {|_start:
-              push    rbp
-              mov     rbp, rsp   ; prologue
-              call main
-              mov rdi, rax    ; rdi stores return code
-              mov rax, 60     ; exit syscall
-              syscall|};
+    (* if wrap_main_into_start
+    then (
+      printfn ppf "";
+      printfn ppf ".text";
+      printfn ppf ".globl _start";
+      printfn ppf "_start:";
+      emit call "main";
+      print_epilogue ppf "main";
+      Machine.flush_queue ppf;
+      ()); *)
     let open Compile_lib in
     let on_vb (_flg, name, expr) =
       if Addr_of_local.size () <> 0
@@ -1219,6 +1244,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
           emit mv a0 sp;
           emit call "rukaml_initialize";
           emit comment "this is main";
+          do_string_init ();
           emit li a0 0)
         else
           List.rev pats
@@ -1230,6 +1256,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
       print_epilogue ppf name.hum_name;
       Machine.flush_queue ppf
     in
+    printfn ppf "\n.text";
     List.iter on_vb anf;
     Format.pp_print_flush ppf ());
   Result.Ok ()
