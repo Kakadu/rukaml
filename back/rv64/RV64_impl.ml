@@ -454,19 +454,20 @@ let generate_body is_toplevel body =
     (* printfn ppf "  addi sp, sp, -8*%d # fun %S arguments" count (Option.get f); *)
     count
   in
-  let rec helper dest = function
+  let rec helper dest x =
+    match x with
     | Compile_lib.ANF.EComplex c -> helper_c dest c
     | ELet (_, Tpat_var name, rhs, wher) ->
       assert (Addr_of_local.contains name);
       let local = DStack_var name in
-      (* printfn ppf "    ;; calculate rhs and put into %a. offset = %d" pp_dest
-           dest
-           (Addr_of_local.find_exn name); *)
       helper_c local rhs;
       helper dest wher
-    | ELet (_, Tpat_unit, _rhs, wher) -> helper dest wher
+    | ELet (_, Tpat_unit, rhs, wher) ->
+      helper_c (DReg "zero") rhs;
+      helper dest wher
     | ELet _ as anf -> failwiths "Not implemented: @[%a@]" ANF.pp anf
-  and helper_c (dest : dest) = function
+  and helper_c (dest : dest) x =
+    match x with
     | CIte (CAtom (AConst (Parsetree.PConst_bool true)), bth, _bel) -> helper dest bth
     | CIte (CAtom (AConst (Parsetree.PConst_bool false)), _bth, bel) -> helper dest bel
     | CIte
@@ -779,6 +780,7 @@ let generate_body is_toplevel body =
         emit addi SP SP 16 ~comm:(sprintf "Dealloc 2 slots for %S" f.hum_name));
       if dest <> DReg "a0" then emit sd_dest (RU "a0") dest
     | CApp (AVar f, arg1, args) when is_toplevel_func f ->
+      emit comment (sprintf "  %s %d" __FUNCTION__ __LINE__);
       (* Callig a rukaml function uses custom calling convention.
            Pascal convention: all arguments on stack, LTR *)
       let expected_arity =
@@ -831,7 +833,7 @@ let generate_body is_toplevel body =
     | (CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), [])) as cexpr
       ->
       (* A 1 argument application *)
-      set_verbose true;
+
       (* log "cexpr = @[%a@]" ANF.pp_c cexpr; *)
       with_two_slots (fun arg0 arg1 ->
         emit addi SP SP (-16) ~comm:(sprintf "pad and 1st arg of function %s" f.hum_name);
@@ -845,7 +847,6 @@ let generate_body is_toplevel body =
         in
         helper_a (DStack_var arg1) arg;
         floc ();
-        (* emit ld (RU "a0") (Addr_of_local.pp_to_mach f); *)
         emit li (RU "a1") 1;
         emit ld (RU "a2") (Addr_of_local.pp_to_mach arg1);
         emit call "rukaml_applyN";
@@ -863,28 +864,17 @@ let generate_body is_toplevel body =
       when Addr_of_local.has_key arg ->
       emit li a0 idx;
       emit ld a1 (pp_to_mach arg);
-      emit call "rukaml_field0";
+      emit call "rukaml_field";
       emit sd_dest a0 dest
     | CApp
         ( APrimitive (("get_arg" | "field" | "block_nth"), _)
         , AVar _from
         , [ AConst (PConst_int _idx) ] ) ->
       failwiths "Not implemented: %s %d" __FILE__ __LINE__
-      (* helper_a (DReg "rsi") cont;
-           printfn ppf "  mov rdi, %d" n;
-           printfn ppf "  call rukaml_field";
-           printfn ppf "  mov %a, rax" Addr_of_local.pp_dest dest *)
     | CApp (AVar id, AUnit, []) when id.hum_name = "gc_compact" ->
       failwiths "Not implemented: %s %d" __FILE__ __LINE__
-      (* printfn ppf "  mov rdi, rsp";
-           printfn ppf "  mov rsi, 0";
-           printfn ppf "  call rukaml_gc_compact" *)
     | CApp (AVar id, AUnit, []) when id.hum_name = "gc_stats" ->
       failwiths "Not implemented %s %d" __FILE__ __LINE__
-      (* printfn ppf "  mov rdi, 0";
-           printfn ppf "  mov rsi, 0";
-           printfn ppf "  call rukaml_gc_print_stats" *)
-    | CAtom atom -> helper_a dest atom
     | CApp (APrimitive ("output_string", 2), AVar ch, [ AVar arg ]) ->
       emit ld a0 (pp_to_mach ch);
       emit ld a1 (pp_to_mach arg);
@@ -951,25 +941,16 @@ let generate_body is_toplevel body =
     | CApp _ as anf ->
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_c anf;
       failwiths "Not implemented %d" __LINE__
+    | CAtom atom ->
+      emit
+        comment
+        (Format.asprintf "  %s %d. atom = @[%a@]" __FUNCTION__ __LINE__ ANF.pp_a atom);
+      helper_a dest atom
     | CString_const s ->
       let rukaml_val_loc n = sprintf "my_STRING_LIT_%d" n in
       emit lla t0 (rukaml_val_loc (String_lit_hash.find string_list_hash s));
       emit ld t0 (ROffset (Temp_reg 0, 0));
       emit sd_dest t0 dest
-      (* let payload_words_n = (String.length s + 7) / 8 in
-      emit li a0 (payload_words_n + 1) ~comm:"; size of block for string";
-      emit li a1 252 ~comm:"; string tag";
-      emit call "rukaml_alloc_block";
-      emit sd_dest a0 dest;
-      String.iter
-        (fun ch ->
-           (* TODO: This creation of strings is full of shit *)
-           emit li t0 (Char.code ch);
-           emit sb t0 a0;
-           emit addi a0 a0 1)
-        s;
-      emit li t0 (String.length s) ~comm:"string length "; *)
-      (* emit sd t0 a0 *)
     | _rest ->
       Format.eprintf "@[%a@]\n%!" Compile_lib.ANF.pp_c _rest;
       failwiths "Not implemented %s %d" __FILE__ __LINE__
@@ -1153,7 +1134,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
         printfn ppf "STRING_LIT_%d: .asciz \"%s\"" v k;
         printfn ppf ".equ STRING_LIT_%d_len, %d" v (1 + String.length k));
       printfn ppf ".align 3   # Align to 8-byte boundary (2^3)";
-      iter_string_lit_hash (fun _ v -> printfn ppf "my_STRING_LIT_%d: .quad 0x0" v);
+      iter_string_lit_hash (fun k v ->
+        printfn ppf "my_STRING_LIT_%d: .quad 0x0 # '%s'" v k);
       fun () ->
         iter_string_lit_hash (fun _k v ->
           emit lla a0 (lit_name v);
@@ -1232,12 +1214,12 @@ let codegen ?(wrap_main_into_start = true) anf file =
       let pats, body = ANF.group_abstractions expr in
       let argc = List.length pats in
       let names =
-        List.map
+        List.filter_map
           (function
-            | ANF.APname name -> name)
+            | ANF.APname name -> Some name
+            | ANF.APunit -> None)
           pats
       in
-      (* let _ = if argc mod 2 = 0 then argc else argc + 1 in *)
       let () =
         if name.Ident.hum_name = "main"
         then (
@@ -1249,7 +1231,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
         else
           List.rev pats
           |> ListLabels.iteri ~f:(fun i -> function
-            | ANF.APname name -> Addr_of_local.add_arg ~argc i name)
+            | ANF.APname name -> Addr_of_local.add_arg ~argc i name
+            | APunit -> ())
       in
       generate_body is_toplevel body;
       Addr_of_local.remove_args names;

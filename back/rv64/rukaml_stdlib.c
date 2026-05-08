@@ -238,6 +238,11 @@ void rukaml_print_int_kaml(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
   rukaml_print_int(x);
 }
 
+void* rukaml_print_newline_sysv() {
+  puts("\n");
+  return 0;
+}
+
 typedef void *(*fun0)(void);
 typedef void *(*fun1)(void *);
 typedef void *(*fun2)(void *, void *);
@@ -686,7 +691,7 @@ void** rukaml_string_of_char_list_sysv(void** chs) {
 void* rukaml_output_string_sysv(int dest, void* str)
 {
   assert(dest == STDOUT_FILENO);
-  // printf("str addr = 0x%lX\n", str);
+  // printf("str addr = 0x%lX, str = '%s', len=%d\n", str, str, strlen(str));
   if (TAG(str) != String_tag)
   {
     mk_err_fatal("tag mismatch");
