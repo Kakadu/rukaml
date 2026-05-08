@@ -21,7 +21,10 @@ let failwiths fmt = Format.kasprintf failwith fmt
 
 open Frontend
 
-type apat = APname of Ident.t [@@deriving show { with_path = false }]
+type apat =
+  | APunit
+  | APname of Ident.t
+[@@deriving show { with_path = false }]
 
 type imm_expr =
   | AUnit
@@ -58,6 +61,7 @@ type iterator =
   ; cite : iterator -> c_expr -> expr -> expr -> unit
   ; capp : iterator -> imm_expr -> imm_expr -> imm_expr list -> unit
   ; elet : iterator -> Parsetree.rec_flag -> Typedtree.pattern -> c_expr -> expr -> unit
+  ; cconst_string : iterator -> string -> unit
   ; on_expr : iterator -> expr -> unit
   ; on_cexpr : iterator -> c_expr -> unit
   ; on_imm : iterator -> imm_expr -> unit
@@ -71,13 +75,14 @@ let default_iterator =
   ; aconstruct = (fun self _tag es -> List.iter (self.on_imm self) es)
   ; aarray = (fun self es -> List.iter (self.on_imm self) es)
   ; alam = (fun self _ e -> self.on_expr self e)
-  ; catom = (fun self -> self.on_imm self)
+  ; catom = (fun self x -> self.on_imm self x)
   ; cite =
       (fun self c th el ->
         self.on_cexpr self c;
         self.on_expr self th;
         self.on_expr self el)
   ; capp = (fun self a1 a2 ass -> List.iter (self.on_imm self) (a1 :: a2 :: ass))
+  ; cconst_string = (fun _ _ -> ())
   ; elet =
       (fun self _flg _pat cexpr expr ->
         self.on_cexpr self cexpr;
@@ -87,11 +92,12 @@ let default_iterator =
          | EComplex c -> self.on_cexpr self c
          | ELet (flg, _pat, c, e) -> self.elet self flg _pat c e)
   ; on_cexpr =
-      (fun self -> function
-         | CAtom imm -> self.catom self imm
-         | CIte (c, th, el) -> self.cite self c th el
-         | CString_const _ -> ()
-         | CApp (f, arg1, args) -> self.capp self f arg1 args)
+      (fun self x ->
+        match x with
+        | CAtom imm -> self.catom self imm
+        | CIte (c, th, el) -> self.cite self c th el
+        | CString_const s -> self.cconst_string self s
+        | CApp (f, arg1, args) -> self.capp self f arg1 args)
   ; on_imm =
       (fun self -> function
          | AUnit -> ()
@@ -151,6 +157,7 @@ include struct
 
   let pp_apat ppf = function
     | APname s -> Ident.pp ppf s
+    | APunit -> fprintf ppf "()"
   ;;
 
   let is_simple_rhs = function
@@ -383,8 +390,16 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
     | CApp ((APrimitive _ as f), _arg1, _args) ->
       CApp (f, helperi _arg1, List.map helperi _args)
     | CApp ((AVar _ as _f), _arg1, _args) (* not ident1 *) as is ->
-      (* TODO: Do we  need to lookup inside args? *)
-      is
+      let map = function
+        | AVar v when Ident.equal ident1 v ->
+          (match rhs with
+           | CAtom rhs -> rhs
+           | _ ->
+             Format.eprintf "rhs = %a\n" pp_c rhs;
+             failwiths "Substitution implemented badly")
+        | x -> x
+      in
+      CApp (_f, map _arg1, List.map map _args)
     | c ->
       Format.eprintf "%a\n%!" pp_c c;
       Format.eprintf "can't substitute %a -> %a\n%!" Ident.pp ident1 pp_c rhs;
@@ -512,7 +527,7 @@ let simplify : _ Arity_map.t -> expr -> expr =
           , ELet (NonRecursive, var2, CAtom (AVar name2), wher_) )
         when Ident.equal name1 name2 ->
         (* let name1 = ... in
-           let name1 = ... in *)
+           let ... = name1 in *)
         helper acc (ELet (NonRecursive, var2, body, wher_))
       | ELet (NonRecursive, Tpat_var v1, rhs, where)
         when used_once_in_if v1 ~where && is_comparison rhs && cfg.opt_cmp_into_if_inline
@@ -702,12 +717,10 @@ let anf =
         helper arg1 (fun arg1 ->
           let name = gensym_id () in
           ELet (NonRecursive, Tpat_var name, CApp (f, arg1, []), k (AVar name))))
+    | TLam (Typedtree.Tpat_unit, body, _) ->
+      EComplex (CAtom (ALam (APunit, helper body k)))
     | TLam (pat, body, _) ->
       anf_pat pat ~kbefore:(fun name e -> elam name e) (fun _pat -> helper body k)
-    (* | TLam (PVar pat, body, _) ->
-       let name = gensym_s () in
-       let body = helper body complex_of_atom in
-       make_let_nonrec name (CAtom (ALam (APname pat, body))) (k (AVar name)) *)
     | TLet (flag, name, _typ, TLam (Tpat_var vname, body, _), wher) ->
       ELet
         ( flag
@@ -722,15 +735,14 @@ let anf =
                 )))
         , helper wher complex_of_atom )
     | TLet (_, pat, _typ, rhs, wher) ->
+      (* NOTE: CPS in this part is tricky *)
       helper rhs (fun imm_rhs ->
         anf_pat
-          ~kbefore:(fun name -> make_let_nonrec name (CAtom imm_rhs))
+          ~kbefore:(fun name ->
+            (* Format.printf "%s %d, ident = %a\n%!" __FILE__ __LINE__ Ident.pp name; *)
+            make_let_nonrec name (CAtom imm_rhs))
           pat
           (fun _ -> helper wher k))
-      (* | TLet (flag, name, _typ, rhs, wher) -> *)
-      (* NOTE: CPS in this part is tricky *)
-      (* TODO: should we merge this case to the upper one? *)
-      (* helper rhs (fun imm_rhs -> ELet (flag, name, CAtom imm_rhs, helper wher k)) *)
     | TIf (econd, eth, el, _) ->
       helper econd (fun eimm ->
         let name = gensym_id () in

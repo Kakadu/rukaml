@@ -1,6 +1,8 @@
 open Frontend
 
-type apat = APname of Frontend.Ident.t
+type apat =
+  | APunit
+  | APname of Frontend.Ident.t
 
 val pp_apat : Format.formatter -> apat -> unit
 
@@ -74,6 +76,7 @@ type iterator =
   ; cite : iterator -> c_expr -> expr -> expr -> unit
   ; capp : iterator -> imm_expr -> imm_expr -> imm_expr list -> unit
   ; elet : iterator -> Parsetree.rec_flag -> Typedtree.pattern -> c_expr -> expr -> unit
+  ; cconst_string : iterator -> string -> unit
   ; on_expr : iterator -> expr -> unit
   ; on_cexpr : iterator -> c_expr -> unit
   ; on_imm : iterator -> imm_expr -> unit

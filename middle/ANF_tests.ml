@@ -81,8 +81,7 @@ let%expect_test "CPS factorial" =
   let rec fack n k =
     if n = 0 then k 1
     else fack (n-1) (fun p -> k (p*n)) |};
-  [%expect
-    {|
+  [%expect {|
     let __lifted_lam_1 n k p =
       let temp1 = (p * n) in
       k temp1
@@ -127,9 +126,8 @@ let%expect_test "Check string literal is put to separate let" =
   [%expect
     {|
     let main =
-      let temp1 = output_string stdout  in
       let temp2 = "hello world!" in
-      let t = temp1 temp2  in
+      let t = output_string stdout temp2 in
       0
     |}]
 ;;
@@ -148,11 +146,11 @@ let%expect_test "Check string literal is put to separate let" =
   [%expect
     {|
     let __lifted_let_4_is_keyword s =
-      let temp4 = "true" in
-      (if (s = temp4)
+      let temp5 = "true" in
+      (if (s = temp5)
       then 1
-      else let temp2 = "false" in
-           (if (s = temp2)
+      else let temp3 = "false" in
+           (if (s = temp3)
            then 1
            else 0))
     let main =
@@ -202,6 +200,47 @@ let%expect_test "Substitution of variable renames" =
   [%expect
     {|
     let f x =
+      (x + 1)
+    |}]
+;;
+
+let%expect_test "Substitution of variable renames" =
+  test_anf
+    ~simplify:true
+    {|
+
+let test_keywords () =
+  let is_keyword k = true in
+    let sq = "let2" in
+    if is_keyword sq then 0
+    else
+      let () = output_string stdout sq in
+      1
+
+    |};
+  [%expect {|
+    let __lifted_let_5_is_keyword k =
+      1
+    let test_keywords () =
+      let temp1 = "let2" in
+      let temp2 = __lifted_let_5_is_keyword temp1  in
+      (if temp2
+      then 0
+      else let () = output_string stdout temp1 in
+           1)
+    |}]
+;;
+
+let%expect_test "ANF function with unit args" =
+  test_anf
+    ~simplify:true
+    {|
+
+let test_keywords () () x = x+1
+
+    |};
+  [%expect {|
+    let test_keywords () () x =
       (x + 1)
     |}]
 ;;
