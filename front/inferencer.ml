@@ -916,7 +916,12 @@ let start_env =
   (* Stdio writing primitives *)
   |> extend_s
        "output_char"
+       ~kind:(Builtin ("output_char", 2))
        (Scheme.make_mono (tarrow out_channel_typ (tarrow char_typ unit_typ)))
+  |> extend_s
+       "output_int"
+       ~kind:(Builtin ("output_int", 2))
+       (Scheme.make_mono (tarrow out_channel_typ (tarrow int_typ unit_typ)))
   |> extend_s
        "output_string"
        ~kind:(Builtin ("output_string", 2))
@@ -983,6 +988,10 @@ let start_env =
         Typedtree.S
           (Var_set.singleton 0, array_typ param @-> int_typ @-> param @-> unit_typ))
   (* strings stuff *)
+  |> extend_s
+       "string_of_int"
+       ~kind:(Builtin ("string_of_int", 1))
+       (Scheme.make_mono (tarrow int_typ string_typ))
   |> extend_s
        "string_len"
        ~kind:(Builtin ("string_len", 1))
