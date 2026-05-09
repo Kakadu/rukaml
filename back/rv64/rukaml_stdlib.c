@@ -239,7 +239,7 @@ void rukaml_print_int_kaml(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
 }
 
 void* rukaml_print_newline_sysv() {
-  puts("\n");
+  printf("\n");
   return 0;
 }
 
@@ -369,7 +369,7 @@ void *rukaml_alloc_block(int64_t size, uint8_t tag)
   assert(TAG(ans) == tag);
   assert(SIZE(ans) == size);
 
-  logGC("A block %lX is created. Allocated words = %lu\n",
+  printf("A block %lX is created. Allocated words = %lu\n",
         (uint64_t)ans, GC.allocated_words);
   // printf("Header addr = %lX\n", rez);
   return ans;
@@ -382,6 +382,7 @@ void *rukaml_alloc_array(int64_t size)
 
 // Standart CC
 void *rukaml_tag0(void **obj) {
+  assert(obj != NULL);
   return (void *)(uint64_t)(TAG(obj));
 }
 
@@ -396,6 +397,7 @@ uint64_t rukaml_array_length(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
                              uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
                              void **arr)
 {
+  assert(arr != NULL);
   return SIZE(arr);
 }
 
@@ -474,11 +476,13 @@ void rukaml_array_set(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
 
 void *rukaml_field(int n, void **r)
 {
+  assert(r != NULL);
   return r[n];
 }
 
 void *rukaml_alloc_closure(void *func, int32_t argsc)
 {
+  assert(func != NULL);
   rukaml_closure *ans = (rukaml_closure *)malloc(sizeof(rukaml_closure) + sizeof(void *) * argsc);
   //  { .code = func, .argsc = argsc }
   ans->code = func;
@@ -613,10 +617,13 @@ void rukaml_trace_val(void *arg, unsigned int level)
 
 uint64_t rukaml_list_length(int r0, int r1, int r2, int r3, int r4, int r5, void **ls)
 {
+  printf("%s, lst = 0x%LX\n", __FUNCTION__, ls);
   for (uint64_t size = 0;; ++size)
   {
-    if (ls == 0) // [] lowered to int. TODO: adjust for tagged ints
+    assert(ls != NULL);
+    if (TAG(ls) == 0) // [] lowered to int. TODO: adjust for tagged ints
     {
+      printf("%s returns %lu\n", __FUNCTION__, size);
       return size;
     }
     else if (IS_BLOCK(ls) && (TAG(ls) == 1) && (SIZE(ls) == 2)) // ( :: ) of 'a * 'a list
@@ -642,38 +649,88 @@ uint64_t rukaml_string_len_imm(void **str)
     mk_err_fatal("tag mismatch");
   }
 
-  return (uint64_t)(str[SIZE(str) - 1]);
+  // uint64_t ans = (uint64_t)(str[SIZE(str) - 1]);
+  uint64_t ans = strlen(str);
+  printf("Len of rukaml string '%s' is %d\n", str, ans);
+  return ans;
 }
 
-void* rukaml_make_string_of_lit(const char* const s) {
+char rukaml_string_nth_sysv(void **str, uint64_t n)
+{
+  // puts("HERR\n");
+  assert(str != NULL);
+  // printf("%s n = %d, str = '%s', \n", __FUNCTION__, n, str);
+  if (str == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(str) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  uint64_t str_len = 0 ;
+  str_len  = rukaml_string_len_imm(str);
+  printf("%s str = '%s', n = %d, strlen = %d\n", __FUNCTION__, str, n, str_len);
+
+  if (n >= str_len)
+  {
+    mk_err_fatal("index out of bounds");
+  }
+
+  return ((char *)str)[n];
+}
+
+char rukaml_string_nth(int r0, int r1, int r2, int r3, int r4, int r5, void **str, uint64_t n)
+{
+  return rukaml_string_nth_sysv(str, n);
+}
+
+
+void* rukaml_make_string_of_lit(const char* const s)
+{
   // printf("%s, str = %s\n", __FUNCTION__, s); fflush(stdout);
   const size_t len = strlen(s);
-  size_t payload_words_n = (len + 7) / 8;
-  void** block = (void*)rukaml_alloc_block(payload_words_n + 1, String_tag);
+  size_t payload_words_n = (len + 1 + 7) / 8;
+  void** block = (void*)rukaml_alloc_block(payload_words_n, String_tag);
   // printf("String created at addr = 0x%lX\n", block);
   assert(TAG(block) == String_tag);
-  block[payload_words_n] = len;
-  assert(rukaml_string_len_imm((void **)block) == len);
-
-  for (size_t i = 0; i < len; ++i) {
+  // block[payload_words_n] = len;
+  memset(block, '\0', payload_words_n);
+  for (size_t i = 0; i < len; ++i)
     ((char *)(block))[i] = s[i];
-  }
+
+  assert(rukaml_string_len_imm((void **)block) == len);
   // printf("String created at addr = 0x%lX\n", block);
   return (void*)block;
 }
 
+void* rukaml_string_of_int_sysv(void* num) {
+  int len = snprintf(NULL, 0, "%d", num);
+  char *str = malloc(len + 1);
+  snprintf(str, len + 1, "%d", num);
+
+  void* ans = rukaml_make_string_of_lit(str);
+  assert(TAG(ans) == String_tag);
+  free(str);
+  return ans;
+}
+
 void **rukaml_string_of_char_list(int r0, int r1, int r2, int r3, int r4, int r5, void **chs)
 {
+  assert(chs != NULL);
+  // TODO: change to Balyshev-style representaiton
   // chs == 0 means [] lowered to int. TODO: adjust for tagged ints
-  uint64_t chars_n = chs == 0 ? 0 : rukaml_list_length(0, 0, 0, 0, 0, 0, chs);
-
-  uint64_t payload_words_n = (chars_n + 7) / 8;
+  uint64_t chars_n = 0;
+  if (TAG(chs) != 0) {
+    chars_n = rukaml_list_length(0, 0, 0, 0, 0, 0, chs);
+  }
+  uint64_t payload_words_n = (chars_n + 1 + 7) / 8;
 
   uint64_t *block = (uint64_t *)rukaml_alloc_block(payload_words_n + 1, String_tag);
 
-  block[payload_words_n] = chars_n;
-  assert(rukaml_string_len_imm((void **)block) == chars_n);
-
+  memset(block, '\0', payload_words_n);
   for (size_t n = 0; n < chars_n; ++n)
   {
     assert(TAG(chs) == 1); // tag of ( :: )
@@ -681,6 +738,7 @@ void **rukaml_string_of_char_list(int r0, int r1, int r2, int r3, int r4, int r5
     chs = (void **)(chs[1]);
   }
 
+  assert(rukaml_string_len_imm((void **)block) == chars_n);
   return (void **)block;
 }
 
@@ -696,6 +754,22 @@ void* rukaml_output_string_sysv(int dest, void* str)
   {
     mk_err_fatal("tag mismatch");
   }
-  puts(str);
+  printf("%s", str);
+  // puts(str); //fflush(stdout);
+  return 0;
+}
+
+void* rukaml_output_int_sysv(int dest, int64_t n)
+{
+  assert(dest == STDOUT_FILENO);
+  printf("%d", n); //fflush(stdout);
+  return 0;
+}
+
+void* rukaml_output_char_sysv(int dest, char c)
+{
+  assert(dest == STDOUT_FILENO);
+  printf("%c", c);
+  // putchar(c); //fflush(stdout);
   return 0;
 }

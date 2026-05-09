@@ -742,15 +742,14 @@ let generate_body is_toplevel body =
          log "def_kind=%a" pp_def_kind dk;
          failwiths "not implemented %d" __LINE__)
     | CApp (APrimitive (">=", info), vl, [ vr ]) ->
+      (* This could be buggy *)
       helper_c dest (ANF.CApp (ANF.APrimitive ("<=", info), vr, [ vl ]))
-    | CApp (APrimitive (("<=" as prim), _), AVar vl, [ AVar vr ]) ->
-      with_two_slots (fun _ slot1 ->
-        emit ld t0 (Addr_of_local.pp_to_mach vl);
-        emit ld t1 (Addr_of_local.pp_to_mach vr);
-        emit addi t1 t1 1;
-        emit slt t2 t0 t1;
-        emit sd_dest t2 dest
-        (* adf asdfa sdf asdfa sdfa sd adf asdfa sdf asdfa sdfa sd adf asdfa sdf asdfa sdfa sd adf asdfa sdf asdfa sdfa sd *))
+    | CApp (APrimitive ("<=", _), AVar vl, [ AVar vr ]) ->
+      emit ld t0 (Addr_of_local.pp_to_mach vl);
+      emit ld t1 (Addr_of_local.pp_to_mach vr);
+      emit addi t1 t1 1;
+      emit slt t2 t0 t1;
+      emit sd_dest t2 dest
     | CApp (APrimitive ((("+" | "*" | "-") as prim), _), AVar vl, [ AVar vr ]) ->
       emit comment (sprintf "%s is stored in %d" vl.hum_name (Addr_of_local.find_exn vl));
       emit comment (sprintf "%s is stored in %d" vr.hum_name (Addr_of_local.find_exn vr));
@@ -768,7 +767,7 @@ let generate_body is_toplevel body =
         t4;
       emit sd_dest t5 dest
     | CApp (AVar f, arg, []) when f.Ident.hum_name = "trace_rukaml_val" ->
-      assert (`External = is_toplevel f);
+      (* assert (`External = is_toplevel f); *)
       with_two_slots (fun ra_name arg1 ->
         emit addi SP SP (-16) ~comm:(sprintf "pad and 1st arg of function %s" f.hum_name);
         emit sd ra (Addr_of_local.pp_to_mach ra_name);
@@ -880,10 +879,20 @@ let generate_body is_toplevel body =
       emit ld a1 (pp_to_mach arg);
       emit call "rukaml_output_string_sysv";
       emit sd_dest a0 dest
+    | CApp (APrimitive ("output_char", 2), APrimitive ("stdout", 0), [ AVar arg ]) ->
+      emit li a0 1;
+      emit ld a1 (pp_to_mach arg);
+      emit call "rukaml_output_char_sysv";
+      emit sd_dest a0 dest
     | CApp (APrimitive ("output_string", 2), APrimitive ("stdout", 0), [ AVar arg ]) ->
       emit li a0 1;
       emit ld a1 (pp_to_mach arg);
       emit call "rukaml_output_string_sysv";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("output_int", 2), APrimitive ("stdout", 0), [ AVar arg ]) ->
+      emit li a0 1;
+      emit ld a1 (pp_to_mach arg);
+      emit call "rukaml_output_int_sysv";
       emit sd_dest a0 dest
     | CApp (APrimitive ("print_newline", 1), _arg_unit, []) ->
       emit li a0 0;
@@ -891,7 +900,8 @@ let generate_body is_toplevel body =
       emit sd_dest zero dest
     | CApp (APrimitive ("string_len", 1), AVar arg, []) ->
       emit ld a0 (pp_to_mach arg);
-      emit call "rukaml_string_len";
+      emit call "rukaml_string_len_imm";
+      (* TODO: Why imm?*)
       emit sd_dest a0 dest
     | CApp (APrimitive ("char_code", 1), AVar arg, []) ->
       emit ld t0 (pp_to_mach arg);
@@ -921,6 +931,11 @@ let generate_body is_toplevel body =
       emit li a0 c;
       emit call "rukaml_match_failure";
       emit sd_dest a0 dest
+    | CApp (APrimitive ("string_of_char_list", 1), (AConstruct (0, []) as arg), []) ->
+      helper_a (DReg "t5") arg;
+      emit mv a0 t5;
+      emit call "rukaml_string_of_char_list_sysv";
+      emit sd_dest a0 dest
     | CApp (APrimitive ("string_of_char_list", 1), AVar v, []) ->
       emit ld a0 (pp_to_mach v);
       emit call "rukaml_string_of_char_list_sysv";
@@ -929,9 +944,25 @@ let generate_body is_toplevel body =
       assert (parity = 2);
       emit ld a0 (pp_to_mach arg1);
       emit ld a1 (pp_to_mach arg2);
-      emit call "string_nth0"
+      emit call "rukaml_string_nth_sysv";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("string_of_int", 1), AVar v, []) ->
+      emit ld a0 (pp_to_mach v);
+      emit call "rukaml_string_of_int_sysv";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("string_of_int", 1), AConst (PConst_int n), []) ->
+      emit li a0 n;
+      emit call "rukaml_string_of_int_sysv";
+      emit sd_dest a0 dest
     | CApp (APrimitive ("||", 2), AVar arg1, [ AVar arg2 ]) ->
-      emit or_ t0 (pp_to_mach arg1) (pp_to_mach arg2);
+      emit ld t1 (pp_to_mach arg1);
+      emit ld t2 (pp_to_mach arg2);
+      emit or_ t0 t1 t2;
+      emit sd_dest t0 dest
+    | CApp (APrimitive ("<", 2), AConst (PConst_int arg1), [ AVar arg2 ]) ->
+      emit li t1 arg1;
+      emit ld t2 (pp_to_mach arg2);
+      emit slt t0 t1 t2;
       emit sd_dest t0 dest
     | CApp (APrimitive (pname, partiy), arg1, args) ->
       Format.eprintf "At %s:%d\n%!" __FILE__ __LINE__;
@@ -955,7 +986,7 @@ let generate_body is_toplevel body =
       Format.eprintf "@[%a@]\n%!" Compile_lib.ANF.pp_c _rest;
       failwiths "Not implemented %s %d" __FILE__ __LINE__
   and helper_a (dest : dest) x =
-    (* log "  %s: expr = %a" __FUNCTION__ ANF.pp_a x; *)
+    log "  %s: expr = %a" __FUNCTION__ ANF.pp_a x;
     match x with
     | AConst (Parsetree.PConst_int n) ->
       (match dest with
@@ -1004,6 +1035,7 @@ let generate_body is_toplevel body =
         (List.rev r);
       emit sd_dest a0 dest
     | AConstruct (tag, args) ->
+      emit comment (Format.asprintf "AConstruct: %a" ANF.pp_a x);
       with_two_slots (fun ra_name rez_slot ->
         emit addi SP SP (-16) ~comm:(sprintf "padding for construct %d" tag);
         emit sd (RU "ra") (pp_to_mach ra_name);
@@ -1019,7 +1051,7 @@ let generate_body is_toplevel body =
         emit ld ra (Addr_of_local.pp_to_mach ra_name);
         emit ld t0 (pp_to_mach rez_slot);
         emit sd_dest t0 dest;
-        emit addi SP SP 16 ~comm:(sprintf "FUN consturctor creation"))
+        emit addi SP SP 16 ~comm:(sprintf "FUN constructor creation"))
     | ATuple (x1, x2, xs) ->
       emit_initialize_block dest ~fields:(x1 :: x2 :: xs) ~tag:0 ~name:"tuple"
     | AConst (PConst_bool true) ->
@@ -1032,25 +1064,32 @@ let generate_body is_toplevel body =
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_a _atom;
       failwiths "not implemented %s %d" __FILE__ __LINE__
   and emit_initialize_block dest ~tag ~fields ~name =
-    log "Init block with fields: @[[ %a ]@]" (pp_space_list ANF.pp_a) fields;
+    emit
+      comment
+      (Format.asprintf
+         "Init block with fields: @[[ %a ]@]"
+         (pp_space_list ANF.pp_a)
+         fields);
     emit li a0 (List.length fields) ~comm:(sprintf "%s size" name);
     emit li a1 tag ~comm:(sprintf "%s tag" name);
     emit call "rukaml_alloc_block";
     (* fresh block stored in a0 *)
     with_two_slots (fun _ block_addr ->
+      emit addi SP SP (-16) ~comm:"block_addr :: i :: ...";
       emit sd a0 (Addr_of_local.pp_to_mach block_addr);
       List.iteri
         (fun i x ->
            (* TODO: matching on x should give shorter code *)
            helper_a (DReg "t1") x;
            emit ld t0 (Addr_of_local.pp_to_mach block_addr);
-           emit addi t0 t0 i;
+           emit addi t0 t0 (8 * i);
            (* I'm not sure about this *)
-           emit sd t1 t0;
+           emit sd t1 (ROffset (t0, 0));
            ())
         fields;
       emit ld t0 (Addr_of_local.pp_to_mach block_addr);
-      emit sd_dest t0 dest)
+      emit sd_dest t0 dest;
+      emit addi SP SP 16)
   in
   helper (DReg "a0") body;
   dealloc_locals ~now:()
@@ -1131,11 +1170,11 @@ let codegen ?(wrap_main_into_start = true) anf file =
       let lit_name n = sprintf "STRING_LIT_%d" n in
       let rukaml_val_loc n = sprintf "my_STRING_LIT_%d" n in
       iter_string_lit_hash (fun k v ->
-        printfn ppf "STRING_LIT_%d: .asciz \"%s\"" v k;
+        printfn ppf "STRING_LIT_%d: .asciz %S" v k;
         printfn ppf ".equ STRING_LIT_%d_len, %d" v (1 + String.length k));
       printfn ppf ".align 3   # Align to 8-byte boundary (2^3)";
       iter_string_lit_hash (fun k v ->
-        printfn ppf "my_STRING_LIT_%d: .quad 0x0 # '%s'" v k);
+        printfn ppf "my_STRING_LIT_%d: .quad 0x0 # '%S'" v k);
       fun () ->
         iter_string_lit_hash (fun _k v ->
           emit lla a0 (lit_name v);
