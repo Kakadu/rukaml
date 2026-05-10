@@ -979,11 +979,13 @@ let start_env =
        (Typedtree.S (Var_set.singleton 0, tarrow (array_typ (tv 0 ~level:1000)) int_typ))
   |> extend_s
        "array_get"
+       ~kind:(Builtin ("array_get", 2))
        (let param = tv 0 ~level:1000 in
         let ( @-> ) = tarrow in
         Typedtree.S (Var_set.singleton 0, array_typ param @-> int_typ @-> param))
   |> extend_s
        "array_set"
+       ~kind:(Builtin ("array_set", 3))
        (let param = tv 0 ~level:1000 in
         Typedtree.S
           (Var_set.singleton 0, array_typ param @-> int_typ @-> param @-> unit_typ))
