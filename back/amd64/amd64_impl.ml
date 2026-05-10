@@ -333,6 +333,7 @@ let allocate_locals ppf input_anf : now:unit -> unit =
       helper th;
       helper el
     | CApp _ | CAtom _ -> ()
+    | _ -> failwiths "TODO: not implemented %d" __LINE__
   in
   helper input_anf;
   let count = List.length !names in
@@ -458,7 +459,6 @@ let rec generate_body ppf body =
         printfn ppf "  mov qword [rsp%+d*8], %d" (count - 1 - i) tag
       | AConstruct (_, _ :: _) -> assert false
       | APrimitive _ -> assert false
-      | ATuple _ -> assert false
       | AArray _ -> assert false);
     count + _stack_padding
   in
@@ -976,8 +976,8 @@ let rec generate_body ppf body =
        | { kind = Immediate Match; _ } -> assert false)
     | AConstruct (tag, []) -> printfn ppf "  mov qword %a, %d" pp_dest dest tag
     | AConstruct (tag, fields) -> emit_initialize_block dest ~fields ~tag ~name:"adt"
-    | ATuple (x1, x2, xs) ->
-      emit_initialize_block dest ~fields:(x1 :: x2 :: xs) ~tag:0 ~name:"tuple"
+    (* | ATuple (x1, x2, xs) ->
+      emit_initialize_block dest ~fields:(x1 :: x2 :: xs) ~tag:0 ~name:"tuple" *)
     | AArray fields -> emit_initialize_block dest ~fields ~tag:1 ~name:"array"
     | APrimitive ("match_failure", _) -> printfn ppf "  call rukaml_match_failure"
     | APrimitive ("print", (1 as argc)) ->
