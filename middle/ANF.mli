@@ -11,7 +11,6 @@ type imm_expr =
   | AConst of Frontend.Parsetree.const
   | AVar of Frontend.Ident.t
   | APrimitive of string * int
-  | ATuple of imm_expr * imm_expr * imm_expr list
   | AConstruct of int * imm_expr list
   | AArray of imm_expr list
   | ALam of apat * expr
@@ -20,6 +19,7 @@ and c_expr =
   | CApp of imm_expr * imm_expr * imm_expr list
   | CString_const of string
   | CIte of c_expr * expr * expr
+  | CTuple of imm_expr * imm_expr * imm_expr list
   | CAtom of imm_expr
 
 and expr =
@@ -68,7 +68,7 @@ type iterator =
   { aconst : iterator -> Parsetree.const -> unit
   ; avar : iterator -> Ident.t -> unit
   ; aprimitive : iterator -> string -> int -> unit
-  ; atuple : iterator -> imm_expr -> imm_expr -> imm_expr list -> unit
+  ; ctuple : iterator -> imm_expr -> imm_expr -> imm_expr list -> unit
   ; aconstruct : iterator -> int -> imm_expr list -> unit
   ; aarray : iterator -> imm_expr list -> unit
   ; alam : iterator -> apat -> expr -> unit

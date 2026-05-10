@@ -81,7 +81,8 @@ let%expect_test "CPS factorial" =
   let rec fack n k =
     if n = 0 then k 1
     else fack (n-1) (fun p -> k (p*n)) |};
-  [%expect {|
+  [%expect
+    {|
     let __lifted_lam_1 n k p =
       let temp1 = (p * n) in
       k temp1
@@ -218,7 +219,8 @@ let test_keywords () =
       1
 
     |};
-  [%expect {|
+  [%expect
+    {|
     let __lifted_let_5_is_keyword k =
       1
     let test_keywords () =
@@ -232,15 +234,60 @@ let test_keywords () =
 ;;
 
 let%expect_test "ANF function with unit args" =
+  test_anf ~simplify:true {| let test_keywords () () x = x+1 |};
+  [%expect
+    {|
+    let test_keywords () () x =
+      (x + 1)
+    |}]
+;;
+
+let%expect_test _ =
   test_anf
     ~simplify:true
     {|
+    let f str =
+      let rec aux str  =
+        let ch = string_nth str 0 in
+        let () = output_char stdout ch in
+        42
+      in
+      aux str
+        |};
+  [%expect
+    {|
+    let rec __lifted_let_6_aux str =
+      let ch = string_nth str 0 in
+      let () = output_char stdout ch in
+      42
+    let f str =
+      __lifted_let_6_aux str
+    |}]
+;;
 
-let test_keywords () () x = x+1
+let%expect_test "nested algebraic values" =
+  test_anf ~simplify:true {| let f x = x :: (1 :: []) |};
+  [%expect
+    {|
+    let f x =
+      let temp1 = Constr_0 in
+      let temp2 = (Constr_1 (1, temp1)) in
+      (Constr_1 (x, temp2))
+    |}]
+;;
 
-    |};
-  [%expect {|
-    let test_keywords () () x =
-      (x + 1)
+let%expect_test _ =
+  test_anf
+    ~simplify:true
+    {|
+    let f g =
+      let s = "123" in
+      g (s,s) |};
+  [%expect
+    {|
+    let f g =
+      let temp1 = "123" in
+      let temp2 = (temp1, temp1) in
+        g temp2
     |}]
 ;;
