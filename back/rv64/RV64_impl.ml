@@ -835,9 +835,14 @@ let generate_body is_toplevel body =
       emit ld a1 (pp_to_mach arg);
       emit call "rukaml_output_string_sysv";
       emit sd_dest a0 dest
-    | CApp (APrimitive ("output_char", 2), APrimitive ("stdout", 0), [ AVar arg ]) ->
+    | CApp (APrimitive ("output_char", 2), APrimitive ("stdout", 0), [ arg ]) ->
+      let on_arg dest = function
+        | ANF.AVar arg1 -> emit ld dest (pp_to_mach arg1)
+        | AConst (PConst_int n) -> emit li dest n
+        | _ -> assert false
+      in
       emit li a0 1;
-      emit ld a1 (pp_to_mach arg);
+      on_arg a1 arg;
       emit call "rukaml_output_char_sysv";
       emit sd_dest a0 dest
     | CApp (APrimitive ("output_string", 2), APrimitive ("stdout", 0), [ AVar arg ]) ->
