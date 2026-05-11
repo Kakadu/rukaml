@@ -36,7 +36,11 @@ let pp_space_list eta =
 ;;
 
 module String_lit_hash = struct
-  include Hashtbl.Make (String)
+  include Hashtbl.Make (struct
+      include String
+
+      let hash = Hashtbl.hash
+    end)
 
   let last = ref 0
 
