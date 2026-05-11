@@ -406,8 +406,8 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
       Format.eprintf "can't substitute %a -> %a\n%!" Ident.pp ident1 pp_c rhs;
       assert false
   and helperi x =
-    log "  SubstituteI %a ~~> %a" Ident.pp ident1 pp_c rhs;
-    log "  inside @[%a@]" pp_a x;
+    (* log "  SubstituteI %a ~~> %a" Ident.pp ident1 pp_c rhs;
+    log "  inside @[%a@]" pp_a x; *)
     match x with
     | AConst (PConst_bool true) -> AConst (PConst_int 1)
     | AConst (PConst_bool false) -> AConst (PConst_int 0)
@@ -700,6 +700,7 @@ let anf_pat pat ?(kbefore = fun _ -> Fun.id) k =
 let anf =
   (* Standard pitfall: forgot to call continuation *)
   let rec helper e (k : imm_expr -> expr) =
+    (* log "helper: @[%a@]" Typedtree.pp_expr e; *)
     match e with
     | Typedtree.TConst (Parsetree.PConst_string s) ->
       let name = gensym_id () in
@@ -708,8 +709,22 @@ let anf =
     | TFormat (s, _ty) ->
       let name = gensym_id () in
       ELet (NonRecursive, Tpat_var name, CString_const s, k (AVar name))
-    | TApp (TApp (TVar (varname, _, Builtin (bname, 2), _), arg1, _), arg2, _)
-      when is_infix_binop varname ->
+    | TApp
+        ( TApp (TApp (TVar (_varname, _, Builtin (bname, 3), _), arg1, _), arg2, _)
+        , arg3
+        , _ ) ->
+      helper arg1 (fun arg1 ->
+        helper arg2 (fun arg2 ->
+          helper arg3 (fun arg3 ->
+            let name = gensym_id () in
+            ELet
+              ( NonRecursive
+              , Tpat_var name
+              , CApp (APrimitive (bname, 2), arg1, [ arg2; arg3 ])
+              , k (AVar name) ))))
+    | TApp (TApp (TVar (_varname, _, Builtin (bname, 2), _), arg1, _), arg2, _)
+    (* TODO: Why check for infixes? Maybe being builtin is enough? *)
+    (* when is_infix_binop varname  *) ->
       helper arg1 (fun arg1 ->
         helper arg2 (fun arg2 ->
           let name = gensym_id () in

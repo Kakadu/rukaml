@@ -127,8 +127,8 @@ let%expect_test "Check string literal is put to separate let" =
   [%expect
     {|
     let main =
-      let temp2 = "hello world!" in
-      let t = output_string stdout temp2 in
+      let temp1 = "hello world!" in
+      let t = output_string stdout temp1 in
       0
     |}]
 ;;
@@ -289,5 +289,26 @@ let%expect_test _ =
       let temp1 = "123" in
       let temp2 = (temp1, temp1) in
         g temp2
+    |}]
+;;
+
+let%expect_test "substitute inside arrays" =
+  (* ANF.set_logging true; *)
+  test_anf
+    ~simplify:true
+    {|
+    let mtx_mul_3x3 a =
+      let a0 = array_get a 0 in
+      [| [| array_get a0 0 |] |]
+ |};
+  [%expect
+    {|
+      let mtx_mul_3x3 a =
+        let a0 = array_get a 0 in
+        let temp4 = array_get a0 0 in
+        let temp3 = [|temp4|] in
+        [|temp3|]
+
+
     |}]
 ;;
