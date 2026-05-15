@@ -710,7 +710,8 @@ let anf =
       let name = gensym_id () in
       ELet (NonRecursive, Tpat_var name, CString_const s, k (AVar name))
     | TApp
-        ( TApp (TApp (TVar (_varname, _, Builtin (bname, 3), _), arg1, _), arg2, _)
+        ( TApp
+            (TApp (TVar (_varname, _, Builtin (bname, (3 as arity)), _), arg1, _), arg2, _)
         , arg3
         , _ ) ->
       helper arg1 (fun arg1 ->
@@ -720,7 +721,7 @@ let anf =
             ELet
               ( NonRecursive
               , Tpat_var name
-              , CApp (APrimitive (bname, 2), arg1, [ arg2; arg3 ])
+              , CApp (APrimitive (bname, arity), arg1, [ arg2; arg3 ])
               , k (AVar name) ))))
     | TApp (TApp (TVar (_varname, _, Builtin (bname, 2), _), arg1, _), arg2, _)
     (* TODO: Why check for infixes? Maybe being builtin is enough? *)
