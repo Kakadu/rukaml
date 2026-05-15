@@ -948,6 +948,20 @@ let generate_body is_toplevel body =
       on_arg a2 arg2;
       emit call "rukaml_array_set_sysv";
       emit sd_dest a0 dest
+    | CApp (APrimitive ("printf", 1), AVar arg0, []) ->
+      emit ld a0 (pp_to_mach arg0);
+      emit call "rukaml_alloc_printf_closure0";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("fprintf", 2), APrimitive ("stdout", 0), [ AVar arg1 ]) ->
+      emit li a0 1;
+      emit ld a1 (pp_to_mach arg1);
+      emit call "rukaml_alloc_fprintf_closure0";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("fprintf", 2), AVar arg0, [ AVar arg1 ]) ->
+      emit ld a0 (pp_to_mach arg0);
+      emit ld a1 (pp_to_mach arg1);
+      emit call "rukaml_alloc_fprintf_closure0";
+      emit sd_dest a0 dest
     | CApp (APrimitive (pname, partiy), arg1, args) ->
       Format.eprintf "At %s:%d\n%!" __FILE__ __LINE__;
       Format.eprintf "Unsupported primitive call: %s/%d\n%!" pname partiy;

@@ -55,7 +55,7 @@ static uint64_t log_level = 0x0;
 #define IS_IMM(v) (!IS_BLOCK(v))
 
 
-int HEAP_SIZE = 2048; // in words
+int HEAP_SIZE = 8192; // in words
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
@@ -574,10 +574,10 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
   assert(f_closure->args_received + argc <= f_closure->argsc);
 
   if (f_closure->args_received + argc == f_closure->argsc) {
-    // log("argsc = %d, args_received=%d, new_args=%d\n",
-    //   f_closure->argsc, f_closure->args_received, argc);
     size_t i = 0, j;
     fun0 callable;
+    log("argsc = %d, args_received=%d, new_args=%d\n",
+      f_closure->argsc, f_closure->args_received, argc);
     // for full application we can omit copying closure
     void** stack_args = alloca(f_closure->argsc * sizeof(void*));
     for (i=0; i<f_closure->args_received; ++i) {
@@ -592,8 +592,9 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
     }
 
     va_end(argp);
-    // printf("Do a call\n");
+
     callable = (fun0)f_closure->code;
+    log("Do a call\n");
     return callable();
   } else {
     // There we have under application
@@ -664,7 +665,7 @@ uint64_t rukaml_string_len_imm(void **str)
 
   // uint64_t ans = (uint64_t)(str[SIZE(str) - 1]);
   uint64_t ans = strlen((char*)str);
-  printf("Len of rukaml string '%s' is %d\n", str, ans);
+  // log("Len of rukaml string '%s' is %d\n", str, ans);
   return ans;
 }
 
@@ -685,7 +686,7 @@ char rukaml_string_nth_sysv(void **str, uint64_t n)
 
   uint64_t str_len = 0 ;
   str_len  = rukaml_string_len_imm(str);
-  printf("%s str = '%s', n = %d, strlen = %d\n", __func__, str, n, str_len);
+  // log("%s str = '%s', n = %d, strlen = %d\n", __func__, str, n, str_len);
 
   if (n >= str_len)
   {
@@ -703,7 +704,7 @@ char rukaml_string_nth(int r0, int r1, int r2, int r3, int r4, int r5, void **st
 
 void* rukaml_make_string_of_lit(const char* const s)
 {
-  printf("%s, str = '%s'\n", __func__, s); fflush(stdout);
+  log("%s, str = '%s'\n", __func__, s); fflush(stdout);
   const size_t len = strlen(s);
   size_t payload_words_n = (len + 1 + 7) / 8;
   void** block = (void*)rukaml_alloc_block(payload_words_n, String_tag);
@@ -715,14 +716,14 @@ void* rukaml_make_string_of_lit(const char* const s)
   for (size_t i = 0; i < len; ++i)
     ((char *)(block))[i] = s[i];
 
-  printf("block contents = '%s'\n", (char*)block);
+  log("block contents = '%s'\n", (char*)block);
   assert(rukaml_string_len_imm((void **)block) == len);
   // printf("String created at addr = 0x%lX\n", block);
   return (void*)block;
 }
 
 uint64_t* rukaml_string_of_int_sysv(uint64_t num) {
-  printf("%s. num = %" PRIu64 "\n", __func__, num);
+  log("%s. num = %" PRIu64 "\n", __func__, num);
   int len = snprintf(NULL, 0, "%d", num);
   char *str = malloc(len + 1);
   memset(str, '\0', len+1);
@@ -790,4 +791,242 @@ void* rukaml_output_char_sysv(int dest, char c)
   printf("%c", c);
   // putchar(c); //fflush(stdout);
   return 0;
+}
+
+// fprintf stuff below
+
+#if defined(__riscv) && __riscv_xlen == 64
+  #define DECLARE_FAKE_ARGS int a0, int a1, int a2, int a3, int a4, int a5, int a6, int a7
+  #define FAKE_ARGS 0,1,2,3,4,5,6,7
+#endif
+
+void rukaml_fprintf_impl(void *dest, void **fmt, va_list args)
+{
+  // if (dest == NULL)
+  // {
+  //   mk_err_fatal("unexpected null ptr");
+  // }
+
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(fmt) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  uint64_t fmt_len = rukaml_string_len_imm(fmt);
+
+  // log("%s, fmtlen = %d\n", __func__, fmt_len);
+  for (size_t pos = 0; pos < fmt_len; ++pos)
+  {
+    char ch = rukaml_string_nth_sysv(fmt, pos);
+    // printf("ch = '%c'\n", ch);
+    if (ch != '%')
+    {
+      // TODO: fix hardcoded stdout
+      putc(ch, stdout);
+      // log("continue\n");
+      continue;
+    }
+
+    pos++;
+
+    if (pos >= fmt_len)
+    {
+      mk_err_fatal("invalid fmt");
+    }
+
+    ch = rukaml_string_nth_sysv(fmt, pos);
+
+    switch (ch)
+    {
+    case 'a':
+    {
+      void *pp_item_closure = va_arg(args, void *);
+      void *item = va_arg(args, void *);
+      rukaml_applyN(pp_item_closure, 2, dest, item);
+      break;
+    }
+    case 'b':
+    {
+      int64_t v = va_arg(args, int64_t);
+      // TODO: fix hardcoded stdout
+      fprintf(stdout, "%s", v ? "true" : "false");
+      break;
+    }
+    case 'c':
+    {
+      int64_t v = va_arg(args, int64_t);
+      // TODO: fix hardcoded stdout
+      fprintf(stdout, "%c", (char)v);
+      break;
+    }
+    case 'd':
+    {
+      int64_t v = va_arg(args, int64_t);
+      // log("%s %d, dest = %d, v=%ld\n", __func__, __LINE__, dest, v);
+      // TODO: fix hardcoded stdout
+      fprintf(stdout, "%ld", v);
+      break;
+    }
+    case 's':
+    {
+      void **str = va_arg(args, void **);
+      // rukaml_fprintf_string(dest, str);
+      // log("%s %d, dest = %d, v=%ld\n", __func__, __LINE__, dest, str);
+      // log("%s, stdout = %lx, STDOUT_FILENO = %lx\n", __func__, stdout, STDOUT_FILENO);
+      rukaml_output_string_sysv(STDOUT_FILENO, str);
+      break;
+    }
+
+    case '%':
+    {
+      fputc('%', dest);
+      break;
+    }
+
+    default:
+    {
+      mk_err_fatal("invalid fmt");
+      break;
+    }
+    }
+  }
+
+
+  // log("%s LEAVE\n", __func__);
+
+}
+
+void *rukaml_fprintf_wrap(DECLARE_FAKE_ARGS, void *out_channel, void **fmt, ...)
+{
+  // if (out_channel == NULL)
+  // {
+  //   mk_err_fatal("unexpected null ptr");
+  // }
+  // log("%s, ch=%X, fmt=%" PRIx64"\n", __func__, out_channel, fmt);
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(fmt) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  va_list args;
+  va_start(args, fmt);
+  rukaml_fprintf_impl( out_channel, fmt, args);
+  va_end(args);
+  return NULL;
+}
+
+// arity stands for amount of arguments which fprintf (or other format printer) expects after a format string
+// for example, arity for "123" is equal to 0, for "%a" is equal to 2, for "%a %s" is equal to 3
+uint64_t eval_fmt_arity(void **fmt)
+{
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+  assert(TAG(fmt) == String_tag);
+
+  uint64_t fmt_len = rukaml_string_len_imm(fmt);
+
+  uint64_t arity_acc = 0;
+
+  for (size_t pos = 0; pos < fmt_len; ++pos)
+  {
+    char ch = rukaml_string_nth_sysv(fmt, pos);
+
+    if (ch != '%')
+    {
+      continue;
+    }
+
+    pos++;
+
+    if (pos >= fmt_len)
+    {
+      mk_err_fatal("invalid fmt");
+    }
+
+    ch = rukaml_string_nth_sysv(fmt, pos);
+
+    switch (ch)
+    {
+    case 'a':
+      arity_acc += 2;
+      break;
+    case 'b':
+    case 'c':
+    case 'd':
+    case 's':
+    case 'x':
+      arity_acc++;
+      break;
+    case '%':
+      break;
+
+    default:
+      mk_err_fatal("invalid fmt");
+    }
+  }
+
+  return arity_acc;
+}
+
+
+void *rukaml_alloc_fprintf_closure(DECLARE_FAKE_ARGS, void *out_channel, void **fmt)
+{
+  if (out_channel == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+  assert(TAG(fmt) == String_tag);
+
+
+
+  uint64_t arity = eval_fmt_arity(fmt);
+  log("%s, arity = %lu\n", __func__, arity);
+  if (arity == 0)
+  {
+    return rukaml_fprintf_wrap(FAKE_ARGS, out_channel, fmt);
+  }
+
+  void *closure = rukaml_alloc_closure(rukaml_fprintf_wrap, 2 + arity);
+
+  return rukaml_applyN(closure, 2, out_channel, fmt);
+}
+
+void *rukaml_alloc_fprintf_closure0(int dest, void **fmt)
+{
+  assert(TAG(fmt) == String_tag);
+  return rukaml_alloc_fprintf_closure(FAKE_ARGS, dest, fmt);
+}
+
+void *rukaml_alloc_printf_closure0(void **fmt)
+{
+  assert(TAG(fmt) == String_tag);
+  return rukaml_alloc_fprintf_closure(FAKE_ARGS, stdout, fmt);
+}
+
+void *rukaml_alloc_printf_closure(DECLARE_FAKE_ARGS, void **fmt)
+{
+
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null fmt");
+  }
+  assert(TAG(fmt) == String_tag);
+  return rukaml_alloc_fprintf_closure(FAKE_ARGS, stdout, fmt);
 }
