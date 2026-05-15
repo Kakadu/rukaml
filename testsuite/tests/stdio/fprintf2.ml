@@ -1,6 +1,6 @@
 (*
    test
-  (targets amd64)
+  (targets (anf promote) amd64 rv64)
   (run (stdout "true 1 a foo"))
 *)
 

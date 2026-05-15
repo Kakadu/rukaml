@@ -5,6 +5,6 @@
 *)
 let main =
   let r = [| 1; 4; 3; 3 |] in
-  let unit = array_set r 1 42 in
-  0
+  let () = array_set r 1 42 in
+  output_int stdout (array_get r 1)
 ;;

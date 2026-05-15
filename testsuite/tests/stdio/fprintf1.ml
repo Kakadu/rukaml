@@ -1,8 +1,9 @@
 (*
 test
-  (targets amd64)
+  (targets amd64 rv64)
   (run (stdout "hello world!"))
 *)
 
 let main =
-  let t = printf "hello world!" in 0
+  let t = printf "hello world!" in
+  0

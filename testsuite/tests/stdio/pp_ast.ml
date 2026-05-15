@@ -1,6 +1,6 @@
 (*
    test
-  (targets amd64)
+  (targets amd64 rv64)
   (run (stdout
           "((fun x -> x) (fun x -> x))"
           "(let x = 1 in (let y = 2 in ((+ x) y)))"

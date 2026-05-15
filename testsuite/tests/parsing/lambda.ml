@@ -126,34 +126,28 @@ let string_to_char_list s =
 let test0 () =
   match parse_var (string_to_char_list " x ") with
   | Prez_ok (ch, tl) ->
-    let () = output_string stdout "(0) parsed var: " in
-    output_char stdout ch
-    (* printf2 "(0) parsed var: %c\n" ch *)
+
+    printf "(0) parsed var: %c\n" ch
   | Prez_err err ->
     (* printf2 "(0) parsing error: %a"  *)
     pp_parsing_error stdout err
 ;;
 
-let test1 =
+let test1() =
   match parens parse_var (string_to_char_list "(x)") with
   | Prez_ok (ch, tl) ->
-    let() = output_string stdout "parsed var: " in
-    (* printf2 "(1) parsed var: %c\n" ch *)
-    let () = output_char stdout ch in
-    print_newline()
+    printf "(1) parsed var: %c\n" ch
   | Prez_err err ->
      (* printf2 "(1) parsing error: %a"  *)
   pp_parsing_error stdout err
 ;;
 
-let test2 =
+let test2 ()=
   match parens parse_var (string_to_char_list " ( x ) ") with
   | Prez_ok (ch, tl) ->
-    (* printf2 "(2) parsed var: %c\n"  *)
-    output_char stdout ch
+    printf "(2) parsed var: %c\n" ch
   | Prez_err err ->
-    (* printf2 "(2) parsing error: %a\n"  *)
-    pp_parsing_error stdout err
+    printf "(2) parsing error: %a\n" pp_parsing_error err
 ;;
 
 type expr =
@@ -163,21 +157,11 @@ type expr =
 
 let rec pp_expr parens oc expr =
   match expr with
-  | Var name -> output_char stdout name
+  | Var name -> fprintf oc "%c" name
   | Abs (name, e) ->
-    let () = if parens then output_char stdout '(' else () in
-    let () = output_string stdout "> " in
-    let () = output_char stdout name in
-    let ()  =pp_expr false stdout e in
-    let () = if parens then output_char stdout ')' else () in
-    ()
+    fprintf oc (if parens then "(> %c . %a)" else "> %c . %a") name (pp_expr false) e
   | App (e1, e2) ->
-    let () = if parens then output_char stdout '(' else () in
-    let () = pp_expr true stdout e1 in
-    let () = output_char stdout ' ' in
-    let () = pp_expr true stdout e2 in
-    let () = if parens then output_char stdout ')' else () in
-    ()
+    fprintf oc (if parens then "(%a %a)" else "%a %a") (pp_expr true) e1 (pp_expr true) e2
 ;;
 
 let parse_atom parse_expr =
@@ -196,17 +180,13 @@ let parse_evar chs =
   | Prez_ok (name, tl) -> Prez_ok (Var name, tl)
 ;;
 
-let test3 =
+let test3 ()=
   match parse_atom parse_evar (string_to_char_list " ( x ) ") with
   | Prez_ok (e, tl) ->
-    let () = output_string stdout "(3) parsed expr: " in
-    let () = pp_expr true stdout e in
-    print_newline()
+    printf "(3) parsed expr: %a\n" (pp_expr true) e
   | Prez_err err ->
-    (* printf2 "(3) parsing error: %a\n" pp_parsing_error stdout err *)
-    let () = output_string stdout "(3) parsed error: " in
-    let () = pp_parsing_error stdout err in
-    print_newline()
+    printf "(3) parsing error: %a\n" pp_parsing_error err
+
 ;;
 
 let make_left_prio_app first rest =
@@ -243,11 +223,10 @@ let parse_app parse_expr =
                Prez_ok (App (left, right), chs)))))
 ;;
 
-let test4 =
+let test4 () =
   match parse_app (parse_atom parse_evar) (string_to_char_list " ( x ) y ") with
   | Prez_ok (e, tl) ->
-    let () = pp_expr true stdout e in
-    print_endline "(4) parsed expr\n"
+    printf "(4) parsed expr: %a\n" (pp_expr true) e
   | Prez_err err ->
     let() = pp_parsing_error stdout err in
      print_endline "(4) parsing error"
@@ -272,29 +251,25 @@ let parse_abs parse_expr =
              | Prez_ok (body, chs) -> Prez_ok (Abs (var, body), chs)))))
 ;;
 
-let test5 =
+let test5 () =
   match
     parse_abs (parse_app (parse_atom parse_evar)) (string_to_char_list "> x . ( x ) y ")
   with
   | Prez_ok (e, tl) ->
-    let () = pp_expr true stdout e in
-    print_endline "(5) parsed expr\n"
+    printf "(5) parsed expr: %a\n" (pp_expr true) e
   | Prez_err err ->
-    (* printf2 "(5) parsing error: %a\n" *)
-  pp_parsing_error stdout err
+    printf "(5) parsing error: %a\n" pp_parsing_error err
+
 ;;
 
-let test6 =
+let test6 () =
   match
     parse_abs
       (parse_app (parse_atom parse_evar))
       (string_to_char_list "> f . > x . > y . f x y ")
   with
   | Prez_ok (e, tl) ->
-    let () = print_string "(6) parsed expr" in
-    let () = pp_expr true stdout e in
-    print_newline()
-
+    printf "(6) parsed expr: %a\n" (pp_expr true) e
   | Prez_err err ->
     (* printf2 "(6) parsing error: %a\n" *)
      pp_parsing_error stdout err
@@ -328,47 +303,42 @@ let parse_expr chs =
     chs
 ;;
 
-let test7 =
+let test7 () =
   match parse_expr (string_to_char_list "> f . > x . > y . f x y ") with
   | Prez_ok (e, tl) ->
-    let () = pp_expr true stdout e in
-    print_endline "(7) parsed expr\n"
+    printf "(7) parsed expr: %a\n" (pp_expr true) e
   | Prez_err err ->
     (* printf2 "(7) parsing error: %a\n"  *)
     pp_parsing_error stdout err
 ;;
 
-let test8 =
+let test8 () =
   match parse_expr (string_to_char_list "(> x . x) a") with
   | Prez_ok (e, tl) ->
-    pp_expr true stdout e
-    (* printf2 "(8) parsed expr: %a\n" (pp_expr true) e *)
+    printf "(8) parsed expr: %a\n" (pp_expr true) e
   | Prez_err err ->
       (* printf2 "(8) parsing error: %a\n"  *)
       pp_parsing_error stdout err
 ;;
 
-let test9 =
+let test9 () =
   match parse_expr (string_to_char_list "(> f . > x . f x) (> y . y)") with
   | Prez_ok (e, tl) ->
-    (* printf2 "(9) parsed expr: %a\n" (pp_expr true) e *)
-    pp_expr true stdout e
+    printf "(9) parsed expr: %a\n" (pp_expr true) e
   | Prez_err err ->
       (* printf2 "(9) parsing error: %a\n"  *)
       pp_parsing_error stdout err
 ;;
 
-let test18 =
+let test18 () =
   match parse_expr (string_to_char_list "(> k . > x . k) (> x . > y . x)") with
   | Prez_ok (e, tl) ->
-    pp_expr true stdout e
-    (* printf2 "(18) parsed expr: %a\n" (pp_expr true) e *)
+    printf "(18) parsed expr: %a\n" (pp_expr true) e
   | Prez_err err ->
-    (* printf2 "(18) parsing error: %a\n" *)
-     pp_parsing_error stdout err
+    printf "(18) parsing error: %a\n" pp_parsing_error err
 ;;
 
-let test17 =
+let test17 () =
   match parse_expr (string_to_char_list "(> x . > y . > z . x z (y z)) a b c") with
   | Prez_ok (e, tl) ->
     pp_expr true stdout e
@@ -440,4 +410,12 @@ let test38 =
 
 let main =
   let () = test0 () in
+  let () = test1 () in
+  let () = test2 () in
+  let () = test3 () in
+  let () = test4 () in
+  let () = test5 () in
+  let () = test6 () in
+  let () = test7 () in
+  let () = test8 () in
   ()

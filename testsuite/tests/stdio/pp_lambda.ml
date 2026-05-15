@@ -1,6 +1,6 @@
 (*
    test
-  (targets amd64)
+  (targets amd64 rv64)
   (run (stdout
            "i := λ x . x"
            "k := λ x . λ y . x"
