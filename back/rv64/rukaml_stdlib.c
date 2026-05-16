@@ -55,7 +55,7 @@ static uint64_t log_level = 0x0;
 #define IS_IMM(v) (!IS_BLOCK(v))
 
 
-int HEAP_SIZE = 8192; // in words
+int HEAP_SIZE = 16384 ; // in words
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
@@ -78,58 +78,64 @@ struct gc_data
   struct gc_stats stats;
 };
 
+// 0x55555565F2A0
+// 0x55555555F2A0
+
+// 0x2AAAAB578010
+// 0x2AAAAB478010
 static struct gc_data GC = {.ebp = 0, .allocated_words = 0, .stats = {.gs_allocated_words = 0}};
 
 void rukaml_initialize(uint64_t ebp)
 {
-  setbuf(stdout, NULL);
-  {
-    char *env = getenv("RUKAMLRUNPARAM");
-    if (env)
-    {
-      char *temp;
-      temp = strtok(env, ",");
-      while (temp != NULL)
-      {
-        if (strlen(temp) <= 2 || temp[1] != '=')
-          continue;
+  // setbuf(stdout, NULL);
+  // {
+  //   char *env = getenv("RUKAMLRUNPARAM");
+  //   if (env)
+  //   {
+  //     char *temp;
+  //     temp = strtok(env, ",");
+  //     while (temp != NULL)
+  //     {
+  //       if (strlen(temp) <= 2 || temp[1] != '=')
+  //         continue;
 
-        switch (temp[0])
-        {
-        case 'v':
-        {
-          uint64_t v = strtol(temp + 2, (char **)NULL, 10);
-          log_level = v;
-          break;
-        }
-        case 'm':
-        {
-          long v = strtol(temp + 2, (char **)NULL, 10);
-          assert(v > 0);
-          log("Setting heap size to be %ld words\n", v);
-          HEAP_SIZE = (uint32_t)v;
-          break;
-        }
-        default:
-          fprintf(stderr, "Unrecongnized env switch\n");
-          break;
-        }
-        temp = strtok(NULL, ",");
-      }
-    }
-  }
+  //       switch (temp[0])
+  //       {
+  //       case 'v':
+  //       {
+  //         uint64_t v = strtol(temp + 2, (char **)NULL, 10);
+  //         log_level = v;
+  //         break;
+  //       }
+  //       case 'm':
+  //       {
+  //         long v = strtol(temp + 2, (char **)NULL, 10);
+  //         assert(v > 0);
+  //         log("Setting heap size to be %ld words\n", v);
+  //         HEAP_SIZE = (uint32_t)v;
+  //         break;
+  //       }
+  //       default:
+  //         fprintf(stderr, "Unrecongnized env switch\n");
+  //         break;
+  //       }
+  //       temp = strtok(NULL, ",");
+  //     }
+  //   }
+  // }
   GC.ebp = ebp;
   log("%s. stack_start = 0x%lX\n", __func__, GC.ebp);
   const uint64_t size = sizeof(uint64_t *) * HEAP_SIZE;
+  printf("Malloc heap size = %ld (0x%LX)\n", size, size);
   GC.main_bank = malloc(size);
   memset(GC.main_bank, 0x80, size);
-  GC.main_bank_fin = GC.main_bank + size;
+  GC.main_bank_fin = GC.main_bank +   HEAP_SIZE;
   GC.backup_bank = malloc(sizeof(uint64_t *) * HEAP_SIZE);
-  GC.backup_bank_fin = GC.backup_bank + size;
+  GC.backup_bank_fin = GC.backup_bank +   HEAP_SIZE;
   GC.allocated_words = 0;
   GC.stats.gs_current_bank = 0;
-  log("main   bank: 0x%lX..0x%lX\n", (uint64_t)GC.main_bank, (uint64_t)GC.main_bank_fin);
-  log("backup bank: 0x%lX..0x%lX\n", (uint64_t)GC.backup_bank, (uint64_t)GC.backup_bank_fin);
+  printf("main   bank: 0x%lX..0x%lX\n", (uint64_t)GC.main_bank, (uint64_t)GC.main_bank_fin);
+  printf("backup bank: 0x%lX..0x%lX\n", (uint64_t)GC.backup_bank, (uint64_t)GC.backup_bank_fin);
 }
 
 static bool is_old_bank(uint64_t *ptr)
@@ -174,6 +180,7 @@ void dfs(uint64_t *allocated, uint64_t *root)
 
 void rukaml_gc_compact(uint64_t rsp)
 {
+  assert(false);
   assert(GC.ebp > rsp);
   log("=== %s. EBP=0x%lX, RSP=0x%lX\n", __func__, GC.ebp, rsp);
   log("stack width = 0x%lX / 8\n", GC.ebp - rsp);
@@ -386,18 +393,38 @@ void *rukaml_alloc_pair(void *l, void *r)
   log("A pair %lX created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
   return rez + 1;
 }
-
+//0x55555555F2A0 - 0x55555565F2A0
 void *rukaml_alloc_block(int64_t size, uint8_t tag)
 {
+  static size_t call_count = 0;
+  call_count++;
+
   if (GC.allocated_words + size + 1 > HEAP_SIZE)
   {
     fprintf(stderr, "Not enough memory\n");
     exit(1);
   }
-  uint64_t *rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
+  uint64_t *rez = ((uint64_t **)(GC.main_bank + GC.allocated_words ));
+  assert(is_old_bank(rez));
+  printf("call_count = %d\n", call_count);
+  // if (call_count >= 311) {
+    // printf("GOING TO CRASH\n");
+    printf("main_bank = 0x%LX, rez = 0x%LX, bank_fin = 0x%LX, size = %ld\n", GC.main_bank, rez, GC.main_bank_fin, size);
+  // }
+
   GC.allocated_words += size + 1;
   GC.stats.gs_allocated_words += size + 1;
+  // if (call_count >= 318) {
+  //   assert( GC.main_bank < rez);
+  //   assert( rez < GC.main_bank_fin);
+  //   printf("%s %d\n", __func__, __LINE__);
+  //   printf("rez[0] = %LX\n", rez[0]);
+    printf("%s %d\n", __func__, __LINE__);
+  //   printf("rez[1] = %LX\n", rez[1]);
+  // }
   rez[0] = (uint64_t *)HEADER(size, tag);
+  // if (call_count >= 318)
+    printf("%s %d\n", __func__, __LINE__);
   uint64_t *ans = &rez[1];
   assert(TAG(ans) == tag);
   assert(SIZE(ans) == size);
@@ -925,6 +952,24 @@ void *rukaml_fprintf_wrap(DECLARE_FAKE_ARGS, void *out_channel, void **fmt, ...)
   return NULL;
 }
 
+void pp_string_as_HEX(char* str) {
+  printf("HEX_string:\n");
+  for (size_t i=0; i< strlen(str); ++i) {
+    switch(str[i]) {
+    case '\n':
+      printf(" \\n %X", (unsigned) str[i]);
+      break;
+    case ' ':
+      printf(" ' ' %X", (unsigned) str[i]);
+      break;
+    default:
+      printf("  %c 0x%X", str[i], (unsigned) str[i]);
+    }
+  }
+
+  printf("\n");
+}
+
 // arity stands for amount of arguments which fprintf (or other format printer) expects after a format string
 // for example, arity for "123" is equal to 0, for "%a" is equal to 2, for "%a %s" is equal to 3
 uint64_t eval_fmt_arity(void **fmt)
@@ -935,7 +980,10 @@ uint64_t eval_fmt_arity(void **fmt)
   }
   assert(TAG(fmt) == String_tag);
 
+
   uint64_t fmt_len = rukaml_string_len_imm(fmt);
+  log("\n%s len = %d\n", __func__, fmt_len);
+  // pp_string_as_HEX(fmt);
 
   uint64_t arity_acc = 0;
 
