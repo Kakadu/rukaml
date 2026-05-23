@@ -1125,6 +1125,65 @@ iterate:
 |}
 ;;
 
+let prepare_string_lit_init ppf anf =
+  let () =
+    let iter =
+      { ANF.default_iterator with
+        cconst_string = (fun _ s -> String_lit_hash.extend s string_list_hash)
+      }
+    in
+    List.iter (fun (_, _, e) -> iter.on_expr iter e) anf
+  in
+  let assembly_a_string ppf s =
+    if String.for_all (fun c -> Char.code c < 128) s
+    then printfn ppf ".asciz %S" s
+    else (
+      let len = String.length s in
+      let classify c = if Char.code c < 128 then `letter else `weird in
+      let add_weird buf ch = Printf.bprintf buf ".byte 0x%X\n" (Char.code ch) in
+      let rec loop i acc =
+        if i < len
+        then (
+          match classify s.[i], acc with
+          | `letter, `Letter buf ->
+            Buffer.add_char buf s.[i];
+            loop (i + 1) acc
+          | `weird, `Letter buf ->
+            printfn ppf ".ascii \"%s\"" (Buffer.contents buf);
+            let buf = Buffer.create 22 in
+            add_weird buf s.[i];
+            loop (i + 1) (`Weird buf)
+          | `weird, `Weird buf ->
+            add_weird buf s.[i];
+            loop (i + 1) acc
+          | `letter, `Weird buf ->
+            printfn ppf "%s" (Buffer.contents buf);
+            let buf = Buffer.create 20 in
+            Buffer.add_char buf s.[i];
+            loop (i + 1) (`Letter buf))
+        else (
+          match acc with
+          | `Letter buf -> printfn ppf ".asciz \"%s\"" (Buffer.contents buf)
+          | `Weird buf -> printfn ppf "%s" (Buffer.contents buf))
+      in
+      loop 0 (`Letter (Buffer.create 20)))
+  in
+  printfn ppf ".data";
+  let lit_name n = sprintf "STRING_LIT_%d" n in
+  let rukaml_val_loc n = sprintf "my_STRING_LIT_%d" n in
+  iter_string_lit_hash (fun k v ->
+    printfn ppf "STRING_LIT_%d: %a" v assembly_a_string k;
+    printfn ppf ".equ STRING_LIT_%d_len, %d" v (1 + String.length k));
+  printfn ppf ".align 3   # Align to 8-byte boundary (2^3)";
+  iter_string_lit_hash (fun k v -> printfn ppf "my_STRING_LIT_%d: .quad 0x0 # '%S'" v k);
+  fun () ->
+    iter_string_lit_hash (fun _k v ->
+      emit lla a0 (lit_name v);
+      emit call "rukaml_make_string_of_lit";
+      emit lla t1 (rukaml_val_loc v);
+      emit sd a0 (ROffset (Temp_reg 1, 0)))
+;;
+
 module String_set = Set.Make (String)
 
 let codegen ?(wrap_main_into_start = true) anf file =
@@ -1146,31 +1205,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
   in
   Stdio.Out_channel.with_file file ~f:(fun ch ->
     let ppf = Format.formatter_of_out_channel ch in
-    let do_string_init =
-      let () =
-        let iter =
-          { ANF.default_iterator with
-            cconst_string = (fun _ s -> String_lit_hash.extend s string_list_hash)
-          }
-        in
-        List.iter (fun (_, _, e) -> iter.on_expr iter e) anf
-      in
-      printfn ppf ".data";
-      let lit_name n = sprintf "STRING_LIT_%d" n in
-      let rukaml_val_loc n = sprintf "my_STRING_LIT_%d" n in
-      iter_string_lit_hash (fun k v ->
-        printfn ppf "STRING_LIT_%d: .asciz %S" v k;
-        printfn ppf ".equ STRING_LIT_%d_len, %d" v (1 + String.length k));
-      printfn ppf ".align 3   # Align to 8-byte boundary (2^3)";
-      iter_string_lit_hash (fun k v ->
-        printfn ppf "my_STRING_LIT_%d: .quad 0x0 # '%S'" v k);
-      fun () ->
-        iter_string_lit_hash (fun _k v ->
-          emit lla a0 (lit_name v);
-          emit call "rukaml_make_string_of_lit";
-          emit lla t1 (rukaml_val_loc v);
-          emit sd a0 (ROffset (Temp_reg 1, 0)))
-    in
+    let do_string_init = prepare_string_lit_init ppf anf in
     (* externs *)
     let __ () =
       List.iter
