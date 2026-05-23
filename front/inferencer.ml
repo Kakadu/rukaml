@@ -952,6 +952,7 @@ let start_env =
           (tarrow (format3_typ ~arg_ty ~dest_ty:out_channel_typ ~out_ty:unit_typ) arg_ty))
   |> extend_s
        "sprintf"
+       ~kind:(Builtin ("sprintf", 1))
        (let arg_ty = tv 0 ~level:(-1) in
         (* forall '_0 . ('_0, unit, string) format3 -> '_0 *)
         Scheme.scheme

@@ -948,6 +948,10 @@ let generate_body is_toplevel body =
       on_arg a2 arg2;
       emit call "rukaml_array_set_sysv";
       emit sd_dest a0 dest
+    | CApp (APrimitive ("sprintf", 1), AVar arg0, []) ->
+      emit ld a0 (pp_to_mach arg0);
+      emit call "rukaml_alloc_sprintf_closure_sysv";
+      emit sd_dest a0 dest
     | CApp (APrimitive ("printf", 1), AVar arg0, []) ->
       emit ld a0 (pp_to_mach arg0);
       emit call "rukaml_alloc_printf_closure0";
