@@ -163,5 +163,6 @@ tuples
 
   $ run << EOF
   > let rec (a,b) = (a,b)
+  > EOF
   infer error: Only variables are allowed as left-hand side of `let rec'
   [1]

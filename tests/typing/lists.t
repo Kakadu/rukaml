@@ -22,6 +22,7 @@
   >   | hd :: tl ->
   >     let tl = filter pred tl in
   >     if pred hd then tl else hd :: tl
+  > EOF
   let rec map: ('_3 -> '_4) -> '_3 list -> '_4 list =
     fun f ls -> match ls with
                   | [] -> []
@@ -63,7 +64,8 @@
   >     | hd :: tl, acc -> aux tl (hd :: acc)
   >    in
   >  aux (rev xs) ys   
-  let aux: '_3 list -> '_3 list -> '_3 list =
+  > EOF
+  let rec aux: '_3 list -> '_3 list -> '_3 list =
     fun ls acc -> match ls with
                     | [] -> acc
                     | hd :: tl -> (aux tl) (hd :: acc)
@@ -74,7 +76,7 @@
                    | ([], _) -> []
                    | (_, []) -> []
                    | (xhd :: xtl, yhd :: ytl) -> (xhd, yhd) :: ((join xtl) ytl)
-  let aux: '_3 list -> '_3 list -> '_3 list =
+  let rec aux: '_3 list -> '_3 list -> '_3 list =
     fun xs ys -> match (xs, ys) with
                    | ([], acc) -> acc
                    | (hd :: tl, acc) -> (aux tl) (hd :: acc)
@@ -99,6 +101,7 @@
   >   match ls with
   >   | [] -> true
   >   | hd :: tl -> if pred hd then forall pred tl else false
+  > EOF
   let is_empty: '_3 list -> bool =
     fun ls -> match ls with
                 | _ :: _ -> false
@@ -119,6 +122,7 @@
   >   match ls with
   >   | [] -> 0
   >   | _ :: xs -> 1 + len xs
+  > EOF
   let len: '_2 list -> int =
     fun ls -> match ls with
                 | [] -> 0
@@ -133,6 +137,7 @@
   >   | x :: xs, y :: ys ->
   >     if item_eq x y then equal item_eq xs ys else false
   >   | _ -> false
+  > EOF
   let rec equal: ('_4 -> '_5 -> bool) -> '_4 list -> '_5 list -> bool =
     fun item_eq a b -> match (a, b) with
                          | ([], []) -> true
@@ -148,6 +153,7 @@
   >   | x :: xs ->
   >     let tail = skip (n - 1) xs in
   >       if n > 0 then x :: tail else tail
+  > EOF
   let rec skip: int -> '_4 list -> '_4 list =
     fun n ls -> match ls with
                   | [] -> []
@@ -161,6 +167,7 @@
   >   match ls with
   >   | [] -> []
   >   | x :: xs -> if n < 1 then [] else x :: take (n - 1) xs
+  > EOF
   let rec take: int -> '_4 list -> '_4 list =
     fun n ls -> match ls with
                   | [] -> []

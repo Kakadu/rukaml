@@ -96,6 +96,7 @@ value binding
   > match (x, y) with
   > | (x, y) -> (x, y)
   > | _ -> (y, x)
+  > EOF
   Parsed: (match (x, y) with
             | (x, y) -> (x, y)
             | _ -> (y, x))
@@ -107,6 +108,7 @@ value binding
   > | (f, (f, s)) -> 2
   > | (f, s) -> 1
   > | s -> 0
+  > EOF
   Parsed: (match e with
             | (f, (f, (f, (f, s)))) -> 4
             | (f, (f, (f, s))) -> 3
@@ -118,6 +120,7 @@ value binding
   > | One x -> 1
   > | Two (x, y) -> 2
   > | Three (x, y, z) -> 3
+  > EOF
   Parsed: (match x with
             | One (x) -> 1
             | Two ((x, y)) -> 2
@@ -126,6 +129,7 @@ value binding
   $ cat << EOF | ./run.exe -e -
   > match x with
   > | _ -> if x then y else z
+  > EOF
   Parsed: (match x with
             | _ -> (if x then y else z))
 
@@ -136,6 +140,7 @@ value binding
   > else 
   >   match z with
   >   | _ -> Z
+  > EOF
   Parsed: (if x then match y with
                        | _ -> y else match z with
                                        | _ -> Z)
@@ -144,6 +149,7 @@ value binding
   > match f x with
   > | Some x -> g x
   > | None -> a b c
+  > EOF
   Parsed: (match f x with
             | Some (x) -> (g x)
             | None -> (a b c))
@@ -155,6 +161,7 @@ value binding
   >   match y with
   >   | C -> c
   >   | D -> d
+  > EOF
   Parsed: (match x with
             | A -> a
             | B -> (match y with
@@ -168,6 +175,7 @@ value binding
   >    | C -> c
   >    | D -> d)
   > | B -> b
+  > EOF
   Parsed: (match x with
             | A -> (match y with
                      | C -> c
@@ -178,6 +186,7 @@ value binding
   $ cat << EOF | ./run.exe -e -
   > match (match () with _ -> ()) with
   > | _ -> ()
+  > EOF
   Parsed: (match match () with
                    | _ -> () with
             | _ -> ())
@@ -185,10 +194,12 @@ value binding
   $ cat << EOF | ./run.exe -e -
   > match (if x then y else z) with
   > | _ -> ()
+  > EOF
   Parsed: (match if x then y else z with
             | _ -> ())
 
   $ cat << EOF | ./run.exe -e -
   > if (match x with _ -> ()) then 1 else 2
+  > EOF
   Parsed: (if match x with
                 | _ -> () then 1 else 2)

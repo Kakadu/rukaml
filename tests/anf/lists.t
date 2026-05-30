@@ -7,6 +7,7 @@
   >   match ls with
   >   | [] -> 0
   >   | _ -> 1
+  > EOF
   let is_empty ls =
     let temp1 = ls in
       let temp2 = get_tag temp1  in
@@ -19,6 +20,7 @@
   >   match ls with
   >   | [] -> 0
   >   | _ :: xs -> 1 + len xs
+  > EOF
   let len ls =
     let temp1 = ls in
       let temp8 = get_tag temp1  in
@@ -38,6 +40,7 @@
   >   match ls with
   >   | [] -> []
   >   | hd :: tl -> f hd :: map f tl
+  > EOF
   let rec map f ls =
     let temp1 = ls in
       let temp11 = get_tag temp1  in
@@ -57,6 +60,7 @@
   >   match ls with
   >   | [] -> acc
   >   | hd :: tl -> fold f (f acc hd) tl
+  > EOF
   let rec fold f acc ls =
     let temp1 = ls in
       let temp11 = get_tag temp1  in
@@ -79,6 +83,7 @@
   >   | x :: xs, y :: ys ->
   >     if item_eq x y then equal item_eq xs ys else false
   >   | _ -> false
+  > EOF
   let rec equal item_eq a b =
     let temp2 = (a, b) in
       let temp19 = get_arg 0 temp2 in
@@ -87,7 +92,7 @@
           then let temp20 = get_arg 1 temp2 in
                  let temp21 = get_tag temp20  in
                    (if (temp21 = 0)
-                   then true
+                   then 1
                    else let temp9 = get_arg 0 temp2 in
                           let temp17 = get_tag temp9  in
                             (if (temp17 = 1)
@@ -102,9 +107,9 @@
                                                     let temp4 = temp3 y  in
                                                       (if temp4
                                                       then equal item_eq xs ys
-                                                      else false)
-                                         else false)
-                            else false))
+                                                      else 0)
+                                         else 0)
+                            else 0))
           else let temp9 = get_arg 0 temp2 in
                  let temp17 = get_tag temp9  in
                    (if (temp17 = 1)
@@ -119,9 +124,9 @@
                                            let temp4 = temp3 y  in
                                              (if temp4
                                              then equal item_eq xs ys
-                                             else false)
-                                else false)
-                   else false))
+                                             else 0)
+                                else 0)
+                   else 0))
 
 
   $ run << EOF
@@ -129,18 +134,19 @@
   >   match ls with
   >   | [] -> false
   >   | hd :: tl -> if pred hd then true else exists pred tl
+  > EOF
   let rec exists pred ls =
     let temp1 = ls in
       let temp10 = get_tag temp1  in
         (if (temp10 = 0)
-        then false
+        then 0
         else let temp8 = get_tag temp1  in
                (if (temp8 = 1)
                then let hd = get_arg 0 temp1 in
                       let tl = get_arg 1 temp1 in
                         let temp2 = pred hd  in
                           (if temp2
-                          then true
+                          then 1
                           else exists pred tl)
                else match_failure))
 
@@ -149,11 +155,12 @@
   >   match ls with
   >   | [] -> true
   >   | hd :: tl -> if pred hd then forall pred tl else false
+  > EOF
   let rec forall pred ls =
     let temp1 = ls in
       let temp10 = get_tag temp1  in
         (if (temp10 = 0)
-        then true
+        then 1
         else let temp8 = get_tag temp1  in
                (if (temp8 = 1)
                then let hd = get_arg 0 temp1 in
@@ -161,7 +168,7 @@
                         let temp2 = pred hd  in
                           (if temp2
                           then forall pred tl
-                          else false)
+                          else 0)
                else match_failure))
 
 
@@ -172,6 +179,7 @@
   >   | _, [] -> []
   >   | xhd :: xtl, yhd :: ytl ->
   >     (xhd, yhd) :: join xtl ytl
+  > EOF
   let rec join xs ys =
     let temp2 = (xs, ys) in
       let temp23 = get_arg 0 temp2 in
@@ -216,7 +224,8 @@
   >     | hd :: tl, acc -> aux tl (hd :: acc)
   >    in
   >  aux (rev xs) ys  
-  let aux ls acc =
+  > EOF
+  let rec aux ls acc =
     let temp1 = ls in
       let temp9 = get_tag temp1  in
         (if (temp9 = 0)
@@ -225,14 +234,13 @@
                (if (temp7 = 1)
                then let hd = get_arg 0 temp1 in
                       let tl = get_arg 1 temp1 in
-                        let temp2 = aux tl  in
-                          let temp3 = (Constr_1 (hd, acc)) in
-                            temp2 temp3 
+                        let temp3 = (Constr_1 (hd, acc)) in
+                          aux tl temp3
                else match_failure))
   let rev ls =
     let temp12 = Constr_0 in
       aux ls temp12
-  let aux xs ys =
+  let rec aux xs ys =
     let temp15 = (xs, ys) in
       let temp25 = get_arg 0 temp15 in
         let temp27 = get_tag temp25  in
@@ -257,6 +265,7 @@
   >   | [] -> []
   >   | x :: xs ->
   >     if n = 0 then [] else x :: take (n - 1) xs
+  > EOF
   let rec take n ls =
     let temp1 = ls in
       let temp14 = get_tag temp1  in
