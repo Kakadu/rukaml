@@ -481,6 +481,8 @@ let rec check_pat ~level env table = function
   | Parsetree.PConst (PConst_int n) -> return (env, Tpat_const (PConst_int n), int_typ)
   | Parsetree.PConst (PConst_bool b) -> return (env, Tpat_const (PConst_bool b), bool_typ)
   | Parsetree.PConst (PConst_char c) -> return (env, Tpat_const (PConst_char c), char_typ)
+  | Parsetree.PConst (PConst_string s) ->
+    return (env, Tpat_const (PConst_string s), string_typ)
   | Parsetree.PVar x ->
     let* tx = fresh_var ~level in
     let xident = Ident.of_string x in
@@ -612,6 +614,54 @@ let restrict : restriction_state -> weak_table -> ty -> ty t =
   return @@ helper t
 ;;
 
+(* TODO : make it faster *)
+let infer_format3_of_string ~level s =
+  let* out_ty = fresh_var ~level in
+  let* dest_ty = fresh_var ~level in
+  let rec helper chs acc_ty =
+    match chs with
+    | [] -> return acc_ty
+    | 'd' :: '%' :: tl -> helper tl (tarrow int_typ acc_ty)
+    | 'b' :: '%' :: tl -> helper tl (tarrow bool_typ acc_ty)
+    | 'c' :: '%' :: tl -> helper tl (tarrow char_typ acc_ty)
+    | 's' :: '%' :: tl -> helper tl (tarrow string_typ acc_ty)
+    | 'a' :: '%' :: tl ->
+      let* fresh = fresh_var ~level in
+      helper tl (tarrow (tarrow dest_ty (tarrow fresh out_ty)) (tarrow fresh acc_ty))
+    | '%' :: '%' :: tl -> helper tl acc_ty
+    | _ :: '%' :: _ -> fail (`InvalidFormatString s)
+    | _ :: tl -> helper tl acc_ty
+  in
+  let* arg_ty = helper (List.rev (String.to_list s)) out_ty in
+  let ty = format3_typ ~arg_ty ~out_ty ~dest_ty in
+  let expr = TFormat (s, ty) in
+  return (ty, expr)
+;;
+
+let expects_format3 ty =
+  match type_without_links ty with
+  | { typ_desc = Arrow ({ typ_desc = TConstr (_, "format3") }, _) } -> true
+  | _ -> false
+;;
+
+(* context that determines the type assigned to string literals.
+   the default is TypeString.
+   context changes during inference of formatted output primitives' arguments. *)
+type string_inference_mode =
+  | TypeString
+  | TypeFormat3
+
+type inferencer_state =
+  { restriction_state : restriction_state
+  ; infer_strings_as : string_inference_mode
+  }
+
+(** sometimes the context needs to be reset.
+   for example, to correctly infer strings inside tuples/arrays/adts: [ fprintf "%a" pp_string_list  [ "string1"; "string2" ] ] *)
+let clean_state { restriction_state; _ } =
+  { restriction_state; infer_strings_as = TypeString }
+;;
+
 let infer env table expr =
   let current_level = ref 1 in
   let enter_level () =
@@ -624,7 +674,7 @@ let infer env table expr =
   in
   let rec (helper
             : Type_env.t
-              -> restriction_state
+              -> inferencer_state
               -> Parsetree.expr
               -> (ty * Typedtree.expr) R.t)
     =
@@ -655,6 +705,7 @@ let infer env table expr =
         return (typ, TVar (x, Type_env.ident_of_string x env, kind, typ))
       | EUnit -> return (unit_typ, TUnit)
       | Parsetree.EArray r ->
+        let state = clean_state state in
         (match r with
          | [] ->
            let* ty = fresh_var ~level:!current_level in
@@ -676,28 +727,29 @@ let infer env table expr =
            (* log "ty = %a" pp_ty ty; *)
            return (ty, TArray (exprs, ty)))
       (* lambda abstraction *)
-      | ELam (PVar x, e1) ->
-        let* tx = fresh_var ~level:!current_level in
-        let xID = Ident.of_string x in
-        let env = Type_env.extend ~varname:x xID (S (Var_set.empty, tx)) env in
-        let* ty, tbody = helper env DoNothing e1 in
-        (* log "ta = %a" pp_ty ta; *)
-        let trez = elim table @@ tarrow tx ty in
-        return (trez, TLam (Tpat_var xID, tbody, trez))
-      | Parsetree.ELam ((PTuple _ as pat), body) ->
+        let state = clean_state state in
         let* env, pat, tp = check_pat ~level:!current_level env table pat in
         let* ty, tbody = helper env DoNothing body in
         let trez = elim table @@ tarrow tp ty in
         return (trez, TLam (pat, tbody, trez))
       | EApp (e1, e2) ->
+        let state = clean_state state in
         let* t1, te1 = helper env state e1 in
-        let* t2, te2 = helper env state e2 in
+        let* t2, te2 =
+          helper
+            env
+            { state with
+              infer_strings_as =
+                (if t1 |> expects_format3 then TypeFormat3 else TypeString)
+            }
+            e2
+        in
         let* tv = fresh_var ~level:0 in
         (* log "t1 = %a" pp_ty t1; *)
         (* log "t2 = %a" pp_ty t2; *)
         (* log "tv = %a" pp_ty tv; *)
         let* () = unify table t1 (tarrow t2 tv) in
-        let* tv = restrict state table tv in
+        let* tv = restrict state.restriction_state table tv in
         let tv = elim table tv in
         (* log "t1 = %a" pp_ty t1; *)
         (* log "t2 = %a" pp_ty t2; *)
@@ -706,8 +758,12 @@ let infer env table expr =
       | EConst (PConst_int _n as c) -> return (int_typ, TConst c)
       | EConst (PConst_char _c as c) -> return (char_typ, TConst c)
       | EConst (PConst_bool _b as c) -> return (bool_typ, TConst c)
+      | EConst (PConst_string _s as c) ->
+        (match state.infer_strings_as with
+         | TypeString -> return (string_typ, TConst c)
+         | TypeFormat3 -> infer_format3_of_string ~level:!current_level _s)
       | Parsetree.EIf (c, th, el) ->
-        let* t1, tc = helper env state c in
+        let* t1, tc = helper env (clean_state state) c in
         let* t2, tth = helper env state th in
         let* t3, tel = helper env state el in
         let* () = unify table t1 bool_typ in
@@ -715,6 +771,7 @@ let infer env table expr =
         let t2 = elim table t2 in
         return (t2, TIf (tc, tth, tel, t2))
       | ETuple (a, b, es) ->
+        let state = clean_state state in
         let* ta, ea = helper env state a in
         let* tb, eb = helper env state b in
         let* typs, exprs =
@@ -729,7 +786,7 @@ let infer env table expr =
         return (tup_typ, TTuple (ea, eb, exprs, tup_typ))
       | Parsetree.ELet (NonRecursive, PVar x, rhs, e2) ->
         enter_level ();
-        let* t1, typed_rhs = helper env state rhs in
+        let* t1, typed_rhs = helper env (clean_state state) rhs in
         leave_level ();
         let t2 = generalize ~level:!current_level t1 in
         let x_ident = Ident.of_string x in
@@ -743,7 +800,7 @@ let infer env table expr =
         let f_ident = Ident.of_string f in
         let* t1, typed_rhs =
           let env = Type_env.extend ~varname:f f_ident (S (Var_set.empty, tf)) env in
-          helper env state erhs
+          helper env (clean_state state) erhs
         in
         leave_level ();
         let* () = unify table tf t1 in
@@ -759,12 +816,12 @@ let infer env table expr =
       | ELet (NonRecursive, (PTuple _ as pat), rhs, wher) ->
         let* env, pat, tp = check_pat ~level:!current_level env table pat in
         let* _ty, tbody = helper env state rhs in
-        let* () = unify table tp _ty in
+        let* rhs_ty, rhs = helper env (clean_state state) rhs in
         let* twher, typed_wher = helper env state wher in
         let twher = elim table twher in
         return (twher, TLet (NonRecursive, pat, Scheme.make_mono _ty, tbody, typed_wher))
       | EMatch (expr, ((p1, e1), cases)) ->
-        let* expr_ty, expr = helper env state expr in
+        let* expr_ty, expr = helper env (clean_state state) expr in
         let* env1, p1, pty = check_pat ~level:!current_level env table p1 in
         let* () = unify table pty expr_ty in
         let* ety, e1 = helper env1 state e1 in
