@@ -268,11 +268,20 @@ type dispatch =
   { prio : dispatch -> expr t
   ; expr_basic : dispatch -> expr t
   ; expr_long : dispatch -> expr t
+  ; expr_tuple : dispatch -> expr t
   ; expr : dispatch -> expr t
   }
 
 let pack : dispatch =
   let open Format in
+  let expr_tuple d =
+    let* () = ws *> trace_pos "expr_tuple" in
+    let* x1 = d.prio d in
+    return (fun x2 xs -> etuple x1 x2 xs)
+    <*> ws *> char ',' *> d.prio d
+    <*> many (ws *> char ',' *> d.prio d)
+    <|> return x1
+  in
   let prio d =
     ws
     *> fix (fun _self ->
