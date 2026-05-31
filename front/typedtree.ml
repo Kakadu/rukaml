@@ -283,15 +283,18 @@ module TypeEnv = struct
   ;;
 
   let env_with_base_types =
-    let env =
-      Base.List.fold
-        ~init:empty
-        ~f:add_type
-        [ typ_unit; typ_int; typ_bool; typ_array; TypeList.typ_list ]
-    in
-    Base.List.fold
-      ~init:env
-      ~f:add_constructor
-      [ TypeList.constr_nil; TypeList.constr_cons ]
+    empty
+    |> add_type typ_unit
+    |> add_type typ_int
+    |> add_type typ_bool
+    |> add_type typ_char
+    |> add_type typ_string
+    |> add_type typ_array
+    |> add_type typ_in_channel
+    |> add_type typ_out_channel
+    |> add_type TypeList.typ_list
+    |> add_constructor TypeList.constr_nil
+    |> add_constructor TypeList.constr_cons
+    |> add_type typ_format3
   ;;
 end
