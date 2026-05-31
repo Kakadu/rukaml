@@ -501,42 +501,55 @@ let type_params =
 ;;
 
 let type_kind_variants =
-  let parse_variant =
-    let* name = ws *> char '|' *> ws *> constructor_name in
-    (let* ct = ws *> keyword "of" *> ws *> core_type in
-     return (name, Some ct))
-    <|> return (name, None)
+  let variant =
+    let* name = ws *> constructor_name in
+    (let* () = ws *> keyword "of" in
+     let* args = sep_by1 (ws *> char '*') core_type_constr_arg in
+     return (name, args))
+    <|> return (name, [])
   in
-  many parse_variant
-  >>= function
-  | var :: vars -> return (KVariants (var, vars))
-  | _ -> fail "is not variants"
+  let* pty_params = ws *> type_params in
+  let* pty_name = ws *> type_name in
+  let* () = ws <* char '=' in
+  let* v1 = variant <|> ws *> char '|' *> variant in
+  let* vs = many (ws *> char '|' *> variant) in
+  return { pty_name; pty_params; pty_kind = Ptype_variant (v1, vs); pty_manifest = None }
 ;;
 
-let type_kind_alias = ws *> core_type >>| fun core_type -> KAbstract (Some core_type)
-let type_kind = ws *> (type_kind_variants <|> type_kind_alias)
+let type_kind_alias =
+  let* pty_params = ws *> type_params in
+  let* pty_name = ws *> type_name in
+  let* () = ws <* char '=' in
+  let* pty_manifest = core_type_alias >>| Option.some in
+  return { pty_name; pty_params; pty_kind = Ptype_abstract; pty_manifest }
+;;
+
+let type_kind_abstract =
+  let* pty_params = ws *> type_params in
+  let* pty_name = ws *> type_name in
+  return { pty_name; pty_params; pty_kind = Ptype_abstract; pty_manifest = None }
+;;
 
 let single_type_declaration =
-  let* params = ws *> type_params in
-  let* name = ws *> type_name in
-  let* kind = ws *> char '=' *> ws *> type_kind in
-  return { pty_params = params; pty_name = name; pty_kind = kind }
+  choice [ type_kind_variants; type_kind_alias; type_kind_abstract ]
 ;;
 
 let type_declaration =
-  ws
-  *> string "type"
-  *>
+  let* () = ws <* string "type" in
   let* frst = ws *> single_type_declaration in
   let* rest = many (ws *> string "and" *> single_type_declaration) in
   return (frst, rest)
 ;;
 
 let value_binding = letdef (pack.expr pack) <* ws
+let skip_separator = option () (ws *> string ";;" *> return ())
 
 let structure =
   many1
-    (value_binding >>| (fun vb -> SValue vb) <|> (type_declaration >>| fun td -> SType td))
+    (value_binding
+     >>| (fun vb -> Pstr_value vb)
+     <|> (type_declaration >>| fun td -> Pstr_type td)
+     <* skip_separator)
 ;;
 
 let parse_structure str =
