@@ -74,20 +74,24 @@ let rec pp_pattern ppf = function
       (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " ") pp_pattern)
       rest
   | Tpat_any -> fprintf ppf "_"
-  | Tpat_constr (ident, None) -> fprintf ppf "%s" ident.hum_name
-  | Tpat_constr (ident, Some (Tpat_tuple (head, tail, [])))
+  | Tpat_constr (ident, []) -> fprintf ppf "%s" ident.hum_name
+  | Tpat_constr (ident, [ head; tail ])
   (* syntactic sugar for lists *)
     when Ident.equal ident cons_ident ->
     let rec aux acc = function
-      | Tpat_constr (ident, Some (Tpat_tuple (hd, tl, [])))
-        when Ident.equal ident cons_ident -> aux (hd :: acc) tl
-      | Tpat_constr (ident, None) when Ident.equal ident nil_ident ->
+      | Tpat_constr (ident, [ hd; tl ]) when Ident.equal ident cons_ident ->
+        aux (hd :: acc) tl
+      | Tpat_constr (ident, []) when Ident.equal ident nil_ident ->
         Pprint.pp_cons_brackets ppf head ~pp_item:pp_pattern (List.rev acc)
       | _ as exp ->
         Pprint.pp_cons_semicolons ppf ~pp_item:pp_pattern head (List.rev (exp :: acc))
     in
     aux [] tail
-  | Tpat_constr (ident, Some patt) -> fprintf ppf "%s %a" ident.hum_name pp_pattern patt
+  | Tpat_constr (ident, [ arg ]) -> fprintf ppf "%s %a" ident.hum_name pp_pattern arg
+  | Tpat_constr (ident, args) ->
+    fprintf ppf "@[%s (" ident.hum_name;
+    pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp_pattern ppf args;
+    fprintf ppf ")@]"
 ;;
 
 let pp_expr =
@@ -176,22 +180,31 @@ let pp_expr =
       if pars
       then fprintf ppf "(@[<v 2>%a@])" pp_match ()
       else fprintf ppf "@[<v 2>%a@]" pp_match ()
-    | TConstruct (ident, None, _ty) -> fprintf ppf "%s" ident.hum_name
-    | TConstruct (ident, Some (TTuple (head, tail, [], _)), _ty)
+    | TConstruct (ident, [], _ty) -> fprintf ppf "%s" ident.hum_name
+    | TConstruct (ident, [ arg ], _ty) ->
+      fprintf ppf (if pars then "(%s %a)" else "%s %a") ident.hum_name expr arg
+    | TConstruct (ident, [ head; tail ], _ty)
     (* syntactic sugar for lists *)
       when Ident.equal ident cons_ident ->
       let rec aux ppf acc = function
-        | TConstruct (ident, Some (TTuple (hd, tl, [], _)), _)
-          when Ident.equal ident cons_ident -> aux ppf (hd :: acc) tl
-        | TConstruct (ident, None, _) when Ident.equal ident nil_ident ->
+        | TConstruct (ident, [ hd; tl ], _) when Ident.equal ident cons_ident ->
+          aux ppf (hd :: acc) tl
+        | TConstruct (ident, [], _) when Ident.equal ident nil_ident ->
           Pprint.pp_cons_brackets ppf head ~pp_item:expr_no (List.rev acc)
         | _ as exp ->
           Pprint.pp_cons_semicolons ppf ~pp_item:expr ~pars head (List.rev (exp :: acc))
       in
       aux ppf [] tail
+    | TConstruct (ident, args, _ty) ->
+      fprintf ppf (if pars then "@[(" else "@[");
+      fprintf ppf "%s (" ident.hum_name;
+      pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") expr_no ppf args;
+      fprintf ppf ")";
+      fprintf ppf (if pars then ")@]" else "@]")
     | TConstruct (ident, Some arg, _ty) ->
       fprintf ppf (if pars then "(%s %a)" else "%s %a") ident.hum_name expr arg
   and pp_typ = pp_typ_hum
+  and pp_typ = pp_typ_hum ~parens:false
   and pp_pat ppf s = fprintf ppf "%a" pp_pattern s
   and expr ppf = expr_gen ~pars:true ppf
   and expr_no ppf = expr_gen ~pars:false ppf in
