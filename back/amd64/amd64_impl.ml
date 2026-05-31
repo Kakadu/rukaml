@@ -310,7 +310,8 @@ let generate_body is_toplevel ppf body =
       | AConstruct _ -> assert false
       | APrimitive _ as arg -> failwiths "Primitive %a is not supported" ANF.pp_a arg
       | ATuple _ -> assert false
-      | AArray _ -> assert false);
+      | AArray _ -> assert false
+      | _ -> failwith "not implemented");
     count + _stack_padding
   in
   let rec helper dest = function
@@ -517,7 +518,8 @@ let generate_body is_toplevel ppf body =
        | ATuple (_, _, _)
        | AArray _
        | ALam (_, _)
-       | AUnit -> failwith "Should not happen")
+       | AUnit -> failwith "Should not happen"
+       | _ -> failwith "not implemented")
     | CApp (APrimitive ("=", 2), AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
       if l = r
       then printfn ppf "  mov qword %a, 1" pp_dest dest
@@ -609,7 +611,7 @@ let generate_body is_toplevel ppf body =
          | op -> failwiths "not_implemeted  %S. %d" op __LINE__);
       printfn ppf "  mov %a, r11" pp_dest dest
       (* TODO: Maybe move this specialization to the case below  *)
-    | CApp (AVar f, arg1, args) as cexpr when Option.is_some (is_toplevel f) ->
+    | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
       (* Callig a rukaml function uses custom calling convention.
            CDECL convention: all arguments on stack, LTR *)
       let expected_arity = Option.get (is_toplevel f) in

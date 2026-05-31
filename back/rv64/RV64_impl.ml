@@ -398,6 +398,7 @@ let generate_body is_toplevel body =
       | ATuple _ -> assert false
       | AArray _ -> assert false
       | AConstruct _ -> assert false
+      | _ -> failwith "not implemented"
     in
     ListLabels.iteri args ~f:on_arg;
     (* printfn ppf "  addi sp, sp, -8*%d # fun %S arguments" count (Option.get f); *)
@@ -524,7 +525,8 @@ let generate_body is_toplevel body =
        | AArray _ | AVar _ | APrimitive _ | AConstruct _
        | ATuple (_, _, _)
        | ALam (_, _)
-       | AUnit -> failwith "Should not happen: print_int")
+       | AUnit -> failwith "Should not happen: print_int"
+       | _ -> failwith "not implemented")
     | CApp (AVar f, arg1, [])
       when f.Ident.hum_name = "length"
            && is_toplevel f = None
