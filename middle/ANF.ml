@@ -616,7 +616,10 @@ let anf =
         __LINE__
         Pprinttyped.pp_hum
         m
-    | TConstruct (ident, [], _) -> k (AConstruct (ident.id, []))
+    | TConstruct (ident, [], _) ->
+      let name = gensym_id () in
+      let rhs = CAtom (AConstruct (ident.id, [])) in
+      make_let_nonrec name rhs (k (AVar name))
     | TConstruct (ident, args, _) ->
       let rec aux = function
         | hd :: tl, acc -> helper hd (fun x -> aux (tl, x :: acc))
