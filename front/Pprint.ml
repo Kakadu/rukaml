@@ -36,33 +36,79 @@ let pp_cons_semicolons ppf ~pp_item ?(pars = false) hd tl =
   if pars then fprintf ppf ")"
 ;;
 
-let rec pp_pattern ppf = function
+(** TODOs:
+    omit parens in [ let (Some x) = ... ] and dont omit in [ let f (Some x) = ... ]
+    omit parens in [ let (x, y) = ... ] and dont omit in [ let f (x, y) = ... ] *)
+type pp_pattern_ctx =
+  | CtxTuple (* <here>, <here>, <here> *)
+  | CtxSingleConstrArg (* Some <here> *)
+  | CtxManyConstrArgs (* Some (<here>, <here>, <here>) *)
+  | CtxLeftSideFun (* fun <here> -> ... *)
+  | CtxLeftSideMatch (* | <here> -> ... *)
+  | CtxLeftSideLet (* let <here> = ... *)
+  | CtxListBrackets (* [ <here>; <here>; <here> ] *)
+  | CtxListSemicolons (* <here> :: <here> *)
+  | CtxFree (* omits outer parens *)
+
+let rec pp_pattern ctx ppf = function
+  | PAny -> fprintf ppf "_"
   | PUnit -> fprintf ppf "()"
   | PConst x -> pp_const ppf x
-  | PVar s -> fprintf ppf "@[%s@]" s
+  | PVar s -> fprintf ppf "%s" s
+  | PConstruct (name, []) -> fprintf ppf "%s" name
   | PTuple (pa, pb, ps) ->
-    fprintf ppf "@[(%a" pp_pattern pa;
-    List.iter (fprintf ppf ", %a" pp_pattern) (pb :: ps);
-    fprintf ppf ")@]"
-  | PAny -> fprintf ppf "@[_@]"
-  | PConstruct ("[]", None) -> fprintf ppf "[]"
-  | PConstruct ("::", Some (PTuple (head, tail, []))) ->
+    let fmt : _ format =
+      match ctx with
+      | CtxTuple
+      | CtxLeftSideFun
+      | CtxSingleConstrArg
+      | CtxManyConstrArgs
+      | CtxListSemicolons
+      | CtxLeftSideLet -> "(%a)"
+      | CtxFree | CtxListBrackets | CtxLeftSideMatch -> "%a"
+    in
+    let pp_tuple ppf () =
+      fprintf ppf "@[%a" (pp_pattern CtxTuple) pa;
+      List.iter (fprintf ppf ", %a" (pp_pattern CtxTuple)) (pb :: ps);
+      fprintf ppf "@]"
+    in
+    fprintf ppf fmt pp_tuple ()
+  | PConstruct ("::", [ head; tail ]) ->
     let rec aux acc = function
-      | PConstruct ("::", Some (PTuple (hd, tl, []))) -> aux (hd :: acc) tl
-      | PConstruct ("[]", None) ->
-        pp_cons_brackets ppf ~pp_item:pp_pattern head (List.rev acc)
+      | PConstruct ("::", [ hd; tl ]) -> aux (hd :: acc) tl
+      | PConstruct ("[]", []) ->
+        pp_cons_brackets ppf ~pp_item:(pp_pattern CtxListBrackets) head (List.rev acc)
       | _ as exp ->
-        pp_cons_semicolons ppf ~pp_item:pp_pattern head (List.rev (exp :: acc))
+        pp_cons_semicolons
+          ppf
+          ~pp_item:(pp_pattern CtxListSemicolons)
+          head
+          (List.rev (exp :: acc))
     in
     aux [] tail
-  | PConstruct (name, None) -> fprintf ppf "@[%s@]" name
-  | PConstruct (name, Some arg) -> fprintf ppf "@[%s (%a)@]" name pp_pattern arg
-;;
-
-let pp_const ppf = function
-  | PConst_bool b -> fprintf ppf "%b" b
-  | PConst_int n -> fprintf ppf "%d" n
-  | PConst_char c -> fprintf ppf "'%c'" c
+  | PConstruct (name, [ arg ]) ->
+    let fmt : _ format =
+      match ctx with
+      | CtxFree | CtxTuple | CtxManyConstrArgs | CtxListBrackets | CtxLeftSideMatch ->
+        "@[%s %a@]"
+      | CtxLeftSideFun | CtxSingleConstrArg | CtxListSemicolons | CtxLeftSideLet ->
+        "@[(%s %a)@]"
+    in
+    fprintf ppf fmt name (pp_pattern CtxSingleConstrArg) arg
+  | PConstruct (name, args) ->
+    let fmt : _ format =
+      match ctx with
+      | CtxFree | CtxTuple | CtxManyConstrArgs | CtxListBrackets | CtxLeftSideMatch ->
+        "%a"
+      | CtxLeftSideFun | CtxSingleConstrArg | CtxListSemicolons | CtxLeftSideLet -> "(%a)"
+    in
+    let pp_constructor ppf () =
+      let pp_sep ppf () = fprintf ppf ", " in
+      fprintf ppf "@[%s (" name;
+      pp_print_list ~pp_sep (pp_pattern CtxManyConstrArgs) ppf args;
+      fprintf ppf ")@]"
+    in
+    fprintf ppf fmt pp_constructor ()
 ;;
 
 let pp_flg ppf = function
