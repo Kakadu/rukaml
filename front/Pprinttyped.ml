@@ -129,17 +129,9 @@ let pp_expr =
          List.iter (fun name -> fprintf ppf "%a " pp_pattern name) ps;
          fprintf ppf "-> %a" expr_no e;
          if pars then fprintf ppf ")")
-    | TApp (TApp (TVar ("+", _, _, _), l, _), r, _) ->
-      fprintf ppf (if pars then "(%a + %a)" else "%a + %a") expr l expr r
-    | TApp (TApp (TVar ("*", _, _, _), l, _), r, _) ->
-      fprintf ppf (if pars then "(%a * %a)" else "%a * %a") expr l expr r
-      (* fprintf ppf "(%a * %a)" expr l expr r *)
-    | TApp (TApp (TVar ("-", _, _, _), l, _), r, _) ->
-      fprintf ppf (if pars then "(%a - %a)" else "%a - %a") expr l expr r
-      (* fprintf ppf "(%a - %a)" expr l expr r *)
-    | TApp (TApp (TVar ("=", _, _, _), l, _), r, _) ->
-      fprintf ppf (if pars then "(%a = %a)" else "%a = %a") expr l expr r
-      (* fprintf ppf "(%a = %a)" expr l expr r *)
+    | TApp (TApp (TVar (op, _, _, _), l, _), r, _)
+      when List.mem op [ "+"; "-"; "*"; "/"; ">"; "<"; "="; "<>"; "<="; ">="; "&&"; "||" ]
+      -> fprintf ppf (if pars then "(%a %s %a)" else "%a %s %a") expr l op expr r
     | TApp (l, r, _) -> fprintf ppf (if pars then "(%a %a)" else "%a %a") expr l expr r
     | TLet (Parsetree.Recursive, pat, S (_vars, ty), rhs, wher) ->
       fprintf
@@ -221,7 +213,7 @@ let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
      | NonRecursive -> "")
     pp_pattern
     tvb_pat
-    pp_typ_hum
+    (pp_typ_hum ~parens:false)
     (match tvb_typ with
      | S (_, typ) -> typ)
     (fun ppf e -> pp_hum ppf e)
@@ -230,9 +222,8 @@ let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
 
 let pp_td_hum ppf td =
   let pp_binder ppf binder = fprintf ppf "'_%d" binder in
-  let pp_params ppf params =
-    match List.of_seq (Var_set.to_seq params) with
-    | [] -> ()
+  let pp_params ppf = function
+    | [] -> fprintf ppf " "
     | [ x ] -> fprintf ppf " %a " pp_binder x
     | xs ->
       let pp_sep ppf () = fprintf ppf ", " in
@@ -241,16 +232,24 @@ let pp_td_hum ppf td =
   fprintf ppf "@[<v 2>";
   fprintf ppf "type%a%s" pp_params td.tty_params td.tty_ident.hum_name;
   (match td.tty_kind with
-   | Tty_abstract None -> ()
-   | Tty_abstract (Some ty) -> fprintf ppf " = %a@ " pp_typ_hum ty
-   | Tty_variants variants ->
-     let pp_variant ppf = function
-       | (ident : Ident.t), None -> fprintf ppf "| %s" ident.hum_name
-       | (ident : Ident.t), Some ty ->
-         fprintf ppf "| %s of %a" ident.hum_name pp_typ_hum ty
+   | Ttype_variants variants ->
+     let pp_variant ppf variant =
+       match variant.constr_args with
+       | [] -> fprintf ppf "| %s" variant.constr_ident.hum_name
+       | args ->
+         fprintf ppf "| %s of " variant.constr_ident.hum_name;
+         pp_print_list
+           ~pp_sep:(fun ppf () -> fprintf ppf " * ")
+           (pp_typ_hum ~parens:true)
+           ppf
+           args
      in
      fprintf ppf " =@ ";
-     pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "@ ") pp_variant ppf variants);
+     pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "@ ") pp_variant ppf variants
+   | Ttype_abstract ->
+     (match td.tty_manifest with
+      | Some ty -> fprintf ppf " = %a@ " (pp_typ_hum ~parens:false) ty
+      | None -> ()));
   fprintf ppf "@]"
 ;;
 
