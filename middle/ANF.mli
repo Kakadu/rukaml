@@ -24,17 +24,23 @@ and apat =
   | Apat_unit
   | Apat_var of Ident.t
   | Apat_const of Parsetree.const
+
+and vb = Parsetree.rec_flag * apat * expr
+
+type stru_item = ANF_vb of vb
+type stru = stru_item list
+
 val show_c_expr : c_expr -> string
 val pp_a : Format.formatter -> imm_expr -> unit
 val pp_c : Format.formatter -> c_expr -> unit
 val pp : Format.formatter -> expr -> unit
 val pp_apat : Format.formatter -> apat -> unit
+val pp_stru : Format.formatter -> stru -> unit
 val is_infix_binop : string -> bool
 val group_abstractions : expr -> apat list * expr
-val simplify_stru : vb list -> vb list
+val simplify_stru : stru -> stru
 val anf : Typedtree.expr -> expr
-val anf_vb : Typedtree.value_binding -> vb
-val anf_stru : Typedtree.structure_item list -> vb list
+val anf_stru : Typedtree.structure_item list -> stru
 
 (** Gensym stuff *)
 val anf_pat
