@@ -476,25 +476,32 @@ let%expect_test _ =
     (fun f x -> x) |}]
 ;;
 
-let simplify_vb acc (flag, name, body) =
+let simplify_vb acc (flag, patt, body) =
   let get_arity x =
     match group_abstractions x with
     | [], _ -> 0
     | xs, _ -> List.length xs
   in
-  match flag, name.Ident.hum_name with
-  | Parsetree.Recursive, s ->
+  match flag, patt with
+  | Parsetree.Recursive, Apat_var name ->
     let arity = get_arity body in
-    let new_acc = Arity_map.add s arity acc in
-    new_acc, (flag, name, simplify new_acc body)
-  | NonRecursive, s ->
+    let new_acc = Arity_map.add name.hum_name arity acc in
+    new_acc, (flag, patt, simplify new_acc body)
+  | NonRecursive, Apat_var name ->
     let arity = get_arity body in
-    let new_acc = Arity_map.add s arity acc in
-    new_acc, (flag, name, simplify acc body)
+    let new_acc = Arity_map.add name.hum_name arity acc in
+    new_acc, (flag, patt, simplify acc body)
+  | _ -> acc, (flag, patt, body)
 ;;
 
-let simplify_stru : vb list -> vb list =
-  fun stru -> Stdppx.List.fold_left_map ~f:simplify_vb ~init:Arity_map.empty stru |> snd
+let simplify_stru_item acc = function
+  | ANF_vb vb ->
+    let new_acc, new_vb = simplify_vb acc vb in
+    new_acc, ANF_vb new_vb
+;;
+
+let simplify_stru (stru : stru) : stru =
+  Stdppx.List.fold_left_map ~f:simplify_stru_item ~init:Arity_map.empty stru |> snd
 ;;
 
 let reset_gensym, gensym =
