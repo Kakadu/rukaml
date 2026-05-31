@@ -194,6 +194,18 @@ let constant =
        | _ -> fail "Not a boolean constant")
 ;;
 
+let constructor ~atom ~item mk_constructor =
+  let constant_constr =
+    let* name = ws *> constructor_name in
+    return (mk_constructor name [])
+  in
+  let* name = ws *> constructor_name in
+  (let* args = parens (sep_by (ws <* char ',') item) in
+   return (mk_constructor name args))
+  <|> (atom <|> constant_constr >>| fun arg -> mk_constructor name [ arg ])
+  <|> return (mk_constructor name [])
+;;
+
 let patt_basic d =
   ws
   *> fix (fun _self ->
@@ -210,10 +222,10 @@ let patt_basic d =
           return (pcons first (List.fold_right pcons rest pnil)))
          <* ws
          <* char ']')
-    <|> let* name = ws *> constructor_name in
-        (let* patt = ws *> d.patt_basic d in
-         return (PConstruct (name, Some patt)))
-        <|> return (PConstruct (name, None)))
+    <|> constructor
+          ~atom:(d.patt_basic d)
+          ~item:(d.patt_basic d <|> d.patt_cons d <|> parens (d.patt_tuple d))
+          pconstruct
 ;;
 
 let patt_cons d =
