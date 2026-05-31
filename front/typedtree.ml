@@ -65,17 +65,17 @@ type pattern =
   | Tpat_var of Ident.t
   | Tpat_tuple of pattern * pattern * pattern list
   | Tpat_any
-  | Tpat_constr of Ident.t * pattern option
+  | Tpat_constr of Ident.t * pattern list
 [@@deriving show { with_path = false }]
 
 let of_untyped_pattern =
   let rec helper = function
+    | Parsetree.PAny -> Tpat_any
     | Parsetree.PUnit -> Tpat_unit
     | Parsetree.PConst x -> Tpat_const x
     | Parsetree.PVar v -> Tpat_var (Ident.of_string v)
     | Parsetree.PTuple (a, b, xs) -> Tpat_tuple (helper a, helper b, List.map helper xs)
-    | Parsetree.PAny -> failwith "not implemented"
-    | Parsetree.PConstruct _ -> failwith "not implemented"
+    | Parsetree.PConstruct _ -> failwith "should not happen"
   in
   helper
 ;;
@@ -96,6 +96,7 @@ type expr =
   | TTuple of expr * expr * expr list * ty
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
   | TMatch of expr * (pattern * expr) Parsetree.list1 * ty
+  | TConstruct of Ident.t * expr list * ty
   | TFormat of string * ty
 [@@deriving show { with_path = false }]
 
@@ -148,8 +149,8 @@ let compact_expr =
         ( helper e
         , ((p1, helper e1), List.map (fun (p, e) -> p, helper e) cases)
         , type_without_links ty )
-    | TConstruct (ident, None, ty) -> TConstruct (ident, None, type_without_links ty)
-    | TConstruct (ident, Some expr, ty) ->
+    | TConstruct (ident, args, ty) ->
+      TConstruct (ident, List.map helper args, type_without_links ty)
     | TFormat (s, ty) -> TFormat (s, type_without_links ty)
   in
   helper
@@ -162,20 +163,23 @@ type value_binding =
   ; tvb_typ : scheme
   }
 
+type constructor_info =
+  { constr_ident : Ident.t
+    (* number of constructor in declaration (counting from zero) and it's name *)
+  ; constr_type_ident : Ident.t
+    (* reference to the type in which the variant was declared *)
+  ; constr_args : ty list
+  }
+
 type type_kind =
-  | Tty_abstract of ty option
-  | Tty_variants of (Ident.t * ty option) list
+  | Ttype_abstract
+  | Ttype_variants of constructor_info list
 
 type type_declaration =
   { tty_ident : Ident.t
-  ; tty_params : binder_set
+  ; tty_params : binder list
   ; tty_kind : type_kind
-  }
-
-type constructor_info =
-  { constr_ident : Ident.t
-  ; constr_type_ident : Ident.t
-  ; constr_arg : ty option
+  ; tty_manifest : ty option
   }
 
 type structure_item =
@@ -274,7 +278,7 @@ module TypeEnv = struct
     { env with env_types = Ident.Ident_map.add ident.hum_name ident td env.env_types }
   ;;
 
-  let add_constructor (env : t) (constr : constructor_info) =
+  let add_constructor (constr : constructor_info) (env : t) =
     let ident = constr.constr_ident in
     { env with
       env_constructors = Ident.String_map.add ident.hum_name constr env.env_constructors
