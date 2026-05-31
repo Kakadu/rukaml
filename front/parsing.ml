@@ -411,44 +411,84 @@ let type_param_tuple =
   | _ -> fail "tuple of param names expected"
 ;;
 
-let core_type_arrow core_type =
-  fix (fun self ->
-    let* operand = ws *> core_type in
-    ws *> string "->" *> ws *> self
-    >>| (fun operand2 -> CTArrow (operand, operand2))
+type dispatch_core_type =
+  { core_type_arrow : dispatch_core_type -> core_type t
+  ; core_type_tuple : dispatch_core_type -> core_type t
+  ; core_type_atom : dispatch_core_type -> core_type t
+  ; core_type_app : dispatch_core_type -> core_type t
+  ; core_type : dispatch_core_type -> core_type t
+  }
+
+let core_type_atom d =
+  fix (fun _self ->
+    ws
+    *> choice
+         [ (type_param_name >>| fun name -> Ptyp_var name)
+         ; (type_name >>| fun name -> Ptyp_constr (name, []))
+         ; parens (d.core_type d)
+         ])
+;;
+
+let core_type_app d =
+  ws
+  *> fix (fun _self ->
+    (let* args =
+       choice
+         [ parens
+             (let* arg1 = d.core_type d in
+              let* args = many (ws *> char ',' *> d.core_type d) in
+              return (arg1 :: args))
+         ; (d.core_type_atom d >>| fun arg -> [ arg ])
+         ]
+     in
+     let* first = ws *> type_name in
+     let* rest = many (ws *> type_name) in
+     return
+       (Base.List.fold
+          ~f:(fun arg f -> Ptyp_constr (f, [ arg ]))
+          ~init:(Ptyp_constr (first, args))
+          rest))
+    <|> d.core_type_atom d)
+;;
+
+let core_type_tuple d =
+  fix (fun _self ->
+    let* first = ws *> d.core_type_app d in
+    many (ws *> char '*' *> d.core_type_app d)
+    >>= function
+    | [] -> return first
+    | second :: rest -> return (Ptyp_tuple (first, second, rest)))
+;;
+
+let core_type_arrow d =
+  fix (fun _self ->
+    let* operand = ws *> d.core_type_tuple d in
+    ws *> string "->" *> ws *> d.core_type_arrow d
+    >>| (fun operand2 -> Ptyp_arrow (operand, operand2))
     <|> return operand)
 ;;
 
-let core_type_tuple core_type =
-  let* first = ws *> core_type in
-  many (ws *> char '*' *> ws *> core_type)
-  >>= function
-  | [] -> return first
-  | second :: rest -> return (CTTuple (first, second, rest))
+let core_type d =
+  choice
+    [ d.core_type_arrow d; d.core_type_tuple d; d.core_type_app d; d.core_type_atom d ]
 ;;
 
-let core_type =
-  ws
-  *> fix (fun self ->
-    let prims =
-      fail ""
-      <|> (type_name >>| fun v -> CTConstr (v, []))
-      <|> (type_param_name >>| fun name -> CTVar name)
-    in
-    let prims =
-      (let* arg = prims in
-       let* name = ws *> type_name in
-       return (CTConstr (name, [ arg ])))
-      <|> prims
-    in
-    let self = parens self <|> prims in
-    let self = core_type_tuple self <|> self in
-    let self = core_type_arrow self <|> self in
-    (let* ct = char '(' *> ws *> self in
-     let* cts = many (ws *> char ',' *> self) in
-     let* name = ws *> char ')' *> type_name in
-     return (CTConstr (name, ct :: cts)))
-    <|> self)
+(** parses <core_type> in [ type t = <core_type> ] *)
+let core_type_alias =
+  core_type { core_type; core_type_arrow; core_type_tuple; core_type_app; core_type_atom }
+;;
+
+(** parses <core_typeK> in [ type t = Foo of <core_type1> * ... * <core_typeN> ] *)
+let core_type_constr_arg =
+  let helper d =
+    choice
+      [ d.core_type_app d
+      ; parens (d.core_type_arrow d)
+      ; parens (d.core_type_tuple d)
+      ; d.core_type_atom d
+      ]
+  in
+  helper { core_type; core_type_arrow; core_type_tuple; core_type_app; core_type_atom }
 ;;
 
 let type_params =
