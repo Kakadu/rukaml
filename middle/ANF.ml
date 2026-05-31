@@ -747,25 +747,54 @@ let anf =
   fun e -> helper e complex_of_atom
 ;;
 
-let anf_vb vb : vb =
-  let anf_body = anf vb.Typedtree.tvb_body in
-  let name =
-    match vb.tvb_pat with
-    | Tpat_var s -> s
-    | Tpat_tuple _ -> assert false
-    | _ -> failwith "not implemented"
+(* TODO: cps here is silly *)
+
+let anf_vb_k ?(flg = Parsetree.NonRecursive) apatt body k = ANF_vb (flg, apatt, body) :: k
+
+let anf_stru_item (vb : Typedtree.value_binding) : stru_item list =
+  let access obj n =
+    EComplex (CApp (APrimitive ("block_nth", 2), obj, [ AConst (PConst_int n) ]))
   in
-  vb.tvb_flag, name, anf_body
+  let compare_tag ~scrut ~tag =
+    anf_vb_k
+      (Apat_const (PConst_int tag))
+      (EComplex (CApp (APrimitive ("block_tag", 1), AVar scrut, [])))
+  in
+  let rec anf_vbs_from_tvb ?(flg = Parsetree.NonRecursive) lhs rhs k =
+    match (lhs : Typedtree.pattern) with
+    | Tpat_any -> anf_vb_k Apat_any rhs k
+    | Tpat_unit -> anf_vb_k Apat_unit rhs k
+    | Tpat_var name -> anf_vb_k ~flg (Apat_var name) rhs k
+    | Tpat_const const -> anf_vb_k (Apat_const const) rhs k
+    | Tpat_tuple (p1, p2, ps) ->
+      let fresh = gensym_id ~prefix:"tuple" () in
+      let k = access_fields (p1 :: p2 :: ps) fresh k in
+      anf_vb_k (Apat_var fresh) rhs k
+    | Tpat_constr (variant, ps) ->
+      let fresh = gensym_id ~prefix:"adt" () in
+      let k = compare_tag ~scrut:fresh ~tag:variant.id (access_fields ps fresh k) in
+      anf_vb_k (Apat_var fresh) rhs k
+  and access_fields lhs_fields rhs_ident k =
+    let rec helper lhs_fields n k =
+      match lhs_fields with
+      | [] -> []
+      | head :: tail ->
+        let k = helper tail (n + 1) k in
+        anf_vbs_from_tvb head (access (AVar rhs_ident) n) k
+    in
+    helper lhs_fields 0 k
+  in
+  let rhs = anf vb.Typedtree.tvb_body in
+  anf_vbs_from_tvb ~flg:vb.tvb_flag vb.tvb_pat rhs []
 ;;
 
-(* TODO : handle type_declarations here *)
 let anf_stru stru =
   let open Typedtree in
   let rec aux items acc =
     match items with
-    | [] -> List.rev acc
+    | [] -> List.concat (List.rev acc)
     | Tstr_type _ :: xs -> aux xs acc
-    | Tstr_value vb :: xs -> aux xs (anf_vb vb :: acc)
+    | Tstr_value vb :: xs -> aux xs (anf_stru_item vb :: acc)
   in
   aux stru []
 ;;
