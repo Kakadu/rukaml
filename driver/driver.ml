@@ -1,6 +1,5 @@
 open! Base
 open Stdio
-
 open Frontend
 open Compile_lib
 
@@ -152,13 +151,17 @@ module Target = struct
     ; out_path : string
     ; cps : bool
     ; caa : bool
+    ; ppx : bool
     }
 
   open Compiler
 
   (** Intermediate targets *)
   module Intermediate = struct
-    let parsetree (p : params) = parse p.text
+    let parsetree (p : params) =
+      parse (if p.ppx then Parsing.make_preprocessing_exn p.text else p.text)
+    ;;
+
     let cpstree p = (parsetree p) (if p.cps then cps ~caa:p.caa else ( |> ))
     let cconvtree p = (cpstree p) cconv
     let typedtree table p = (cconvtree p) (infer table)
@@ -168,7 +171,6 @@ module Target = struct
   let rv64 table p = (Intermediate.anftree table p) rv64
   let amd64 table p = (Intermediate.anftree table p) amd64
   let llvm table p = (Intermediate.anftree table p) llvm
-
   let finish target p = (target p) (to_file p.out_path)
 
   let targets table =
@@ -210,7 +212,7 @@ let () =
   let target = ref "" in
   let cps = ref false in
   let caa = ref false in
-
+  let ppx = ref true in
   let open Stdlib.Arg in
   let args =
     [ "-o", Set_string out_path, " output file"
@@ -218,19 +220,19 @@ let () =
     ; "--print-targets", Unit print_targets, " print all supported targets"
     ; "--cps", Set cps, " enable cps conversion"
     ; "--caa", Set caa, " enable call arity analysis"
+    ; "--no-ppx", Set ppx, " disable preprocessing"
     ]
   in
   parse args (fun s -> inp_path := Some s) "rukaml";
-
   hack !target;
-
   let text =
     match !inp_path with
     | Some path -> In_channel.with_file path ~f:In_channel.input_all
     | None -> In_channel.input_all stdin
   in
-
-  let params = Target.{ text; out_path = !out_path; cps = !cps; caa = !caa } in
+  let params =
+    Target.{ text; out_path = !out_path; cps = !cps; caa = !caa; ppx = !ppx }
+  in
   match Map.find (Target.targets Typedtree.empty_table) !target with
   | Some target -> target params
   | None -> error "invalid target %S" !target
