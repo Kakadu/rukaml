@@ -53,7 +53,12 @@ val int_typ : ty
 val char_typ : ty
 val bool_typ : ty
 val unit_typ : ty
+val string_typ : ty
 val array_typ : ty -> ty
+val list_typ : ty -> ty
+val in_channel_typ : ty
+val out_channel_typ : ty
+val format3_typ : arg_ty:ty -> dest_ty:ty -> out_ty:ty -> ty
 
 type pattern =
   | Tpat_unit
@@ -83,7 +88,7 @@ type expr =
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
   (** let rec? .. = ... in ... *)
   | TMatch of expr * (pattern * expr) Parsetree.list1 * ty
-  | TConstruct of Ident.t * expr option * ty
+  | TFormat of string * ty
 
 val type_of_expr : expr -> ty
 val type_without_links : ty -> ty
