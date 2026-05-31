@@ -181,12 +181,16 @@ let escape_seq =
 
 let constant =
   ws *> fail ""
-  <|> string "()" *> return PUnit
-  <|> (take_while1 is_digit >>| fun chs -> PConst (const_int (int_of_string chs)))
+  <|> (take_while1 is_digit >>| fun chs -> const_int (int_of_string chs))
+  <|> (apostrophes escape_seq >>| const_char)
+  <|> (apostrophes (any_char_except [ '\''; '\\' ]) >>| fun ch -> const_char ch)
+  <|> quotes
+        (many (any_char_except [ '"'; '\\' ] <|> escape_seq)
+         >>| fun chs -> const_string (Base.String.of_char_list chs))
   <|> (var_name
        >>= function
-       | "true" -> return @@ PConst (const_bool true)
-       | "false" -> return @@ PConst (const_bool false)
+       | "true" -> return (const_bool true)
+       | "false" -> return (const_bool false)
        | _ -> fail "Not a boolean constant")
 ;;
 
