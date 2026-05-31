@@ -313,8 +313,12 @@ let pack : dispatch =
     fix (fun _self ->
       prio
         (d.expr_long d)
-        [| [ ws *> string "=", eeq
+        [| [ ws *> string "||", elor ]
+         ; [ ws *> string "&&", eland ]
+         ; [ ws *> string "=", eeq
+           ; ws *> string "<>", ene
            ; ws *> string "<=", ele
+           ; ws *> string ">=", ege
            ; ws *> string "<", elt
            ; ws *> string ">", egt
            ]
