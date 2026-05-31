@@ -689,6 +689,7 @@ let anf =
         make_let_nonrec fresh (CAtom scrut) wher
       in
       helper scrutinee k
+    | _ -> failwiths "not implemented"
   in
   fun e -> helper e complex_of_atom
 ;;
