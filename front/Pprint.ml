@@ -376,15 +376,23 @@ let pp_type_params ppf td =
 
 let pp_type_kind ppf td =
   match td.pty_kind with
-  | KAbstract None -> ()
-  | KAbstract (Some ct) -> fprintf ppf " = %a" pp_core_type ct
-  | KVariants (case, cases) ->
+  | Ptype_variant (case, cases) ->
     let pp_case ppf = function
-      | name, None -> fprintf ppf "| %s" name
-      | name, Some ct -> fprintf ppf "| %s of %a" name pp_core_type ct
+      | name, [] -> fprintf ppf "| %s" name
+      | name, args ->
+        fprintf ppf "| %s of " name;
+        pp_print_list
+          ~pp_sep:(fun ppf () -> fprintf ppf " * ")
+          (pp_core_type ~pars:true)
+          ppf
+          args
     in
     fprintf ppf " =@ ";
     List.iter (fprintf ppf "%a@ " pp_case) (case :: cases)
+  | Ptype_abstract ->
+    (match td.pty_manifest with
+     | None -> ()
+     | Some ct -> fprintf ppf " = %a" (pp_core_type ~pars:false) ct)
 ;;
 
 let pp_type_declaration ppf (td, tds) =
@@ -403,8 +411,8 @@ let pp_type_declaration ppf (td, tds) =
 ;;
 
 let pp_structure_item ppf = function
-  | Parsetree.SValue vb -> pp_value_binding ppf vb
-  | Parsetree.SType tds -> pp_type_declaration ppf tds
+  | Parsetree.Pstr_value vb -> pp_value_binding ppf vb
+  | Parsetree.Pstr_type tds -> pp_type_declaration ppf tds
 ;;
 
 let pp_stru ppf vbs =
