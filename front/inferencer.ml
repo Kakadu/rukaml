@@ -295,6 +295,7 @@ module Type_env = struct
   let extend ~varname ?(kind = User) id scheme t =
     { t with env_values = Ident.Ident_map.add varname id (scheme, kind) t.env_values }
   ;;
+
   let extend_string varname = extend (Ident.of_string varname) ~varname
 
   let extend_by_ident (ident : Ident.t) scheme t =
@@ -313,50 +314,27 @@ module Type_env = struct
   let find_exn s t = Ident.Ident_map.find_by_ident s t.env_values
   let find_by_string s t = Ident.Ident_map.find_by_string s t.env_values
 
-  let extend_constructors ~ident ~type_ident constr_arg t =
-    let constr = { constr_type_ident = type_ident; constr_ident = ident; constr_arg } in
-    { t with
-      env_constructors = Ident.String_map.add ident.hum_name constr t.env_constructors
+  let extend_constructors constr_info env =
+    { env with
+      env_constructors =
+        Ident.String_map.add
+          constr_info.constr_ident.hum_name
+          constr_info
+          env.env_constructors
     }
   ;;
 
-  let extend_types ~ident tty_params tty_kind t =
-    let type_entry = { tty_ident = ident; tty_params; tty_kind } in
-    { t with env_types = Ident.Ident_map.add ident.hum_name ident type_entry t.env_types }
-  ;;
-
-  let apply_to_type_declaration sub { tty_ident; tty_params; tty_kind } =
-    let aux sub = function
-      | Some ty ->
-        Some (Type.apply (Var_set.fold (fun k s -> Subst.remove s k) tty_params sub) ty)
-      | None -> None
-    in
-    { tty_ident
-    ; tty_params
-    ; tty_kind =
-        (match tty_kind with
-         | Tty_abstract ty_opt -> Tty_abstract (aux sub ty_opt)
-         | Tty_variants vs ->
-           Tty_variants (List.map vs ~f:(fun (name, ty_opt) -> name, aux sub ty_opt)))
+  let extend_types td env =
+    { env with
+      env_types = Ident.Ident_map.add td.tty_ident.hum_name td.tty_ident td env.env_types
     }
   ;;
 
-  let apply_to_constructor_info sub { constr_ident; constr_arg; constr_type_ident } =
-    { constr_arg = Option.map ~f:(Type.apply sub) constr_arg
-    ; constr_type_ident
-    ; constr_ident
-    }
-  ;;
-
-  let apply s t =
+  let apply s env =
     let env_values =
-      Ident.Ident_map.map t.env_values ~f:(fun (typ, info) -> Scheme.apply s typ, info)
+      Ident.Ident_map.map env.env_values ~f:(fun (typ, info) -> Scheme.apply s typ, info)
     in
-    let env_types = Ident.Ident_map.map t.env_types ~f:(apply_to_type_declaration s) in
-    let env_constructors =
-      Ident.String_map.map (apply_to_constructor_info s) t.env_constructors
-    in
-    { env_values; env_types; env_constructors }
+    { env with env_values }
   ;;
 end
 
