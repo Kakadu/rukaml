@@ -210,10 +210,10 @@ let patt_basic d =
   ws
   *> fix (fun _self ->
     parens (d.patt d)
-    <|> char '_' *> return PAny
-    <|> patt_const
+    <|> char '(' *> char ')' *> return PUnit
+    <|> (constant >>| fun x -> PConst x)
     <|> (var_name >>= fun v -> return (pvar v) <* trace_pos v)
-    <|> string "[]" *> return pnil
+    <|> char '[' *> ws *> char ']' *> return pnil
     <|> (char '['
          *> ws
          *>
@@ -226,6 +226,7 @@ let patt_basic d =
           ~atom:(d.patt_basic d)
           ~item:(d.patt_basic d <|> d.patt_cons d <|> parens (d.patt_tuple d))
           pconstruct
+    <|> char '_' *> return PAny)
 ;;
 
 let patt_cons d =
@@ -278,7 +279,7 @@ let letdef erhs =
        *> keyword "let"
        *> option NonRecursive (keyword "rec" >>| fun _ -> Recursive)
        <* ws)
-  <*> pattern
+  <*> ws *> pattern
   <*> many (ws *> pattern)
   <*> ws *> string "=" *> ws *> erhs
 ;;
