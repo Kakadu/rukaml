@@ -573,7 +573,7 @@ let structure =
 ;;
 
 let parse_structure str =
-  parse_string ~consume:All structure str
+  parse_string ~consume:All (structure <* ws <* end_of_input) str
   |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
 ;;
 
@@ -600,7 +600,7 @@ let make_preprocessing_exn str =
 (** {1} Testing stuff *)
 
 let parse_pat_exn str =
-  match parse_string ~consume:All pattern str with
+  match parse_string ~consume:All (pattern <* ws <* end_of_input) str with
   | Result.Error e ->
     Format.eprintf "Error: %s\n" e;
     failwith "Error during parsing of pattern"
@@ -609,16 +609,18 @@ let parse_pat_exn str =
 
 let parse_vb_exn str =
   (* Stdlib.Format.printf "parsing a string '%s'\n%!" str; *)
-  match parse_string ~consume:All value_binding str with
+  match parse_string ~consume:All (value_binding <* ws <* end_of_input) str with
   | Result.Error e ->
     Format.eprintf "Error: %s\n" e;
     failwith "Error during parsing"
   | Ok r -> r
 ;;
 
-let value_bindings = many1 value_binding
+let value_bindings = many1 (value_binding <* skip_separator)
 
 let parse_value_bindings str =
-  parse_string ~consume:All value_bindings str
+  parse_string ~consume:All (value_bindings <* ws <* end_of_input) str
   |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
 ;;
+
+let core_type : core_type t = core_type_alias
