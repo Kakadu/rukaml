@@ -1101,10 +1101,10 @@ let structure_item ?(env = start_env) table pstru_item =
   let ( let* ) = Result.( >>= ) in
   let return = Result.return in
   match pstru_item with
-  | Parsetree.SValue item ->
+  | Parsetree.Pstr_value item ->
     let* env, typed_vb = vb ~env table item in
     return (env, Tstr_value typed_vb)
-  | Parsetree.SType (item, []) ->
+  | Parsetree.Pstr_type (item, []) ->
     let* env, stru_item = td ~env item in
     return (env, Tstr_type stru_item)
   | _ -> failwith "not implemented: \"and\" chain of type declarations"
