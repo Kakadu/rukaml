@@ -401,6 +401,11 @@ let pack : dispatch =
       >>= function
       | [] -> fail "can't parse many expressions"
       | [ h ] -> return h
+      (* TODO? > fix these kludges for adt constructors *)
+      | [ EConstruct (name, []); ETuple (arg1, arg2, args) ] ->
+        return (EConstruct (name, arg1 :: arg2 :: args))
+      | [ EConstruct (name, []); arg ] -> return (EConstruct (name, [ arg ]))
+      (* < *)
       | foo :: args -> return @@ eapp foo args)
   in
   { expr_basic; expr_long; prio; expr_tuple; expr = expr_tuple }
