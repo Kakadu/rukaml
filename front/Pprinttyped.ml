@@ -61,6 +61,7 @@ let rec pp_pattern ppf = function
   | Tpat_const (PConst_int n) -> fprintf ppf "%d" n
   | Tpat_const (PConst_bool b) -> fprintf ppf "%b" b
   | Tpat_const (PConst_char c) -> fprintf ppf "%c" c
+  | Tpat_const (PConst_string s) -> fprintf ppf "\"%s\"" s
   | Tpat_var id -> Ident.pp ppf id
   | Tpat_tuple (h1, h2, []) -> fprintf ppf "(%a, %a)" pp_pattern h1 pp_pattern h2
   | Tpat_tuple (h1, h2, rest) ->
@@ -201,9 +202,7 @@ let pp_expr =
       pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") expr_no ppf args;
       fprintf ppf ")";
       fprintf ppf (if pars then ")@]" else "@]")
-    | TConstruct (ident, Some arg, _ty) ->
-      fprintf ppf (if pars then "(%s %a)" else "%s %a") ident.hum_name expr arg
-  and pp_typ = pp_typ_hum
+    | TFormat (s, _ty) -> fprintf ppf "\"%s\"" s
   and pp_typ = pp_typ_hum ~parens:false
   and pp_pat ppf s = fprintf ppf "%a" pp_pattern s
   and expr ppf = expr_gen ~pars:true ppf
