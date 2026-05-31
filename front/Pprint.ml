@@ -285,18 +285,19 @@ let rec pp_expr ctx ppf = function
 ;;
 
 let pp_value_binding ppf (is_rec, pat, rhs) =
-  let () =
-    (match is_rec with
-     | Parsetree.Recursive -> fprintf ppf "@[<v 2>@[let rec %a "
-     | NonRecursive -> fprintf ppf "@[<v 2>@[let %a ")
-      pp_pattern
-      pat
-  in
+  (match is_rec with
+   | Parsetree.Recursive -> fprintf ppf "@[<v 2>@[let rec %a "
+   | NonRecursive -> fprintf ppf "@[<v 2>@[let %a ")
+    (pp_pattern CtxLeftSideLet)
+    pat;
   match group_lams rhs with
   | args, rhs ->
-    List.iter (fprintf ppf "%a@ " pp_pattern) args;
-    fprintf ppf "=@ @]@[%a@]@]" no_pars rhs
+    List.iter (fprintf ppf "%a@ " (pp_pattern CtxLeftSideLet)) args;
+    fprintf ppf "=@ @]@[%a@]@]" (pp_expr CtxRightSideLet) rhs
 ;;
+
+let pp_pattern = pp_pattern CtxFree
+let pp_expr = pp_expr CtxFree
 
 open Typedtree
 
@@ -307,14 +308,15 @@ let rec pp_typ ppf { typ_desc } =
   | Arrow (l, r) -> fprintf ppf "(%a -> %a)" pp_typ l pp_typ r
   | TLink t -> pp_typ ppf t
   | TProd (a, b, ts) ->
-    fprintf ppf "@[(%a, %a" pp_typ a pp_typ b;
-    List.iter (fprintf ppf ", %a" pp_typ) ts;
+    fprintf ppf "@[(%a * %a" pp_typ a pp_typ b;
+    List.iter (fprintf ppf " * %a" pp_typ) ts;
     fprintf ppf ")@]"
   | TConstr ([], name) -> fprintf ppf "%s" name
   | TConstr ([ ty ], name) -> fprintf ppf "@[%a %s@]" pp_typ ty name
   | TConstr (tys, name) ->
+    fprintf ppf "@[(";
     pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp_typ ppf tys;
-    fprintf ppf " %s" name
+    fprintf ppf ") %s@]" name
 ;;
 
 let pp_scheme ppf = function
