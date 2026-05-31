@@ -128,19 +128,13 @@ let parse_name regexp error_message =
 ;;
 
 let var_name =
-  let regexp = "^[a-z_][a-zA-Z0-9_]*$" in
+  let regexp = "^[a-z_][a-zA-Z0-9_']*$" in
   let message = "not a variable name" in
   parse_name regexp message
 ;;
 
-let constructor_name =
-  let regexp = "^[A-Z][a-zA-Z0-9_]*$" in
-  let message = "not a constructor name" in
-  parse_name regexp message
-;;
-
 let type_name =
-  let regexp = "^[a-z_][a-zA-Z0-9_]*$" in
+  let regexp = "^[a-z_][a-zA-Z0-9_']*$" in
   let message = "not a type name" in
   parse_name regexp message
 ;;
@@ -152,7 +146,7 @@ let type_param_name =
 ;;
 
 let constructor_name =
-  let regexp = "^[A-Z][a-zA-Z0-9_]*$" in
+  let regexp = "^[A-Z][a-zA-Z0-9_']*$" in
   let message = "not a constructor name" in
   parse_name regexp message
 ;;
