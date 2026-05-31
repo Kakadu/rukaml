@@ -878,55 +878,151 @@ let infer env table expr =
 let ( @-> ) = tarrow
 
 let start_env =
-  let cmp_scheme = Scheme.make_mono (tarrow int_typ (tarrow int_typ bool_typ)) in
+  let int_cmp_scheme = Scheme.make_mono (tarrow int_typ (tarrow int_typ bool_typ)) in
   let int_arith_scheme = Scheme.make_mono (tarrow int_typ (tarrow int_typ int_typ)) in
+  let bool_arith_scheme = Scheme.make_mono (tarrow bool_typ (tarrow bool_typ bool_typ)) in
   let extend_s ?(kind = User) varname =
     Type_env.extend ~varname ~kind (Ident.of_string varname)
   in
   let extend_binop name = extend_s ~kind:(Builtin (name, 2)) name in
+  let extend_builtin name ~argc = extend_s ~kind:(Builtin (name, argc)) name in
   Type_env.env_with_base_types
+  |> extend_builtin
+       ~argc:1
+       "exit"
+       (Scheme.scheme (Var_set.singleton 0) (tarrow int_typ (tv 0 ~level:1000)))
   (* TODO: print_int *)
-  |> extend_s
-       "print"
-       (Scheme.make_mono (tarrow int_typ unit_typ))
-       ~kind:(Builtin ("print", 1))
-  |> extend_s
-       "char_code"
-       (Scheme.make_mono (tarrow char_typ int_typ))
-       ~kind:(Builtin ("char_code", 1))
-     (* ***** StdIO stuff *)
-  |> extend_s "stdin" (Scheme.make_mono (array_typ char_typ))
+  |> extend_builtin ~argc:1 "print" (Scheme.make_mono (tarrow int_typ unit_typ))
+  |> extend_builtin ~argc:1 "char_code" (Scheme.make_mono (tarrow char_typ int_typ))
+  (* ***** StdIO stuff *)
+  (* |> extend_s "stdin" (Scheme.make_mono (array_typ char_typ))
   |> extend_s
        "open_in"
-       (Scheme.make_mono (tarrow (array_typ char_typ) (array_typ char_typ)))
-  |> extend_binop "<" cmp_scheme
-  |> extend_binop ">" cmp_scheme
-  |> extend_binop "<=" cmp_scheme
-  |> extend_binop ">=" cmp_scheme
-  |> extend_binop "=" cmp_scheme
+       (Scheme.make_mono (tarrow (array_typ char_typ) (array_typ char_typ))) *)
+  (* Stdio channels *)
+  |> extend_builtin ~argc:0 "stdin" (Scheme.make_mono in_channel_typ)
+  |> extend_builtin ~argc:0 "stdout" (Scheme.make_mono out_channel_typ)
+  |> extend_builtin ~argc:0 "stderr" (Scheme.make_mono out_channel_typ)
+  (* Command line arguments *)
+  |> extend_builtin ~argc:0 "sys_argv" (Scheme.make_mono (array_typ string_typ))
+  (* Stdio file access primitives *)
+  |> extend_builtin
+       ~argc:1
+       "open_in"
+       (Scheme.make_mono (tarrow string_typ in_channel_typ))
+  |> extend_builtin
+       ~argc:1
+       "open_out"
+       (Scheme.make_mono (tarrow string_typ out_channel_typ))
+  |> extend_builtin ~argc:1 "close_in" (Scheme.make_mono (tarrow in_channel_typ unit_typ))
+  |> extend_builtin
+       ~argc:1
+       "close_out"
+       (Scheme.make_mono (tarrow out_channel_typ unit_typ))
+  (* Stdio reading primitives *)
+  |> extend_builtin
+       ~argc:1
+       "input_char"
+       (Scheme.make_mono (tarrow in_channel_typ char_typ))
+  |> extend_builtin
+       ~argc:1
+       "input_line"
+       (Scheme.make_mono (tarrow in_channel_typ string_typ))
+  |> extend_builtin
+       ~argc:1
+       "end_of_input"
+       (Scheme.make_mono (tarrow in_channel_typ bool_typ))
+  (* Stdio writing primitives *)
+  |> extend_builtin
+       ~argc:2
+       "output_char"
+       (Scheme.make_mono (tarrow out_channel_typ (tarrow char_typ unit_typ)))
+  |> extend_builtin
+       ~argc:2
+       "output_string"
+       (Scheme.make_mono (tarrow out_channel_typ (tarrow string_typ unit_typ)))
+  |> extend_builtin
+       ~argc:2
+       "fprintf"
+       (let arg_ty = tv 0 ~level:(-1) in
+        (* forall '_0 . out_channel -> ('_0, out_channel, unit) format3 -> '_0 *)
+        Scheme.scheme
+          (Var_set.singleton 0)
+          (tarrow
+             out_channel_typ
+             (tarrow
+                (format3_typ ~arg_ty ~dest_ty:out_channel_typ ~out_ty:unit_typ)
+                arg_ty)))
+  |> extend_builtin
+       ~argc:1
+       "printf"
+       (let arg_ty = tv 0 ~level:(-1) in
+        (* forall '_0 . ('_0, out_channel, unit) format -> 'a *)
+        Scheme.scheme
+          (Var_set.singleton 0)
+          (tarrow (format3_typ ~arg_ty ~dest_ty:out_channel_typ ~out_ty:unit_typ) arg_ty))
+  |> extend_builtin
+       ~argc:1
+       "sprintf"
+       (let arg_ty = tv 0 ~level:(-1) in
+        (* forall '_0 . ('_0, unit, string) format3 -> '_0 *)
+        Scheme.scheme
+          (Var_set.singleton 0)
+          (tarrow (format3_typ ~arg_ty ~dest_ty:unit_typ ~out_ty:string_typ) arg_ty))
+  |> extend_builtin ~argc:1 "flush" (Scheme.make_mono (tarrow out_channel_typ unit_typ))
+  (* Built-in binops *)
+  |> extend_binop "<" int_cmp_scheme
+  |> extend_binop ">" int_cmp_scheme
+  |> extend_binop "<=" int_cmp_scheme
+  |> extend_binop ">=" int_cmp_scheme
+  |> extend_binop
+       "="
+       (Scheme.scheme
+          (Var_set.of_list [ -1 ])
+          (tarrow (tv (-1) ~level:(-1)) (tarrow (tv (-1) ~level:(-1)) bool_typ)))
   |> extend_binop "+" int_arith_scheme
   |> extend_binop "-" int_arith_scheme
   |> extend_binop "*" int_arith_scheme
   |> extend_binop "/" int_arith_scheme
+  |> extend_binop "&&" bool_arith_scheme
+  |> extend_binop "||" bool_arith_scheme
   (* Array stuff *)
-  |> extend_s
-       "length"
+  |> extend_builtin
+       ~argc:1
+       "array_len"
        (Typedtree.S (Var_set.singleton 0, tarrow (array_typ (tv 0 ~level:1000)) int_typ))
-  |> extend_s
-       "get"
+  |> extend_builtin
+       ~argc:2
+       "array_get"
        (let param = tv 0 ~level:1000 in
         let ( @-> ) = tarrow in
         Typedtree.S (Var_set.singleton 0, array_typ param @-> int_typ @-> param))
-  |> extend_s
-       "set"
+  |> extend_builtin
+       ~argc:3
+       "array_set"
        (let param = tv 0 ~level:1000 in
         Typedtree.S
           (Var_set.singleton 0, array_typ param @-> int_typ @-> param @-> unit_typ))
+  (* strings stuff *)
+  |> extend_builtin ~argc:1 "string_len" (Scheme.make_mono (tarrow string_typ int_typ))
+  |> extend_builtin
+       ~argc:2
+       "string_nth"
+       (Scheme.make_mono (tarrow string_typ (tarrow int_typ char_typ)))
+  |> extend_builtin
+       ~argc:1
+       "string_of_char_list"
+       (Scheme.make_mono (tarrow (list_typ char_typ) string_typ))
+  |> extend_builtin
+       ~argc:2
+       "string_equal"
+       (Scheme.make_mono (tarrow string_typ (tarrow string_typ bool_typ)))
   (* GC stuff *)
-  |> extend_s "gc_compact" (Scheme.make_mono (tarrow unit_typ unit_typ))
-  |> extend_s "gc_stats" (Scheme.make_mono (tarrow unit_typ unit_typ))
-  |> extend_s "closure_count" (Scheme.make_mono (tarrow unit_typ unit_typ))
-  |> extend_s
+  |> extend_builtin ~argc:1 "gc_compact" (Scheme.make_mono (tarrow unit_typ unit_typ))
+  |> extend_builtin ~argc:1 "gc_stats" (Scheme.make_mono (tarrow unit_typ unit_typ))
+  |> extend_builtin ~argc:1 "closure_count" (Scheme.make_mono (tarrow unit_typ unit_typ))
+  |> extend_builtin
+       ~argc:1
        "trace_rukaml_val"
        (S (Var_set.singleton 0, tarrow (tv ~level:1000 0) unit_typ))
 ;;
