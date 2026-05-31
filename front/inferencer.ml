@@ -933,34 +933,30 @@ let w e =
 ;;
 
 let vb ?(env = start_env) table (flg, pat, body) : (_, [> error ]) Result.t =
+  let level = -1 in
   let comp =
     match flg, pat with
-    | Parsetree.NonRecursive, Parsetree.PVar name ->
-      let* v = fresh in
-      (* TODO: Why -1 is OK? *)
-      let tv = Typedtree.tv v ~level:(-1) in
-      let env = Type_env.extend_string name (S (Var_set.empty, tv)) env in
+    | Parsetree.NonRecursive, _ ->
+      (* TODO: is ~level:0 OK here? *)
+      let* env_with_binding, tpat, _pat_ty = check_pat ~level:0 env table pat in
+      let* rhs_ty, typed_rhs = infer env table body in
+      return (env_with_binding, rhs_ty, tpat, typed_rhs)
+    | Recursive, Parsetree.PVar name ->
+      let* binder = fresh in
+      let tv = Typedtree.tv binder ~level in
+      let env = Type_env.extend_string name (S (Var_set.singleton binder, tv)) env in
       let* ty, tbody = infer env table body in
       return (env, ty, Tpat_var (Type_env.ident_of_string name env), tbody)
-    | Recursive, PVar name ->
-      let* v = fresh in
-      let tv = Typedtree.tv v ~level:(-1) in
-      let env = Type_env.extend_string name (S (Var_set.empty, tv)) env in
-      let* ty, tbody = infer env table body in
-      let* () = unify table tv (type_of_expr tbody) in
-      return (env, ty, Tpat_var (Type_env.ident_of_string name env), tbody)
-    | Recursive, PTuple _ -> fail `Only_varibles_on_the_left_of_letrec
-    | NonRecursive, PTuple _ -> failwith "Not implemented"
-    | _ -> failwith "not implemented"
+    | Recursive, _ -> fail `Only_varibles_on_the_left_of_letrec
   in
   run comp
   |> Result.map ~f:(fun (env, ty, tpat, body) ->
-    let vb = value_binding flg tpat body (generalize ~level:(-1) ty) in
-    let env : Type_env.t =
-      match pat, vb.Typedtree.tvb_pat with
-      | Parsetree.PVar varname, Tpat_var vident ->
-        Type_env.extend ~varname vident vb.Typedtree.tvb_typ env
-      | _ -> failwith "Not implemented"
+    let scheme = generalize ~level ty in
+    let vb = value_binding flg tpat body scheme in
+    let env =
+      match tpat with
+      | Typedtree.Tpat_var ident -> Type_env.extend_by_ident ident scheme env
+      | _ -> env
     in
     env, vb)
   |> Result.map_error ~f:(function #error as x -> x)
