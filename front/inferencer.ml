@@ -915,41 +915,60 @@ let check_constr_arity (env : Type_env.t) name args =
   match Ident.Ident_map.find_by_string_opt name env.env_types with
   | None -> fail (`Unbound_type name)
   | Some type_declaration ->
-    if List.length args <> Var_set.cardinal type_declaration.tty_params
+    if List.length args <> List.length type_declaration.tty_params
     then fail (`Type_arity_mismatch name)
     else return ()
 ;;
 
 let rec infer_core_type (env : Type_env.t) param_map = function
-  | Parsetree.CTVar name ->
+  | Parsetree.Ptyp_var name ->
     (match Ident.String_map.find_opt name param_map with
      | None -> fail (`Unbound_type_variable name)
      | Some ty -> return ty)
-  | CTArrow (a, b) ->
+  | Ptyp_arrow (a, b) ->
     return (fun a b -> tarrow a b)
     <*> infer_core_type env param_map a
     <*> infer_core_type env param_map b
-  | CTTuple (a, b, xs) ->
+  | Ptyp_tuple (a, b, xs) ->
     return (fun a b xs -> tprod a b xs)
     <*> infer_core_type env param_map a
     <*> infer_core_type env param_map b
     <*> fold_infer_core_type env param_map xs
-  | CTConstr (name, args) ->
-    let* () = check_constr_arity env name args in
-    let* tys = fold_infer_core_type env param_map args in
-    return (tconstr tys name)
+  | Ptyp_constr (name, args) ->
+    (* TODO: it is not OCaml typing actually. it loses nominal types for aliases here. *)
+    (match Ident.Ident_map.find_by_string_opt name env.env_types with
+     | None -> fail (`Unbound_type name)
+     | Some type_decl when List.length args <> List.length type_decl.tty_params ->
+       fail (`Type_arity_mismatch name)
+     | Some type_decl ->
+       let* args_tys = fold_infer_core_type env param_map args in
+       (match type_decl.tty_manifest with
+        | None -> return (tconstr args_tys name)
+        | Some ty ->
+          (* expands aliases like [ type ('a, 'b) pair = 'a * 'b ] *)
+          let substitute ty formal_param exact_arg =
+            let rec helper ty =
+              match ty.typ_desc with
+              | V { binder; _ } when binder = formal_param -> exact_arg
+              | V _ as typ_desc -> { typ_desc }
+              | Weak _ -> failwith "TODO: idk what should happen here"
+              | Arrow (ty1, ty2) -> { typ_desc = Arrow (helper ty1, helper ty2) }
+              | TLink ty -> helper ty
+              | TProd (ty1, ty2, tys) ->
+                { typ_desc = TProd (helper ty1, helper ty2, List.map ~f:helper tys) }
+              | TConstr (args, name) ->
+                { typ_desc = TConstr (List.map ~f:helper args, name) }
+            in
+            helper ty
+          in
+          (* it won't raise because arities have been compared above *)
+          return (List.fold2_exn type_decl.tty_params args_tys ~init:ty ~f:substitute)))
 
 and fold_infer_core_type (env : Type_env.t) param_map items =
   List.fold (List.rev items) ~init:(return []) ~f:(fun acc item ->
     let* acc = acc in
     let* ty = infer_core_type env param_map item in
     return (ty :: acc))
-
-and infer_core_type_opt (env : Type_env.t) param_map = function
-  | None -> return None
-  | Some core_type ->
-    let* ty = infer_core_type env param_map core_type in
-    return (Some ty)
 ;;
 
 let check_params_uniqueness pty_name pty_params =
