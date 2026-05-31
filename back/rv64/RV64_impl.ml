@@ -845,7 +845,7 @@ let generate_body is_toplevel body =
         (fun i x ->
            helper_a (DReg "t0") x;
            emit sd t0 (ROffset (a0, 8 * i)))
-        (List.rev r);
+        r;
       emit sd_dest a0 dest
     | AConstruct (tag, args) ->
       with_two_slots (fun ra_name rez_slot ->

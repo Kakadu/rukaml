@@ -780,7 +780,7 @@ let generate_body is_toplevel ppf body =
         (fun i x ->
            helper_a (DReg "rdi") x;
            printfn ppf "  mov [rax+8*%d], rdi" i)
-        (List.rev r);
+        r;
       printfn ppf "  mov %a, rax" pp_dest dest
     | atom ->
       printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
