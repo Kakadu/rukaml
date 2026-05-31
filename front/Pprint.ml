@@ -116,22 +116,47 @@ let pp_flg ppf = function
   | NonRecursive -> ()
 ;;
 
-let rec pp_expr_helper ?(ps = true) ppf = function
+type pp_expr_ctx =
+  | CtxTuple (* <here>, <here>, <here> or Some (<here>, <here>, <here>)*)
+  | CtxAfterIf (* if <here> then ... else ... *)
+  | CtxAfterThen (* if ... then <here> else ... *)
+  | CtxAfterElse (* if ... then ... else <here> *)
+  | CtxAppLeft (** f in [ f x ] *)
+  | CtxAppRight (** x in [ f x ] or in [ Some x ] *)
+  | CtxMatchWith (* match <here> with ... *)
+  | CtxRightSideFun (* fun ... -> <here> *)
+  | CtxRightSideLet (* let ... = <here> *)
+  | CtxRightSideMatch (* | ... -> <here> *)
+  | CtxLetBody (* let ... = ... in <here> *)
+  | CtxBinop (* <here> + <here> / <here> *)
+  | CtxContainer (* [ <here>; <here>; <here> ] or [| <here>; <here>; <here> |] *)
+  | CtxFree
+
+let rec pp_expr ctx ppf = function
   | EUnit -> fprintf ppf "()"
   | EConst n -> pp_const ppf n
   | EIf (c, th, el) ->
-    (if ps then fprintf ppf "(%a)" else fprintf ppf "%a")
-      (fun ppf ->
-         fprintf
-           ppf
-           "@[<hov>@[if %a@ @]@[then %a@ @]@[else %a@]@]"
-           no_pars
-           c
-           no_pars
-           th
-           no_pars)
-      el
+    let fmt : _ format =
+      match ctx with
+      | CtxFree
+      | CtxAfterElse
+      | CtxRightSideFun
+      | CtxRightSideLet
+      | CtxRightSideMatch
+      | CtxLetBody -> "%a"
+      | _ -> "(%a)"
+    in
+    let pp_ite ppf () =
+      fprintf ppf "@[<hov>";
+      fprintf ppf "@[if %a@ @]" (pp_expr CtxAfterIf) c;
+      fprintf ppf "@[then %a@ @]" (pp_expr CtxAfterThen) th;
+      fprintf ppf "@[else %a@]" (pp_expr CtxAfterElse) el;
+      fprintf ppf "@]"
+    in
+    fprintf ppf fmt pp_ite ()
   | EVar s -> pp_print_string ppf s
+  | EApp (EApp (EVar ("||" as op), l), r)
+  | EApp (EApp (EVar ("&&" as op), l), r)
   | EApp (EApp (EVar ("<" as op), l), r)
   | EApp (EApp (EVar ("<=" as op), l), r)
   | EApp (EApp (EVar (">" as op), l), r)
@@ -141,74 +166,122 @@ let rec pp_expr_helper ?(ps = true) ppf = function
   | EApp (EApp (EVar ("+" as op), l), r)
   | EApp (EApp (EVar ("-" as op), l), r)
   | EApp (EApp (EVar ("=" as op), l), r) ->
-    if ps
-    then fprintf ppf "(%a %s %a)" maybe_pars l op maybe_pars r
-    else fprintf ppf "%a %s %a" maybe_pars l op maybe_pars r
+    let fmt : _ format =
+      match ctx with
+      | CtxAppLeft | CtxAppRight | CtxBinop -> "(%a %s %a)"
+      | _ -> "%a %s %a"
+    in
+    fprintf ppf fmt (pp_expr CtxBinop) l op (pp_expr CtxBinop) r
   | EApp (l, r) ->
-    let grouped = group_applications l r in
-    let lam_itself ppf (fexpr, args) =
-      fprintf ppf "@[<hv>%a" maybe_pars fexpr;
-      List.iteri (fun _ -> fprintf ppf " @[%a@]" maybe_pars) args;
+    let fmt : _ format =
+      match ctx with
+      | CtxAppRight -> "(%a %a)"
+      | _ -> "%a %a"
+    in
+    fprintf ppf fmt (pp_expr CtxAppLeft) l (pp_expr CtxAppRight) r
+  | ELam (pat, e) ->
+    let fmt : _ format =
+      match ctx with
+      | CtxAfterElse | CtxFree | CtxLetBody | CtxRightSideFun | CtxRightSideMatch ->
+        "@[fun %a ->@[ %a@]"
+      | _ -> "@[(fun %a ->@[ %a@])"
+    in
+    fprintf ppf fmt (pp_pattern CtxLeftSideFun) pat (pp_expr CtxRightSideFun) e
+  | ELet (flg, pat, body, in_) ->
+    let fmt : _ format =
+      match ctx with
+      | CtxFree | CtxLetBody | CtxRightSideLet -> "%a"
+      | _ -> "(%a)"
+    in
+    let pp_let ppf () =
+      let rec_ =
+        match flg with
+        | Recursive -> "rec "
+        | _ -> ""
+      in
+      fprintf ppf "@[<v>@[<hv>@[let %s%a " rec_ (pp_pattern CtxLeftSideLet) pat;
+      let args, body = group_lams body in
+      List.iter (fprintf ppf "%a " (pp_pattern CtxLeftSideLet)) args;
+      fprintf ppf "= @]";
+      Format.fprintf ppf "@[<2>%a @]@[in @]@]" (pp_expr CtxRightSideLet) body;
+      fprintf ppf "@[%a@]" (pp_expr CtxLetBody) in_;
       fprintf ppf "@]"
     in
-    if ps then fprintf ppf "(%a)" lam_itself grouped else lam_itself ppf grouped
-  | ELam (pat, e) -> fprintf ppf "@[(fun %a ->@[ %a@])" pp_pattern pat no_pars e
-  | ELet (Recursive, PTuple _, _, _) -> failwith "Should not be representable in types"
-  | ELet (flg, pat, body, in_) ->
-    let rec_ =
-      match flg with
-      | Recursive -> "rec "
-      | _ -> ""
-    in
-    fprintf ppf "@[<v>@[<hv>@[let %s%a " rec_ pp_pattern pat;
-    let args, body = group_lams body in
-    List.iter (fprintf ppf "%a " pp_pattern) args;
-    fprintf ppf "= @]";
-    Format.fprintf ppf "@[<2>%a @]@[in @]@]" no_pars body;
-    fprintf ppf "@[%a@]" no_pars in_;
-    fprintf ppf "@]"
+    fprintf ppf fmt pp_let ()
+  | EArray [] -> fprintf ppf "[| |]"
   | EArray r ->
-    fprintf ppf "[|";
-    Format.fprintf
-      ppf
-      "%a"
-      (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "; ") no_pars)
-      r;
-    fprintf ppf "|]"
+    let pp_sep ppf () = fprintf ppf "; " in
+    Format.fprintf ppf "[| %a |]" (pp_print_list ~pp_sep (pp_expr CtxContainer)) r
   | ETuple (h1, h2, hs) ->
-    fprintf ppf "@[(%a, " no_pars h1;
-    Format.fprintf
-      ppf
-      "%a"
-      (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") no_pars)
-      (h2 :: hs);
-    fprintf ppf ")@]"
+    let fmt : _ format =
+      match ctx with
+      | CtxTuple | CtxBinop | CtxAppLeft | CtxAppRight -> "(%a)"
+      | _ -> "%a"
+    in
+    let pp_tuple ppf () =
+      let pp_sep ppf () = fprintf ppf ", " in
+      fprintf ppf "@[%a, " (pp_expr CtxTuple) h1;
+      pp_print_list ~pp_sep (pp_expr CtxTuple) ppf (h2 :: hs);
+      fprintf ppf "@]"
+    in
+    fprintf ppf fmt pp_tuple ()
   | EMatch (e, (pe, pes)) ->
+    let fmt : _ format =
+      match ctx with
+      | CtxAfterElse | CtxFree | CtxMatchWith | CtxRightSideFun ->
+        "@[<v 2>match %a with@ %a@]"
+      | _ -> "(@[<v 2>match %a with@ %a@])"
+    in
     let pp_cases ppf () =
-      let pp_case ppf (p, e) = fprintf ppf "@[| %a -> %a@]" pp_pattern p maybe_pars e in
+      let pp_case ppf (p, e) =
+        fprintf ppf "@[| %a -> " (pp_pattern CtxLeftSideMatch) p;
+        fprintf ppf "%a@]" (pp_expr CtxRightSideMatch) e
+      in
       pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "@ ") pp_case ppf (pe :: pes)
     in
-    if ps
-    then fprintf ppf "@[<v 2>(match %a with@ %a)@]" no_pars e pp_cases ()
-    else fprintf ppf "@[<v 2>match %a with@ %a@]" no_pars e pp_cases ()
-  | EConstruct ("[]", None) -> fprintf ppf "[]"
-  | EConstruct ("::", Some (ETuple (head, tail, []))) ->
+    fprintf ppf fmt (pp_expr CtxMatchWith) e pp_cases ()
+  | EConstruct ("[]", []) -> fprintf ppf "[]"
+  | EConstruct ("::", [ head; tail ]) ->
     let rec aux acc = function
-      | EConstruct ("::", Some (ETuple (hd, tl, []))) -> aux (hd :: acc) tl
-      | EConstruct ("[]", None) ->
-        pp_cons_brackets ppf ~pp_item:no_pars head (List.rev acc)
+      | EConstruct ("::", [ hd; tl ]) -> aux (hd :: acc) tl
+      | EConstruct ("[]", []) ->
+        pp_cons_brackets ppf ~pp_item:(pp_expr CtxContainer) head (List.rev acc)
       | _ as exp ->
-        pp_cons_semicolons ppf ~pars:ps ~pp_item:maybe_pars head (List.rev (exp :: acc))
+        let pars =
+          match ctx with
+          | CtxAppLeft | CtxAppRight | CtxBinop -> true
+          | _ -> false
+        in
+        pp_cons_semicolons
+          ppf
+          ~pars
+          ~pp_item:(pp_expr CtxBinop)
+          head
+          (List.rev (exp :: acc))
     in
     aux [] tail
-  | EConstruct (name, None) -> fprintf ppf "%s" name
-  | EConstruct (name, Some arg) -> fprintf ppf "@[%s %a@]" name maybe_pars arg
-
-and no_pars ppf = pp_expr_helper ~ps:false ppf
-
-and maybe_pars ppf = pp_expr_helper ~ps:true ppf
-
-let pp_expr = pp_expr_helper ~ps:true
+  | EConstruct (name, []) -> fprintf ppf "%s" name
+  | EConstruct (name, [ arg ]) ->
+    let fmt : _ format =
+      match ctx with
+      | CtxAppLeft | CtxAppRight -> "(%s %a)"
+      | _ -> "%s %a"
+    in
+    fprintf ppf fmt name (pp_expr CtxAppRight) arg
+  | EConstruct (name, args) ->
+    let fmt : _ format =
+      match ctx with
+      | CtxAppLeft | CtxAppRight -> "(%a)"
+      | _ -> "%a"
+    in
+    let pp_constructor ppf () =
+      let pp_sep ppf () = fprintf ppf ", " in
+      fprintf ppf "@[%s (" name;
+      pp_print_list ~pp_sep (pp_expr CtxTuple) ppf args;
+      fprintf ppf ")@]"
+    in
+    fprintf ppf fmt pp_constructor ()
+;;
 
 let pp_value_binding ppf (is_rec, pat, rhs) =
   let () =
