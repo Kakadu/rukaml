@@ -487,14 +487,19 @@ let rec check_pat ~level env table = function
     let env = Type_env.extend ~varname:x xident (Scheme.make_mono tx) env in
     return (env, Typedtree.Tpat_var xident, tx)
   | Parsetree.PTuple (p1, p2, ps) ->
-    let check_many acc p =
-      let* env, ps, ts = acc in
-      let* env, p, t = check_pat ~level env table p in
-      return (env, p :: ps, t :: ts)
+    let check_many ~level env table ps =
+      let f acc p =
+        let* env, ps, ts = acc in
+        let* env, p, t = check_pat ~level env table p in
+        return (env, p :: ps, t :: ts)
+      in
+      let init = return (env, [], []) in
+      let* env, ps, ts = List.fold ~init ~f ps in
+      return (env, List.rev ps, List.rev ts)
     in
     let* env, p1, t1 = check_pat ~level env table p1 in
     let* env, p2, t2 = check_pat ~level env table p2 in
-    let* env, ps, ts = List.fold ps ~init:(return (env, [], [])) ~f:check_many in
+    let* env, ps, ts = check_many ~level env table ps in
     return (env, Tpat_tuple (p1, p2, ps), tprod t1 t2 ts)
   | Parsetree.PAny ->
     let* ty = fresh_var ~level in
