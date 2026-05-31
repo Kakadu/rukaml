@@ -48,12 +48,16 @@ let tprod a b ts = { typ_desc = TProd (a, b, ts) }
 let tconstr tys name = { typ_desc = TConstr (tys, name) }
 let tprim s = tconstr [] s
 let tparam param name = tconstr [ param ] name
-
 let int_typ = tprim "int"
 let char_typ = tprim "char"
 let bool_typ = tprim "bool"
 let unit_typ = tprim "unit"
+let string_typ = tprim "string"
 let array_typ param = tparam param "array"
+let list_typ param = tparam param "list"
+let in_channel_typ = tprim "in_channel"
+let out_channel_typ = tprim "out_channel"
+let format3_typ ~arg_ty ~dest_ty ~out_ty = tconstr [ arg_ty; dest_ty; out_ty ] "format3"
 
 type pattern =
   | Tpat_unit
@@ -92,7 +96,7 @@ type expr =
   | TTuple of expr * expr * expr list * ty
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
   | TMatch of expr * (pattern * expr) Parsetree.list1 * ty
-  | TConstruct of Ident.t * expr option * ty
+  | TFormat of string * ty
 [@@deriving show { with_path = false }]
 
 let rec type_of_expr = function
@@ -100,15 +104,17 @@ let rec type_of_expr = function
   | TConst (Parsetree.PConst_int _) -> int_typ
   | TConst (Parsetree.PConst_bool _) -> bool_typ
   | TConst (Parsetree.PConst_char _) -> char_typ
+  | TConst (Parsetree.PConst_string _) -> string_typ
+  | TLet (_, _, _, _, wher) -> type_of_expr wher
   | TVar (_, _, _, t)
   | TTuple (_, _, _, t)
   | TIf (_, _, _, t)
   | TArray (_, t)
   | TLam (_, _, t)
-  | TApp (_, _, t) -> t
-  | TLet (_, _, _, _, wher) -> type_of_expr wher
-  | TMatch (_, _, t) -> t
-  | TConstruct (_, _, t) -> t
+  | TApp (_, _, t)
+  | TMatch (_, _, t)
+  | TConstruct (_, _, t)
+  | TFormat (_, t) -> t
 ;;
 
 (** Compaction of the tree *)
@@ -144,7 +150,7 @@ let compact_expr =
         , type_without_links ty )
     | TConstruct (ident, None, ty) -> TConstruct (ident, None, type_without_links ty)
     | TConstruct (ident, Some expr, ty) ->
-      TConstruct (ident, Some (helper expr), type_without_links ty)
+    | TFormat (s, ty) -> TFormat (s, type_without_links ty)
   in
   helper
 ;;
@@ -198,21 +204,25 @@ module TypeEnv = struct
 
   let mk_ground_typ name =
     { tty_ident = Ident.of_string name
-    ; tty_params = Var_set.empty
-    ; tty_kind = Tty_abstract None
+    ; tty_params = []
+    ; tty_kind = Ttype_abstract
+    ; tty_manifest = None
     }
   ;;
 
   let typ_unit = mk_ground_typ "unit"
-
   let typ_int = mk_ground_typ "int"
-
   let typ_bool = mk_ground_typ "bool"
+  let typ_char = mk_ground_typ "char"
+  let typ_string = mk_ground_typ "string"
+  let typ_in_channel = mk_ground_typ "in_channel"
+  let typ_out_channel = mk_ground_typ "out_channel"
 
   let typ_array : type_declaration =
     { tty_ident = Ident.of_string "array"
-    ; tty_params = Var_set.singleton (-1) (* TODO: Why -1? *)
-    ; tty_kind = Tty_abstract None
+    ; tty_params = [ -1 ]
+    ; tty_kind = Ttype_abstract
+    ; tty_manifest = None
     }
   ;;
 
@@ -251,7 +261,15 @@ module TypeEnv = struct
     ;;
   end
 
-  let add_type (env : t) (td : type_declaration) =
+  let typ_format3 =
+    { tty_ident = Ident.of_string "format3"
+    ; tty_params = [ -1; -2; -3 ]
+    ; tty_kind = Ttype_abstract
+    ; tty_manifest = None
+    }
+  ;;
+
+  let add_type (td : type_declaration) (env : t) =
     let ident = td.tty_ident in
     { env with env_types = Ident.Ident_map.add ident.hum_name ident td env.env_types }
   ;;
