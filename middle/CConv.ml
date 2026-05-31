@@ -157,7 +157,24 @@ let gensym =
     Format.sprintf "%s_%d" prefix !last
 ;;
 
-let standart_globals = String_set.of_list [ "+"; "="; "<"; "*"; "-" ]
+let standart_globals =
+  [ "+"; "<"; "*"; "-" ]
+  @ [ "&&"; "||" ]
+  @ [ "="; "<>"; ">"; ">="; "<"; "<=" ]
+  @ [ "print" ]
+  @ [ "printf"; "fprintf"; "sprintf" ]
+  @ [ "stdin"; "stdout"; "open_in"; "open_out"; "close_in"; "close_out"; "end_of_input" ]
+  @ [ "exit"; "sys_argv" ]
+  @ [ "input_all"; "input_char" ]
+  @ [ "field"; "block_nth"; "block_tag"; "block_size" ]
+  @ [ "string_nth"; "string_len"; "string_equal"; "string_of_char_list" ]
+  @ [ "array_get"; "array_set"; "array_len" ]
+  @ [ "char_code" ]
+  @ [ "gc_compact"; "gc_stats" ]
+  @ [ "closure_count" ]
+  |> String_set.of_list
+;;
+
 let elams = List.fold_right Parsetree.elam
 
 (** Returns [Some ] when there are arguments coming from closure *)
