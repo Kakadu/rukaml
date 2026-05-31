@@ -320,20 +320,46 @@ let pp_scheme ppf = function
   | S (xs, t) -> fprintf ppf "forall %a . %a" Var_set.pp xs pp_typ t
 ;;
 
-let rec pp_core_type ppf = function
-  | CTVar name -> fprintf ppf "%s" name
-  | CTArrow (ctl, ctr) -> fprintf ppf "(%a -> %a)" pp_core_type ctl pp_core_type ctr
-  | CTTuple (ct1, ct2, cts) ->
-    fprintf ppf "@[(%a * %a" pp_core_type ct1 pp_core_type ct2;
-    List.iter (fprintf ppf " * %a" pp_core_type) cts;
-    fprintf ppf ")@]"
-  | CTConstr (name, []) -> fprintf ppf "@[%s@]" name
-  | CTConstr (name, [ CTVar var_name ]) -> fprintf ppf "@[%s %s@]" var_name name
-  | CTConstr (name, arg :: args) ->
-    fprintf ppf "@[(%a" pp_core_type arg;
-    List.iter (fprintf ppf ", %a" pp_core_type) args;
+type pp_core_type_ctx =
+  | CtxArrowLeft (* <here> -> ... *)
+  | CtxArrowRight (* ... -> <here> *)
+  | CtxSingleTypeParam (* <here> list *)
+  | CtxManyTypeParam (* (<here>, <here>) map *)
+  | CtxTuple (* <here> * <here> * <here> *)
+  | CtxOmit (* omit outer parens *)
+  | CtxDontOmit (* do not omit outer parens *)
+
+let rec pp_core_type ctx ppf = function
+  | Ptyp_var name -> fprintf ppf "%s" name
+  | Ptyp_arrow (ctl, ctr) ->
+    let fmt : _ format =
+      match ctx with
+      | CtxArrowLeft | CtxSingleTypeParam | CtxTuple | CtxDontOmit -> "(%a -> %a)"
+      | CtxArrowRight | CtxManyTypeParam | CtxOmit -> "%a -> %a"
+    in
+    fprintf ppf fmt (pp_core_type CtxArrowLeft) ctl (pp_core_type CtxArrowRight) ctr
+  | Ptyp_tuple (ct1, ct2, cts) ->
+    let fmt : _ format =
+      match ctx with
+      | CtxSingleTypeParam | CtxTuple | CtxDontOmit -> "(%a)"
+      | CtxArrowRight | CtxArrowLeft | CtxManyTypeParam | CtxOmit -> "%a"
+    in
+    let pp_tuple ppf () =
+      fprintf ppf "@[%a * %a" (pp_core_type CtxTuple) ct1 (pp_core_type CtxTuple) ct2;
+      List.iter (fprintf ppf " * %a" (pp_core_type CtxTuple)) cts;
+      fprintf ppf "@]"
+    in
+    fprintf ppf fmt pp_tuple ()
+  | Ptyp_constr (name, []) -> fprintf ppf "@[%s@]" name
+  | Ptyp_constr (name, [ arg ]) ->
+    fprintf ppf "@[%a %s@]" (pp_core_type CtxSingleTypeParam) arg name
+  | Ptyp_constr (name, arg :: args) ->
+    fprintf ppf "@[(%a" (pp_core_type CtxManyTypeParam) arg;
+    List.iter (fprintf ppf ", %a" (pp_core_type CtxManyTypeParam)) args;
     fprintf ppf ") %s@]" name
 ;;
+
+let pp_core_type ~pars = pp_core_type (if pars then CtxDontOmit else CtxOmit)
 
 let pp_type_params ppf td =
   match td.pty_params with
