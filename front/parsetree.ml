@@ -1,8 +1,8 @@
 type const =
   | PConst_int of int
-  (* | PConst_string of string *)
   | PConst_char of char
   | PConst_bool of bool
+  | PConst_string of string
 [@@deriving show { with_path = false }]
 
 type pattern =
@@ -40,6 +40,7 @@ let pvar s = PVar s
 let const_int n = PConst_int n
 let const_char c = PConst_char c
 let const_bool b = PConst_bool b
+let const_string s = PConst_string s
 let eunit = EUnit
 let econst n = EConst n
 let elam v body = ELam (v, body)
