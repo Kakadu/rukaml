@@ -10,7 +10,8 @@
   compile_tests
   CAA_tests
   ANF_tests
-  CPSConv_tests)
+  CPSConv_tests
+  mangling)
  (preprocess
   (pps ppx_deriving.show ppx_expect))
  (instrumentation
