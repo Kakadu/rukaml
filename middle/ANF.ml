@@ -646,7 +646,7 @@ let anf =
       k (APrimitive ("=", 2))
     | TVar (_, name, User, _) -> k (AVar name)
     | TVar (_, _, Builtin (_name, _arity), _) -> k (APrimitive (_name, _arity))
-    | TUnit -> k AUnit
+    | TUnit -> k (AConst (PConst_int 0))
     | TTuple (ea, eb, [], _) ->
       helper ea (fun aimm ->
         helper eb (fun bimm ->
@@ -660,19 +660,7 @@ let anf =
         | [] -> make_let_nonrec name (CAtom (AArray ys)) (k (AVar name))
       in
       helper_fold xs []
-    | TTuple (_, _, _ :: _, _) as m ->
-      Format.eprintf "%a\n%!" Typedtree.pp_expr m;
-      Format.kasprintf
-        failwith
-        "Not implemented (%s %d); '%a'"
-        __FUNCTION__
-        __LINE__
-        Pprinttyped.pp_hum
-        m
-    | TConstruct (ident, [], _) ->
-      let name = gensym_id () in
-      let rhs = CAtom (AConstruct (ident.id, [])) in
-      make_let_nonrec name rhs (k (AVar name))
+    | TConstruct (ident, [], _) -> k (AConstruct (ident.id, []))
     | TConstruct (ident, args, _) ->
       let rec aux = function
         | hd :: tl, acc -> helper hd (fun x -> aux (tl, x :: acc))
