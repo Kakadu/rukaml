@@ -237,30 +237,27 @@ module TypeEnv = struct
   end = struct
     let param_binder = -1
     let param_ty = tv ~level:(-1) param_binder
-
-    let nil_ident = Ident.ident "[]" 0
-    let cons_ident = Ident.ident "::" 1
-
-    let cons_arg_ty = Some (tprod param_ty (tconstr [ param_ty ] "list") [])
-
-    let typ_list : type_declaration =
-      { tty_ident = Ident.of_string "list"
-      ; tty_params = Var_set.singleton param_binder
-      ; tty_kind = Tty_variants [ nil_ident, None; cons_ident, cons_arg_ty ]
-      }
-    ;;
+    let type_list_ident = Ident.of_string "list"
 
     let constr_nil : constructor_info =
-      { constr_arg = None
-      ; constr_type_ident = typ_list.tty_ident
-      ; constr_ident = nil_ident
+      { constr_ident = Ident.ident "[]" 0
+      ; constr_args = []
+      ; constr_type_ident = type_list_ident
       }
     ;;
 
     let constr_cons : constructor_info =
-      { constr_arg = cons_arg_ty
-      ; constr_type_ident = typ_list.tty_ident
-      ; constr_ident = cons_ident
+      { constr_ident = Ident.ident "::" 1
+      ; constr_args = [ param_ty; tconstr [ param_ty ] "list" ]
+      ; constr_type_ident = type_list_ident
+      }
+    ;;
+
+    let typ_list : type_declaration =
+      { tty_ident = type_list_ident
+      ; tty_params = [ param_binder ]
+      ; tty_kind = Ttype_variants [ constr_nil; constr_cons ]
+      ; tty_manifest = None
       }
     ;;
   end
