@@ -297,6 +297,9 @@ let conv ?(standart_globals = standart_globals)
       let* e2 = helper globals e2 in
       let* es = helper_list globals es in
       return (etuple e1 e2 es)
+    | EConstruct (name, es) ->
+      let* es = helper_list globals es in
+      return (econstruct name es)
     | ELet (isrec, (PVar name as pat), rhs, wher) when is_abstraction rhs ->
       log "ELet %a" Pprint.pp_expr root_expr;
       let args, rhs =
