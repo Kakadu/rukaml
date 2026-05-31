@@ -521,33 +521,59 @@ let gensym_s : _ =
 let gensym_id ?(prefix = "temp") () = Ident.of_string (gensym_s ~prefix ())
 
 let anf_pat pat ?(kbefore = fun _ -> Fun.id) k =
-  let access n e = CApp (APrimitive ("field", 2), AConst (PConst_int n), [ e ]) in
-  (* TODO: the use of continuation here is weird, revisit it later. *)
-  let rec helper pat ident_name k =
+  let access n e = CApp (APrimitive ("block_nth", 2), e, [ AConst (PConst_int n) ]) in
+  let compare_tag ~scrut ~expected k =
+    let fresh = gensym_id ~prefix:"tag" () in
+    let get_tag k =
+      ELet
+        ( Parsetree.NonRecursive
+        , Apat_var fresh
+        , CApp (APrimitive ("block_tag", 1), AVar scrut, [])
+        , k )
+    in
+    get_tag
+      (EComplex
+         (CIte
+            ( CApp (APrimitive ("=", 2), AVar fresh, [ AConst (PConst_int expected) ])
+            , k
+            , EComplex (CAtom (APrimitive ("match_failure", 0))) )))
+  in
+  let rec access_fields lhs_patts rhs_ident k =
+    let rec loop i = function
+      | [] -> k ()
+      | Typedtree.Tpat_var name_a :: tl ->
+        make_let_nonrec name_a (access i (AVar rhs_ident)) (loop (1 + i) tl)
+      | h :: tl ->
+        let name_a = Ident.of_string (gensym_s ~prefix:"field" ()) in
+        make_let_nonrec
+          name_a
+          (access i (AVar rhs_ident))
+          (helper h name_a (fun _ -> loop (1 + i) tl))
+    in
+    loop 0 lhs_patts
+  and helper pat ident_name k =
     match pat with
+    (* TODO: it is not optimal *)
+    | Tpat_any -> elet Parsetree.NonRecursive Apat_any (cvar ident_name) @@ k ()
+    | Tpat_unit -> elet Parsetree.NonRecursive Apat_unit (cvar ident_name) @@ k ()
+    | Tpat_const const ->
+      elet Parsetree.NonRecursive (Apat_const const) (cvar ident_name) @@ k ()
     | Typedtree.Tpat_var s -> make_let_nonrec s (cvar ident_name) @@ k ()
-    | Tpat_tuple (a, b, xs) ->
-      let rec loop i ps =
-        match ps with
-        | [] -> k ()
-        | Typedtree.Tpat_var name_a :: tl ->
-          make_let_nonrec name_a (access i (AVar ident_name)) (loop (1 + i) tl)
-        | h :: tl ->
-          let name_a = Ident.of_string (gensym_s ()) in
-          make_let_nonrec
-            name_a
-            (access i (AVar ident_name))
-            (helper h name_a (fun _ -> loop (1 + i) tl))
-      in
-      loop 0 (a :: b :: xs)
-    | _ -> failwith "not implemented"
+    | Tpat_tuple (p1, p2, ps) -> access_fields (p1 :: p2 :: ps) ident_name k
+    | Tpat_constr (name, ps) ->
+      compare_tag ~scrut:ident_name ~expected:name.id (access_fields ps ident_name k)
   in
   match pat with
   | Typedtree.Tpat_var s -> kbefore s (k s)
   | Tpat_tuple _ ->
-    let name_p = Ident.of_string (gensym_s ()) in
+    let name_p = Ident.of_string (gensym_s ~prefix:"tuple" ()) in
     kbefore name_p (helper pat name_p (fun () -> k name_p))
-  | _ -> failwith "not implemented"
+  | Tpat_constr _ ->
+    let name_p = Ident.of_string (gensym_s ~prefix:"adt" ()) in
+    kbefore name_p (helper pat name_p (fun () -> k name_p))
+  | _ ->
+    let name_p = Ident.of_string (gensym_s ~prefix:"weird" ()) in
+    kbefore name_p (helper pat name_p (fun () -> k name_p))
 ;;
 
 let anf =
