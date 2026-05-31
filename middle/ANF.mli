@@ -1,9 +1,5 @@
 open Frontend
 
-type apat = APname of Frontend.Ident.t
-
-val pp_apat : Format.formatter -> apat -> unit
-
 type imm_expr =
   | AUnit
   | AConst of Frontend.Parsetree.const
@@ -20,26 +16,19 @@ and c_expr =
   | CAtom of imm_expr
 
 and expr =
-  | ELet of Frontend.Parsetree.rec_flag * Frontend.Typedtree.pattern * c_expr * expr
+  | ELet of Parsetree.rec_flag * apat * c_expr * expr
   | EComplex of c_expr
 
+and apat =
+  | Apat_any
+  | Apat_unit
+  | Apat_var of Ident.t
+  | Apat_const of Parsetree.const
 val show_c_expr : c_expr -> string
 val pp_a : Format.formatter -> imm_expr -> unit
 val pp_c : Format.formatter -> c_expr -> unit
 val pp : Format.formatter -> expr -> unit
-
-type vb = Frontend.Parsetree.rec_flag * Frontend.Ident.t * expr
-
-val pp_vb
-  :  Format.formatter
-  -> Frontend.Parsetree.rec_flag * Frontend.Ident.t * expr
-  -> unit
-
-val pp_stru
-  :  Format.formatter
-  -> (Frontend.Parsetree.rec_flag * Frontend.Ident.t * expr) list
-  -> unit
-
+val pp_apat : Format.formatter -> apat -> unit
 val is_infix_binop : string -> bool
 val group_abstractions : expr -> apat list * expr
 val simplify_stru : vb list -> vb list
