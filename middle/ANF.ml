@@ -30,12 +30,14 @@ type imm_expr =
   | AConstruct of int * imm_expr list
   | AArray of imm_expr list
   | ALam of apat * expr
+[@@deriving show { with_path = false }]
 
 (* TODO(Kakadu): array, lambda, constructor and tuple are not immediates *)
 and c_expr =
   | CApp of imm_expr * imm_expr * imm_expr list
   | CIte of c_expr * expr * expr
   | CAtom of imm_expr
+[@@deriving show { with_path = false }]
 
 and expr =
   | ELet of Parsetree.rec_flag * apat * c_expr * expr
@@ -47,7 +49,11 @@ and apat =
   | Apat_var of Ident.t
   | Apat_const of Parsetree.const
 
-and vb = Parsetree.rec_flag * Ident.t * expr
+and vb = Parsetree.rec_flag * apat * expr
+
+type stru_item = ANF_vb of vb
+type stru = stru_item list
+
 (* TODO: only complex expression should be there *)
 
 let complex_of_atom x = EComplex (CAtom x)
