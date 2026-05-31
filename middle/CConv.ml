@@ -127,10 +127,13 @@ let rec subst x ~by:v =
         if SS.mem x (vars_from_pattern patt) then patt, expr else patt, helper expr
       in
       ematch (helper subject) (aux case) (List.map aux cases)
-    | ELet (_, PAny, _, _)
-    | ELet (_, PConstruct _, _, _)
-    | ELet (_, PUnit, _, _)
-    | ELet (_, PConst _, _, _) -> failwith "not implemented"
+    | ELet (isrec, ((PUnit | PAny) as pat), rhs, wher) ->
+      (* TODO : is it correct ? *)
+      let rhs' = helper rhs in
+      let wher' = helper wher in
+      elet ~isrec pat rhs' wher'
+    | ELet (_, PConstruct _, _, _) | ELet (_, PConst _, _, _) ->
+      failwith "not implemented 7"
   in
   helper
 ;;
@@ -346,21 +349,18 @@ let conv ?(standart_globals = standart_globals)
          let pat, rhs, wher = rename_vars ~prefix (isrec, pat, rhs, wher) in
          let* () = save (isrec, pat, rhs) in
          return wher)
-    | ELet (Recursive, PTuple _, _, _) -> failwith "not implemented 2"
     | ELet (isrec, (PVar _name as pat), rhs, wher) ->
       assert (not (is_abstraction rhs));
       let new_env = String_set.union (vars_from_pattern pat) globals in
       let* rhs = helper new_env rhs in
       let* body = helper new_env wher in
       return (elet ~isrec pat rhs body)
-    | ELet (NonRecursive, (PTuple _ as pat), rhs, wher) ->
+    | ELet (Recursive, _, _, _) -> failwith "should not happen"
+    | ELet (NonRecursive, ((PTuple _ | PConstruct (_, _ :: _)) as pat), rhs, wher) ->
       let new_env = String_set.union (vars_from_pattern pat) globals in
       let* rhs = helper new_env rhs in
       let* body = helper new_env wher in
       return (elet pat rhs body)
-    | EConstruct (name, es) ->
-      let* es = helper_list globals es in
-      return (econstruct name es)
     | EMatch (scrut, (case, cases)) ->
       let conv_case (patt, expr) =
         let new_env = String_set.union globals (vars_from_pattern patt) in
@@ -376,12 +376,12 @@ let conv ?(standart_globals = standart_globals)
       let* case = conv_case case in
       let* cases = Base.List.fold ~f ~init:(return []) cases in
       return (ematch scrut case (List.rev cases))
-    | ELet (_, PAny, _, _)
-    | ELet (_, PConstruct _, _, _)
-    | ELet (_, PUnit, _, _)
-    | ELet (_, PConst _, _, _) -> failwith "not implemented 3"
-  and helper_list globals : Parsetree.expr list -> (value_binding list, expr list) t =
-    fun es ->
+    | ELet (isrec, ((PUnit | PAny | PConst _ | PConstruct (_, [])) as pat), rhs, wher) ->
+      log "ELet with pattern %a" Pprint.pp_pattern pat;
+      let* rhs = helper globals rhs in
+      let* body = helper globals wher in
+      return (elet ~isrec pat rhs body)
+  and helper_list globals es =
     let* es =
       List.fold_left
         (fun acc e ->
@@ -401,14 +401,17 @@ let conv ?(standart_globals = standart_globals)
     let saved, last_rhs = Monads.Store.run (helper enriched_globals rhs) [] in
     List.rev_append saved [ is_rec, pat, elams args last_rhs ]
     (* |> List.map simplify_vb *)
-  | is_rec, (PTuple _ as pat), root ->
+  | is_rec, ((PTuple _ | PConstruct _) as pat), root ->
     let saved, rhs =
       Monads.Store.run
         (helper (SS.union (vars_from_pattern pat) standart_globals) root)
         []
     in
     List.rev_append saved [ is_rec, pat, rhs ] |> List.map simplify_vb
-  | _ -> failwith "not implemented 4"
+  | is_rec, ((PUnit | PAny | PConst _) as pat), root ->
+    log "%s %d, is_rec = %a, discard pattern" __FUNCTION__ __LINE__ pp_rec_flag is_rec;
+    let saved, rhs = Monads.Store.run (helper standart_globals root) [] in
+    List.rev_append saved [ is_rec, pat, rhs ] |> List.map simplify_vb
 ;;
 
 let value_binding = conv
