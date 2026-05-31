@@ -57,7 +57,7 @@ let test_anf ?(print_before = false) text =
   let ( let* ) x f = Result.bind x f in
   match
     let stru = Frontend.Parsing.parse_vb_exn text in
-    let vbs = CConv.structure [ Parsetree.SValue stru ] in
+    let vbs = CConv.structure [ Parsetree.Pstr_value stru ] in
     let* _env, stru_typed = Inferencer.structure Typedtree.empty_table vbs in
     (* Format.printf "%s %d\n%!" __FILE__ __LINE__; *)
     let anf = anf_stru stru_typed in

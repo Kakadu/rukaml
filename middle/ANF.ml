@@ -616,29 +616,16 @@ let anf =
         __LINE__
         Pprinttyped.pp_hum
         m
-    | TConstruct (ident, None, _) ->
-      let name = gensym_id () in
-      let rhs = CAtom (AConstruct (ident.id, [])) in
-      make_let_nonrec name rhs (k (AVar name))
-    | TConstruct (ident, Some (TTuple (x1, x2, xs, _)), _) ->
-      helper x1
-      @@ fun x1 ->
-      helper x2
-      @@ fun x2 ->
+    | TConstruct (ident, [], _) -> k (AConstruct (ident.id, []))
+    | TConstruct (ident, args, _) ->
       let rec aux = function
-        | hd :: tl, xs -> helper hd (fun x -> aux (tl, x :: xs))
-        | [], xs ->
+        | hd :: tl, acc -> helper hd (fun x -> aux (tl, x :: acc))
+        | [], acc ->
           let name = gensym_id () in
-          let rhs = CAtom (AConstruct (ident.id, x1 :: x2 :: List.rev xs)) in
+          let rhs = CAtom (AConstruct (ident.id, List.rev acc)) in
           make_let_nonrec name rhs (k (AVar name))
       in
-      aux (xs, [])
-    | TConstruct (ident, Some arg, _) ->
-      helper arg
-      @@ fun arg ->
-      let name = gensym_id () in
-      let rhs = CAtom (AConstruct (ident.id, [ arg ])) in
-      make_let_nonrec name rhs (k (AVar name))
+      aux (args, [])
     (* converts TMatch into if-then-else *)
     | TMatch (scrutinee, (case1, cases), _) ->
       let prim_field = APrimitive ("get_arg", 2) in
@@ -688,11 +675,9 @@ let anf =
         | Typedtree.Tpat_any -> success
         | Tpat_var var -> make_let_nonrec var (CAtom scrut_var) success
         | Tpat_const c -> compare_with_constant (AConst c)
-        | Tpat_unit -> compare_with_constant AUnit
-        | Tpat_constr (ident, None) -> compare_tag ident success
-        | Tpat_constr (ident, Some (Tpat_tuple (p1, p2, ps))) ->
-          compare_tag ident @@ match_many (p1 :: p2 :: ps)
-        | Tpat_constr (ident, Some p) -> compare_tag ident @@ match_many [ p ]
+        | Tpat_unit -> compare_with_constant (AConst (PConst_int 0))
+        | Tpat_constr (ident, []) -> compare_tag ident success (* TODO? : delete it *)
+        | Tpat_constr (ident, args) -> compare_tag ident @@ match_many args
         | Tpat_tuple (p1, p2, ps) -> match_many (p1 :: p2 :: ps)
       in
       let k scrut =
