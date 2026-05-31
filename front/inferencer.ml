@@ -262,6 +262,7 @@ end
 module Scheme = struct
   type t = scheme
 
+  let scheme vs ty = S (vs, ty)
   let make_mono ty = S (Var_set.empty, ty)
 
   let occurs_in info = function
@@ -727,9 +728,10 @@ let infer env table expr =
            (* log "ty = %a" pp_ty ty; *)
            return (ty, TArray (exprs, ty)))
       (* lambda abstraction *)
+      | Parsetree.ELam (pat, body) ->
         let state = clean_state state in
         let* env, pat, tp = check_pat ~level:!current_level env table pat in
-        let* ty, tbody = helper env DoNothing body in
+        let* ty, tbody = helper env { state with restriction_state = DoNothing } body in
         let trez = elim table @@ tarrow tp ty in
         return (trez, TLam (pat, tbody, trez))
       | EApp (e1, e2) ->
@@ -778,9 +780,10 @@ let infer env table expr =
           list_foldm
             ~init:(return ([], []))
             ~f:(fun (typs, exprs) e ->
-              let* t1, e1 = helper env state e in
-              return (t1 :: typs, e1 :: exprs))
+              let* ty, expr = helper env state e in
+              return (ty :: typs, expr :: exprs))
             es
+          >>| fun (tys, exprs) -> List.rev tys, List.rev exprs
         in
         let tup_typ = elim table @@ tprod ta tb typs in
         return (tup_typ, TTuple (ea, eb, exprs, tup_typ))
@@ -812,14 +815,14 @@ let infer env table expr =
         in
         let twher = elim table twher in
         return (twher, TLet (Recursive, Tpat_var f_ident, t2, typed_rhs, typed_wher))
-      | ELet (Recursive, PTuple _, _, _) -> fail `Only_varibles_on_the_left_of_letrec
-      | ELet (NonRecursive, (PTuple _ as pat), rhs, wher) ->
-        let* env, pat, tp = check_pat ~level:!current_level env table pat in
-        let* _ty, tbody = helper env state rhs in
+      | ELet (Recursive, (PAny | PUnit | PConst _ | PTuple _ | PConstruct _), _, _) ->
+        fail `Only_varibles_on_the_left_of_letrec
+      | ELet (NonRecursive, lhs, rhs, wher) ->
+        let* env, lhs, _lhs_ty = check_pat ~level:0 env table lhs in
         let* rhs_ty, rhs = helper env (clean_state state) rhs in
         let* twher, typed_wher = helper env state wher in
         let twher = elim table twher in
-        return (twher, TLet (NonRecursive, pat, Scheme.make_mono _ty, tbody, typed_wher))
+        return (twher, TLet (NonRecursive, lhs, Scheme.make_mono rhs_ty, rhs, typed_wher))
       | EMatch (expr, ((p1, e1), cases)) ->
         let* expr_ty, expr = helper env (clean_state state) expr in
         let* env1, p1, pty = check_pat ~level:!current_level env table p1 in
