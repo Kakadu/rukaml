@@ -419,7 +419,7 @@ let pp_stru ppf vbs =
   let open Format in
   open_vbox 0;
   pp_print_list
-    ~pp_sep:(fun ppf () -> fprintf ppf "@ ")
+    ~pp_sep:(fun ppf () -> fprintf ppf "@.")
     (fun ppf -> fprintf ppf "@[%a@]" pp_structure_item)
     ppf
     vbs;
@@ -428,3 +428,7 @@ let pp_stru ppf vbs =
 
 let value_bindings ppf = List.iter (fun vb -> pp_value_binding ppf vb)
 let structure = pp_stru
+
+(* testing stuff *)
+
+let pp_core_type = pp_core_type ~pars:false
