@@ -1043,7 +1043,7 @@ let check_constructors_names_uniqueness pty_name variants =
   else return ()
 ;;
 
-let td ?(env = start_env) { Parsetree.pty_name; pty_params; pty_kind }
+let td ?(env = start_env) { Parsetree.pty_name; pty_params; pty_kind; pty_manifest }
   : (_, [> error ]) Result.t
   =
   let init_params params_list =
@@ -1052,39 +1052,47 @@ let td ?(env = start_env) { Parsetree.pty_name; pty_params; pty_kind }
       let* binder = fresh in
       let ty = tv binder ~level:(-1) in
       let map = Ident.String_map.add name ty map in
-      let bs = Var_set.add binder bs in
-      return (map, bs)
+      return (map, binder :: bs)
     in
-    List.fold ~init:(return (Ident.String_map.empty, Var_set.empty)) ~f:helper params_list
+    List.fold ~init:(return (Ident.String_map.empty, [])) ~f:helper params_list
+    >>| fun (map, params) -> map, List.rev params
   in
   let comp =
     let* () = check_params_uniqueness pty_name pty_params in
-    let* params_map, binder_set = init_params pty_params in
+    let* params_map, tty_params = init_params pty_params in
     let tty_ident = Ident.of_string pty_name in
-    let type_declatation tty_kind = { tty_kind; tty_ident; tty_params = binder_set } in
-    let extend_types = Type_env.extend_types ~ident:tty_ident binder_set in
+    let* tty_manifest =
+      match pty_manifest with
+      | None -> return None
+      | Some core_type -> infer_core_type env params_map core_type >>| Option.some
+    in
     match pty_kind with
-    | Parsetree.KAbstract core_type_opt ->
-      let* ty_opt = infer_core_type_opt env params_map core_type_opt in
-      let tty_kind = Tty_abstract ty_opt in
-      let env = extend_types tty_kind env in
-      return (env, type_declatation tty_kind)
-    | Parsetree.KVariants (v1, vs) ->
+    | Parsetree.Ptype_abstract ->
+      let td = { tty_kind = Ttype_abstract; tty_ident; tty_params; tty_manifest } in
+      let env = Type_env.extend_types td env in
+      return (env, td)
+    | Parsetree.Ptype_variant (v1, vs) ->
       let* () = check_constructors_names_uniqueness pty_name (v1 :: vs) in
       (* > temporarily adds type to env to use it in recursive type declarations *)
-      let env = extend_types (Tty_abstract None) env in
+      let env =
+        Type_env.extend_types
+          { tty_kind = Ttype_abstract; tty_ident; tty_params; tty_manifest }
+          env
+      in
       (* < *)
-      let aux acc (name, core_type_opt) =
+      let aux acc (name, args) =
         let* env, variants, id_cnt = acc in
-        let* ty_opt = infer_core_type_opt env params_map core_type_opt in
-        let ident = Ident.ident name id_cnt in
-        let env = Type_env.extend_constructors ~ident ~type_ident:tty_ident ty_opt env in
-        return (env, (ident, ty_opt) :: variants, id_cnt + 1)
+        let* constr_args = fold_infer_core_type env params_map args in
+        let constr_ident = Ident.ident name id_cnt in
+        let constr_info = { constr_ident; constr_type_ident = tty_ident; constr_args } in
+        let env = Type_env.extend_constructors constr_info env in
+        return (env, constr_info :: variants, id_cnt + 1)
       in
       let* env, variants, _ = List.fold ~init:(return (env, [], 0)) ~f:aux (v1 :: vs) in
-      let tty_kind = Tty_variants (List.rev variants) in
-      let env = extend_types tty_kind env in
-      return (env, type_declatation tty_kind)
+      let tty_kind = Ttype_variants (List.rev variants) in
+      let td = { tty_kind; tty_ident; tty_params; tty_manifest = None } in
+      let env = Type_env.extend_types td env in
+      return (env, td)
   in
   run comp
 ;;
