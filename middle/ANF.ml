@@ -97,23 +97,23 @@ include struct
   ;;
 
   let rec helper ppf = function
-    | ELet (flg, name, CAtom (ALam (arg1, rhs)), wher) ->
+    | ELet (flg, patt, CAtom (ALam (arg1, rhs)), wher) ->
       fprintf
         ppf
         "@[<v 2>@[<hov 2>@[let %a%a %a =@]@ "
         Pprint.pp_flg
         flg
-        Pprinttyped.pp_pattern
-        name
+        helper_p
+        patt
         pp_apat
         arg1;
       fprintf ppf "@[%a@]@ in@]@ @[%a@]@]" helper rhs helper wher
-    | ELet (_, name, rhs, wher) ->
+    | ELet (_, patt, rhs, wher) ->
       fprintf
         ppf
         "@[<v 2>@[let %a = %a in@]@ @[%a@]@]"
-        Pprinttyped.pp_pattern
-        name
+        helper_p
+        patt
         helper_c
         rhs
         helper
@@ -172,6 +172,12 @@ include struct
     | AConstruct (id, [ arg ]) -> fprintf ppf "@[(Constr_%d %a)@]" id helper_a arg
     | AConstruct (id, args) ->
       fprintf ppf "@[(Constr_%d (%a))@]" id (pp_comma_list helper_a) args
+
+  and helper_p ppf = function
+    | Apat_any -> fprintf ppf "_"
+    | Apat_unit -> fprintf ppf "()"
+    | Apat_var name -> fprintf ppf "%a" Ident.pp name
+    | Apat_const const -> fprintf ppf "%a" Pprint.pp_const const
   ;;
 
   let pp_a = helper_a
@@ -186,14 +192,17 @@ include struct
     helper []
   ;;
 
-  let pp_vb ppf (flg, name, expr) =
-    let pats, body = group_abstractions expr in
-    fprintf ppf "@[<v 2>@[let %a%a " Pprint.pp_flg flg Ident.pp name;
-    List.iter (fprintf ppf "%a " pp_apat) pats;
-    fprintf ppf "=@]@ @[%a@]@]" pp body
+  let pp_stru_item ppf = function
+    | ANF_vb (flg, name, expr) ->
+      let pats, body = group_abstractions expr in
+      fprintf ppf "@[<v 2>@[let %a%a " Pprint.pp_flg flg helper_p name;
+      List.iter (fprintf ppf "%a " pp_apat) pats;
+      fprintf ppf "=@]@ @[%a@]@]" pp body
   ;;
 
-  let pp_stru ppf xs = fprintf ppf "@[<v>%a@]" (pp_print_list pp_vb) xs
+  let pp_stru ppf (items : stru) =
+    fprintf ppf "@[<v>%a@]" (pp_print_list pp_stru_item) items
+  ;;
 end
 
 let used_once_as_function ~where name =
