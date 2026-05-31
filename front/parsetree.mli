@@ -13,7 +13,7 @@ type pattern =
   | PAny
   | PVar of string
   | PTuple of pattern * pattern * pattern list
-  | PConstruct of string * pattern option
+  | PConstruct of string * pattern list
 [@@deriving show { with_path = false }]
 
 val pp_pattern : Format.formatter -> pattern -> unit
@@ -38,7 +38,7 @@ type expr =
   | EApp of expr * expr (** Application f x *)
   | ETuple of expr * expr * expr list
   | ELet of rec_flag * pattern * expr * expr (** let rec? .. = ... in ...  *)
-  | EConstruct of string * expr option (** ConstructorName(expr) *)
+  | EConstruct of string * expr list (** ConstructorName(expr1, ..., exprN) *)
   | EMatch of expr * (pattern * expr) list1 (** match expr with ... *)
 
 and 'a list1 = 'a * 'a list [@@deriving show { with_path = false }]
@@ -49,6 +49,7 @@ type type_declaration =
   { pty_params : string list (** ['a] is param in [type 'a list = ...]  *)
   ; pty_name : string (** [list] is name in [type 'a list = ...]  *)
   ; pty_kind : type_kind
+  ; pty_manifest : core_type option
   }
 [@@deriving show { with_path = false }]
 
@@ -89,7 +90,8 @@ val evar : string -> expr
 val elam : pattern -> expr -> expr
 val eapp : expr -> ?is_right_assoc:bool -> expr list -> expr
 val ematch : expr -> pattern * expr -> (pattern * expr) list -> expr
-val econstruct : string -> expr option -> expr
+val econstruct : string -> expr list -> expr
+val pconstruct : string -> pattern list -> pattern
 val eapp1 : expr -> expr -> expr
 val elet : ?isrec:rec_flag -> pattern -> expr -> expr -> expr
 val eite : expr -> expr -> expr -> expr

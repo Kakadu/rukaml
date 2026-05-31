@@ -11,7 +11,7 @@ type pattern =
   | PAny
   | PVar of string
   | PTuple of pattern * pattern * pattern list
-  | PConstruct of string * pattern option
+  | PConstruct of string * pattern list
 [@@deriving show { with_path = false }]
 
 type rec_flag =
@@ -29,7 +29,7 @@ type expr =
   | EApp of expr * expr
   | ETuple of expr * expr * expr list
   | ELet of rec_flag * pattern * expr * expr
-  | EConstruct of string * expr option
+  | EConstruct of string * expr list
   | EMatch of expr * (pattern * expr) list1
 [@@deriving show { with_path = false }]
 
@@ -47,7 +47,8 @@ let elam v body = ELam (v, body)
 let eapp1 f x = EApp (f, x)
 let etuple a b xs = ETuple (a, b, xs)
 let ematch e pe pes = EMatch (e, (pe, pes))
-let econstruct name arg = EConstruct (name, arg)
+let econstruct name args = EConstruct (name, args)
+let pconstruct name args = PConstruct (name, args)
 let earray xs = EArray xs
 
 let eapp f ?(is_right_assoc = false) args =
@@ -57,19 +58,23 @@ let eapp f ?(is_right_assoc = false) args =
   | true, args -> List.fold_right eapp1 args f
 ;;
 
-let pnil = PConstruct ("[]", None)
-let enil = EConstruct ("[]", None)
-let pcons hd tl = PConstruct ("::", Some (PTuple (hd, tl, [])))
-let econs hd tl = EConstruct ("::", Some (ETuple (hd, tl, [])))
+let pnil = PConstruct ("[]", [])
+let enil = EConstruct ("[]", [])
+let pcons hd tl = PConstruct ("::", [ hd; tl ])
+let econs hd tl = EConstruct ("::", [ hd; tl ])
 let elet ?(isrec = NonRecursive) p b wher = ELet (isrec, p, b, wher)
 let eite c t e = EIf (c, t, e)
 let emul a b = eapp (evar "*") [ a; b ]
 let eadd a b = eapp (evar "+") [ a; b ]
 let esub a b = eapp (evar "-") [ a; b ]
 let eeq a b = eapp (evar "=") [ a; b ]
+let ene a b = eapp (evar "<>") [ a; b ]
 let elt a b = eapp (evar "<") [ a; b ]
 let ele a b = eapp (evar "<=") [ a; b ]
+let ege a b = eapp (evar ">=") [ a; b ]
 let egt a b = eapp (evar ">") [ a; b ]
+let elor a b = eapp (evar "||") [ a; b ]
+let eland a b = eapp (evar "&&") [ a; b ]
 let e_cons a b = eapp ~is_right_assoc:true (evar "::") [ a; b ]
 
 type value_binding = rec_flag * pattern * expr [@@deriving show { with_path = false }]
@@ -78,6 +83,7 @@ type type_declaration =
   { pty_params : string list (** ['a] is param in [type 'a list = ...]  *)
   ; pty_name : string (** [list] is name in [type 'a list = ...]  *)
   ; pty_kind : type_kind
+  ; pty_manifest : core_type option
   }
 [@@deriving show { with_path = false }]
 
