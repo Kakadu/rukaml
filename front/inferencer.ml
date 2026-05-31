@@ -27,6 +27,7 @@ type error =
   | `Unbound_type of string
   | `Constructor_arity_mismatch of string
   | `Constructor_name_duplicates of string
+  | `InvalidFormatString of string
   ]
 
 let pp_error ppf : error -> _ = function
@@ -48,6 +49,7 @@ let pp_error ppf : error -> _ = function
     Format.fprintf ppf "constructor arity mistmatch: %s" name
   | `Constructor_name_duplicates name ->
     Format.fprintf ppf "constructor name duplicates in declaration of type %s" name
+  | `InvalidFormatString fmt -> Format.fprintf ppf "\"%s\" is not a valid formatter" fmt
 ;;
 
 type fresh_counter = int
