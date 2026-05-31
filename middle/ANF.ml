@@ -77,7 +77,7 @@ let group_abstractions =
 [@@@ocaml.warnerror "-11"]
 
 let is_infix_binop = function
-  | "=" | "+" | "-" | "*" | "/" | "<" | "<=" | ">" | ">=" -> true
+  | "=" | "+" | "-" | "*" | "/" | "<" | "<=" | ">" | ">=" | "&&" | "||" -> true
   | _ -> false
 ;;
 
@@ -313,7 +313,9 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
   and helperi = function
     | AConst (PConst_bool true) -> AConst (PConst_int 1)
     | AConst (PConst_bool false) -> AConst (PConst_int 0)
-    | (ATuple _ | APrimitive _ | AConst _ | AUnit) as i -> i
+    | (APrimitive _ | AConst _ | AUnit) as i -> i
+    | ATuple (i1, i2, is) -> ATuple (helperi i1, helperi i2, List.map helperi is)
+    | AArray is -> AArray (List.map helperi is)
     | AConstruct (tag, is) -> AConstruct (tag, List.map helperi is)
     | AVar name when Ident.equal ident1 name ->
       Format.eprintf "Possible missing substitution. %s %d\n%!" __FILE__ __LINE__;
@@ -352,7 +354,7 @@ let%expect_test _ =
        ~where:
          (elet
             NonRecursive
-            (Typedtree.Tpat_var v7)
+            (Apat_var v7)
             (CAtom (AVar vf))
             (EComplex (CApp (AVar vx, AVar v9, []))));
   [%expect
@@ -397,26 +399,34 @@ let simplify : _ Arity_map.t -> expr -> expr =
       | EComplex e -> EComplex (helper_c acc e)
       | ELet
           ( Parsetree.NonRecursive
-          , Tpat_var name1
+          , Apat_var name1
           , (CApp (AVar fname, _arg1, args) as rhs)
           , where_ )
         when used_once_as_function name1 ~where:where_
              && Arity_map.is_under fname (1 + List.length args) acc
              && cfg.opt_arity_inline -> helper acc (substitute ~where:where_ name1 rhs)
-      | ELet (Parsetree.NonRecursive, Tpat_var name1, body, EComplex (CAtom (AVar name2)))
+      | ELet
+          ( Parsetree.NonRecursive
+          , Apat_var name1
+          , (CApp (APrimitive (_fname, parity), _arg1, args) as rhs)
+          , where_ )
+        when used_once_as_function name1 ~where:where_
+             && 1 + List.length args < parity
+             && cfg.opt_arity_inline -> helper acc (substitute ~where:where_ name1 rhs)
+      | ELet (Parsetree.NonRecursive, Apat_var name1, body, EComplex (CAtom (AVar name2)))
         when Ident.equal name1 name2 ->
         (* let x = x in ... *)
         EComplex (helper_c acc body)
       | ELet
           ( NonRecursive
-          , Tpat_var name1
+          , Apat_var name1
           , body
           , ELet (NonRecursive, var2, CAtom (AVar name2), wher_) )
         when Ident.equal name1 name2 ->
         (* let name1 = ... in
            let name1 = ... in *)
         helper acc (ELet (NonRecursive, var2, body, wher_))
-      | ELet (NonRecursive, Tpat_var v1, rhs, where)
+      | ELet (NonRecursive, Apat_var v1, rhs, where)
         when used_once_in_if v1 ~where && is_comparison rhs && cfg.opt_cmp_into_if_inline
         -> helper acc (substitute ~where v1 rhs)
       | ELet (flg, name, body, wher) ->
@@ -581,6 +591,7 @@ let anf =
   let rec helper e (k : imm_expr -> expr) =
     match e with
     | Typedtree.TConst n -> k @@ AConst n
+    | TFormat (s, _ty) -> k @@ AConst (PConst_string s)
     | TApp (TApp (TVar (varname, _, Builtin (bname, 2), _), arg1, _), arg2, _)
       when is_infix_binop varname ->
       helper arg1 (fun arg1 ->
@@ -588,7 +599,7 @@ let anf =
           let name = gensym_id () in
           ELet
             ( NonRecursive
-            , Tpat_var name
+            , Apat_var name
             , CApp (APrimitive (bname, 2), arg1, [ arg2 ])
             , k (AVar name) )))
     (* | TApp (TApp (TVar ("fresh", _), arg1, _), arg2, _) ->
@@ -604,36 +615,25 @@ let anf =
       helper f (fun f ->
         helper arg1 (fun arg1 ->
           let name = gensym_id () in
-          ELet (NonRecursive, Tpat_var name, CApp (f, arg1, []), k (AVar name))))
+          ELet (NonRecursive, Apat_var name, CApp (f, arg1, []), k (AVar name))))
     | TLam (pat, body, _) ->
       anf_pat pat ~kbefore:(fun name e -> elam name e) (fun _pat -> helper body k)
     (* | TLam (PVar pat, body, _) ->
        let name = gensym_s () in
        let body = helper body complex_of_atom in
        make_let_nonrec name (CAtom (ALam (APname pat, body))) (k (AVar name)) *)
-    | TLet (flag, name, _typ, TLam (Tpat_var vname, body, _), wher) ->
+    | TLet (flag, Tpat_var name, _typ, TLam (Tpat_var vname, body, _), wher) ->
       ELet
         ( flag
-        , name
-        , (let name = gensym_id () in
-           CAtom
-             (ALam
-                ( APname vname
-                , helper body (fun imm ->
-                    ELet
-                      (NonRecursive, Tpat_var name, CAtom imm, complex_of_atom (AVar name)))
-                )))
+        , Apat_var name
+        , CAtom (ALam (Apat_var vname, helper body complex_of_atom))
         , helper wher complex_of_atom )
-    | TLet (_, (Tpat_tuple _ as pat), _typ, rhs, wher) ->
+    | TLet (_, pat, _typ, rhs, wher) ->
       helper rhs (fun imm_rhs ->
         anf_pat
           ~kbefore:(fun name -> make_let_nonrec name (CAtom imm_rhs))
           pat
           (fun _ -> helper wher k))
-    | TLet (flag, name, _typ, rhs, wher) ->
-      (* NOTE: CPS in this part is tricky *)
-      (* TODO: should we merge this case to the upper one? *)
-      helper rhs (fun imm_rhs -> ELet (flag, name, CAtom imm_rhs, helper wher k))
     | TIf (econd, eth, el, _) ->
       helper econd (fun eimm ->
         let name = gensym_id () in
@@ -647,11 +647,18 @@ let anf =
     | TVar (_, name, User, _) -> k (AVar name)
     | TVar (_, _, Builtin (_name, _arity), _) -> k (APrimitive (_name, _arity))
     | TUnit -> k (AConst (PConst_int 0))
-    | TTuple (ea, eb, [], _) ->
+    | TTuple (ea, eb, es, _) ->
       helper ea (fun aimm ->
         helper eb (fun bimm ->
-          let name = gensym_id () in
-          make_let_nonrec name (CAtom (ATuple (aimm, bimm, []))) (k (AVar name))))
+          let rec helper_fold es imms =
+            match es with
+            | hd :: tl -> helper hd (fun imm -> helper_fold tl (imm :: imms))
+            | [] ->
+              let name = gensym_id () in
+              let atuple = ATuple (aimm, bimm, List.rev imms) in
+              make_let_nonrec name (CAtom atuple) (k (AVar name))
+          in
+          helper_fold es []))
     | TArray (xs, _) ->
       let name = gensym_id () in
       let rec helper_fold xs ys =
