@@ -37,8 +37,19 @@ let parens p =
   char '(' *> trace_pos "after '('" *> p <* trace_pos "before ')'" <* lchar ')'
 ;;
 
+let apostrophes p =
+  char '\'' *> trace_pos "after \'" *> p <* trace_pos "before \'" <* lchar '\''
+;;
+
 let quotes p =
   char '"' *> trace_pos "after '\"'" *> p <* trace_pos "before '\"'" <* lchar '"'
+;;
+
+let any_char_except chs =
+  any_char
+  >>= function
+  | x when List.mem x chs -> fail "any_char_except"
+  | x -> return x
 ;;
 
 let brackets p =
@@ -47,8 +58,6 @@ let brackets p =
   <* lchar '|'
   <* char ']'
 ;;
-
-let const = char '0' >>= fun c -> return (Printf.sprintf "%c" c)
 
 let is_digit = function
   | '0' .. '9' -> true
@@ -73,13 +82,6 @@ let number =
 let is_char_valid_for_name = function
   | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '\'' | '_' -> true
   | _ -> false
-;;
-
-let distinguished_char =
-  any_char
-  >>= function
-  | x when is_char_valid_for_name x -> return x
-  | _ -> fail "distinguished_char"
 ;;
 
 let is_keyword = function
@@ -164,7 +166,20 @@ type dispatch_patt =
   ; patt : dispatch_patt -> pattern t
   }
 
-let patt_const =
+let escape_seq =
+  char '\\'
+  *> choice
+       [ char 'n' *> return '\n'
+       ; char 'r' *> return '\r'
+       ; char 't' *> return '\t'
+       ; char 'b' *> return '\b'
+       ; char '\\' *> return '\\'
+       ; char '\'' *> return '\''
+       ; char '\"' *> return '\"'
+       ]
+;;
+
+let constant =
   ws *> fail ""
   <|> string "()" *> return PUnit
   <|> (take_while1 is_digit >>| fun chs -> PConst (const_int (int_of_string chs)))
