@@ -81,20 +81,21 @@ type type_declaration =
 [@@deriving show { with_path = false }]
 
 and type_kind =
-  | KAbstract of core_type option (** [ type t ], [ type t = x ] *)
-  | KVariants of (string * core_type option) list1 (** [ type t = Some of int | None ]  *)
+  | Ptype_abstract (** [ type t = int * bool ] *)
+  | Ptype_variant of (string * core_type list) list1
+  (** [ type t = Some of int | None ]  *)
 [@@deriving show { with_path = false }]
 
 and core_type =
-  | CTVar of string (** [ 'a, 'b ] are type variables in [ type ('a, 'b) ty = ... ] *)
-  | CTArrow of core_type * core_type (** ['a -> 'b] *)
-  | CTTuple of core_type * core_type * core_type list (** [ 'a * 'b * 'c ] *)
-  | CTConstr of string * core_type list (** [ int ], ['a option], [ ('a, 'b) list ] *)
+  | Ptyp_var of string (** [ 'a, 'b ] are type variables in [ type ('a, 'b) ty = ... ] *)
+  | Ptyp_arrow of core_type * core_type (** ['a -> 'b] *)
+  | Ptyp_tuple of core_type * core_type * core_type list (** [ 'a * 'b * 'c ] *)
+  | Ptyp_constr of string * core_type list (** [ int ], ['a option], [ ('a, 'b) list ] *)
 [@@deriving show { with_path = false }]
 
 type structure_item =
-  | SValue of value_binding (** [ let x = ... ] *)
-  | SType of type_declaration list1 (** [ type x = ... ] *)
+  | Pstr_value of value_binding (** [ let x = ... ] *)
+  | Pstr_type of type_declaration list1 (** [ type x = ... ] *)
 [@@deriving show { with_path = false }]
 
 type structure = structure_item list [@@deriving show { with_path = false }]
