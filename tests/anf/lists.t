@@ -16,12 +16,12 @@
         else 1)
 
   $ run << EOF
-  > let len ls =
+  > let rec len ls =
   >   match ls with
   >   | [] -> 0
   >   | _ :: xs -> 1 + len xs
   > EOF
-  let len ls =
+  let rec len ls =
     let temp1 = ls in
       let temp8 = get_tag temp1  in
         (if (temp8 = 0)

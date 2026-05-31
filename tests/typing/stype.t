@@ -45,21 +45,21 @@
 
   $ run << EOF
   > type ('a, 'b) arrows =
-  >   | Normal of 'a -> 'b
-  >   | Reversed of 'b -> 'a
+  >   | Normal of ('a -> 'b)
+  >   | Reversed of ('b -> 'a)
   > 
   > let a = Normal (fun x -> x > 0)
   > let b = Reversed (fun x -> x > 0)
   > EOF
   type ('_0, '_1) arrows =
-    | Normal of '_0 -> '_1
-    | Reversed of '_1 -> '_0
+    | Normal of ('_0 -> '_1)
+    | Reversed of ('_1 -> '_0)
   let fresh_1: ('_2 -> int -> '_4) -> '_2 -> '_4 =
-    fun > x -> (> x) 0
+    fun > x -> x > 0
   let a: (int, bool) arrows =
     Normal (fresh_1 >)
   let fresh_2: ('_2 -> int -> '_4) -> '_2 -> '_4 =
-    fun > x -> (> x) 0
+    fun > x -> x > 0
   let b: (bool, int) arrows =
     Reversed (fresh_2 >)
   $ run << EOF
@@ -70,7 +70,7 @@
   > EOF
   type '_0 pair =
     | Pair of '_0 * '_0
-  let x: int * int pair =
+  let x: (int * int) pair =
     Pair ((1, 2), (3, 4))
 
   $ run << EOF
@@ -85,9 +85,9 @@
     | Box of '_0
   let fresh_1: int -> int =
     fun a -> a + 1
-  let x: int -> int box =
+  let x: (int -> int) box =
     Box fresh_1
-  let y: int -> int box box =
+  let y: (int -> int) box box =
     Box x
 
 # assert type of { is_pair } is { 'a prod -> bool }
@@ -145,7 +145,7 @@
   > 
   > let x = Pair (1, 2, 3)
   > EOF
-  infer error: unification failed on (int, int) and (int, int, int)
+  infer error: constructor arity mistmatch: Pair
   [1]
 
   $ run << EOF
@@ -179,7 +179,7 @@
   >   match Pair (1, 2) with
   >   | Pair (a, b, c) -> a + 1
   > EOF
-  infer error: unification failed on ('_4, '_4) and ('_4, '_4, '_5)
+  infer error: constructor arity mistmatch: Pair
   [1]
 #
 
@@ -216,7 +216,7 @@
   let rec map: ('_3 -> '_4) -> '_3 list -> '_4 list =
     fun f ls -> match ls with
                   | Nil -> Nil
-                  | Cons (hd, tl) -> Cons ((f hd), ((map f) tl))
+                  | Cons (hd, tl) -> Cons (f hd, (map f) tl)
   let rec fold: ('_2 -> '_4 -> '_2) -> '_2 -> '_4 list -> '_2 =
     fun f acc ls -> match ls with
                       | Nil -> acc
@@ -255,7 +255,7 @@
     fun ls acc -> match ls with
                     | Nil -> acc
                     | Cons (hd, tl) -> (aux tl) (Cons (hd, acc))
-  let rev: '_3 list -> '_3 list =
+  let rev: '_4 list -> '_4 list =
     fun ls -> (aux ls) Nil
   let is_empty: '_3 list -> bool =
     fun ls -> match ls with
@@ -360,12 +360,12 @@
     fun ls -> match ls with
                 | [] -> []
                 | x :: xs -> (Some x) :: (wrap ls)
-  let rec aux: '_3 option list -> '_3 list -> '_3 list option =
+  let rec aux: '_6 option list -> '_6 list -> '_6 list option =
     fun ls acc -> match ls with
                     | [] -> Some acc
                     | None :: _ -> None
                     | Some x :: xs -> (aux xs) (x :: acc)
-  let unwrap: '_3 option list -> '_3 list option =
+  let unwrap: '_4 option list -> '_4 list option =
     fun ls -> (aux ls) []
 
 #

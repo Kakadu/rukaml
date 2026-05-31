@@ -203,28 +203,28 @@ let%expect_test "cps func in func" =
 let%expect_test "cps not allowed let rec" =
   test_cps {| let main  = let rec  x =  x 0 in 0|};
   [%expect
-    {|  (x 0): This kind of expression is not allowed as right-hand side of `let rec'
+    {|  x 0: This kind of expression is not allowed as right-hand side of `let rec'
 |}]
 ;;
 
 let%expect_test "cps not allowed let rec (top-level)" =
   test_cps {| let rec  x =  x 0|};
   [%expect
-    {|  (x 0): This kind of expression is not allowed as right-hand side of `let rec'
+    {|  x 0: This kind of expression is not allowed as right-hand side of `let rec'
 |}]
 ;;
 
 let%expect_test "cps not allowed let rec lambda complex" =
   test_cps {| let main  = let rec x = (fun z -> (fun y -> x )) 0 in 0|};
   [%expect
-    {|  ((fun z -> (fun y -> x)) 0): This kind of expression is not allowed as right-hand side of `let rec'
+    {|  (fun z -> fun y -> x) 0: This kind of expression is not allowed as right-hand side of `let rec'
 |}]
 ;;
 
 let%expect_test "cps not allowed let rec lambda complex (top-level)" =
   test_cps {|let rec x = (fun z -> (fun y -> x )) 0 |};
   [%expect
-    {|  ((fun z -> (fun y -> x)) 0): This kind of expression is not allowed as right-hand side of `let rec'
+    {|  (fun z -> fun y -> x) 0: This kind of expression is not allowed as right-hand side of `let rec'
 |}]
 ;;
 

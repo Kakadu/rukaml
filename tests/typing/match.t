@@ -126,7 +126,7 @@
   >   match (1, 2) with
   >   | (a, b, c) -> a + b + c
   > EOF
-  infer error: unification failed on (int, int, '_3) and (int, int)
+  infer error: unification failed on (int * int * '_3) and (int * int)
   [1]
   $ run << EOF
   > let main =
@@ -149,7 +149,7 @@
   >     match 1 with
   >     | (a, b) -> a + b
   > EOF
-  infer error: unification failed on ('_1, '_2) and int
+  infer error: unification failed on ('_1 * '_2) and int
   [1]
 
   $ run << EOF
@@ -185,6 +185,6 @@
   >     | (a, b) -> a + b
   >     | (a, b, c) -> a + b + c
   > EOF
-  infer error: unification failed on (int, int, int) and (int, int)
+  infer error: unification failed on (int * int * int) and (int * int)
   [1]
 #

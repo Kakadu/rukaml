@@ -14,7 +14,7 @@
   > 
   > let main = exists is_even [ 1; 2; 3; 4; 5 ]
   > EOF
-  let rec exists: (int -> bool) -> int list -> bool =
+  let rec exists: ('_3 -> bool) -> '_3 list -> bool =
     fun pred ls -> match ls with
                      | [] -> false
                      | hd :: tl -> (if pred hd then true else (exists pred) tl)
@@ -37,7 +37,7 @@
   > 
   > let main = map not [ true; false; true; false ]
   > EOF
-  let rec map: (bool -> bool) -> bool list -> bool list =
+  let rec map: ('_3 -> '_4) -> '_3 list -> '_4 list =
     fun f ls -> match ls with
                   | [] -> []
                   | hd :: tl -> (f hd) :: ((map f) tl)
@@ -55,7 +55,7 @@
   > 
   > let main = apply_n not true 5
   > EOF
-  let rec apply_n: (bool -> bool) -> bool -> int -> bool =
+  let rec apply_n: ('_11 -> '_11) -> '_11 -> int -> '_11 =
     fun f x n -> (if n = 0 then x else ((apply_n f) (f x)) (n - 1))
   let not: bool -> bool =
     fun x -> (if x then false else true)
@@ -72,8 +72,14 @@
   > 
   > let main = (apply_n not true 2, apply_n inc 0 2)
   > EOF
-  infer error: unification failed on bool and int
-  [1]
+  let rec apply_n: ('_11 -> '_11) -> '_11 -> int -> '_11 =
+    fun f x n -> (if n = 0 then x else ((apply_n f) (f x)) (n - 1))
+  let not: bool -> bool =
+    fun x -> (if x then false else true)
+  let inc: int -> int =
+    fun x -> x + 1
+  let main: bool * int =
+    ((((apply_n not) true) 2), (((apply_n inc) 0) 2))
 #
 
 # this one works as expected
