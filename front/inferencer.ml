@@ -445,16 +445,17 @@ let lookup_scheme_by_string : _ =
 
 let fresh_var ~level = fresh >>| fun n -> tv n ~level
 
-let instantiate_tconstr ?(level = 0) name var_set =
+let instantiate_tconstr ?(level = 0) name params =
   let* sub, vars =
-    Var_set.fold_R
-      (fun (sub, acc) name ->
-         let* fresh = fresh in
-         let tvar = tv fresh ~level in
-         let sub = Subst.compose sub (Subst.singleton name tvar) in
-         return (sub, tvar :: acc))
-      var_set
-      (return (Subst.empty, []))
+    List.fold
+      ~f:(fun acc binder ->
+        let* sub, tvars = acc in
+        let* fresh = fresh in
+        let tvar = tv fresh ~level in
+        let sub = Subst.compose sub (Subst.singleton binder tvar) in
+        return (sub, tvar :: tvars))
+      params
+      ~init:(return (Subst.empty, []))
   in
   return (sub, tconstr (List.rev vars) name)
 ;;
@@ -498,20 +499,26 @@ let rec check_pat ~level env table = function
   | Parsetree.PAny ->
     let* ty = fresh_var ~level in
     return (env, Tpat_any, ty)
-  | Parsetree.PConstruct (name, patt_opt) ->
+  | Parsetree.PConstruct (name, args) ->
     let* constr_info, type_info = find_constructor name env in
     let ty_name, ty_params = type_info.tty_ident.hum_name, type_info.tty_params in
     let* sub, ty = instantiate_tconstr ~level ty_name ty_params in
-    (match patt_opt, constr_info.constr_arg with
-     | Some patt, Some expected_ty ->
-       let* env, arg_patt, arg_ty = check_pat ~level env table patt in
-       let* () = unify table (Subst.apply sub expected_ty) (Subst.apply sub arg_ty) in
-       let patt = Tpat_constr (constr_info.constr_ident, Some arg_patt) in
-       return (env, patt, ty)
-     | None, None ->
-       let patt = Tpat_constr (constr_info.constr_ident, None) in
-       return (env, patt, ty)
-     | _ -> fail (`Constructor_arity_mismatch name))
+    let rec aux env args expected_tys acc_patts =
+      match args, expected_tys with
+      | [], [] ->
+        return (env, Tpat_constr (constr_info.constr_ident, List.rev acc_patts), ty)
+      | arg :: args, expected_ty :: expected_tys ->
+        let* env, patt, arg_ty = check_pat ~level env table arg in
+        let* () = unify table (Subst.apply sub expected_ty) (Subst.apply sub arg_ty) in
+        aux env args expected_tys (patt :: acc_patts)
+      | _ -> fail (`Constructor_arity_mismatch name)
+    in
+    (* delayed adt constructor arity calculating *)
+    (match args, constr_info.constr_args with
+     | [ Parsetree.PTuple (p1, p2, ps) ], ty1 :: ty2 :: tys ->
+       (* here the case "of (ty1 * ... * tyN)" is explicitly distinguished from the case "of ty1 * ... * tyN" *)
+       aux env (p1 :: p2 :: ps) (ty1 :: ty2 :: tys) []
+     | _ -> aux env args constr_info.constr_args [])
 ;;
 
 let elim weak =
@@ -770,23 +777,33 @@ let infer env table expr =
           List.fold cases ~init:(return (pty, ety, [])) ~f:infer_case
         in
         return (ety, TMatch (expr, ((p1, e1), List.rev cases), ety))
-      | EConstruct (name, arg_opt) ->
+      | EConstruct (name, args) ->
+        let state = clean_state state in
         let* constr_info, type_info = find_constructor name env in
         let ty_name, ty_params = type_info.tty_ident.hum_name, type_info.tty_params in
         let* sub, ty = instantiate_tconstr ~level:!current_level ty_name ty_params in
-        (match constr_info.constr_arg, arg_opt with
-         | Some expected_ty, Some arg ->
-           let* arg_ty, arg_expr = helper env state arg in
-           let* () = unify table (Subst.apply sub expected_ty) (Subst.apply sub arg_ty) in
-           let expr = TConstruct (constr_info.constr_ident, Some arg_expr, ty) in
-           return (ty, expr)
-         | None, None ->
-           let expr = TConstruct (constr_info.constr_ident, None, ty) in
-           return (ty, expr)
-         | _ -> fail (`Constructor_arity_mismatch name))
-      | _ -> failwith "not implemented"
+        let rec aux args expected_tys acc_args =
+          match args, expected_tys with
+          | [], [] ->
+            return (ty, TConstruct (constr_info.constr_ident, List.rev acc_args, ty))
+          | arg :: args, expected_ty :: expected_tys ->
+            let* arg_ty, arg_expr = helper env state arg in
+            let* () =
+              unify table (Subst.apply sub expected_ty) (Subst.apply sub arg_ty)
+            in
+            aux args expected_tys (arg_expr :: acc_args)
+          | _ -> fail (`Constructor_arity_mismatch name)
+        in
+        (* delayed adt constructor arity calculating *)
+        (match args, constr_info.constr_args with
+         | arg1 :: arg2 :: args, ([ { typ_desc = TProd _ } ] as expected) ->
+           (* here the case "of (ty1 * ... * tyN)" is explicitly distinguished from the case "of ty1 * ... * tyN" *)
+           let actual = [ Parsetree.ETuple (arg1, arg2, args) ] in
+           aux actual expected []
+         | _ -> aux args constr_info.constr_args [])
   in
-  let* ty, expr = helper env MakeWeak expr in
+  let init_state = { restriction_state = MakeWeak; infer_strings_as = TypeString } in
+  let* ty, expr = helper env init_state expr in
   let* ty = restrict DoNothing table ty in
   return (ty, expr)
 ;;
