@@ -53,7 +53,12 @@ val int_typ : ty
 val char_typ : ty
 val bool_typ : ty
 val unit_typ : ty
+val string_typ : ty
 val array_typ : ty -> ty
+val list_typ : ty -> ty
+val in_channel_typ : ty
+val out_channel_typ : ty
+val format3_typ : arg_ty:ty -> dest_ty:ty -> out_ty:ty -> ty
 
 type pattern =
   | Tpat_unit
@@ -61,7 +66,7 @@ type pattern =
   | Tpat_var of Ident.t
   | Tpat_tuple of pattern * pattern * pattern list
   | Tpat_any
-  | Tpat_constr of Ident.t * pattern option
+  | Tpat_constr of Ident.t * pattern list
 
 val show_pattern : pattern -> string
 val pp_pattern : Format.formatter -> pattern -> unit
@@ -83,7 +88,8 @@ type expr =
   | TLet of Parsetree.rec_flag * pattern * scheme * expr * expr
   (** let rec? .. = ... in ... *)
   | TMatch of expr * (pattern * expr) Parsetree.list1 * ty
-  | TConstruct of Ident.t * expr option * ty
+  | TConstruct of Ident.t * expr list * ty
+  | TFormat of string * ty
 
 val type_of_expr : expr -> ty
 val type_without_links : ty -> ty
@@ -102,20 +108,21 @@ type value_binding =
   ; tvb_typ : scheme
   }
 
-type type_kind =
-  | Tty_abstract of ty option
-  | Tty_variants of (Ident.t * ty option) list
-
-type type_declaration =
-  { tty_ident : Ident.t
-  ; tty_params : binder_set (* TODO:  replace it with Ident.t list or smth like that *)
-  ; tty_kind : type_kind
-  }
-
 type constructor_info =
   { constr_ident : Ident.t
   ; constr_type_ident : Ident.t
-  ; constr_arg : ty option
+  ; constr_args : ty list
+  }
+
+type type_kind =
+  | Ttype_abstract
+  | Ttype_variants of constructor_info list
+
+type type_declaration =
+  { tty_ident : Ident.t
+  ; tty_params : binder list
+  ; tty_kind : type_kind
+  ; tty_manifest : ty option
   }
 
 type structure_item =
@@ -134,7 +141,6 @@ module TypeEnv : sig
     }
 
   val empty : t
-  val add_type : t -> type_declaration -> t
   val typ_unit : type_declaration
   val typ_int : type_declaration
   val typ_bool : type_declaration

@@ -39,7 +39,7 @@ let%expect_test _ =
   [%expect
     {|
     let mul5 x = repeat 5 (fun acc -> x) 0
-    let rec fac n = if n = 1 then n else n * (fac (n - 1))
+    let rec fac n = if n = 1 then n else n * fac (n - 1)
     let main x = 32 |}]
 ;;
 
@@ -54,7 +54,7 @@ let%expect_test _ =
 
 let%expect_test _ =
   wrap_parse_exn (pack.expr pack) Pprint.pp_expr {|5+1|};
-  [%expect {| (5 + 1) |}]
+  [%expect {| 5 + 1 |}]
 ;;
 
 let%expect_test _ =
@@ -110,7 +110,7 @@ let%expect_test _ =
   parse_expr_exn {| 1+1 |};
   [%expect
     {|
-    (1 + 1) |}]
+    1 + 1 |}]
 ;;
 
 open Format

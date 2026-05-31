@@ -15,5 +15,5 @@
   >    m y in
   >  aux x 0 
   > EOF
-  let aux n y = let m = aux (n - 1) in m y
+  let rec aux n y = let m = aux (n - 1) in m y
   let f x = aux x 0

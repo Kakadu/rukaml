@@ -19,7 +19,6 @@ let of_string hum_name =
 
 (* to create idents for constructors with the specified id *)
 let ident hum_name id = { hum_name; id }
-
 let equal left { id; _ } = left.id = id
 let compare left { id; _ } = Int.compare left.id id
 
@@ -63,7 +62,6 @@ end = struct
   ;;
 
   let find_by_ident id (left, _) = Id_map.find id left
-
   let find_by_ident_opt id (left, _) = Id_map.find_opt id left
 
   let find_by_string str (left, s_to_i) =

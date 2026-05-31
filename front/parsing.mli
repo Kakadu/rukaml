@@ -4,6 +4,7 @@ type dispatch =
   { prio : dispatch -> Parsetree.expr Angstrom.t
   ; expr_basic : dispatch -> Parsetree.expr Angstrom.t
   ; expr_long : dispatch -> Parsetree.expr Angstrom.t
+  ; expr_tuple : dispatch -> Parsetree.expr Angstrom.t
   ; expr : dispatch -> Parsetree.expr Angstrom.t
   }
 
@@ -65,3 +66,4 @@ val parse_pat_exn : string -> Parsetree.pattern
 val parse_vb_exn : string -> Parsetree.value_binding
 val parse_value_bindings : string -> (Parsetree.value_binding list, [> error ]) result
 val parse_structure : string -> (Parsetree.structure_item list, [> error ]) result
+val make_preprocessing_exn : string -> string

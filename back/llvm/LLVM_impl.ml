@@ -74,7 +74,7 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
       LL.build_call typ alloc_closure final_args
     | AArray [] -> LL.const_int i64_typ 0
     | AArray r ->
-      let l = List.map gen_a (List.rev r) in
+      let l = List.map gen_a r in
       let arr = LL.stack_array i64_typ (Array.of_seq @@ List.to_seq l) in
       let arr_typ = Llvm.array_type i64_typ (List.length l) in
       let alloca = LL.build_alloca arr_typ in

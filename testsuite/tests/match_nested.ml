@@ -1,7 +1,26 @@
 (*
 test
   (targets (rv64 promote))
-  (run (stdout "rukaml_print_int 3"))
+  (run (stdout
+  "BLOCK: 0x152a8, tag=0, size=1"
+  " 0 -> Int 0"
+  "BLOCK: 0x15468, tag=1, size=2"
+  " BLOCK: 0x15328, tag=1, size=0"
+  " BLOCK: 0x153a8, tag=1, size=2"
+  "  BLOCK: 0x152a8, tag=0, size=1"
+  "   0 -> Int 0"
+  "  BLOCK: 0x15368, tag=0, size=0"
+  "BLOCK: 0x155e8, tag=1, size=2"
+  " BLOCK: 0x15528, tag=0, size=1"
+  "  BLOCK: 0x15468, tag=1, size=2"
+  "   BLOCK: 0x15328, tag=1, size=0"
+  "   BLOCK: 0x153a8, tag=1, size=2"
+  "    BLOCK: 0x152a8, tag=0, size=1"
+  "     0 -> Int 0"
+  "    BLOCK: 0x15368, tag=0, size=0"
+  " BLOCK: 0x155a8, tag=0, size=0"
+  "rukaml_print_int 3"
+  ))
 *)
 
 type 'a option =

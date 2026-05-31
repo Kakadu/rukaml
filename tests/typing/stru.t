@@ -25,7 +25,7 @@ Zed combinator should trigger occurs check
   > let fac = fun self -> fun n -> if n=1 then 1 else n * (self (n-1))
   > let main = zed fac
   > EOF
-  let rec zed: ((int -> int) -> int -> int) -> int -> int =
+  let rec zed: (('_2 -> '_5) -> '_2 -> '_5) -> '_2 -> '_5 =
     fun f x -> (f (zed f)) x
   let fac: (int -> int) -> int -> int =
     fun self n -> (if n = 1 then 1 else n * (self (n - 1)))
@@ -55,7 +55,7 @@ Zed combinator should trigger occurs check
   > let fac = fun self -> fun n -> if n=1 then 1 else n * (self (n-1))
   > let main = fix fac
   > EOF
-  let rec fix: ((int -> int) -> int -> int) -> int -> int =
+  let rec fix: ('_3 -> '_3) -> '_3 =
     fun f -> f (fix f)
   let fac: (int -> int) -> int -> int =
     fun self n -> (if n = 1 then 1 else n * (self (n - 1)))
@@ -67,7 +67,7 @@ Zed combinator should trigger occurs check
   > let fac = fun self -> fun n -> if n=1 then 1 else n * (self (n-1))
   > let main = zed fac
   > EOF
-  let rec zed: ((int -> int) -> int -> int) -> int -> int =
+  let rec zed: (('_2 -> '_5) -> '_2 -> '_5) -> '_2 -> '_5 =
     fun f x -> (f (zed f)) x
   let fac: (int -> int) -> int -> int =
     fun self n -> (if n = 1 then 1 else n * (self (n - 1)))
@@ -163,5 +163,6 @@ tuples
 
   $ run << EOF
   > let rec (a,b) = (a,b)
+  > EOF
   infer error: Only variables are allowed as left-hand side of `let rec'
   [1]

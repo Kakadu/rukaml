@@ -3,8 +3,8 @@
 type const =
   | PConst_int of int
   | PConst_char of char
-  (* | PConst_string of string *)
   | PConst_bool of bool
+  | PConst_string of string
 [@@deriving show { with_path = false }]
 
 type pattern =
@@ -13,7 +13,7 @@ type pattern =
   | PAny
   | PVar of string
   | PTuple of pattern * pattern * pattern list
-  | PConstruct of string * pattern option
+  | PConstruct of string * pattern list
 [@@deriving show { with_path = false }]
 
 val pp_pattern : Format.formatter -> pattern -> unit
@@ -38,7 +38,7 @@ type expr =
   | EApp of expr * expr (** Application f x *)
   | ETuple of expr * expr * expr list
   | ELet of rec_flag * pattern * expr * expr (** let rec? .. = ... in ...  *)
-  | EConstruct of string * expr option (** ConstructorName(expr) *)
+  | EConstruct of string * expr list (** ConstructorName(expr1, ..., exprN) *)
   | EMatch of expr * (pattern * expr) list1 (** match expr with ... *)
 
 and 'a list1 = 'a * 'a list [@@deriving show { with_path = false }]
@@ -49,24 +49,26 @@ type type_declaration =
   { pty_params : string list (** ['a] is param in [type 'a list = ...]  *)
   ; pty_name : string (** [list] is name in [type 'a list = ...]  *)
   ; pty_kind : type_kind
+  ; pty_manifest : core_type option
   }
 [@@deriving show { with_path = false }]
 
 and type_kind =
-  | KAbstract of core_type option (** [ type t ], [ type t = x ] *)
-  | KVariants of (string * core_type option) list1 (** [ type t = Some of int | None ]  *)
+  | Ptype_abstract
+  | Ptype_variant of (string * core_type list) list1
+  (** [ type t = Some of int | None ]  *)
 [@@deriving show { with_path = false }]
 
 and core_type =
-  | CTVar of string (** [ 'a, 'b ] are type variables in [ type ('a, 'b) ty = ... ] *)
-  | CTArrow of core_type * core_type (** ['a -> 'b] *)
-  | CTTuple of core_type * core_type * core_type list (** [ 'a * 'b * 'c ] *)
-  | CTConstr of string * core_type list (** [ int ], ['a option], [ ('a, 'b) list ] *)
+  | Ptyp_var of string (** [ 'a, 'b ] are type variables in [ type ('a, 'b) ty = ... ] *)
+  | Ptyp_arrow of core_type * core_type (** ['a -> 'b] *)
+  | Ptyp_tuple of core_type * core_type * core_type list (** [ 'a * 'b * 'c ] *)
+  | Ptyp_constr of string * core_type list (** [ int ], ['a option], [ ('a, 'b) list ] *)
 [@@deriving show { with_path = false }]
 
 type structure_item =
-  | SValue of value_binding (** [ let x = ... ] *)
-  | SType of type_declaration list1 (** [ type x = ... ] *)
+  | Pstr_value of value_binding (** [ let x = ... ] *)
+  | Pstr_type of type_declaration list1 (** [ type x = ... ] *)
 [@@deriving show { with_path = false }]
 
 type structure = structure_item list [@@deriving show { with_path = false }]
@@ -75,6 +77,7 @@ val show_structure : structure -> string
 val const_int : int -> const
 val const_char : char -> const
 val const_bool : bool -> const
+val const_string : string -> const
 
 (* val pp_value_binding : Format.formatter -> value_binding -> unit *)
 val pp_expr : Format.formatter -> expr -> unit
@@ -87,7 +90,8 @@ val evar : string -> expr
 val elam : pattern -> expr -> expr
 val eapp : expr -> ?is_right_assoc:bool -> expr list -> expr
 val ematch : expr -> pattern * expr -> (pattern * expr) list -> expr
-val econstruct : string -> expr option -> expr
+val econstruct : string -> expr list -> expr
+val pconstruct : string -> pattern list -> pattern
 val eapp1 : expr -> expr -> expr
 val elet : ?isrec:rec_flag -> pattern -> expr -> expr -> expr
 val eite : expr -> expr -> expr -> expr
@@ -95,9 +99,13 @@ val emul : expr -> expr -> expr
 val eadd : expr -> expr -> expr
 val esub : expr -> expr -> expr
 val eeq : expr -> expr -> expr
+val ene : expr -> expr -> expr
 val elt : expr -> expr -> expr
 val ele : expr -> expr -> expr
+val ege : expr -> expr -> expr
 val egt : expr -> expr -> expr
+val elor : expr -> expr -> expr
+val eland : expr -> expr -> expr
 val e_cons : expr -> expr -> expr
 val etuple : expr -> expr -> expr list -> expr
 val earray : expr list -> expr
