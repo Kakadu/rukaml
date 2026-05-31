@@ -3,11 +3,17 @@ open Typedtree
 open Format
 
 type pp_typ_ctx =
-  | CArrow_left
-  | CArrow_right
-  | CTuple
+  | CArrow_left (* <here> -> ... *)
+  | CArrow_right (* ... -> <here> *)
+  | CTuple (* <here> * <here> * <here> *)
+  | CSingleTypeParam (* <here> list *)
+  | CManyTypeParam (* (<here>, <here>) map *)
+  | CFree (* omit outer parens *)
+  | CWrap (* do not omit outer parens *)
 
-let pp_typ_hum =
+type under_test = int list -> int list list
+
+let pp_typ_hum ~parens =
   let open Format in
   let rec pp_typ ctx ppf t =
     match t.typ_desc with
@@ -17,15 +23,15 @@ let pp_typ_hum =
     | Arrow (l, r) ->
       let fmt : _ format =
         match ctx with
-        | CArrow_right -> "%a -> %a"
-        | CArrow_left | CTuple -> "(%a -> %a)"
+        | CArrow_right | CManyTypeParam | CFree -> "%a -> %a"
+        | CArrow_left | CTuple | CSingleTypeParam | CWrap -> "(%a -> %a)"
       in
       fprintf ppf fmt (pp_typ CArrow_left) l (pp_typ CArrow_right) r
     | TProd (a, b, ts) ->
       let fmt : _ format =
         match ctx with
-        | CArrow_left | CArrow_right -> "%a"
-        | CTuple -> "(%a)"
+        | CArrow_left | CArrow_right | CManyTypeParam | CFree -> "%a"
+        | CTuple | CSingleTypeParam | CWrap -> "(%a)"
       in
       fprintf
         ppf
@@ -36,14 +42,15 @@ let pp_typ_hum =
            fprintf ppf "@]")
         ()
     | TConstr ([], name) -> fprintf ppf "%s" name
-    | TConstr ([ param ], name) -> fprintf ppf "%a %s" (pp_typ ctx) param name
+    | TConstr ([ param ], name) ->
+      fprintf ppf "%a %s" (pp_typ CSingleTypeParam) param name
     | TConstr (params, name) ->
       fprintf ppf "(";
       let pp_sep ppf () = fprintf ppf ", " in
-      pp_print_list (pp_typ CTuple) ~pp_sep ppf params;
+      pp_print_list (pp_typ CManyTypeParam) ~pp_sep ppf params;
       fprintf ppf ") %s" name
   in
-  pp_typ CArrow_right
+  pp_typ (if parens then CWrap else CFree)
 ;;
 
 let cons_ident = Typedtree.TypeEnv.TypeList.constr_cons.constr_ident
