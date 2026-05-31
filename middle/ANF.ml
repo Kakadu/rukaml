@@ -684,10 +684,11 @@ let anf =
       aux (args, [])
     (* converts TMatch into if-then-else *)
     | TMatch (scrutinee, (case1, cases), _) ->
-      let prim_field = APrimitive ("get_arg", 2) in
-      let prim_tag = APrimitive ("get_tag", 2) in
+      let access obj n =
+        CApp (APrimitive ("block_nth", 2), obj, [ AConst (PConst_int n) ])
+      in
+      let get_tag x = CApp (APrimitive ("block_tag", 1), x, []) in
       let match_failure = APrimitive ("match_failure", 0) in
-      let access n x = CApp (prim_field, AConst (PConst_int n), [ x ]) in
       let cmp a b = CApp (APrimitive ("=", 2), a, [ b ]) in
       let rec process_cases scrut cases k =
         match cases with
@@ -706,12 +707,11 @@ let anf =
           make_let_nonrec fresh rhs @@ make_ite fresh success
         in
         let compare_tag (ident : Ident.t) success =
-          let get_tag = CApp (prim_tag, scrut_var, []) in
           let expected_tag = AConst (PConst_int ident.id) in
           let fresh_for_tag = gensym_id () in
           let compare_tags = cmp (AVar fresh_for_tag) expected_tag in
           let fresh_for_cmp = gensym_id () in
-          make_let_nonrec fresh_for_tag get_tag
+          make_let_nonrec fresh_for_tag (get_tag scrut_var)
           @@ make_let_nonrec fresh_for_cmp compare_tags
           @@ make_ite fresh_for_cmp success
         in
@@ -721,7 +721,7 @@ let anf =
             | pat :: tl ->
               let fresh = gensym_id () in
               let success = aux (i + 1) tl in
-              let scrut = access i scrut_var in
+              let scrut = access scrut_var i in
               make_let_nonrec fresh scrut
               @@ match_pattern pat (AVar fresh) success failure
           in
@@ -742,7 +742,6 @@ let anf =
         make_let_nonrec fresh (CAtom scrut) wher
       in
       helper scrutinee k
-    | _ -> failwiths "not implemented"
   in
   fun e -> helper e complex_of_atom
 ;;
