@@ -947,10 +947,10 @@ let vb ?(env = start_env) table (flg, pat, body) : (_, [> error ]) Result.t =
       let* rhs_ty, typed_rhs = infer env table body in
       return (env_with_binding, rhs_ty, tpat, typed_rhs)
     | Recursive, Parsetree.PVar name ->
-      let* binder = fresh in
-      let tv = Typedtree.tv binder ~level in
-      let env = Type_env.extend_string name (S (Var_set.singleton binder, tv)) env in
+      let* tv = fresh_var ~level:0 in
+      let env = Type_env.extend_string name (S (Var_set.empty, tv)) env in
       let* ty, tbody = infer env table body in
+      let* () = unify table tv ty in
       return (env, ty, Tpat_var (Type_env.ident_of_string name env), tbody)
     | Recursive, _ -> fail `Only_varibles_on_the_left_of_letrec
   in
