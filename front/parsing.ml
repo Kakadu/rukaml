@@ -580,13 +580,20 @@ let parse_structure str =
 (** TODO: make preprocessing more flexible (and maybe move it to separated module) *)
 
 let preprocessing =
-  let comment p = string "(*" *> ws *> p <* ws <* string "*)" in
+  let comment_body =
+    fix (fun comment_body ->
+      string "*)" *> return ()
+      <|> string "(*" *> comment_body *> comment_body
+      <|> any_char *> comment_body)
+  in
+  let comment = string "(*" *> comment_body in
   let rule_skip =
-    let* _ = comment (string "[begin skip]") in
-    let* _ = many_till any_char (comment (string "[end skip]")) in
+    let parens p = string "(*" *> ws *> p <* ws <* string "*)" in
+    let* _ = parens (string "[begin skip]") in
+    let* _ = many_till any_char (parens (string "[end skip]")) in
     return ()
   in
-  let rule_default = string "(*" *> many_till any_char (string "*)") *> return () in
+  let rule_default = comment *> return () in
   let any_rule = rule_skip <|> rule_default <|> return () in
   many_till (any_rule *> any_char) end_of_input >>| Base.String.of_list
 ;;
