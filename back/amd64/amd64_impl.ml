@@ -427,9 +427,8 @@ let list_iter_revindex ~f xs =
   List.iteri (fun n x -> f (l - n - 1) x) xs
 ;;
 
-(**
-    Argument [is_toplevel] returns None or Some arity. *)
-let generate_body is_toplevel ppf body =
+let rec generate_body ppf body =
+  let is_toplevel = Toplevel.is_toplevel in
   let open Frontend.Parsetree in
   let allocate_args args =
     (* log "XXX %s: [ %a ]" __FUNCTION__
@@ -493,7 +492,7 @@ let generate_body is_toplevel ppf body =
         printfn
           ppf
           "  mov qword r8, %a  ; arg \"%a\""
-          Addr_of_local.pp_local_exn
+          Addr_of_var.pp_var_exn
           vname
           Ident.pp
           vname;
@@ -534,9 +533,8 @@ let generate_body is_toplevel ppf body =
         , bel ) ->
       (* This is not entirely correct, because OCaml number and target could be different *)
       helper dest (if l = r then bth else bel)
-    | CIte (CAtom (AVar econd), bth, bel) when Addr_of_local.contains econd ->
-      (* if on global or local variable  *)
-      printfn ppf "  mov qword rdx, %a" Addr_of_local.pp_local_exn econd;
+    | CIte (CAtom (AVar econd), bth, bel) when Addr_of_var.is_defined econd ->
+      printfn ppf "  mov qword rdx, %a" Addr_of_var.pp_var_exn econd;
       printfn ppf "  cmp rdx, 0";
       let el_lab = Printf.sprintf "lab_then_%d" (gensym ()) in
       let fin_lab = Printf.sprintf "lab_endif_%d" (gensym ()) in
@@ -555,7 +553,7 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov rax, 60 ; syscall exit";
       printfn ppf "  syscall"
     | CApp (APrimitive ("print", 1), AVar arg, []) ->
-      printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn arg;
+      printfn ppf "  mov rdi, %a" Addr_of_var.pp_var_exn arg;
       printfn ppf "  call rukaml_print_int";
       printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (APrimitive ("block_tag", 1), obj, []) ->
@@ -629,8 +627,8 @@ let generate_body is_toplevel ppf body =
       emit_rukaml_apply1 dest ~fname ~arg
     | CApp (APrimitive ("char_code", 1), arg1, []) ->
       (match arg1 with
-       | AVar v when Addr_of_local.has_key v ->
-         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
+       | AVar v when Addr_of_var.is_defined v ->
+         printfn ppf "  mov r11, %a" Addr_of_var.pp_var_exn v;
          printfn ppf "  mov %a, r11" pp_dest dest
        | AConst (PConst_char c) ->
          printfn ppf "  mov qword %a, %d" pp_dest dest (Char.code c)
@@ -641,7 +639,7 @@ let generate_body is_toplevel ppf body =
       else printfn ppf "  mov qword %a, 0" pp_dest dest
     | CApp (APrimitive ("=", 2), AConst (PConst_int n), [ AVar vname ])
     | CApp (APrimitive ("=", 2), AVar vname, [ AConst (PConst_int n) ]) ->
-      printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
+      printfn ppf "  mov qword r11, %a" Addr_of_var.pp_var_exn vname;
       printfn ppf "  mov qword r12, %d" n;
       printfn ppf "  cmp r11, r12";
       let eq_lab = Printf.sprintf "lab_%d" (gensym ()) in
