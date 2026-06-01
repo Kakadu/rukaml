@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-void rukaml_initialize(uint64_t ebp);
+void rukaml_initialize(uint64_t ebp, int argc, char **argv);
 
 void dfs(uint64_t *allocated, uint64_t *root);
 
@@ -43,6 +43,9 @@ void *rukaml_block_nth(int, int, int, int, int, int, void **obj,
                        uint64_t n);
 
 void *rukaml_field(void **obj, uint64_t n);
+
+uint64_t rukaml_equal_struct(void **left, void **right);
+
 void rukaml_array_set(int, int, int, int, int, int, void **arr, uint64_t n,
                       void *a);
 
