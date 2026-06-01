@@ -5,5 +5,5 @@ test
 *)
 let main =
   let r = [|1; 4; 3; 3|] in
-  let unit = set r 1 42 in
-  print (get r 1)
+  let unit = array_set r 1 42 in
+  print (array_get r 1)
