@@ -26,7 +26,7 @@ module Compiler = struct
   type _ t =
     | Parsetree : Parsetree.structure -> Parsetree.structure t
     | Typedtree : Typedtree.structure -> Typedtree.structure t
-    | ANF : ANF.vb list -> ANF.vb list t
+    | ANF : ANF.stru -> ANF.stru t
     | Code : code -> code t
 
   let k x = fun k -> k x
@@ -74,10 +74,13 @@ module Compiler = struct
   (** Perform closure conversion *)
   let cconv =
     let collect_globals =
-      List.fold_left ~f:(fun acc -> function
-        | _, Parsetree.PVar s, _ -> CConv.String_set.add s acc
-        | _, PTuple _, _ -> acc
-        | _ -> failwith "not implemented")
+      let rec collect_from_patt acc = function
+        | Parsetree.PAny | PConst _ | PUnit -> acc
+        | PVar name -> CConv.String_set.add name acc
+        | PTuple (p1, p2, ps) -> List.fold ~f:collect_from_patt ~init:acc (p1 :: p2 :: ps)
+        | PConstruct (_, args) -> List.fold ~f:collect_from_patt ~init:acc args
+      in
+      List.fold ~f:(fun acc (_rec, lhs, _rhs) -> collect_from_patt acc lhs)
     in
     let f (globals, acc) = function
       | Parsetree.Pstr_value vb ->
@@ -106,8 +109,15 @@ module Compiler = struct
 
   (** Generate code for RV64 *)
   let rv64 (ANF stru) =
+    let vbs =
+      List.map
+        ~f:(function
+          | ANF.ANF_vb (flg, Apat_var name, body) -> flg, name, body
+          | _ -> failwith "not implemented")
+        stru
+    in
     let f ~path =
-      RV64_impl.codegen ~wrap_main_into_start:false stru path |> Result.ok_or_failwith
+      RV64_impl.codegen ~wrap_main_into_start:false vbs path |> Result.ok_or_failwith
     in
     k (Code f)
   ;;
@@ -122,7 +132,13 @@ module Compiler = struct
 
   (** Generate code for LLVM *)
   let llvm (ANF stru) =
-    let f ~path = LLVM_impl.codegen stru path |> Result.ok_or_failwith in
+    let vbs =
+      List.map
+        ~f:(function
+          | ANF.ANF_vb vb -> vb)
+        stru
+    in
+    let f ~path = LLVM_impl.codegen vbs path |> Result.ok_or_failwith in
     k (Code f)
   ;;
 
