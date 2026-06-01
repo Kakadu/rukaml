@@ -454,17 +454,14 @@ let generate_body is_toplevel ppf body =
           (Base.String.to_list s);
         printfn ppf "  mov qword [rax+8*%d], %d" payload_words_n (String.length s);
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
-      | AVar { Ident.hum_name = "open_in"; _ } ->
-        emit_alloc_closure ppf (Ident.of_string "rukaml_array_read_in") 1;
+      | APrimitive ("stdin", 0) ->
+        printfn ppf "  call rukaml_stdin";
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
-      | AVar { Ident.hum_name = "length"; _ } ->
-        emit_alloc_closure ppf (Ident.of_string "rukaml_array_length") 1;
+      | APrimitive ("stdout", 0) ->
+        printfn ppf "  call rukaml_stdout";
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
-      | AVar { Ident.hum_name = "get_arity"; _ } ->
-        emit_alloc_closure ppf (Ident.of_string "rukaml_constructor_arity") 1;
-        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
-      | AVar { Ident.hum_name = "get_tag"; _ } ->
-        emit_alloc_closure ppf (Ident.of_string "rukaml_constructor_tag") 1;
+      | APrimitive ("stderr", 0) ->
+        printfn ppf "  call rukaml_stderr";
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar { Ident.hum_name = "get_arg"; _ } ->
         emit_alloc_closure ppf (Ident.of_string "rukaml_constructor_arg") 2;
