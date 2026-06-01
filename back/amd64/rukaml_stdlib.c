@@ -326,6 +326,19 @@ void rukaml_print_alloc_closure_count(void)
   fflush(stdout);
 }
 
+// TODO: implement tagged int's to distinguish immediate values from heap blocks
+// properly
+
+// good implementation:
+// #define IS_IMM(v) (((uint64_t)(v) & 1) == 1)
+// #define IS_BLOCK(v) (((uint64_t)(v) & 1) == 0)
+// #define BOX_IMM(v) (((int64_t)(v) << 1) | 1)
+// #define UNBOX_IMM(v) (((int64_t)(v) >> 1))
+
+// bad implementation:
+#define IS_BLOCK(v) (is_backup_bank((uint64_t *)v) || is_old_bank((uint64_t *)v))
+#define IS_IMM(v) (!IS_BLOCK(v))
+
 void rukaml_print_int(int64_t x)
 {
   printf("%s %d\n", __func__, x);
