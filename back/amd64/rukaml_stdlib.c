@@ -732,3 +732,127 @@ bool rukaml_string_equal(int r0, int r1, int r2, int r3, int r4, int r5, void **
 
   return memcmp(left, right, rukaml_string_len_imm(left)) == 0;
 }
+void *rukaml_stdin(void)
+{
+  return (void *)stdin;
+}
+
+void *rukaml_stderr(void)
+{
+  return (void *)stderr;
+}
+
+void *rukaml_stdout(void)
+{
+  return (void *)stdout;
+}
+
+void *rukaml_open_impl(void **path, const char *mode)
+{
+  if (path == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(path) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  if (mode == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  uint64_t len = rukaml_string_len_imm(path);
+
+  char *path_cstr = malloc(len + 1);
+
+  if (path_cstr == NULL)
+  {
+    mk_err_fatal("memory allocation failed");
+  }
+
+  memcpy(path_cstr, (const void *)path, len);
+
+  path_cstr[len] = '\0';
+
+  FILE *file = fopen(path_cstr, mode);
+
+  if (file == NULL)
+  {
+    mk_err_fatal("fopen failed");
+  }
+
+  free(path_cstr);
+
+  return (void *)file;
+}
+
+void *rukaml_open_in(int r0, int r1, int r2, int r3, int r4, int r5, void **path)
+{
+  return rukaml_open_impl(path, "r");
+}
+
+void *rukaml_open_out(int r0, int r1, int r2, int r3, int r4, int r5, void **path)
+{
+  return rukaml_open_impl(path, "w");
+}
+
+void rukaml_close_channel(int r0, int r1, int r2, int r3, int r4, int r5, void *channel)
+{
+  if (channel == NULL)
+  {
+    mk_err_warning("unexpected null");
+  }
+  else
+  {
+    fclose((FILE *)channel);
+  }
+}
+
+int64_t rukaml_input_char(int r0, int r1, int r2, int r3, int r4, int r5, void *channel)
+{
+  return fgetc((FILE *)channel);
+}
+
+int64_t rukaml_end_of_input(int r0, int r1, int r2, int r3, int r4, int r5, void *channel)
+{
+  int ch = fgetc((FILE *)channel);
+
+  if (ch == EOF)
+  {
+    return true;
+  }
+
+  ungetc(ch, (FILE *)channel);
+
+  return false;
+}
+
+void rukaml_fwrite_string(FILE *dest, void **str)
+{
+  if (dest == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (str == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(str) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  uint64_t str_len = rukaml_string_len_imm(str);
+
+  uint64_t n = fwrite((void *)(str), sizeof(char), str_len, dest);
+
+  if (n != str_len)
+  {
+    mk_err_warning("fwrite failed");
+  }
+}
