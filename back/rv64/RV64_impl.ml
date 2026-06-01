@@ -368,19 +368,19 @@ let generate_body is_toplevel body =
            emit_alloc_closure vname.hum_name arity;
            emit sd a0 (ROffset (SP, 8 * i))
          | None -> assert false)
-      | AVar { Ident.hum_name = "char_code"; _ } ->
+      | APrimitive ("char_code", 1) ->
         emit_alloc_closure "rukaml_identity" 1;
         (* Result is in a0 *)
         emit sd a0 (ROffset (SP, 8 * i))
-      | AVar { Ident.hum_name = "length"; _ } ->
+      | APrimitive ("array_len", 1) ->
         emit_alloc_closure "rukaml_array_length" 1;
         (* Result is in a0 *)
         emit sd a0 (ROffset (SP, 8 * i))
-      | AVar { Ident.hum_name = "get"; _ } ->
+      | APrimitive ("array_get", 2) ->
         emit_alloc_closure "rukaml_array_get" 2;
         (* Result is in a0 *)
         emit sd a0 (ROffset (SP, 8 * i))
-      | AVar { Ident.hum_name = "set"; _ } ->
+      | APrimitive ("array_set", 3) ->
         emit_alloc_closure "rukaml_array_set" 3;
         (* Result is in a0 *)
         emit sd a0 (ROffset (SP, 8 * i))
@@ -527,10 +527,7 @@ let generate_body is_toplevel body =
        | ALam (_, _)
        | AUnit -> failwith "Should not happen: print_int"
        | _ -> failwith "not implemented")
-    | CApp (AVar f, arg1, [])
-      when f.Ident.hum_name = "length"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
+    | CApp (APrimitive ("array_len", 1), arg1, []) ->
       (match arg1 with
        | AVar v when Addr_of_local.has_key v ->
          with_two_slots (fun ra_name arg_name ->
@@ -543,10 +540,7 @@ let generate_body is_toplevel body =
            emit sd_dest a0 dest;
            emit addi SP SP 16)
        | AArray _ | _ -> failwith "Should not happen")
-    | CApp (AVar f, arg1, [])
-      when f.Ident.hum_name = "get"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
+    | CApp (APrimitive ("array_get", 2), arg1, []) ->
       (match arg1 with
        | AVar arr when Addr_of_local.has_key arr ->
          emit_alloc_closure "rukaml_array_get" 2;
@@ -690,17 +684,16 @@ let generate_body is_toplevel body =
         t3
         t4;
       emit sd_dest t5 dest
-    | CApp (AVar f, arg, []) when f.Ident.hum_name = "trace_rukaml_val" ->
-      assert (Option.is_none (is_toplevel f));
+    | CApp (APrimitive (("trace_rukaml_val" as fname), 1), arg, []) ->
       with_two_slots (fun ra_name arg1 ->
-        emit addi SP SP (-16) ~comm:(sprintf "pad and 1st arg of function %s" f.hum_name);
+        emit addi SP SP (-16) ~comm:(sprintf "pad and 1st arg of function %s" fname);
         emit sd ra (Addr_of_local.pp_to_mach ra_name);
         helper_a (DStack_var arg1) arg;
         emit ld (RU "a0") (Addr_of_local.pp_to_mach arg1);
         emit li (RU "a1") 0;
         emit call "rukaml_trace_val";
         emit ld ra (Addr_of_local.pp_to_mach ra_name);
-        emit addi SP SP 16 ~comm:(sprintf "Dealloc 2 slots for %S" f.hum_name));
+        emit addi SP SP 16 ~comm:(sprintf "Dealloc 2 slots for %S" fname));
       if dest <> DReg "a0" then emit sd_dest (RU "a0") dest
     | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
       (* Callig a rukaml function uses custom calling convention.
@@ -785,16 +778,17 @@ let generate_body is_toplevel body =
     | CApp (APrimitive ("char_code", 1), AVar arg, []) ->
       emit ld t0 (pp_to_mach arg);
       emit sd_dest t0 dest
-    | CApp (APrimitive ("get_tag", _), AVar arg, []) ->
+    | CApp (APrimitive ("block_tag", _), AVar arg, []) ->
       emit ld a0 (pp_to_mach arg);
       emit call "rukaml_tag0";
       emit sd_dest a0 dest ~comm:(Format.asprintf "got tag of '%a'" Ident.pp arg)
-    | CApp (APrimitive ("get_arg", _), AConst (PConst_int idx), [ AVar from ])
+    | CApp (APrimitive ("block_nth", _), AVar from, [ AConst (PConst_int idx) ])
       when Addr_of_local.has_key from ->
-      emit li a0 idx;
-      emit ld a1 (pp_to_mach from);
-      emit call "rukaml_field";
-      emit sd_dest a0 dest
+      with_ra_saving (fun () ->
+        emit li a0 idx;
+        emit ld a1 (pp_to_mach from);
+        emit call "rukaml_field";
+        emit sd_dest a0 dest)
     | CApp (APrimitive (pname, partiy), _, _) ->
       Format.eprintf "Unsupported primitive call: %s/%d\n%!" pname partiy;
       failwiths "Not implemented %d" __LINE__
