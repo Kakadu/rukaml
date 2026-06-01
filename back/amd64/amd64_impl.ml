@@ -544,6 +544,31 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn arg;
       printfn ppf "  call rukaml_print_int";
       printfn ppf "  mov %a, rax" pp_dest dest
+    | CApp (APrimitive ("block_tag", 1), obj, []) ->
+      helper_a (DReg "rsi") obj;
+      printfn ppf "  mov rdi, rukaml_block_tag";
+      printfn ppf "  call rukaml_apply1";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | CApp (APrimitive ("block_size", 1), obj, []) ->
+      helper_a (DReg "rsi") obj;
+      printfn ppf "  mov rdi, rukaml_block_size";
+      printfn ppf "  call rukaml_apply1";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | CApp (APrimitive ("field", 2), AConst (PConst_int n), [ obj ])
+    | CApp (APrimitive ("block_nth", 2), obj, [ AConst (PConst_int n) ]) ->
+      helper_a (DReg "rsi") obj;
+      printfn ppf "  mov rdi, rukaml_block_nth";
+      printfn ppf "  mov rdx, %d" n;
+      printfn ppf "  call rukaml_apply2";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | CApp (APrimitive ("field", 2), AVar v, [ obj ])
+    | CApp (APrimitive ("block_nth", 2), obj, [ AVar v ])
+      when Addr_of_var.is_defined v ->
+      helper_a (DReg "rsi") obj;
+      printfn ppf "  mov rdi, rukaml_block_nth";
+      printfn ppf "  mov rdx, %a" Addr_of_var.pp_var_exn v;
+      printfn ppf "  call rukaml_apply2";
+      printfn ppf "  mov %a, rax" pp_dest dest
     (* >>> TODO: get rid of it *)
     | CApp (APrimitive (("fprintf" as fname), (2 as argc)), arg1, []) ->
       emit_rukaml_applyN dest ~fname ~arg1 ~argc
