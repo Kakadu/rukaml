@@ -702,55 +702,153 @@ let generate_body is_toplevel ppf body =
            printfn ppf "%s:" exit_lab;
            dealloc_var ppf right_name;
            dealloc_var ppf left_name *)
-    | CApp (APrimitive ("-", 2), AVar vname, [ AConst (PConst_int 1) ]) ->
-      (match is_toplevel vname with
-       | None ->
-         printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
-         printfn ppf "  dec r11";
-         printfn ppf "  mov qword %a, r11" pp_dest dest
-       | Some _ ->
-         (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
-         failwiths "not implemented %d" __LINE__)
+    | CApp (APrimitive ("=", 2), AVar v1, [ AVar v2 ])
+      when Addr_of_var.(is_defined v1 && is_defined v2) ->
+      printfn ppf "  mov qword rdi, %a" Addr_of_var.pp_var_exn v1;
+      printfn ppf "  mov qword rsi, %a" Addr_of_var.pp_var_exn v2;
+      printfn ppf "  call rukaml_equal_struct";
+      printfn ppf "  mov qword %a, rax" pp_dest dest
+    | CApp (APrimitive ("=", 2), AVar var, [ obj ]) when Addr_of_var.is_defined var ->
+      helper_a (DReg "rdi") obj;
+      printfn ppf "  mov qword rsi, %a" Addr_of_var.pp_var_exn var;
+      printfn ppf "  call rukaml_equal_struct";
+      printfn ppf "  mov qword %a, rax" pp_dest dest
+    | CApp (APrimitive ("=", 2), obj, [ AVar var ]) when Addr_of_var.is_defined var ->
+      helper_a (DReg "rdi") obj;
+      printfn ppf "  mov qword rsi, %a" Addr_of_var.pp_var_exn var;
+      printfn ppf "  call rukaml_equal_struct";
+      printfn ppf "  mov qword %a, rax" pp_dest dest
+    | CApp (APrimitive ("=", 2), a1, [ a2 ]) ->
+      helper_a (DReg "rdi") a1;
+      let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+      let name2 = Ident.of_string @@ gen_name ~prefix:"arg1" () in
+      Addr_of_local.extend name1;
+      Addr_of_local.extend name2;
+      printfn ppf "  add rsp, -8*2";
+      printfn ppf "  mov qword [rsp], rdi";
+      helper_a (DReg "rsi") a2;
+      printfn ppf "  mov qword rdi, [rsp]";
+      printfn ppf "  add rsp, 8*2";
+      Addr_of_local.remove_local name2;
+      Addr_of_local.remove_local name1;
+      printfn ppf "  call rukaml_equal_struct";
+      printfn ppf "  mov qword %a, rax" pp_dest dest
+    | CApp (APrimitive ("+", 2), AVar vname, [ AConst (PConst_int n) ])
+    | CApp (APrimitive ("+", 2), AConst (PConst_int n), [ AVar vname ]) ->
+      printfn ppf "  mov qword r11, %a" Addr_of_var.pp_var_exn vname;
+      if n = 1 then printfn ppf "  inc r11" else printfn ppf "  add r11, %d" n;
+      printfn ppf "  mov qword %a, r11" pp_dest dest
+    | CApp (APrimitive ("*", 2), AVar vname, [ AConst (PConst_int n) ])
+    | CApp (APrimitive ("*", 2), AConst (PConst_int n), [ AVar vname ]) ->
+      printfn ppf "  mov qword r11, %a" Addr_of_var.pp_var_exn vname;
+      printfn ppf "  imul r11, %d" n;
+      printfn ppf "  mov qword %a, r11" pp_dest dest
     | CApp (APrimitive ("-", 2), AVar vname, [ AConst (PConst_int n) ]) ->
-      (match is_toplevel vname with
-       | None ->
-         printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
-         printfn ppf "  sub r11, %d" n;
-         printfn ppf "  mov qword %a, r11" pp_dest dest
-       | Some _ ->
-         (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
-         failwiths "not implemented %d" __LINE__)
-    | CApp (APrimitive ((("+" | "*") as prim), _), AVar vname, [ AConst (PConst_int n) ])
-    | CApp (APrimitive ((("+" | "*") as prim), _), AConst (PConst_int n), [ AVar vname ])
+      printfn ppf "  mov qword r11, %a" Addr_of_var.pp_var_exn vname;
+      if n = 1 then printfn ppf "  dec r11" else printfn ppf "  sub r11, %d" n;
+      printfn ppf "  mov qword %a, r11" pp_dest dest
+    | CApp (APrimitive ("-", 2), AConst (PConst_int n), [ AVar vname ]) ->
+      printfn ppf "  mov qword r11, %d" n;
+      printfn ppf "  mov qword r12, %a" Addr_of_var.pp_var_exn vname;
+      printfn ppf "  sub r11, r12";
+      printfn ppf "  mov qword %a, r11" pp_dest dest
+    (* TODO?: make folding optional here *)
+    | CApp
+        ( APrimitive ((("+" | "*" | "-") as op), 2)
+        , AConst (PConst_int n1)
+        , [ AConst (PConst_int n2) ] ) ->
+      let n =
+        match op with
+        | "+" -> n1 + n2
+        | "*" -> n1 * n2
+        | "-" -> n1 - n2
+        | _ -> assert false
+      in
+      printfn ppf "  mov qword %a, %d" pp_dest dest n
+    (* TODO?: make folding optional here *)
+    | CApp
+        ( APrimitive ((("&&" | "||") as op), 2)
+        , AConst (PConst_bool b1)
+        , [ AConst (PConst_bool b2) ] ) ->
+      let n =
+        match op with
+        | "&&" -> Bool.to_int (b1 && b2)
+        | "||" -> Bool.to_int (b1 || b2)
+        | _ -> assert false
+      in
+      printfn ppf "  mov qword %a, %d" pp_dest dest n
+    | CApp (APrimitive ((("+" | "*" | "-" | "&&" | "||") as op), 2), AVar vl, [ AVar vr ])
       ->
-      (match is_toplevel vname with
-       | None ->
-         printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vname;
-         printfn
-           ppf
-           "  %s r11, %d"
-           (match prim with
-            | "+" -> "add "
-            | "*" -> "imul"
-            | op -> Format.asprintf ";;; TODO %s. %s %d" op __FUNCTION__ __LINE__)
-           n;
-         printfn ppf "  mov qword %a, r11" pp_dest dest
-       | Some _ ->
-         (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
-         failwiths "not implemented %d" __LINE__)
-    | CApp (APrimitive ((("+" | "*" | "-") as prim), _), AVar vl, [ AVar vr ]) ->
-      printfn ppf "  mov qword r11, %a" Addr_of_local.pp_local_exn vl;
-      printfn ppf "  mov qword r12, %a" Addr_of_local.pp_local_exn vr;
+      printfn ppf "  mov qword r11, %a" Addr_of_var.pp_var_exn vl;
+      printfn ppf "  mov qword r12, %a" Addr_of_var.pp_var_exn vr;
       printfn
         ppf
         "  %s r11, r12"
-        (match prim with
-         | "+" -> "add "
+        (match op with
+         | "+" -> "add"
          | "*" -> "imul"
          | "-" -> "sub"
-         | op -> failwiths "not_implemeted  %S. %d" op __LINE__);
+         | "&&" -> "and"
+         | "||" -> "or"
+         | _ -> assert false);
       printfn ppf "  mov %a, r11" pp_dest dest
-      (* TODO: Maybe move this specialization to the case below  *)
+    | CApp (APrimitive ((("<" | ">" | "<=" | ">=") as op), 2), l, [ r ]) ->
+      (match l, r with
+       | AConst (PConst_int n), AVar v ->
+         printfn ppf "  mov qword r11, %d" n;
+         printfn ppf "  mov qword r12, %a" Addr_of_var.pp_var_exn v
+       | AVar v, AConst (PConst_int n) ->
+         printfn ppf "  mov qword r11, %a" Addr_of_var.pp_var_exn v;
+         printfn ppf "  mov qword r12, %d" n
+       | AConst (PConst_char ch), AVar v ->
+         printfn ppf "  mov qword r11, %d" (Char.code ch);
+         printfn ppf "  mov qword r12, %a" Addr_of_var.pp_var_exn v
+       | AVar v, AConst (PConst_char ch) ->
+         printfn ppf "  mov qword r11, %a" Addr_of_var.pp_var_exn v;
+         printfn ppf "  mov qword r12, %d" (Char.code ch)
+       | AVar vl, AVar vr ->
+         printfn ppf "  mov qword r11, %a" Addr_of_var.pp_var_exn vl;
+         printfn ppf "  mov qword r12, %a" Addr_of_var.pp_var_exn vr
+       (* TODO: it can be folded *)
+       | AConst (PConst_int n1), AConst (PConst_int n2) ->
+         printfn ppf "  mov qword r11, %d" n1;
+         printfn ppf "  mov qword r12, %d" n2
+       | AConst (PConst_char ch1), AConst (PConst_char ch2) ->
+         printfn ppf "  mov qword r11, %d" (Char.code ch1);
+         printfn ppf "  mov qword r12, %d" (Char.code ch2)
+       | _ -> assert false);
+      printfn ppf "  cmp qword r11, r12";
+      printfn
+        ppf
+        (match op with
+         | "<" -> "setl r11b"
+         | ">" -> "setg r11b"
+         | "<=" -> "setle r11b"
+         | ">=" -> "setge r11b"
+         | _ -> assert false);
+      printfn ppf "  and r11, 1";
+      printfn ppf "mov qword %a, r11" pp_dest dest
+    | CApp (APrimitive ("&&", 2), AVar v, [ AConst (PConst_bool true) ])
+    | CApp (APrimitive ("&&", 2), AConst (PConst_bool true), [ AVar v ])
+    | CApp (APrimitive ("||", 2), AVar v, [ AConst (PConst_bool false) ])
+    | CApp (APrimitive ("||", 2), AConst (PConst_bool false), [ AVar v ]) ->
+      printfn ppf "  mov qword r11, %a" Addr_of_var.pp_var_exn v;
+      printfn ppf "  mov %a, r11" pp_dest dest
+    | CApp (APrimitive ("||", 2), AConst (PConst_bool true), [ _ ])
+    | CApp (APrimitive ("||", 2), _, [ AConst (PConst_bool true) ]) ->
+      printfn ppf "  mov %a, 1" pp_dest dest
+    | CApp (APrimitive ("&&", 2), AConst (PConst_bool false), [ _ ])
+    | CApp (APrimitive ("&&", 2), _, [ AConst (PConst_bool false) ]) ->
+      printfn ppf "  mov %a, 0" pp_dest dest
+    | CApp (AVar f, arg1, []) when Toplevel.is_toplevel_constant f ->
+      (* f is closure *)
+      helper_a (DReg "rdx") arg1;
+      printfn ppf "  mov rax, 0  ; no float arguments";
+      printfn ppf "  mov rdi, [%a]" Toplevel.pp_label_exn f;
+      printfn ppf "  mov rsi, 1 ; argc";
+      printfn ppf "  call rukaml_applyN";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    (* TODO: | CApp (AVar f, (AUnit as arg), []) *)
     | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
       (* Callig a rukaml function uses custom calling convention.
            CDECL convention: all arguments on stack, LTR *)
