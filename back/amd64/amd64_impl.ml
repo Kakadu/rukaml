@@ -532,13 +532,14 @@ let generate_body is_toplevel ppf body =
       printfn ppf "%s:" el_lab;
       helper dest bel;
       printfn ppf "%s:" fin_lab
-    | CAtom (AVar f)
-    (* TODO(Kakadu): change to builtin *)
-      when f.Ident.hum_name = "stdin"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
-      printfn ppf "  call rukaml_array_stdin";
-      printfn ppf "  mov %a, rax" pp_dest dest
+    | CApp (APrimitive ("exit", 1), AVar arg, []) ->
+      printfn ppf "  mov rdi, %a" Addr_of_var.pp_var_exn arg;
+      printfn ppf "  mov rax, 60 ; syscall exit";
+      printfn ppf "  syscall"
+    | CApp (APrimitive ("exit", 1), AConst (PConst_int n), []) ->
+      printfn ppf "  mov rdi, %d" n;
+      printfn ppf "  mov rax, 60 ; syscall exit";
+      printfn ppf "  syscall"
     | CApp (APrimitive ("print", 1), AVar arg, []) ->
       printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn arg;
       printfn ppf "  call rukaml_print_int";
