@@ -826,9 +826,14 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov rdi, 0";
       printfn ppf "  mov rsi, 0";
       printfn ppf "  call rukaml_print_alloc_closure_count"
+    | CApp (AVar f, arg1, args) as _cexpr when Toplevel.is_toplevel_function f ->
       (* Callig a rukaml function uses custom calling convention.
            CDECL convention: all arguments on stack, LTR *)
-      let expected_arity = Option.get (is_toplevel f) in
+      let expected_arity =
+        match Toplevel.find_exn f with
+        | { kind = Function { argc }; _ } -> argc
+        | _ -> assert false
+      in
       let formal_arity = 1 + List.length args in
       (* printfn
         ppf
@@ -839,13 +844,13 @@ let generate_body is_toplevel ppf body =
       if expected_arity = formal_arity
       then (
         let to_remove = allocate_args (arg1 :: args) in
-        printfn ppf "  call %a" Ident.pp f;
+        printfn ppf "  call %a" Toplevel.pp_label_exn f;
         printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
         printfn ppf "  mov %a, rax" pp_dest dest)
       else if formal_arity < expected_arity
       then (
         let partial_args_count = allocate_args (arg1 :: args) in
-        printfn ppf "  mov rdi, %a" Ident.pp f;
+        printfn ppf "  mov rdi, %a" Toplevel.pp_label_exn f;
         printfn ppf "  mov rsi, %d" expected_arity;
         printfn ppf "  call rukaml_alloc_closure";
         printfn ppf "  mov rdi, rax";
