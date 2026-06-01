@@ -835,6 +835,69 @@ iterate:
 ;;
 
 let use_custom_main = false
+(* let <name> = ... *)
+let emit_global_constant ppf ident expr =
+  printfn ppf "section .bss";
+  printfn ppf "  global %a" Toplevel.pp_label_exn ident;
+  printfn ppf "  %a:    resq 1" Toplevel.pp_label_exn ident;
+  printfn ppf "section .text";
+  printfn ppf "init_%a:" Toplevel.pp_label_exn ident;
+  printfn ppf "  push rbp";
+  printfn ppf "  mov rbp, rsp";
+  generate_body ppf expr;
+  printfn ppf "  mov qword [%a], rax" Toplevel.pp_label_exn ident;
+  printfn ppf "  lea rdi, [%a]" Toplevel.pp_label_exn ident;
+  printfn ppf "  call add_gc_static_root";
+  printfn ppf "  pop rbp";
+  printfn ppf "  ret ;;; init_%a" Toplevel.pp_label_exn ident
+;;
+
+(* let () = ... or let _ = ... *)
+let emit_global_eval ppf ident expr =
+  printfn ppf "section .text";
+  printfn ppf "init_%a:" Toplevel.pp_label_exn ident;
+  printfn ppf "  push rbp";
+  printfn ppf "  mov rbp, rsp";
+  generate_body ppf expr;
+  printfn ppf "  mov qword %a, rax" pp_dest DDiscard;
+  printfn ppf "  pop rbp";
+  printfn ppf "  ret ;;; init_%a" Toplevel.pp_label_exn ident
+;;
+
+(* let <constant> = ... *)
+let emit_global_match ppf ident const expr =
+  printfn ppf "section .text";
+  printfn ppf "init_%a:" Toplevel.pp_label_exn ident;
+  printfn ppf "  push rbp";
+  printfn ppf "  mov rbp, rsp";
+  printfn ppf "  ; begin eval matching lhs";
+  (* result in rax *)
+  generate_body ppf ANF.(EComplex (CAtom (AConst const)));
+  printfn ppf "  ; end eval matching rhs";
+  (*
+     TODO: for now some assert fails with this one
+  let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+  let name2 = Ident.of_string @@ gen_name ~prefix:"lhs" () in
+  Addr_of_local.extend name1;
+  Addr_of_local.extend name2; *)
+  printfn ppf "  add rsp, -8*2 ; matching lhs";
+  printfn ppf "  mov qword [rsp], rax";
+  printfn ppf "  ; begin eval matching rhs";
+  (* result in rax *)
+  generate_body ppf expr;
+  printfn ppf "  ; end eval matching rhs";
+  printfn ppf "  mov qword rdi, rax";
+  printfn ppf "  mov qword rsi, [rsp]";
+  printfn ppf "  call rukaml_equal_struct ; matching result";
+  printfn ppf "  cmp rax, 0";
+  (* TODO? : make call here *)
+  printfn ppf "  je rukaml_match_failure";
+  printfn ppf "  add rsp, 8*2 ; matching lhs";
+  (* Addr_of_local.remove_local name2;
+  Addr_of_local.remove_local name1; *)
+  printfn ppf "  pop rbp";
+  printfn ppf "  ret ;;; init_%a" Toplevel.pp_label_exn ident
+;;
 
 let codegen ?(wrap_main_into_start = true) anf file =
   (* log "Going to generate code here %s %d" __FUNCTION__ __LINE__; *)
