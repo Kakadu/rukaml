@@ -810,7 +810,10 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  call rukaml_applyN";
       printfn ppf "  mov %a, rax" pp_dest dest
     (* TODO: | CApp (AVar f, (AUnit as arg), []) *)
-    | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
+    | CApp (APrimitive ("print", 1), AConst (PConst_int n), []) ->
+      printfn ppf "  mov rdi, %d" n;
+      printfn ppf "  call rukaml_print_int";
+      printfn ppf "  mov qword %a, 0" pp_dest dest
       (* Callig a rukaml function uses custom calling convention.
            CDECL convention: all arguments on stack, LTR *)
       let expected_arity = Option.get (is_toplevel f) in
@@ -934,8 +937,8 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov qword %a,  %d" pp_dest dest n
     | AConst (Frontend.Parsetree.PConst_char c) ->
       printfn ppf "  mov qword %a,  %d" pp_dest dest (Char.code c)
-    | AVar ({ Ident.hum_name = "print"; _ } as v) when None = is_toplevel v ->
-      alloc_closure ppf (Ident.of_string "rukaml_print_int") 1;
+    | APrimitive ("print", 1) ->
+      emit_alloc_closure ppf ~fname:(Ident.ident "rukaml_print_int_kaml" 0) ~argc:1;
       printfn ppf "  mov %a, rax" pp_dest dest
     | AVar vname ->
       (match is_toplevel vname with
