@@ -145,24 +145,18 @@ tuples
   >   let y = fun z -> z in
   >   y
   > EOF
-  let y: '_1 -> '_1 =
+  let __lifted_let_1_y: '_1 -> '_1 =
     fun z -> z
   let foo: '_1 -> '_2 -> '_2 =
-    fun x -> y
+    fun x -> __lifted_let_1_y
 
   $ run << EOF
   > let foo x =
   >   let y = fun z -> z in
   >   (y 1, y true)
   > EOF
-  let y: '_1 -> '_1 =
+  let __lifted_let_1_y: '_1 -> '_1 =
     fun z -> z
   let foo: '_1 -> int * bool =
-    fun x -> ((y 1), (y true))
+    fun x -> ((__lifted_let_1_y 1), (__lifted_let_1_y true))
 
-
-  $ run << EOF
-  > let rec (a,b) = (a,b)
-  > EOF
-  infer error: Only variables are allowed as left-hand side of `let rec'
-  [1]

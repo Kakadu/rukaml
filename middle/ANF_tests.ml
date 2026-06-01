@@ -2,7 +2,7 @@ open Frontend
 open ANF
 
 let complex_of_atom x = EComplex (CAtom x)
-let alam name e = ALam (APname name, e)
+let alam name e = ALam (Apat_var name, e)
 let elam name e = complex_of_atom (alam name e)
 
 let test_anf_pat text =
@@ -26,30 +26,30 @@ let%expect_test _ =
   test_anf_pat "(x,y)";
   [%expect
     {|
-    (fun temp1 -> let x = field 0 temp1 in
-                    let y = field 1 temp1 in
-                      use_pattern_vars_here) |}]
+    (fun tuple1 -> let x = block_nth tuple1 0 in
+                     let y = block_nth tuple1 1 in
+                       use_pattern_vars_here) |}]
 ;;
 
 let%expect_test _ =
   test_anf_pat "(x,y,z)";
   [%expect
     {|
-    (fun temp1 -> let x = field 0 temp1 in
-                    let y = field 1 temp1 in
-                      let z = field 2 temp1 in
-                        use_pattern_vars_here) |}]
+    (fun tuple1 -> let x = block_nth tuple1 0 in
+                     let y = block_nth tuple1 1 in
+                       let z = block_nth tuple1 2 in
+                         use_pattern_vars_here) |}]
 ;;
 
 let%expect_test _ =
   test_anf_pat "((x,y),z)";
   [%expect
     {|
-    (fun temp1 -> let temp2 = field 0 temp1 in
-                    let x = field 0 temp2 in
-                      let y = field 1 temp2 in
-                        let z = field 1 temp1 in
-                          use_pattern_vars_here) |}]
+    (fun tuple1 -> let field2 = block_nth tuple1 0 in
+                     let x = block_nth field2 0 in
+                       let y = block_nth field2 1 in
+                         let z = block_nth tuple1 1 in
+                           use_pattern_vars_here) |}]
 ;;
 
 let test_anf ?(print_before = false) text =
@@ -64,11 +64,11 @@ let test_anf ?(print_before = false) text =
     if print_before
     then (
       Format.printf "Before simplify:\n%!";
-      Format.printf "@[<v>%a@]\n\n%!" (Format.pp_print_list pp_vb) anf);
+      Format.printf "@[<v>%a@]\n\n%!" pp_stru anf);
     anf |> simplify_stru |> Result.ok
   with
   | Result.Error err -> Format.printf "%a\n%!" Inferencer.pp_error err
-  | Ok anf -> Format.printf "@[<v>%a@]\n%!" (Format.pp_print_list pp_vb) anf
+  | Ok anf -> Format.printf "@[<v>%a@]\n%!" pp_stru anf
 ;;
 
 let%expect_test "CPS factorial" =
@@ -79,14 +79,14 @@ let%expect_test "CPS factorial" =
     else fack (n-1) (fun p -> k (p*n)) |};
   [%expect
     {|
-    let fresh_1 n k p =
+    let __lifted_lam_1 n k p =
       let temp1 = (p * n) in
         k temp1
     let rec fack n k =
       (if (n = 0)
       then k 1
       else let temp5 = (n - 1) in
-             let temp8 = fresh_1 n k in
+             let temp8 = __lifted_lam_1 n k in
                fack temp5 temp8)
     |}]
 ;;
@@ -105,11 +105,11 @@ let%expect_test _ =
   test_anf {| let foo = ((fun x -> x), (fun y -> y)) |};
   [%expect
     {|
-    let fresh_2 x =
+    let __lifted_lam_2 x =
       x
-    let fresh_3 y =
+    let __lifted_lam_3 y =
       y
     let foo =
-      (fresh_2, fresh_3)
+      (__lifted_lam_2, __lifted_lam_3)
     |}]
 ;;

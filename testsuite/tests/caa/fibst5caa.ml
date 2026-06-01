@@ -8,3 +8,5 @@ test
       "rukaml_print_int 8"
       "Total closure allocations: 26"))
 *)
+
+let main = 0

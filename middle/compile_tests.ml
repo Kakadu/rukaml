@@ -62,8 +62,8 @@ let%expect_test " " =
       let iter n = let rec loop m = if m = n then m else loop (1 + m) in loop 0
       	~~[2 value bindings]~~>
 
-      let rec loop n m = if m = n then m else loop n (1 + m)
-      let iter n = loop n 0 |}]
+      let rec __lifted_let_1_loop n m = if m = n then m else __lifted_let_1_loop n (1 + m)
+      let iter n = __lifted_let_1_loop n 0 |}]
 ;;
 
 let anon1 =
@@ -77,10 +77,10 @@ let%expect_test " " =
     {|
     let mul5 x = repeat 5 (fun acc -> x) 0
     	~~[2 value bindings]~~>
-    let fresh_1 x
+    let __lifted_lam_2 x
                                                                     acc =
                                                                       x
-    let mul5 x = repeat 5 (fresh_1 x) 0
+    let mul5 x = repeat 5 (__lifted_lam_2 x) 0
        |}]
 ;;
 
@@ -93,8 +93,8 @@ let%expect_test "iter" =
     let iter n = let rec loop m = n + m in loop n
     	~~[2 value bindings]~~>
 
-    let rec loop n m = n + m
-    let iter n = loop n n
+    let rec __lifted_let_3_loop n m = n + m
+    let iter n = __lifted_let_3_loop n n
        |}]
 ;;
 
@@ -117,8 +117,9 @@ let%expect_test "repeat " =
                                            else last in loop 0
     	~~[2 value bindings]~~>
 
-    let rec loop n f m last = if m < n then loop n f (1 + m) (f last) else last
-    let repeat n f = loop n f 0
+    let rec __lifted_let_4_loop n f m last = if m < n then __lifted_let_4_loop n f (1 + m) (f last)
+                                                      else last
+    let repeat n f = __lifted_let_4_loop n f 0
        |}]
 ;;
 
@@ -136,8 +137,8 @@ let%expect_test "uuu: lifting letrec " =
     let uuu n = let rec loop m last = (m + n) + last in loop 0
     	~~[2 value bindings]~~>
 
-    let rec loop n m last = (m + n) + last
-    let uuu n = loop n 0
+    let rec __lifted_let_5_loop n m last = (m + n) + last
+    let uuu n = __lifted_let_5_loop n 0
        |}]
 ;;
 
@@ -149,7 +150,8 @@ let%expect_test " nested let" =
     {|
     let main = let id x = x in 5
     	~~[2 value bindings]~~>
-    let id x = x
+    let __lifted_let_6_id x
+                                                          = x
     let main = 5
 
      |}]
@@ -177,10 +179,10 @@ let%expect_test "unwrap as expression" =
                                         | _ -> 0) in aux ls
     	~~[2 value bindings]~~>
 
-    let rec aux ls = (match ls with
-                        | (Some x) :: xs -> aux xs
-                        | _ -> 0)
-    let unwrap ls = aux ls
+    let rec __lifted_let_7_aux ls = (match ls with
+                                       | (Some x) :: xs -> __lifted_let_7_aux xs
+                                       | _ -> 0)
+    let unwrap ls = __lifted_let_7_aux ls
     |}]
 ;;
 
@@ -193,9 +195,9 @@ let%expect_test "unwrap as structure" =
                                         | _ -> 0) in aux ls
     	~~[2 value bindings]~~>
 
-    let rec aux ls = (match ls with
-                        | (Some x) :: xs -> aux xs
-                        | _ -> 0)
-    let unwrap ls = aux ls
+    let rec __lifted_let_8_aux ls = (match ls with
+                                       | (Some x) :: xs -> __lifted_let_8_aux xs
+                                       | _ -> 0)
+    let unwrap ls = __lifted_let_8_aux ls
     |}]
 ;;

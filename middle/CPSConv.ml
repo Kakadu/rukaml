@@ -253,19 +253,19 @@ let%expect_test "counts simple" =
   test_count {| let m x y z = x y y|};
   [%expect
     {|
-    var x got id 45
-    var y got id 46
-    var z got id 47
-    var m got id 48
-    id: 45; counts 1
-    id: 46; counts 2
-    id: 47; counts 0
-    id: 48; counts 0
+    var x got id 71
+    var y got id 72
+    var z got id 73
+    var m got id 74
+    id: 71; counts 1
+    id: 72; counts 2
+    id: 73; counts 0
+    id: 74; counts 0
     ids that ref_once:
-    45
+    71
     ids that no_refs:
-    47
-    48
+    73
+    74
     |}]
 ;;
 
@@ -273,22 +273,22 @@ let%expect_test "counts branching, shadowing" =
   test_count {| let m x y = if x then fun x -> x 1 else fun x -> (y , y x)|};
   [%expect
     {|
-    var x got id 49
-    var y got id 50
-    var x got id 51
-    var x got id 52
-    var m got id 53
-    id: 49; counts 1
-    id: 50; counts 2
-    id: 51; counts 1
-    id: 52; counts 1
-    id: 53; counts 0
+    var x got id 75
+    var y got id 76
+    var x got id 77
+    var x got id 78
+    var m got id 79
+    id: 75; counts 1
+    id: 76; counts 2
+    id: 77; counts 1
+    id: 78; counts 1
+    id: 79; counts 0
     ids that ref_once:
-    49
-    51
-    52
+    75
+    77
+    78
     ids that no_refs:
-    53
+    79
     |}]
 ;;
 
@@ -296,12 +296,12 @@ let%expect_test "counts rec, ptuple" =
   test_count {| let rec (x,y) = x x y|};
   [%expect
     {|
-    var x got id 54
-    var y got id 55
-    id: 54; counts 2
-    id: 55; counts 1
+    var x got id 80
+    var y got id 81
+    id: 80; counts 2
+    id: 81; counts 1
     ids that ref_once:
-    55
+    81
     ids that no_refs:
     |}]
 ;;

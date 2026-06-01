@@ -10,7 +10,7 @@
   > EOF
   let is_empty ls =
     let temp1 = ls in
-      let temp2 = get_tag temp1  in
+      let temp2 = block_tag temp1  in
         (if (temp2 = 0)
         then 0
         else 1)
@@ -23,13 +23,13 @@
   > EOF
   let rec len ls =
     let temp1 = ls in
-      let temp8 = get_tag temp1  in
+      let temp8 = block_tag temp1  in
         (if (temp8 = 0)
         then 0
-        else let temp6 = get_tag temp1  in
+        else let temp6 = block_tag temp1  in
                (if (temp6 = 1)
-               then let temp4 = get_arg 0 temp1 in
-                      let xs = get_arg 1 temp1 in
+               then let temp4 = block_nth temp1 0 in
+                      let xs = block_nth temp1 1 in
                         let temp2 = len xs  in
                           (1 + temp2)
                else match_failure))
@@ -43,16 +43,16 @@
   > EOF
   let rec map f ls =
     let temp1 = ls in
-      let temp11 = get_tag temp1  in
-        (if (temp11 = 0)
+      let temp10 = block_tag temp1  in
+        (if (temp10 = 0)
         then Constr_0
-        else let temp9 = get_tag temp1  in
-               (if (temp9 = 1)
-               then let hd = get_arg 0 temp1 in
-                      let tl = get_arg 1 temp1 in
-                        let temp3 = f hd  in
-                          let temp5 = map f tl in
-                            (Constr_1 (temp3, temp5))
+        else let temp8 = block_tag temp1  in
+               (if (temp8 = 1)
+               then let hd = block_nth temp1 0 in
+                      let tl = block_nth temp1 1 in
+                        let temp2 = f hd  in
+                          let temp4 = map f tl in
+                            (Constr_1 (temp2, temp4))
                else match_failure))
 
   $ run << EOF
@@ -63,13 +63,13 @@
   > EOF
   let rec fold f acc ls =
     let temp1 = ls in
-      let temp11 = get_tag temp1  in
+      let temp11 = block_tag temp1  in
         (if (temp11 = 0)
         then acc
-        else let temp9 = get_tag temp1  in
+        else let temp9 = block_tag temp1  in
                (if (temp9 = 1)
-               then let hd = get_arg 0 temp1 in
-                      let tl = get_arg 1 temp1 in
+               then let hd = block_nth temp1 0 in
+                      let tl = block_nth temp1 1 in
                         let temp3 = f acc  in
                           let temp4 = temp3 hd  in
                             fold f temp4 tl
@@ -86,23 +86,23 @@
   > EOF
   let rec equal item_eq a b =
     let temp2 = (a, b) in
-      let temp19 = get_arg 0 temp2 in
-        let temp23 = get_tag temp19  in
+      let temp19 = block_nth temp2 0 in
+        let temp23 = block_tag temp19  in
           (if (temp23 = 0)
-          then let temp20 = get_arg 1 temp2 in
-                 let temp21 = get_tag temp20  in
+          then let temp20 = block_nth temp2 1 in
+                 let temp21 = block_tag temp20  in
                    (if (temp21 = 0)
                    then 1
-                   else let temp9 = get_arg 0 temp2 in
-                          let temp17 = get_tag temp9  in
+                   else let temp9 = block_nth temp2 0 in
+                          let temp17 = block_tag temp9  in
                             (if (temp17 = 1)
-                            then let x = get_arg 0 temp9 in
-                                   let xs = get_arg 1 temp9 in
-                                     let temp10 = get_arg 1 temp2 in
-                                       let temp13 = get_tag temp10  in
+                            then let x = block_nth temp9 0 in
+                                   let xs = block_nth temp9 1 in
+                                     let temp10 = block_nth temp2 1 in
+                                       let temp13 = block_tag temp10  in
                                          (if (temp13 = 1)
-                                         then let y = get_arg 0 temp10 in
-                                                let ys = get_arg 1 temp10 in
+                                         then let y = block_nth temp10 0 in
+                                                let ys = block_nth temp10 1 in
                                                   let temp3 = item_eq x  in
                                                     let temp4 = temp3 y  in
                                                       (if temp4
@@ -110,16 +110,16 @@
                                                       else 0)
                                          else 0)
                             else 0))
-          else let temp9 = get_arg 0 temp2 in
-                 let temp17 = get_tag temp9  in
+          else let temp9 = block_nth temp2 0 in
+                 let temp17 = block_tag temp9  in
                    (if (temp17 = 1)
-                   then let x = get_arg 0 temp9 in
-                          let xs = get_arg 1 temp9 in
-                            let temp10 = get_arg 1 temp2 in
-                              let temp13 = get_tag temp10  in
+                   then let x = block_nth temp9 0 in
+                          let xs = block_nth temp9 1 in
+                            let temp10 = block_nth temp2 1 in
+                              let temp13 = block_tag temp10  in
                                 (if (temp13 = 1)
-                                then let y = get_arg 0 temp10 in
-                                       let ys = get_arg 1 temp10 in
+                                then let y = block_nth temp10 0 in
+                                       let ys = block_nth temp10 1 in
                                          let temp3 = item_eq x  in
                                            let temp4 = temp3 y  in
                                              (if temp4
@@ -137,13 +137,13 @@
   > EOF
   let rec exists pred ls =
     let temp1 = ls in
-      let temp10 = get_tag temp1  in
+      let temp10 = block_tag temp1  in
         (if (temp10 = 0)
         then 0
-        else let temp8 = get_tag temp1  in
+        else let temp8 = block_tag temp1  in
                (if (temp8 = 1)
-               then let hd = get_arg 0 temp1 in
-                      let tl = get_arg 1 temp1 in
+               then let hd = block_nth temp1 0 in
+                      let tl = block_nth temp1 1 in
                         let temp2 = pred hd  in
                           (if temp2
                           then 1
@@ -158,13 +158,13 @@
   > EOF
   let rec forall pred ls =
     let temp1 = ls in
-      let temp10 = get_tag temp1  in
+      let temp10 = block_tag temp1  in
         (if (temp10 = 0)
         then 1
-        else let temp8 = get_tag temp1  in
+        else let temp8 = block_tag temp1  in
                (if (temp8 = 1)
-               then let hd = get_arg 0 temp1 in
-                      let tl = get_arg 1 temp1 in
+               then let hd = block_nth temp1 0 in
+                      let tl = block_nth temp1 1 in
                         let temp2 = pred hd  in
                           (if temp2
                           then forall pred tl
@@ -182,29 +182,29 @@
   > EOF
   let rec join xs ys =
     let temp2 = (xs, ys) in
-      let temp23 = get_arg 0 temp2 in
-        let temp25 = get_tag temp23  in
-          (if (temp25 = 0)
-          then let temp24 = get_arg 1 temp2 in
+      let temp21 = block_nth temp2 0 in
+        let temp23 = block_tag temp21  in
+          (if (temp23 = 0)
+          then let temp22 = block_nth temp2 1 in
                  Constr_0
-          else let temp19 = get_arg 0 temp2 in
-                 let temp20 = get_arg 1 temp2 in
-                   let temp21 = get_tag temp20  in
-                     (if (temp21 = 0)
+          else let temp17 = block_nth temp2 0 in
+                 let temp18 = block_nth temp2 1 in
+                   let temp19 = block_tag temp18  in
+                     (if (temp19 = 0)
                      then Constr_0
-                     else let temp9 = get_arg 0 temp2 in
-                            let temp17 = get_tag temp9  in
-                              (if (temp17 = 1)
-                              then let xhd = get_arg 0 temp9 in
-                                     let xtl = get_arg 1 temp9 in
-                                       let temp10 = get_arg 1 temp2 in
-                                         let temp13 = get_tag temp10  in
-                                           (if (temp13 = 1)
-                                           then let yhd = get_arg 0 temp10 in
-                                                  let ytl = get_arg 1 temp10 in
-                                                    let temp5 = (xhd, yhd) in
-                                                      let temp7 = join xtl ytl in
-                                                        (Constr_1 (temp5, temp7))
+                     else let temp7 = block_nth temp2 0 in
+                            let temp15 = block_tag temp7  in
+                              (if (temp15 = 1)
+                              then let xhd = block_nth temp7 0 in
+                                     let xtl = block_nth temp7 1 in
+                                       let temp8 = block_nth temp2 1 in
+                                         let temp11 = block_tag temp8  in
+                                           (if (temp11 = 1)
+                                           then let yhd = block_nth temp8 0 in
+                                                  let ytl = block_nth temp8 1 in
+                                                    let temp3 = (xhd, yhd) in
+                                                      let temp5 = join xtl ytl in
+                                                        (Constr_1 (temp3, temp5))
                                            else match_failure)
                               else match_failure)))
 
@@ -225,39 +225,38 @@
   >    in
   >  aux (rev xs) ys  
   > EOF
-  let rec aux ls acc =
+  let rec __lifted_let_1_aux ls acc =
     let temp1 = ls in
-      let temp9 = get_tag temp1  in
+      let temp9 = block_tag temp1  in
         (if (temp9 = 0)
         then acc
-        else let temp7 = get_tag temp1  in
+        else let temp7 = block_tag temp1  in
                (if (temp7 = 1)
-               then let hd = get_arg 0 temp1 in
-                      let tl = get_arg 1 temp1 in
+               then let hd = block_nth temp1 0 in
+                      let tl = block_nth temp1 1 in
                         let temp3 = (Constr_1 (hd, acc)) in
-                          aux tl temp3
+                          __lifted_let_1_aux tl temp3
                else match_failure))
   let rev ls =
-    let temp12 = Constr_0 in
-      aux ls temp12
-  let rec aux xs ys =
-    let temp15 = (xs, ys) in
-      let temp25 = get_arg 0 temp15 in
-        let temp27 = get_tag temp25  in
-          (if (temp27 = 0)
-          then get_arg 1 temp15
-          else let temp19 = get_arg 0 temp15 in
-                 let temp23 = get_tag temp19  in
-                   (if (temp23 = 1)
-                   then let hd = get_arg 0 temp19 in
-                          let tl = get_arg 1 temp19 in
-                            let acc = get_arg 1 temp15 in
-                              let temp17 = (Constr_1 (hd, acc)) in
-                                aux tl temp17
+    __lifted_let_1_aux ls Constr_0
+  let rec __lifted_let_2_aux xs ys =
+    let temp14 = (xs, ys) in
+      let temp24 = block_nth temp14 0 in
+        let temp26 = block_tag temp24  in
+          (if (temp26 = 0)
+          then block_nth temp14 1
+          else let temp18 = block_nth temp14 0 in
+                 let temp22 = block_tag temp18  in
+                   (if (temp22 = 1)
+                   then let hd = block_nth temp18 0 in
+                          let tl = block_nth temp18 1 in
+                            let acc = block_nth temp14 1 in
+                              let temp16 = (Constr_1 (hd, acc)) in
+                                __lifted_let_2_aux tl temp16
                    else match_failure))
   let cat xs ys =
-    let temp29 = rev xs  in
-      aux temp29 ys
+    let temp28 = rev xs  in
+      __lifted_let_2_aux temp28 ys
 
   $ run << EOF
   > let rec take n ls =
@@ -268,18 +267,18 @@
   > EOF
   let rec take n ls =
     let temp1 = ls in
-      let temp14 = get_tag temp1  in
-        (if (temp14 = 0)
+      let temp12 = block_tag temp1  in
+        (if (temp12 = 0)
         then Constr_0
-        else let temp12 = get_tag temp1  in
-               (if (temp12 = 1)
-               then let x = get_arg 0 temp1 in
-                      let xs = get_arg 1 temp1 in
+        else let temp10 = block_tag temp1  in
+               (if (temp10 = 1)
+               then let x = block_nth temp1 0 in
+                      let xs = block_nth temp1 1 in
                         (if (n = 0)
                         then Constr_0
-                        else let temp5 = (n - 1) in
-                               let temp7 = take temp5 xs in
-                                 (Constr_1 (x, temp7)))
+                        else let temp4 = (n - 1) in
+                               let temp6 = take temp4 xs in
+                                 (Constr_1 (x, temp6)))
                else match_failure))
 
 

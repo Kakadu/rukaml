@@ -7,14 +7,14 @@ Polyvariadic uncurrying
   > let three = succ two
   > let four = succ three
   > EOF
-  let two f temp1 =
-    let a = field 0 temp1 in
-      let b = field 1 temp1 in
+  let two f tuple1 =
+    let a = block_nth tuple1 0 in
+      let b = block_nth tuple1 1 in
         let temp2 = f a  in
           temp2 b 
-  let succ prev f temp4 =
-    let a = field 0 temp4 in
-      let rest = field 1 temp4 in
+  let succ prev f tuple4 =
+    let a = block_nth tuple4 0 in
+      let rest = block_nth tuple4 1 in
         let temp5 = f a  in
           let temp6 = prev temp5  in
             temp6 rest 
@@ -34,7 +34,7 @@ let (_,_) = ...
     let temp1 = (a + b) in
       (temp1, a)
   let f a b =
-    let temp5 = mydiv a b in
-      let u = field 0 temp5 in
-        let v = field 1 temp5 in
+    let tuple5 = mydiv a b in
+      let u = block_nth tuple5 0 in
+        let v = block_nth tuple5 1 in
           (u + v)

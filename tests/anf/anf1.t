@@ -12,9 +12,9 @@
   > let sum x = let (a, b) = x in a+b
   > EOF
   let sum x =
-    let temp1 = x in
-      let a = field 0 temp1 in
-        let b = field 1 temp1 in
+    let tuple1 = x in
+      let a = block_nth tuple1 0 in
+        let b = block_nth tuple1 1 in
           (a + b)
 
   $ run << EOF
@@ -34,14 +34,14 @@ CPS Factorial
   > let rec fack n k =
   >  if n=1 then k 1 else fack (n-1) (fun m -> k (n*m))
   > EOF
-  let fresh_1 n k m =
+  let __lifted_lam_1 n k m =
     let temp1 = (n * m) in
       k temp1 
   let rec fack n k =
     (if (n = 1)
     then k 1 
     else let temp5 = (n - 1) in
-           let temp8 = fresh_1 n k in
+           let temp8 = __lifted_lam_1 n k in
              fack temp5 temp8)
 
 CPS Fibonacci
@@ -49,19 +49,19 @@ CPS Fibonacci
   > let rec fibk n k =
   >  if n<1 then k 1 else fibk (n-1) (fun p -> fibk (n-2) (fun q -> k (p + q)))
   > EOF
-  let fresh_2 p k q =
+  let __lifted_lam_2 p k q =
     let temp1 = (p + q) in
       k temp1 
-  let fresh_1 n k fibk p =
+  let __lifted_lam_1 n k fibk p =
     let temp3 = (n - 2) in
       let temp4 = fibk temp3  in
-        let temp6 = fresh_2 p k in
+        let temp6 = __lifted_lam_2 p k in
           temp4 temp6 
   let rec fibk n k =
     (if (n < 1)
     then k 1 
     else let temp10 = (n - 1) in
-           let temp14 = fresh_1 n k fibk in
+           let temp14 = __lifted_lam_1 n k fibk in
              fibk temp10 temp14)
 
 Polyvariadic uncurrying
@@ -71,14 +71,14 @@ Polyvariadic uncurrying
   > let three = succ two
   > let four = succ three
   > EOF
-  let two f temp1 =
-    let a = field 0 temp1 in
-      let b = field 1 temp1 in
+  let two f tuple1 =
+    let a = block_nth tuple1 0 in
+      let b = block_nth tuple1 1 in
         let temp2 = f a  in
           temp2 b 
-  let succ prev f temp4 =
-    let a = field 0 temp4 in
-      let rest = field 1 temp4 in
+  let succ prev f tuple4 =
+    let a = block_nth tuple4 0 in
+      let rest = block_nth tuple4 1 in
         let temp5 = f a  in
           let temp6 = prev temp5  in
             temp6 rest 
@@ -105,11 +105,11 @@ Polyvariadic currying
   let two f a b =
     let temp1 = (a, b) in
       f temp1 
-  let fresh_1 f arg rest =
+  let __lifted_lam_1 f arg rest =
     let temp3 = (arg, rest) in
       f temp3 
   let succ prev f arg =
-    let temp6 = fresh_1 f arg in
+    let temp6 = __lifted_lam_1 f arg in
       prev temp6 
   let three =
     succ two 
@@ -124,15 +124,15 @@ Polyvariadic map
   > let four = succ three
   > let temp = two (fun x -> x) (1,2)
   > EOF
-  let two f temp1 =
-    let a = field 0 temp1 in
-      let b = field 1 temp1 in
+  let two f tuple1 =
+    let a = block_nth tuple1 0 in
+      let b = block_nth tuple1 1 in
         let temp2 = f a  in
           let temp3 = f b  in
             (temp2, temp3)
-  let succ prev f temp5 =
-    let a = field 0 temp5 in
-      let rest = field 1 temp5 in
+  let succ prev f tuple5 =
+    let a = block_nth tuple5 0 in
+      let rest = block_nth tuple5 1 in
         let temp6 = f a  in
           let temp7 = prev f  in
             let temp8 = temp7 rest  in
@@ -141,11 +141,11 @@ Polyvariadic map
     succ two 
   let four =
     succ three 
-  let fresh_1 x =
+  let __lifted_lam_1 x =
     x
   let temp =
     let temp13 = (1, 2) in
-      two fresh_1 temp13
+      two __lifted_lam_1 temp13
 
   $ run << EOF #-vcc -vanf
   > let foo f x = x
