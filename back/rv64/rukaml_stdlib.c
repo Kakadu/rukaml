@@ -106,9 +106,9 @@ void rukaml_initialize(uint64_t ebp)
   logGC("%s. EBP=0x%lX\n", __func__, GC.ebp);
   const uint64_t size = sizeof(uint64_t *) * HEAP_SIZE;
   GC.main_bank = malloc(size);
-  GC.main_bank_fin = GC.main_bank + size;
-  GC.backup_bank = malloc(sizeof(uint64_t *) * HEAP_SIZE);
-  GC.backup_bank_fin = GC.backup_bank + size;
+  GC.main_bank_fin = GC.main_bank + HEAP_SIZE;
+  GC.backup_bank = malloc(size);
+  GC.backup_bank_fin = GC.backup_bank + HEAP_SIZE;
   GC.allocated_words = 0;
   GC.stats.gs_current_bank = 0;
   logGC("main   bank: 0x%lX..0x%lX\n", (uint64_t)GC.main_bank, (uint64_t)GC.main_bank_fin);
@@ -336,7 +336,7 @@ void *rukaml_alloc_block(int64_t size, uint8_t tag)
     fprintf(stderr, "Not enough memory\n");
     exit(1);
   }
-  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
+  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words));
   GC.allocated_words += size + 1;
   GC.stats.gs_allocated_words += size + 1;
   rez[0] = (uint64_t *)HEADER(size, tag);
