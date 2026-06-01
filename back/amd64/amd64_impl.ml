@@ -354,9 +354,9 @@ let pp_dest ppf = function
   | DStack_var name -> Addr_of_local.pp_local_exn ppf name
 ;;
 
-let alloc_closure ppf name arity =
-  printfn ppf "  mov rdi, %a" Ident.pp name;
-  printfn ppf "  mov rsi, %d" arity;
+let emit_alloc_closure ppf ~fname ~argc =
+  printfn ppf "  mov rdi, %a" Toplevel.pp_label_exn fname;
+  printfn ppf "  mov rsi, %d" argc;
   printfn ppf "  call rukaml_alloc_closure"
 ;;
 
@@ -405,12 +405,6 @@ let allocate_locals ppf input_anf : now:unit -> unit =
     fun ~now ->
       let () = now in
       ()
-;;
-
-let emit_alloc_closure ppf fname arity =
-  printfn ppf "  mov rdi, %a" Ident.pp fname;
-  printfn ppf "  mov rsi, %d" arity;
-  printfn ppf "  call rukaml_alloc_closure"
 ;;
 
 let list_iter_revindex ~f xs =
