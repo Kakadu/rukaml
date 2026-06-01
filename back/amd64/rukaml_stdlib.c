@@ -46,6 +46,8 @@ int HEAP_SIZE = 160;
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
+const uint8_t String_tag = 252;
+
 void __mk_err_fatal(const char *file, int line, const char *msg)
 {
   fprintf(stderr, "[fatal] file=%s line=%d msg=\"%s\"\n", file, line, msg);
