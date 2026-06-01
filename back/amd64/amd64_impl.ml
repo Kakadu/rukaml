@@ -971,6 +971,95 @@ let generate_body is_toplevel ppf body =
     | atom ->
       printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
       failwiths "Unsupported: %a" ANF.pp_a atom
+  and emit_initialize_block dest ~tag ~fields ~name =
+    printfn ppf "  mov rdi, %d ; %s size" (List.length fields) name;
+    printfn ppf "  mov rsi, %d ; %s tag" tag name;
+    printfn ppf "  call rukaml_alloc_block";
+    let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+    let name2 = Ident.of_string @@ gen_name ~prefix:name () in
+    Addr_of_local.extend name1;
+    Addr_of_local.extend name2;
+    printfn ppf "  add rsp, -8*2 ; push %s" name;
+    printfn ppf "  mov qword [rsp], rax";
+    List.iteri
+      (fun i x ->
+         helper_a (DReg "rsi") x;
+         printfn ppf "  mov qword rdi, [rsp] ; get %s" name;
+         printfn ppf "  mov qword [rdi+8*%d], rsi ; set field of %s" i name)
+      fields;
+    printfn ppf "  mov rax, [rsp]";
+    printfn ppf "  add rsp, 8*2 ; pop %s" name;
+    Addr_of_local.remove_local name2;
+    Addr_of_local.remove_local name1;
+    printfn ppf "  mov %a, rax" pp_dest dest
+  and emit_rukaml_apply1 dest ~fname ~arg =
+    let fident = Ident.ident fname 0 in
+    match arg with
+    | ANF.AVar v when Addr_of_var.is_defined v ->
+      printfn ppf "  mov rdi, %a" Toplevel.pp_label_exn fident;
+      printfn ppf "  mov rsi, %a" Addr_of_var.pp_var_exn v;
+      printfn ppf "  call rukaml_apply1";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | _ ->
+      helper_a (DReg "rsi") arg;
+      printfn ppf "  mov rdi, %a" Toplevel.pp_label_exn fident;
+      printfn ppf "  call rukaml_apply1";
+      printfn ppf "  mov %a, rax" pp_dest dest
+  and emit_rukaml_apply2 dest ~fname ~arg1 ~arg2 =
+    let fident = Ident.ident fname 0 in
+    (match arg1, arg2 with
+     | ANF.AVar v1, ANF.AVar v2 ->
+       printfn ppf "  mov rsi, %a" Addr_of_var.pp_var_exn v1;
+       printfn ppf "  mov rdx, %a" Addr_of_var.pp_var_exn v2
+     | ANF.AVar v1, _ ->
+       helper_a (DReg "rdx") arg2;
+       printfn ppf "  mov rsi, %a" Addr_of_var.pp_var_exn v1
+     | _, ANF.AVar v2 ->
+       helper_a (DReg "rsi") arg1;
+       printfn ppf "  mov rdx, %a" Addr_of_var.pp_var_exn v2
+     | _ ->
+       helper_a (DReg "rsi") arg1;
+       printfn ppf "  add rsp, -8*2";
+       printfn ppf "  mov qword [rsp], rsi";
+       helper_a (DReg "rdx") arg2;
+       printfn ppf "  mov qword rsi, [rsp]";
+       printfn ppf "  add rsp, 8*2");
+    printfn ppf "  mov rdi, %a" Toplevel.pp_label_exn fident;
+    printfn ppf "  call rukaml_apply1";
+    printfn ppf "  mov %a, rax" pp_dest dest
+  and emit_rukaml_applyN dest ~fname ~argc ~arg1 =
+    let fident = Ident.ident fname 0 in
+    assert (argc > 1);
+    match arg1 with
+    | ANF.AVar v when Addr_of_var.is_defined v ->
+      printfn ppf "  mov rdi, %a" Toplevel.pp_label_exn fident;
+      printfn ppf "  mov rsi, %d" argc;
+      printfn ppf "  call rukaml_alloc_closure";
+      printfn ppf "  mov rdi, rax";
+      printfn ppf "  mov rsi, 1";
+      printfn ppf "  mov rdx, %a" Addr_of_var.pp_var_exn v;
+      printfn ppf "  mov rax, 0";
+      printfn ppf "  call rukaml_applyN";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | _ ->
+      printfn ppf "  mov rdi, %a" Toplevel.pp_label_exn fident;
+      printfn ppf "  mov rsi, %d" argc;
+      printfn ppf "  call rukaml_alloc_closure";
+      let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+      let name2 = Ident.of_string @@ gen_name ~prefix:"arg1" () in
+      Addr_of_local.extend name1;
+      Addr_of_local.extend name2;
+      printfn ppf "  add rsp, -8*2 ; closure";
+      printfn ppf "  mov [rsp], rax";
+      helper_a (DReg "rdx") arg1;
+      printfn ppf "  mov rdi, [rsp]";
+      printfn ppf "  add rsp, 8*2 ; closure";
+      Addr_of_local.remove_local name2;
+      Addr_of_local.remove_local name1;
+      printfn ppf "  mov rsi, 1";
+      printfn ppf "  mov rax, 0";
+      printfn ppf "  call rukaml_applyN";
+      printfn ppf "  mov %a, rax" pp_dest dest
   in
   let dealloc_locals = allocate_locals ppf body in
   helper (DReg "rax") body;
