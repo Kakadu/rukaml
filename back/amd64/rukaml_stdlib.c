@@ -95,6 +95,45 @@ static struct gc_data GC = {
     // .static_roots is not compile-time constant, so it is not initialized here
 };
 
+void initialize_gc_static_roots()
+{
+  GC.static_roots.capacity = INITIAL_GC_STATIC_ROOTS_CAPACITY;
+  GC.static_roots.roots = (uint64_t **)(calloc(INITIAL_GC_STATIC_ROOTS_CAPACITY,
+                                               sizeof(uint64_t *)));
+  if (GC.static_roots.roots == NULL)
+  {
+    mk_err_fatal("memory allocation failed");
+  }
+  GC.static_roots.counter = 0;
+}
+
+void teardown_gc_static_roots()
+{
+  free(GC.static_roots.roots);
+}
+
+// TODO! (memory leak)
+//  gc roots can not only be added but also disappear, at least in two cases:
+//  1. shadowing of a global variable
+//  2. mutation of a global variable
+//  some mechanism for removing static roots is needed
+void add_gc_static_root(void **static_root)
+{
+  if (GC.static_roots.counter >= GC.static_roots.capacity)
+  {
+    uint64_t new_capacity = GC.static_roots.capacity * 2;
+    uint64_t **new_roots = (uint64_t **)realloc(GC.static_roots.roots, new_capacity * sizeof(uint64_t *));
+    if (new_roots == NULL)
+    {
+      mk_err_fatal("memory allocation failed");
+    }
+    GC.static_roots.capacity = new_capacity;
+    GC.static_roots.roots = new_roots;
+  }
+
+  GC.static_roots.roots[GC.static_roots.counter++] = (uint64_t *)static_root;
+}
+
 uint64_t allocated_closures = 0;
 
 static void *rukaml_sys_argv = NULL; // private field
