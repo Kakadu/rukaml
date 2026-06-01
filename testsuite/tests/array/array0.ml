@@ -6,5 +6,5 @@ test
 *)
 let main =
   let r = [|1; 2; 3|] in
-  let n = length r in
+  let n = array_len r in
   print n
