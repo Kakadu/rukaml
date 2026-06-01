@@ -68,6 +68,16 @@ struct gc_stats
   uint64_t gs_allocated_words; // allocated from beginning of the program
   uint64_t gs_current_bank;    // 0 = first bank, 1 = second
 };
+
+#define INITIAL_GC_STATIC_ROOTS_CAPACITY 64
+
+struct gc_static_roots
+{
+  uint64_t counter;
+  uint64_t capacity;
+  uint64_t **roots;
+};
+
 struct gc_data
 {
   uint64_t ebp;
@@ -77,9 +87,13 @@ struct gc_data
   uint64_t *backup_bank_fin;
   uint64_t allocated_words; // currently allocated
   struct gc_stats stats;
+  struct gc_static_roots static_roots;
 };
 
-static struct gc_data GC = {.ebp = 0, .allocated_words = 0, .stats = {.gs_allocated_words = 0}};
+static struct gc_data GC = {
+    .ebp = 0, .allocated_words = 0, .stats = {.gs_allocated_words = 0},
+    // .static_roots is not compile-time constant, so it is not initialized here
+};
 
 uint64_t allocated_closures = 0;
 
