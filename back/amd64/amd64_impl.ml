@@ -337,6 +337,17 @@ module Toplevel = struct
   ;;
 end
 
+module Mangling = struct
+  let bounded =
+    (* main, stdlib_externs and aliases for them are initially bounded identifiers *)
+    [ Ident.ident "main" 0 ]
+    @ List.map (fun (_argc, ident) -> Ident.ident ident 0) stdlib_externs
+    @ List.map (fun (alias, _aliasee) -> Ident.ident alias 0) stdlib_aliases
+  ;;
+
+  let mangle_names_stru = Compile_lib.Mangling.mangle_names_stru ~bounded
+end
+
 let pp_dest ppf = function
   | DDiscard -> fprintf ppf "[rukaml_discard]"
   | DReg s -> fprintf ppf "%s" s
