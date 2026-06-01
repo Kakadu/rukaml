@@ -814,6 +814,18 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov rdi, %d" n;
       printfn ppf "  call rukaml_print_int";
       printfn ppf "  mov qword %a, 0" pp_dest dest
+    | CApp (APrimitive ("gc_compact", 1), _, []) ->
+      printfn ppf "  mov rdi, rsp";
+      printfn ppf "  mov rsi, 0";
+      printfn ppf "  call rukaml_gc_compact"
+    | CApp (APrimitive ("gc_stats", 1), _, []) ->
+      printfn ppf "  mov rdi, 0";
+      printfn ppf "  mov rsi, 0";
+      printfn ppf "  call rukaml_gc_print_stats"
+    | CApp (APrimitive ("closure_count", 1), _, []) ->
+      printfn ppf "  mov rdi, 0";
+      printfn ppf "  mov rsi, 0";
+      printfn ppf "  call rukaml_print_alloc_closure_count"
       (* Callig a rukaml function uses custom calling convention.
            CDECL convention: all arguments on stack, LTR *)
       let expected_arity = Option.get (is_toplevel f) in
