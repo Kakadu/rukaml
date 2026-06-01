@@ -544,92 +544,50 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn arg;
       printfn ppf "  call rukaml_print_int";
       printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (AVar f, arg, [])
-    (* TODO(Kakadu): change to builtin *)
-      when f.Ident.hum_name = "length"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
-      (match arg with
-       | AVar v when Addr_of_local.has_key v ->
-         let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
-         let name2 = Ident.of_string @@ gen_name ~prefix:"array" () in
-         Addr_of_local.extend name1;
-         Addr_of_local.extend name2;
-         printfn ppf "  add rsp, -8*2";
-         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
-         printfn ppf "  mov qword [rsp], r11";
-         printfn ppf "  call rukaml_array_length";
-         printfn ppf "  mov %a, rax" pp_dest dest;
-         printfn ppf "  add rsp, 8*2";
-         Addr_of_local.remove_local name2;
-         Addr_of_local.remove_local name1
-       | _ -> failwith "Should not happen")
-    | CApp (APrimitive ("get_tag", _), arg, []) ->
-      (match arg with
-       | AVar v when Addr_of_local.has_key v ->
-         let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
-         let name2 = Ident.of_string @@ gen_name ~prefix:"constr" () in
-         Addr_of_local.extend name1;
-         Addr_of_local.extend name2;
-         printfn ppf "  add rsp, -8*2";
-         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
-         printfn ppf "  mov qword [rsp], r11";
-         printfn ppf "  call rukaml_constructor_tag";
-         printfn ppf "  mov %a, rax" pp_dest dest;
-         printfn ppf "  add rsp, 8*2";
-         Addr_of_local.remove_local name2;
-         Addr_of_local.remove_local name1
-       | _ -> failwith "Should not happen")
-    | CApp (APrimitive ("get_arity", _), arg, []) ->
-      (match arg with
-       | AVar v when Addr_of_local.has_key v ->
-         let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
-         let name2 = Ident.of_string @@ gen_name ~prefix:"constr" () in
-         Addr_of_local.extend name1;
-         Addr_of_local.extend name2;
-         printfn ppf "  add rsp, -8*2";
-         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
-         printfn ppf "  mov qword [rsp], r11";
-         printfn ppf "  call rukaml_constructor_arity";
-         printfn ppf "  mov %a, rax" pp_dest dest;
-         printfn ppf "  add rsp, 8*2";
-         Addr_of_local.remove_local name2;
-         Addr_of_local.remove_local name1
-       | _ -> failwith "Should not happen")
-    | CApp (AVar f, arg1, [])
-    (* TODO(Kakadu): change to builtin *)
-      when f.Ident.hum_name = "get"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
-      (match arg1 with
-       | AVar arr when Addr_of_local.has_key arr ->
-         printfn ppf "  mov rdi, rukaml_array_get";
-         printfn ppf "  mov rsi, 2";
-         printfn ppf "  call rukaml_alloc_closure";
-         printfn ppf "  mov rdi, rax";
-         printfn ppf "  mov rsi, 1";
-         printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arr;
-         printfn ppf "  mov al, 0";
-         printfn ppf "  call rukaml_applyN";
-         printfn ppf "  mov %a, rax" pp_dest dest
-       | _ -> failwith "Should not happen")
-    | CApp (AVar f, arg1, [])
-    (* TODO(Kakadu): change to builtin *)
-      when f.Ident.hum_name = "set"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
-      (match arg1 with
-       | AVar arr when Addr_of_local.has_key arr ->
-         printfn ppf "  mov rdi, rukaml_array_set";
-         printfn ppf "  mov rsi, 3";
-         printfn ppf "  call rukaml_alloc_closure";
-         printfn ppf "  mov rdi, rax";
-         printfn ppf "  mov rsi, 1";
-         printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arr;
-         printfn ppf "  mov al, 0";
-         printfn ppf "  call rukaml_applyN";
-         printfn ppf "  mov %a, rax" pp_dest dest
-       | _ -> failwith "Should not happen")
+    (* >>> TODO: get rid of it *)
+    | CApp (APrimitive (("fprintf" as fname), (2 as argc)), arg1, []) ->
+      emit_rukaml_applyN dest ~fname ~arg1 ~argc
+    | CApp (APrimitive (("block_nth" as fname), (2 as argc)), arg1, []) ->
+      emit_rukaml_applyN dest ~fname ~arg1 ~argc
+    | CApp (APrimitive (("string_nth" as fname), (2 as argc)), arg1, []) ->
+      emit_rukaml_applyN dest ~fname ~arg1 ~argc
+    | CApp (APrimitive (("string_equal" as fname), (2 as argc)), arg1, []) ->
+      emit_rukaml_applyN dest ~fname ~arg1 ~argc
+    | CApp (APrimitive (("array_get" as fname), (2 as argc)), arg1, []) ->
+      emit_rukaml_applyN dest ~fname ~arg1 ~argc
+    (* <<< *)
+    | CApp (APrimitive (("printf" as fname), 1), arg, []) ->
+      emit_rukaml_apply1 dest ~fname ~arg
+    | CApp (APrimitive (("sprintf" as fname), 1), arg, []) ->
+      emit_rukaml_apply1 dest ~fname ~arg
+    | CApp (APrimitive (("fprintf" as fname), 2), arg1, [ arg2 ]) ->
+      emit_rukaml_apply2 dest ~fname ~arg1 ~arg2
+    | CApp (APrimitive (("string_len" as fname), 1), arg, []) ->
+      emit_rukaml_apply1 dest ~fname ~arg
+    | CApp (APrimitive (("block_nth" as fname), 2), arg1, [ arg2 ]) ->
+      emit_rukaml_apply2 dest ~fname ~arg1 ~arg2
+    | CApp (APrimitive (("string_nth" as fname), 2), arg1, [ arg2 ]) ->
+      emit_rukaml_apply2 dest ~fname ~arg1 ~arg2
+    | CApp (APrimitive (("string_equal" as fname), 2), arg1, [ arg2 ]) ->
+      emit_rukaml_apply2 dest ~fname ~arg1 ~arg2
+    | CApp (APrimitive (("string_of_char_list" as fname), 1), arg, []) ->
+      emit_rukaml_apply1 dest ~arg ~fname
+    | CApp (APrimitive (("open_in" as fname), 1), arg, []) ->
+      emit_rukaml_apply1 dest ~arg ~fname
+    | CApp (APrimitive (("open_out" as fname), 1), arg, []) ->
+      emit_rukaml_apply1 dest ~arg ~fname
+    | CApp (APrimitive (("input_char" as fname), 1), arg, []) ->
+      emit_rukaml_apply1 dest ~arg ~fname
+    | CApp (APrimitive (("end_of_input" as fname), 1), arg, []) ->
+      emit_rukaml_apply1 dest ~arg ~fname
+    | CApp (APrimitive ((("close_in" | "close_out") as fname), 1), arg, []) ->
+      emit_rukaml_apply1 dest ~fname ~arg
+    | CApp (APrimitive (("array_set" as fname), (3 as argc)), arg1, []) ->
+      emit_rukaml_applyN dest ~fname ~argc ~arg1
+    | CApp (APrimitive (("array_get" as fname), 2), arg1, [ arg2 ]) ->
+      emit_rukaml_apply2 dest ~fname ~arg1 ~arg2
+    | CApp (APrimitive (("array_len" as fname), 1), arg, []) ->
+      emit_rukaml_apply1 dest ~fname ~arg
     | CApp (APrimitive ("char_code", 1), arg1, []) ->
       (match arg1 with
        | AVar v when Addr_of_local.has_key v ->
