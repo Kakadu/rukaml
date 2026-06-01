@@ -44,6 +44,7 @@ let pp_space_list eta =
 ;;
 
 let print_prologue ppf name =
+  printfn ppf "section .text";
   if name = "main"
   then (
     printfn ppf "global _start";
@@ -1093,7 +1094,10 @@ let generate_body is_toplevel ppf body =
 let put_print_newline ppf =
   printfn
     ppf
-    {|print_newline:
+    {|
+    section .text
+
+    print_newline:
           mov rax, 1 ; 'write' syscall identifier
           mov rdi, 1 ; stdout file descriptor
           mov rsi, newline_char ; where do we take data from
@@ -1106,6 +1110,8 @@ let put_print_hex ppf =
   printfn
     ppf
     {|
+section .text
+
 print_hex:
   mov rax, rdi
   mov rdi, 1
@@ -1223,11 +1229,13 @@ let codegen ?(wrap_main_into_start = true) anf file =
         {|section .data
             newline_char: db 10
             codes: db '0123456789abcdef' |};
-    printfn ppf "section .text";
     if use_custom_main
     then (
       put_print_newline ppf;
       put_print_hex ppf);
+    printfn ppf "section .text";
+    put_init_stdlib ppf;
+    printfn ppf "";
     put_discard ppf;
     printfn ppf "";
     if use_custom_main
@@ -1236,20 +1244,24 @@ let codegen ?(wrap_main_into_start = true) anf file =
            https://filippo.io/linux-syscall-table/ *)
       printfn
         ppf
-        {|_start:
-              push    rbp
-              mov     rbp, rsp   ; prologue
-              push 5
-              call sq
-              add rsp, 8
-              mov rdi, rax    ; rdi stores return code
-              mov rax, 60     ; exit syscall
-              syscall|}
+        {|
+section .text
+    _start:
+          push    rbp
+          mov     rbp, rsp   ; prologue
+          push 5
+          call sq
+          add rsp, 8
+          mov rdi, rax    ; rdi stores return code
+          mov rax, 60     ; exit syscall
+          syscall|}
     else if wrap_main_into_start
     then
       printfn
         ppf
-        {|_start:
+        {|
+        section .text
+        _start:
               push    rbp
               mov     rbp, rsp   ; prologue
               call main
