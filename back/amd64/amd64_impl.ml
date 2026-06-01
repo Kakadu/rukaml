@@ -349,6 +349,20 @@ module Mangling = struct
   let mangle_names_stru = Compile_lib.Mangling.mangle_names_stru ~bounded
 end
 
+module Addr_of_var = struct
+  let pp_var_exn ppf ident =
+    match Addr_of_local.pp_local_exn ppf ident with
+    | () -> log "Found local variable %s" ident.hum_name
+    | exception Not_found ->
+      (match Toplevel.pp_toplevel_exn ppf ident with
+       | () -> log "Found global variable %s" ident.hum_name
+       | exception Not_found ->
+         failwiths "Can't find location of a variable %s" ident.hum_name)
+  ;;
+
+  let is_defined (ident : Ident.t) = Addr_of_local.has_key ident || Toplevel.has_key ident
+end
+
 let pp_dest ppf = function
   | DDiscard -> fprintf ppf "[rukaml_discard]"
   | DReg s -> fprintf ppf "%s" s
