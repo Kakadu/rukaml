@@ -824,6 +824,27 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  call rukaml_applyN";
       printfn ppf "  mov %a, rax" pp_dest dest
     (* TODO: | CApp (AVar f, (AUnit as arg), []) *)
+    | CApp (AVar f, (AConst _ as arg), [])
+    | CApp (AVar f, (AConstruct _ as arg), [])
+    | CApp (AVar f, (APrimitive _ as arg), [])
+    | CApp (AVar f, (AVar _ as arg), [])
+      when Addr_of_local.has_key f ->
+      let arg1 = Ident.of_string "arg1" in
+      let temp_padding = Ident.of_string "temp_padding" in
+      Addr_of_local.extend temp_padding;
+      Addr_of_local.extend arg1;
+      printfn ppf "  sub rsp, 8 ; padding";
+      printfn ppf "  sub rsp, 8 ; first arg of a function %a" Ident.pp f;
+      helper_a (DStack_var arg1) arg;
+      printfn ppf "  mov rax, 0  ; no float arguments";
+      printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn f;
+      printfn ppf "  mov rsi, 1";
+      printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arg1;
+      printfn ppf "  call rukaml_applyN";
+      Addr_of_local.remove_local arg1;
+      Addr_of_local.remove_local temp_padding;
+      printfn ppf "  add rsp, 8*2 ; free space for args of function \"%a\"" Ident.pp f;
+      printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (APrimitive ("print", 1), AConst (PConst_int n), []) ->
       printfn ppf "  mov rdi, %d" n;
       printfn ppf "  call rukaml_print_int";
@@ -883,33 +904,6 @@ let generate_body is_toplevel ppf body =
         printfn ppf "  mov %a, rax" pp_dest dest
         (* printfn ppf "  sub rsp, 8*2 ; deallocate closure value and padding" *))
       else failwith "Arity mismatch: over application"
-    | CApp (AVar f, (AConst _ as arg), [])
-    | CApp (AVar f, (APrimitive _ as arg), [])
-    | CApp (AVar f, (AVar _ as arg), []) ->
-      assert (Option.is_none (is_toplevel f));
-      let arg =
-        match arg with
-        (* TODO(Kakadu): change to builtin *)
-        | AVar id when id.Frontend.Ident.hum_name = "closure_count" ->
-          ANF.AConst (PConst_int 0)
-        | _ -> arg
-      in
-      let arg1 = Ident.of_string "arg1" in
-      let temp_padding = Ident.of_string "temp_padding" in
-      Addr_of_local.extend temp_padding;
-      Addr_of_local.extend arg1;
-      printfn ppf "  sub rsp, 8 ; padding";
-      printfn ppf "  sub rsp, 8 ; first arg of a function %a" Ident.pp f;
-      helper_a (DStack_var arg1) arg;
-      printfn ppf "  mov rax, 0  ; no float arguments";
-      printfn ppf "  mov rdi, %a" pp_dest (DStack_var f);
-      printfn ppf "  mov rsi, 1";
-      printfn ppf "  mov rdx, %a" pp_dest (DStack_var arg1);
-      printfn ppf "  call rukaml_applyN";
-      Addr_of_local.remove_local arg1;
-      Addr_of_local.remove_local temp_padding;
-      printfn ppf "  add rsp, 8*2 ; free space for args of function \"%a\"" Ident.pp f;
-      printfn ppf "  mov %a, rax" pp_dest dest
     | CAtom atom -> helper_a dest atom
     | CApp _ as anf ->
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_c anf;
