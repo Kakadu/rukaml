@@ -25,9 +25,19 @@
   Parsed: 'a * 'b
 
   $ cat << EOF | ./run.exe -core-type -
-  > 'a -> 'b
+  > 'a -> 'b -> 'c
   > EOF
-  Parsed: 'a -> 'b
+  Parsed: 'a -> 'b -> 'c
+
+  $ cat << EOF | ./run.exe -core-type -
+  > 'a -> ('b -> 'c)
+  > EOF
+  Parsed: 'a -> 'b -> 'c
+
+  $ cat << EOF | ./run.exe -core-type -
+  > ('a -> 'b) -> 'c
+  > EOF
+  Parsed: ('a -> 'b) -> 'c
 
   $ cat << EOF | ./run.exe -core-type -
   > ('a -> 'b) * ('b -> 'a)
@@ -67,10 +77,16 @@
 
 # type declaration
   $ cat << EOF | ./run.exe -stru -
-  > type t = int
+  > type t
   > EOF
-  Parsed: type t = int
+  Parsed: type t
           
+  $ cat << EOF | ./run.exe -stru -
+  > type t = int -> bool
+  > EOF
+  Parsed: type t = int -> bool
+          
+
   $ cat << EOF | ./run.exe -stru -
   > type 'a my_list = 'a list
   > EOF
@@ -111,7 +127,6 @@
             | Reversed of ('b -> 'a)
             
           
-
   $ cat << EOF | ./run.exe -stru -
   > type 'a list =
   > | Nil
@@ -122,13 +137,32 @@
             | Cons of 'a * 'a list
             
           
-
   $ cat << EOF | ./run.exe -stru -
   > type ('a, 'b) qwe =
-  > | Asd of 'a -> ('a -> 'b) -> 'b
+  > | Asd of ('a -> ('a -> 'b) -> 'b)
   > | Zxc of ('a -> 'a) * ('a -> 'a) * 'a
   > EOF
-  Error: : end_of_input
+  Parsed: type ('a, 'b) qwe =
+            | Asd of ('a -> ('a -> 'b) -> 'b)
+            | Zxc of ('a -> 'a) * ('a -> 'a) * 'a
+            
+          
+  $ cat << EOF | ./run.exe -stru -
+  > type t =
+  > | Foo of int
+  > | Bar of int list
+  > | Qwe of ('a -> 'b) option
+  > | Asd of (int list, bool option) map
+  > | Zxc of ((int, bool) result, string option list) map list
+  > EOF
+  Parsed: type t =
+            | Foo of int
+            | Bar of int list
+            | Qwe of ('a -> 'b) option
+            | Asd of (int list, bool option) map
+            | Zxc of ((int, bool) result, string option list) map list
+            
+          
 #
 
 # "and" chains
@@ -228,7 +262,6 @@
   > | B of B
   > EOF
   Error: : end_of_input
-#
 
 # unsorted
   $ cat << EOF | ./run.exe -stru -
