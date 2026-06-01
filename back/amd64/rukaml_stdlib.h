@@ -16,7 +16,16 @@ void rukaml_print_int_kaml(int, int, int, int, int, int, int64_t);
 
 uint64_t rukaml_array_length(int, int, int, int, int, int, void **arr);
 void **rukaml_array_stdin(void);
-void *rukaml_array_get(int, int, int, int, int, int, void **arr,
+void *rukaml_stdin(void);
+void *rukaml_stdout(void);
+void *rukaml_stderr(void);
+
+void *rukaml_open_in(int, int, int, int, int, int, void **path);
+void *rukaml_open_out(int, int, int, int, int, int, void **path);
+void rukaml_close_channel(int, int, int, int, int, int, void *channel);
+
+int64_t rukaml_input_char(int, int, int, int, int, int, void *channel);
+int64_t rukaml_end_of_input(int, int, int, int, int, int, void *channel);
                        uint64_t n);
 void rukaml_array_set(int, int, int, int, int, int, void **arr, uint64_t n,
                       void *a);
@@ -52,5 +61,7 @@ void *rukaml_alloc_closure(void *func, int32_t argsc);
 void *rukaml_alloc_constructor(int32_t arity, int32_t tag);
 
 void *rukaml_applyN(void *f, int64_t argc, ...);
+
+void *rukaml_argv(void);
 
 #endif // RUKAML_STDLIB_H
