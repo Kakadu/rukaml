@@ -279,21 +279,16 @@ void rukaml_print_int_kaml(int a0, int a1, int a2, int a3, int a4, int a5, int64
   rukaml_print_int(x);
 }
 
-uint64_t rukaml_array_length(int a0, int a1, int a2, int a3, int a4, int a5, void **arr)
-{
-  return SIZE(arr);
-}
-
 void **rukaml_array_stdin(void)
 {
   char buf[MAX_STRING_FROM_STDIN];
   int code = scanf("%s", buf);
   if (!code)
   {
-    return rukaml_alloc_array(0);
+    return rukaml_alloc_block(0, Array_tag);
   }
   size_t size = strlen(buf);
-  void **arr = rukaml_alloc_array(size);
+  void **arr = rukaml_alloc_block(size, Array_tag);
 
   for (int i = 0; i < size; i++)
   {
@@ -317,14 +312,14 @@ void **rukaml_array_read_in(int a0, int a1, int a2, int a3, int a4, int a5,
   FILE *fp = fopen(path, "r");
   if (!fp)
   {
-    return rukaml_alloc_array(0);
+    return rukaml_alloc_block(0, Array_tag);
   }
 
   fseek(fp, 0, SEEK_END);
   size_t size = ftell(fp);
   fseek(fp, 0, SEEK_SET);
 
-  void **arr = rukaml_alloc_array(size);
+  void **arr = rukaml_alloc_block(size, Array_tag);
 
   for (int i = 0; i < size; i++)
   {
@@ -334,18 +329,6 @@ void **rukaml_array_read_in(int a0, int a1, int a2, int a3, int a4, int a5,
   fread(arr, sizeof(void *), size, fp);
   fclose(fp);
   return arr;
-}
-
-void *rukaml_array_get(int a0, int a1, int a2, int a3, int a4, int a5,
-                       void **arr, uint64_t n)
-{
-  assert(TAG(arr) == Array_tag);
-  if (n >= SIZE(arr))
-  {
-    fprintf(stderr, "Index out of bounds");
-    exit(1);
-  }
-  return arr[n];
 }
 
 void rukaml_array_set(int a0, int a1, int a2, int a3, int a4, int a5,
@@ -361,28 +344,6 @@ void rukaml_array_set(int a0, int a1, int a2, int a3, int a4, int a5,
   return;
 }
 
-uint64_t rukaml_constructor_tag(int a0, int a1, int a2, int a3, int a4, int a5, void **constr)
-{
-  return TAG(constr);
-}
-
-uint64_t rukaml_constructor_arity(int a0, int a1, int a2, int a3, int a4, int a5, void **constr)
-{
-  return SIZE(constr);
-}
-
-void *rukaml_constructor_arg(int a0, int a1, int a2, int a3, int a4, int a5, uint64_t n, void **constr)
-{
-  if (n >= SIZE(constr))
-  {
-    fprintf(stderr, "Index out of arity");
-    exit(1);
-  }
-
-  return constr[n];
-}
-
-// TODO: add line and file information here
 void rukaml_match_failure()
 {
   fprintf(stderr, "Match failure\n");
@@ -449,69 +410,49 @@ rukaml_closure *copy_closure(rukaml_closure *src)
   return memcpy(dst, src, size);
 }
 
-void *rukaml_alloc_pair(void *l, void *r)
-{
-  if (GC.allocated_words + 3 > HEAP_SIZE)
-  {
-    fprintf(stderr, "Not enough memory\n");
-    exit(1);
-  }
-  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
-  GC.allocated_words += 3;
-  GC.stats.gs_allocated_words += 3;
-  rez[0] = (uint64_t *)HEADER(2, Tuple_tag);
-  assert(TAG(rez + 1) == Tuple_tag);
-
-  (rez)[1] = l;
-  (rez)[2] = r;
-  logGC("A pair %lX created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
-  return rez + 1;
-}
-
-void *rukaml_alloc_array(int32_t size)
+void *rukaml_alloc_block(uint64_t size, uint64_t tag)
 {
   if (GC.allocated_words + size + 1 > HEAP_SIZE)
   {
-    fprintf(stderr, "Not enough memory\n");
-    exit(1);
+    mk_err_fatal("Not enough memory");
   }
-  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
+  uint64_t **rez = (uint64_t **)(GC.main_bank + GC.allocated_words);
   GC.allocated_words += size + 1;
   GC.stats.gs_allocated_words += size + 1;
-  rez[0] = (uint64_t *)HEADER(size, Array_tag);
-  assert(TAG(rez + 1) == Array_tag);
+  *rez = (uint64_t *)HEADER(size, tag);
   assert(SIZE(rez + 1) == size);
-  logGC("An array %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
+  assert(TAG(rez + 1) == tag);
+
+  logGC("A block %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
+
   return rez + 1;
 }
 
-void *rukaml_alloc_constructor(int32_t arity, int32_t tag)
+uint64_t rukaml_block_tag(int, int, int, int, int, int, void **obj)
 {
-  if (GC.allocated_words + arity + 1 > HEAP_SIZE)
+  // constant adt variants are lowered to int (TODO: adjust for tagged ones)
+  if (IS_IMM(obj))
   {
-    fprintf(stderr, "Not enough memory\n");
-    exit(1);
+    return (uint64_t)(obj);
   }
-  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
-  GC.allocated_words += arity + 1;
-  GC.stats.gs_allocated_words += arity + 1;
-  rez[0] = (uint64_t *)HEADER(arity, tag);
-  assert(SIZE(rez + 1) == arity);
-  logGC("A constructor %lX is created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
 
-  return rez + 1;
+  return TAG(obj);
 }
 
-void *rukaml_field(int n, void **r)
+uint64_t rukaml_block_size(int, int, int, int, int, int, void **obj)
 {
-  return r[n];
+  return SIZE(obj);
 }
 
-/* int64_t myadd(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t a, int64_t b)
+void *rukaml_block_nth(int, int, int, int, int, int, void **obj, uint64_t n)
 {
-  printf("a = %ld, b = %ld\n", a, b);
-  return a * b;
-} */
+  return obj[n];
+}
+
+void *rukaml_field(void **obj, uint64_t n)
+{
+  return obj[n];
+}
 
 void *rukaml_alloc_closure(void *func, int32_t argsc)
 {
