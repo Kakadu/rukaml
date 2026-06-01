@@ -92,6 +92,8 @@ let list_take n xs =
 ;;
 
 type dest =
+  (* rukaml_discard is reserved word in .bss where result of vb with '_' pattern is discarded *)
+  | DDiscard
   | DReg of string
   | DStack_var of Frontend.Ident.t
 
@@ -336,6 +338,7 @@ module Toplevel = struct
 end
 
 let pp_dest ppf = function
+  | DDiscard -> fprintf ppf "[rukaml_discard]"
   | DReg s -> fprintf ppf "%s" s
   | DStack_var name -> Addr_of_local.pp_local_exn ppf name
 ;;
@@ -1103,6 +1106,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
     then (
       put_print_newline ppf;
       put_print_hex ppf);
+    put_discard ppf;
     printfn ppf "";
     if use_custom_main
     then
