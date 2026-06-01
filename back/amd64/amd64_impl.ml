@@ -441,14 +441,17 @@ let generate_body is_toplevel ppf body =
       | AConst (PConst_bool true) -> pp_access 1
       | AConst (PConst_int n) -> pp_access ~doc:"constant" n
       | AConst (PConst_char c) -> pp_access ~doc:"constant" (Char.code c)
-      | AVar vname when Option.is_some (is_toplevel vname) ->
-        (match is_toplevel vname with
-         | Some arity ->
-           emit_alloc_closure ppf vname arity;
-           printfn ppf "  mov qword [rsp%+d*8], rax ; arg \"%a\"" i Ident.pp vname
-         | None -> assert false)
-      | AVar { Ident.hum_name = "print"; _ } ->
-        emit_alloc_closure ppf (Ident.of_string "rukaml_print_int_kaml") 1;
+      | AConst (PConst_string s) ->
+        (* notice: strings representation differs from adt/array/tuple, so rukaml_emit_alloc_block is not used here *)
+        let payload_words_n = (String.length s + 7) / 8 in
+        (* +1 to store String.length s in the last word *)
+        printfn ppf "  mov rdi, %d ; size of block for string" (payload_words_n + 1);
+        printfn ppf "  mov rsi, 252 ; string tag";
+        printfn ppf "  call rukaml_alloc_block";
+        List.iteri
+          (fun i ch -> printfn ppf "  mov qword [rax+%d], %d" i (Char.code ch))
+          (Base.String.to_list s);
+        printfn ppf "  mov qword [rax+8*%d], %d" payload_words_n (String.length s);
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar { Ident.hum_name = "open_in"; _ } ->
         emit_alloc_closure ppf (Ident.of_string "rukaml_array_read_in") 1;
@@ -952,17 +955,18 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  call rukaml_alloc_pair";
       printfn ppf "  mov %a, rax" pp_dest dest
     | APrimitive ("match_failure", _) -> printfn ppf "  call rukaml_match_failure"
-    | APrimitive ("print", (1 as parity)) ->
-      alloc_closure ppf (Ident.of_string "rukaml_print_int_kaml") parity;
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | AArray r ->
-      printfn ppf "  mov rdi, %d" (List.length r);
-      printfn ppf "  call rukaml_alloc_array";
+    | AConst (PConst_string s) ->
+      (* notice: DO NOT use emit_initialize_block here. strings representation differs *)
+      let payload_words_n = (String.length s + 7) / 8 in
+      (* +1 to store String.length s in the last word *)
+      printfn ppf "  mov rdi, %d ; size of block for string" (payload_words_n + 1);
+      printfn ppf "  mov rsi, 252 ; string tag";
+      printfn ppf "  call rukaml_alloc_block";
       List.iteri
-        (fun i x ->
-           helper_a (DReg "rdi") x;
-           printfn ppf "  mov [rax+8*%d], rdi" i)
-        r;
+        (fun i ch -> printfn ppf "  mov qword [rax+%d], %d" i (Char.code ch))
+        (Base.String.to_list s);
+      printfn ppf "  mov qword [rax+8*%d], %d" payload_words_n (String.length s);
+      printfn ppf "  mov %a, rax" pp_dest dest
       printfn ppf "  mov %a, rax" pp_dest dest
     | atom ->
       printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
