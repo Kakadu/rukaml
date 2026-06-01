@@ -573,3 +573,122 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
   }
   return f_closure;
 }
+
+uint64_t rukaml_string_len_imm(void **str)
+{
+  if (str == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(str) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  return (uint64_t)(str[SIZE(str) - 1]);
+}
+
+char rukaml_string_nth_imm(void **str, uint64_t n)
+{
+  if (str == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(str) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  uint64_t str_len = rukaml_string_len_imm(str);
+
+  if (n >= str_len)
+  {
+    mk_err_fatal("index out of bounds");
+  }
+
+  return ((char *)str)[n];
+}
+
+char rukaml_string_nth(int r0, int r1, int r2, int r3, int r4, int r5, void **str, uint64_t n)
+{
+  return rukaml_string_nth_imm(str, n);
+}
+
+char rukaml_string_len(int r0, int r1, int r2, int r3, int r4, int r5, void **str)
+{
+  return rukaml_string_len_imm(str);
+}
+
+uint64_t rukaml_list_length(int r0, int r1, int r2, int r3, int r4, int r5,
+                            void **ls)
+{
+  for (uint64_t size = 0;; ++size)
+  {
+    if (ls == 0) // [] lowered to int. TODO: adjust for tagged ints
+    {
+      return size;
+    }
+    else if (IS_BLOCK(ls) && (TAG(ls) == 1) &&
+             (SIZE(ls) == 2)) // ( :: ) of 'a * 'a list
+    {
+      ls = (void **)(ls[1]);
+    }
+    else
+    {
+      mk_err_fatal("tag mismatch");
+    }
+  }
+}
+
+void **rukaml_string_of_char_list(int r0, int r1, int r2, int r3, int r4,
+                                  int r5, void **chs)
+{
+  uint64_t chars_n = rukaml_list_length(0, 0, 0, 0, 0, 0, chs);
+  uint64_t payload_words_n = (chars_n + 7) / 8;
+  uint64_t *block =
+      (uint64_t *)rukaml_alloc_block(payload_words_n + 1, String_tag);
+
+  block[payload_words_n] = chars_n;
+  assert(rukaml_string_len_imm((void **)block) == chars_n);
+
+  for (size_t n = 0; n < chars_n; ++n)
+  {
+    assert(TAG(chs) == 1);                 // tag of ( :: )
+    ((char *)(block))[n] = (char)(chs[0]); // get head
+    chs = (void **)(chs[1]);               // get next list node
+  }
+
+  return (void **)block;
+}
+
+bool rukaml_string_equal(int r0, int r1, int r2, int r3, int r4, int r5, void **left, void **right)
+{
+  if (left == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+
+  if (right == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+
+  if (TAG(left) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  if (TAG(right) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  if (rukaml_string_len_imm(left) != rukaml_string_len_imm(right))
+  {
+    return false;
+  }
+
+  return memcmp(left, right, rukaml_string_len_imm(left)) == 0;
+}
