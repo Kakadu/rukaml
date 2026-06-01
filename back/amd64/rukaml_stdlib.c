@@ -224,7 +224,12 @@ void rukaml_initialize(uint64_t ebp, int argc, char **argv)
   GC.backup_bank_fin = GC.backup_bank + HEAP_SIZE;
   GC.allocated_words = 0;
   GC.stats.gs_current_bank = 0;
+
+  initialize_gc_static_roots();
   rukaml_init_argv(argc, argv);
+  add_gc_static_root(&rukaml_sys_argv); // sys_argv needs to be a static root
+  ;                                     // because it's allocated via rukaml_alloc_block
+  ;                                     // otherwise GC may collect its block.
 }
 
 static bool is_old_bank(uint64_t *ptr)
