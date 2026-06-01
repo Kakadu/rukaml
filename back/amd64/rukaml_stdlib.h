@@ -26,6 +26,10 @@ void rukaml_close_channel(int, int, int, int, int, int, void *channel);
 
 int64_t rukaml_input_char(int, int, int, int, int, int, void *channel);
 int64_t rukaml_end_of_input(int, int, int, int, int, int, void *channel);
+
+void **rukaml_string_of_char_list(int, int, int, int, int, int, void **chs);
+bool rukaml_string_equal(int, int, int, int, int, int, void **left, void **right);
+char rukaml_string_nth(int, int, int, int, int, int, void **str, uint64_t n);
 void *rukaml_alloc_block(uint64_t size, uint64_t tag);
 
 uint64_t rukaml_block_size(int, int, int, int, int, int, void **obj);
