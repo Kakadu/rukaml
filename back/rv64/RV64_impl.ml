@@ -202,7 +202,7 @@ let allocate_locals input_anf : (now:unit -> unit) * _ =
   let local_names = ref Ident.Ident_set.empty in
   let rec helper = function
     | ANF.EComplex c -> helper_c c
-    | ELet (_flg, Tpat_var name, rhs, where_) ->
+    | ELet (_flg, Apat_var name, rhs, where_) ->
       local_names := Ident.Ident_set.add name !local_names;
       helper_c rhs;
       helper where_
@@ -406,7 +406,7 @@ let generate_body is_toplevel body =
   in
   let rec helper dest = function
     | Compile_lib.ANF.EComplex c -> helper_c dest c
-    | ELet (_, Tpat_var name, rhs, wher) ->
+    | ELet (_, Apat_var name, rhs, wher) ->
       assert (Addr_of_local.contains name);
       let local = DStack_var name in
       (* printfn ppf "    ;; calculate rhs and put into %a. offset = %d" pp_dest
@@ -1037,7 +1037,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
       let names =
         List.map
           (function
-            | ANF.APname name -> name)
+            | ANF.Apat_var name -> name)
           pats
       in
       (* let _ = if argc mod 2 = 0 then argc else argc + 1 in *)
@@ -1051,7 +1051,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
         else
           List.rev pats
           |> ListLabels.iteri ~f:(fun i -> function
-            | ANF.APname name -> Addr_of_local.add_arg ~argc i name)
+            | ANF.Apat_var name -> Addr_of_local.add_arg ~argc i name)
       in
       generate_body is_toplevel body;
       Addr_of_local.remove_args names;
