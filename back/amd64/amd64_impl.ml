@@ -1299,6 +1299,78 @@ let emit_global_match ppf ident const expr =
   printfn ppf "  ret ;;; init_%a" Toplevel.pp_label_exn ident
 ;;
 
+let emit_global_function ppf name body =
+  if Addr_of_local.size () <> 0
+  then
+    failwiths
+      "There are left over variables (before function %a): %s "
+      Ident.pp
+      name
+      (Addr_of_local.keys ());
+  (* printfn ppf "";
+                fprintf ppf "\t; %a\n" Loc_of_ident.pp (); *)
+
+  (* print_prologue ppf name; *)
+
+  (* fprintf ppf "  ; There are %d known arguments in %s\n%!"
+                (Loc_of_ident.size ()) name; *)
+
+  (* printfn ppf "  sub rsp, %d" (8 * Loc_of_ident.size ()); *)
+  if use_custom_main && name.Ident.hum_name = "main"
+  then (
+    printfn ppf "section .text";
+    printfn
+      ppf
+      {|_start:
+                    push    rbp
+                    mov     rbp, rsp   ; prologue
+                    push 5
+                    call double
+                    add rsp, 8 ; pop 5
+                    mov rdi, rax
+                    call print_hex
+                    call print_newline
+
+                    mov rdi, 0x1122334455667788
+                    call print_hex
+                    call print_newline
+                    mov rax, 60
+                    xor rdi, rdi
+                    syscall|})
+  else if Toplevel.is_toplevel_function name || Toplevel.is_main name
+  then (
+    if Toplevel.is_main name
+    then (* TODO: maybe immediates should not be here *)
+      put_init_global_immediates ppf;
+    printfn ppf "section .text";
+    printfn ppf "GLOBAL %a" Toplevel.pp_label_exn name;
+    printfn ppf "@[<h>%a:@]" Toplevel.pp_label_exn name;
+    let pats, body = ANF.group_abstractions body in
+    let argc = List.length pats in
+    let names = List.map (fun (ANF.Apat_var name) -> name) pats in
+    List.rev pats
+    |> ListLabels.iteri ~f:(fun i -> function
+      | ANF.Apat_var name -> Addr_of_local.add_arg ~argc i name);
+    printfn ppf "  push rbp";
+    printfn ppf "  mov  rbp, rsp";
+    if Toplevel.is_main name
+    then (
+      (* >>> TODO : move it to _start *)
+      printfn ppf "  push rdi          ; save argc";
+      printfn ppf "  push rsi          ; save argv";
+      printfn ppf "  mov rdi, rbp      ; ebp  (for gc initialization)";
+      printfn ppf "  mov rsi, [rsp+8]  ; argc (for Sys.argv initialization)";
+      printfn ppf "  mov rdx, [rsp]    ; argv (for Sys.argv initialization)";
+      printfn ppf "  call rukaml_initialize";
+      printfn ppf "  call rukaml_init_global_immediates";
+      printfn ppf "  pop rsi           ; pass argv to main";
+      printfn ppf "  pop rdi           ; pass argc to main" (* <<< *));
+    generate_body ppf body;
+    Addr_of_local.remove_args names;
+    print_epilogue ppf (Format.asprintf "%a" Toplevel.pp_label_exn name))
+  else assert false
+;;
+
 let codegen ?(wrap_main_into_start = true) anf file =
   let anf = Mangling.mangle_names_stru anf in
   (* log "Going to generate code here %s %d" __FUNCTION__ __LINE__; *)
@@ -1354,67 +1426,28 @@ section .text
               syscall|};
     let open Compile_lib in
     anf
-    |> List.iter (fun (_flg, name, expr) ->
-      if Addr_of_local.size () <> 0
-      then
-        failwiths
-          "There are left over variables (before function %a): %s "
-          Ident.pp
-          name
-          (Addr_of_local.keys ());
-      (* printfn ppf "";
-                fprintf ppf "\t; %a\n" Loc_of_ident.pp (); *)
-
-      (* print_prologue ppf name; *)
-
-      (* fprintf ppf "  ; There are %d known arguments in %s\n%!"
-                (Loc_of_ident.size ()) name; *)
-
-      (* printfn ppf "  sub rsp, %d" (8 * Loc_of_ident.size ()); *)
-      if use_custom_main && name.Ident.hum_name = "main"
-      then
-        printfn
-          ppf
-          {|_start:
-                    push    rbp
-                    mov     rbp, rsp   ; prologue
-                    push 5
-                    call double
-                    add rsp, 8 ; pop 5
-                    mov rdi, rax
-                    call print_hex
-                    call print_newline
-
-                    mov rdi, 0x1122334455667788
-                    call print_hex
-                    call print_newline
-                    mov rax, 60
-                    xor rdi, rdi
-                    syscall|}
-      else (
-        let () = printfn ppf "GLOBAL %a" Ident.pp name in
-        let () = printfn ppf "@[<h>%a:@]" Ident.pp name in
-        let pats, body = ANF.group_abstractions expr in
-        let argc = List.length pats in
-        let names =
-          List.map
-            (function
-              | ANF.APname name -> name)
-            pats
-        in
-        List.rev pats
-        |> ListLabels.iteri ~f:(fun i -> function
-          | ANF.APname name -> Addr_of_local.add_arg ~argc i name);
-        printfn ppf "  push rbp";
-        printfn ppf "  mov  rbp, rsp";
-        if name.hum_name = "main"
-        then (
-          printfn ppf "  mov rdi, rsp";
-          printfn ppf "  call rukaml_initialize");
-        generate_body is_toplevel ppf body;
-        Addr_of_local.remove_args names;
-        print_epilogue ppf name.hum_name);
-      ());
+    |> List.iter (function
+      | ANF.ANF_vb (_flg, Apat_var { hum_name = "main"; _ }, body) ->
+        let name = Ident.ident "main" 0 in
+        Toplevel.extend name ~kind:Main;
+        emit_global_function ppf name body
+      | ANF.ANF_vb (_flg, Apat_var name, body) ->
+        let pats, _ = Compile_lib.ANF.group_abstractions body in
+        (match List.length pats with
+         | 0 ->
+           Toplevel.extend name ~kind:(Immediate Constant);
+           emit_global_constant ppf name body
+         | argc ->
+           Toplevel.extend name ~kind:(Function { argc });
+           emit_global_function ppf name body)
+      | ANF.ANF_vb (_flg, (Apat_any | Apat_unit), body) ->
+        let fresh = ANF.gensym_id ~prefix:"eval" () in
+        Toplevel.extend fresh ~kind:(Immediate Eval);
+        emit_global_eval ppf fresh body
+      | ANF.ANF_vb (_flg, Apat_const const, cexpr) ->
+        let fresh = ANF.gensym_id ~prefix:"match" () in
+        Toplevel.extend fresh ~kind:(Immediate Match);
+        emit_global_match ppf fresh const cexpr);
     Format.pp_print_flush ppf ());
   Result.Ok ()
 ;;
