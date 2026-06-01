@@ -1303,20 +1303,6 @@ let codegen ?(wrap_main_into_start = true) anf file =
   let anf = Mangling.mangle_names_stru anf in
   (* log "Going to generate code here %s %d" __FUNCTION__ __LINE__; *)
   log "ANF: @[%a@]" Compile_lib.ANF.pp_stru anf;
-  let is_toplevel =
-    let hash = Hashtbl.create (List.length anf) in
-    List.iter
-      (fun (_, name, body) ->
-         let pats, _ = Compile_lib.ANF.group_abstractions body in
-         let argc = List.length pats in
-         assert (argc >= 1 || name.Ident.hum_name = "main");
-         Hashtbl.add hash name argc)
-      anf;
-    fun name ->
-      match Hashtbl.find hash name with
-      | n -> Some n
-      | exception Not_found -> None
-  in
   Stdio.Out_channel.with_file file ~f:(fun ch ->
     let ppf = Format.formatter_of_out_channel ch in
     printfn ppf "section .note.GNU-stack noalloc noexec nowrite progbits";
