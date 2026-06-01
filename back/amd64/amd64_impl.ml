@@ -967,6 +967,30 @@ let generate_body is_toplevel ppf body =
         (Base.String.to_list s);
       printfn ppf "  mov qword [rax+8*%d], %d" payload_words_n (String.length s);
       printfn ppf "  mov %a, rax" pp_dest dest
+    | ALam (pat, body) ->
+      let pats, body = ANF.group_abstractions body in
+      let pats = pat :: pats in
+      let argc = List.length pats in
+      let names = List.map (fun (ANF.Apat_var name) -> name) pats in
+      let lam_name = Ident.of_string (Printf.sprintf "__lam_%d" (gensym ())) in
+      Toplevel.extend lam_name ~kind:(Function { argc });
+      printfn ppf "section .text";
+      printfn ppf "GLOBAL %a" Toplevel.pp_label_exn lam_name;
+      printfn ppf "@[<h>%a:@]" Toplevel.pp_label_exn lam_name;
+      List.rev names
+      |> ListLabels.iteri ~f:(fun i name -> Addr_of_local.add_arg ~argc i name);
+      printfn ppf "  push rbp";
+      printfn ppf "  mov  rbp, rsp";
+      generate_body ppf body;
+      Addr_of_local.remove_args names;
+      print_epilogue ppf (Format.asprintf "%a" Toplevel.pp_label_exn lam_name);
+      emit_alloc_closure ppf ~fname:lam_name ~argc;
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | APrimitive ("closure_count", (1 as argc)) ->
+      emit_alloc_closure
+        ppf
+        ~fname:(Ident.ident "rukaml_print_alloc_closure_count" 0)
+        ~argc;
       printfn ppf "  mov %a, rax" pp_dest dest
     | atom ->
       printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
