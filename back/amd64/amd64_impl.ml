@@ -162,6 +162,100 @@ module Addr_of_local = struct
     |> Seq.fold_left (fun acc x -> Format.asprintf "%s %a" acc Ident.pp x) ""
   ;;
 end
+module Toplevel = struct
+  (* immediate is anything that needs to be evaluated before control flow enters main *)
+  type immediate =
+    | Constant (* let x = <expr which is not a lambda> *)
+    | Match (* let 42 = <expr> *)
+    | Eval (* let () = <expr> or let _ = <expr> *)
+
+  type kind =
+    | Main (* main: *)
+    | Alias of { aliasee : Ident.t }
+    | Function of { argc : int }
+    | Immediate of immediate
+
+  type t =
+    { ident : Ident.t
+    ; kind : kind
+    }
+
+  type toplevel = t
+
+  let store : (Ident.t, toplevel) Hashtbl.t = Hashtbl.create 100
+  let contains (ident : Ident.t) = Hashtbl.mem store ident
+  let has_key = contains
+  let is_toplevel = contains
+
+  let rec find_opt (ident : Ident.t) =
+    match Hashtbl.find_opt store ident with
+    | Some { kind = Alias { aliasee }; _ } -> find_opt aliasee
+    | x -> x
+  ;;
+
+  let rec find_exn (ident : Ident.t) =
+    match Hashtbl.find_opt store ident with
+    | Some { kind = Alias { aliasee }; _ } -> find_exn aliasee
+    | Some x -> x
+    | None ->
+      Format.eprintf "Can't find toplevel %a" Ident.pp ident;
+      raise Not_found
+  ;;
+
+  (* __immediates is used to make toplevel evaluation in the order of declaration *)
+  let __immediates : toplevel Queue.t = Queue.create ()
+  let iter_immediates f = Queue.iter f __immediates
+
+  let extend (ident : Ident.t) ~kind =
+    let toplevel = { ident; kind } in
+    Hashtbl.add store ident toplevel;
+    match kind with
+    | Immediate _ -> Queue.add toplevel __immediates
+    | _ -> ()
+  ;;
+
+  let rec pp_toplevel_ident ppf { ident; kind } =
+    match kind with
+    | Main -> Format.fprintf ppf "main"
+    | Alias { aliasee } -> pp_toplevel_ident ppf (find_exn aliasee)
+    | _ -> Ident.pp ppf ident
+  ;;
+
+  let pp_label_exn ppf (ident : Ident.t) =
+    let toplevel = find_exn ident in
+    pp_toplevel_ident ppf toplevel
+  ;;
+
+  let pp_toplevel_exn ppf (ident : Ident.t) =
+    let toplevel = find_exn ident in
+    Format.fprintf ppf "[%a]" pp_toplevel_ident toplevel
+  ;;
+
+  let is_toplevel_function (ident : Ident.t) =
+    match find_opt ident with
+    | Some { kind = Function _; _ } -> true
+    | _ -> false
+  ;;
+
+  let is_toplevel_constant (ident : Ident.t) =
+    match find_opt ident with
+    | Some { kind = Immediate Constant; _ } -> true
+    | _ -> false
+  ;;
+
+  let is_main (ident : Ident.t) =
+    match find_opt ident with
+    | Some { kind = Main; _ } -> true
+    | _ -> false
+  ;;
+
+  (* TODO: it is not the best way to resolve aliases *)
+  let rec resolve_alias fident =
+    match find_exn fident with
+    | { kind = Alias { aliasee }; _ } -> resolve_alias aliasee
+    | { ident; _ } -> ident
+  ;;
+end
 
 let pp_dest ppf = function
   | DReg s -> fprintf ppf "%s" s
