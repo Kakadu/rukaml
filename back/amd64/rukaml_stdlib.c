@@ -219,9 +219,9 @@ void rukaml_initialize(uint64_t ebp, int argc, char **argv)
   logGC("%s. EBP=0x%lX\n", __func__, GC.ebp);
   const uint64_t size = sizeof(uint64_t *) * HEAP_SIZE;
   GC.main_bank = malloc(size);
-  GC.main_bank_fin = GC.main_bank + size;
-  GC.backup_bank = malloc(sizeof(uint64_t *) * HEAP_SIZE);
-  GC.backup_bank_fin = GC.backup_bank + size;
+  GC.main_bank_fin = GC.main_bank + HEAP_SIZE;
+  GC.backup_bank = malloc(size);
+  GC.backup_bank_fin = GC.backup_bank + HEAP_SIZE;
   GC.allocated_words = 0;
   GC.stats.gs_current_bank = 0;
   rukaml_init_argv(argc, argv);
