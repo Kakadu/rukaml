@@ -1300,6 +1300,7 @@ let emit_global_match ppf ident const expr =
 ;;
 
 let codegen ?(wrap_main_into_start = true) anf file =
+  let anf = Mangling.mangle_names_stru anf in
   (* log "Going to generate code here %s %d" __FUNCTION__ __LINE__; *)
   log "ANF: @[%a@]" Compile_lib.ANF.pp_stru anf;
   let is_toplevel =
