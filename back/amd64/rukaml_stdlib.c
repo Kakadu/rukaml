@@ -81,7 +81,48 @@ static struct gc_data GC = {.ebp = 0, .allocated_words = 0, .stats = {.gs_alloca
 
 uint64_t allocated_closures = 0;
 
-void rukaml_initialize(uint64_t ebp)
+static void *rukaml_sys_argv = NULL; // private field
+
+void *rukaml_argv(void) // public getter
+{
+  return rukaml_sys_argv;
+}
+
+static void *rukaml_string_of_cstr(const char *cstr)
+{
+  size_t len = strlen(cstr);
+  size_t payload_words = (len + 7) / 8;
+  void **str_block = rukaml_alloc_block(payload_words + 1, String_tag);
+  memcpy(str_block, cstr, len);
+  ((uint64_t *)str_block)[payload_words] = len;
+  return str_block;
+}
+
+void rukaml_init_argv(int argc, char **argv)
+{
+  if (argc < 1)
+  {
+    mk_err_fatal("argc < 1");
+  }
+
+#ifdef DEBUG
+  printf("[debug] rukaml initialization: argc = %d\n", argc);
+#endif
+
+  void **arr = (void **)rukaml_alloc_block(argc, Array_tag);
+  for (int n = 0; n < argc; n++)
+  {
+    char *nth = rukaml_string_of_cstr(argv[n]);
+#ifdef DEBUG
+    printf("[debug] rukaml initialization: argv[%d] = %s\n", n, nth);
+#endif
+    arr[n] = nth;
+  }
+
+  rukaml_sys_argv = arr;
+}
+
+void rukaml_initialize(uint64_t ebp, int argc, char **argv)
 {
   setbuf(stdout, NULL);
   {
@@ -128,8 +169,7 @@ void rukaml_initialize(uint64_t ebp)
   GC.backup_bank_fin = GC.backup_bank + size;
   GC.allocated_words = 0;
   GC.stats.gs_current_bank = 0;
-  logGC("main   bank: 0x%lX..0x%lX\n", (uint64_t)GC.main_bank, (uint64_t)GC.main_bank_fin);
-  logGC("backup bank: 0x%lX..0x%lX\n", (uint64_t)GC.backup_bank, (uint64_t)GC.backup_bank_fin);
+  rukaml_init_argv(argc, argv);
 }
 
 static bool is_old_bank(uint64_t *ptr)
