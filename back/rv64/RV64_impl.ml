@@ -288,6 +288,20 @@ let with_two_slots f =
   rez
 ;;
 
+let with_ra_saving f =
+  let slot1 = Ident.of_string @@ Printf.sprintf "x%d" (gensym ()) in
+  let slot2 = Ident.of_string @@ Printf.sprintf "x%d" (gensym ()) in
+  Addr_of_local.extend slot1;
+  Addr_of_local.extend slot2;
+  emit addi SP SP (-16);
+  emit sd ra (ROffset (SP, 0));
+  let () = f () in
+  emit ld ra (ROffset (SP, 0));
+  emit addi SP SP 16;
+  Addr_of_local.remove_local slot2;
+  Addr_of_local.remove_local slot1
+;;
+
 let print_epilogue ppf fname =
   if fname <> "main"
   then emit ret ~comm:fname
@@ -543,24 +557,70 @@ let generate_body is_toplevel body =
     | CApp (APrimitive ("array_get", 2), arg1, []) ->
       (match arg1 with
        | AVar arr when Addr_of_local.has_key arr ->
-         emit_alloc_closure "rukaml_array_get" 2;
-         emit li a1 1;
-         emit ld a2 (pp_to_mach arr);
-         emit call "rukaml_applyN";
-         emit sd_dest a0 dest
+         with_ra_saving (fun () ->
+           emit_alloc_closure "rukaml_array_get" 2;
+           emit li a1 1;
+           emit ld a2 (pp_to_mach arr);
+           emit call "rukaml_applyN";
+           emit sd_dest a0 dest)
        | _ -> failwith "Should not happen")
-    | CApp (AVar f, arg1, [])
-      when f.Ident.hum_name = "set"
-           && is_toplevel f = None
-           && not (Addr_of_local.has_key f) ->
+    | CApp (APrimitive ("array_get", 2), arg1, [ arg2 ]) ->
+      with_ra_saving (fun () ->
+        emit_alloc_closure "rukaml_array_get" 2;
+        emit li a1 2;
+        (match arg1 with
+         | AVar arr when Addr_of_local.has_key arr -> emit ld a2 (pp_to_mach arr)
+         | _ -> failwith "Should not happen");
+        (match arg2 with
+         | AVar n when Addr_of_local.has_key n -> emit ld a3 (pp_to_mach n)
+         | AConst (PConst_int n) -> emit li a3 n
+         | _ -> failwith "Should not happen");
+        emit call "rukaml_applyN";
+        emit sd_dest a0 dest)
+    | CApp (APrimitive ("array_set", 3), arg1, []) ->
       (match arg1 with
        | AVar arr when Addr_of_local.has_key arr ->
-         emit_alloc_closure "rukaml_array_set" 3;
-         emit li a1 1;
-         emit ld a2 (pp_to_mach arr);
-         emit call "rukaml_applyN";
-         emit sd_dest a0 dest
+         with_ra_saving (fun () ->
+           emit_alloc_closure "rukaml_array_set" 3;
+           emit li a1 1;
+           emit ld a2 (pp_to_mach arr);
+           emit call "rukaml_applyN";
+           emit sd_dest a0 dest)
        | _ -> failwith "Should not happen")
+    | CApp (APrimitive ("array_set", 3), arg1, [ arg2; arg3 ]) ->
+      (* it's better to use registers for passing args *)
+      let ra_slot = Ident.of_string @@ Printf.sprintf "ra%d" (gensym ()) in
+      let item_slot = Ident.of_string @@ Printf.sprintf "item%d" (gensym ()) in
+      let pos_slot = Ident.of_string @@ Printf.sprintf "pos%d" (gensym ()) in
+      let arr_slot = Ident.of_string @@ Printf.sprintf "arr%d" (gensym ()) in
+      Addr_of_local.extend ra_slot (* 24(sp) *);
+      Addr_of_local.extend item_slot (* 16(sp) *);
+      Addr_of_local.extend pos_slot (* 8(sp) *);
+      Addr_of_local.extend arr_slot (* 0 (sp) *);
+      emit addi SP SP (-32);
+      emit sd ra (pp_to_mach ra_slot);
+      (match arg1 with
+       | AVar arr ->
+         emit ld a0 (pp_to_mach arr);
+         emit sd a0 (pp_to_mach arr_slot)
+       | _ -> assert false);
+      (match arg2 with
+       | AVar nvar ->
+         emit ld a0 (pp_to_mach nvar);
+         emit sd a0 (pp_to_mach pos_slot)
+       | AConst (PConst_int n) ->
+         emit li a0 n;
+         emit sd a0 (pp_to_mach pos_slot)
+       | _ -> assert false);
+      helper_a (DStack_var item_slot) arg3;
+      emit call "rukaml_array_set";
+      emit ld ra (pp_to_mach ra_slot);
+      emit addi SP SP 32;
+      Addr_of_local.remove_local arr_slot;
+      Addr_of_local.remove_local pos_slot;
+      Addr_of_local.remove_local item_slot;
+      Addr_of_local.remove_local ra_slot;
+      emit sd_dest a0 dest
     | CApp (APrimitive ("=", _), AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
       (* TODO: user Addr_of_local.pp_local_exn *)
       if l = r
