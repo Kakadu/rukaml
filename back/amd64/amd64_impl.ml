@@ -384,12 +384,14 @@ let allocate_locals ppf input_anf : now:unit -> unit =
   let names = ref [] in
   let rec helper = function
     | ANF.EComplex c -> helper_c c
-    | ELet (_flg, Tpat_var name, rhs, where_) ->
+    | ELet (_flg, Apat_var name, rhs, where_) ->
       Addr_of_local.extend name;
       names := name :: !names;
       helper_c rhs;
       helper where_
-    | ELet _ -> assert false
+    | ELet (_flg, (Apat_any | Apat_unit | Apat_const _), rhs, where_) ->
+      helper_c rhs;
+      helper where_
   and helper_c = function
     | CIte (_, th, el) ->
       helper th;
@@ -523,15 +525,39 @@ let rec generate_body ppf body =
   in
   let rec helper dest = function
     | Compile_lib.ANF.EComplex c -> helper_c dest c
-    | ELet (_, Tpat_var name, rhs, wher) ->
+    | ELet (_, Apat_var name, rhs, wher) ->
       assert (Addr_of_local.contains name);
-      let local = DStack_var name in
+      let rhs_dest = DStack_var name in
       (* printfn ppf "    ;; calculate rhs and put into %a. offset = %d" pp_dest
            dest
            (Addr_of_local.find_exn name); *)
-      helper_c local rhs;
+      helper_c rhs_dest rhs;
       helper dest wher
-    | ELet _ -> assert false
+    | ELet (_, (Apat_any | Apat_unit), rhs, wher) ->
+      helper_c DDiscard rhs;
+      helper dest wher
+    | ELet (_, Apat_const lhs, rhs, wher) ->
+      let pad = Ident.of_string (gen_name ~prefix:"pad" ()) in
+      let scrut = Ident.of_string (gen_name ~prefix:"scrut" ()) in
+      Addr_of_local.extend pad;
+      Addr_of_local.extend scrut;
+      printfn ppf "  sub rsp, 16";
+      helper_c (DStack_var scrut) rhs;
+      helper_a (DReg "rdi") (ANF.AConst lhs);
+      printfn ppf "  mov qword rsi, %a" Addr_of_local.pp_local_exn scrut;
+      Addr_of_local.remove_local scrut;
+      Addr_of_local.remove_local pad;
+      printfn ppf "  add rsp, 16";
+      printfn ppf "  call rukaml_equal_struct";
+      printfn ppf "  cmp rax, 1";
+      let fail_lab = Printf.sprintf "lab_fail_%d" (gensym ()) in
+      let cont_lab = Printf.sprintf "lab_cont_%d" (gensym ()) in
+      printfn ppf "  jne %s" fail_lab;
+      printfn ppf "  jmp %s" cont_lab;
+      printfn ppf "%s:" fail_lab;
+      printfn ppf "  call rukaml_match_failure";
+      printfn ppf "%s:" cont_lab;
+      helper dest wher
   and helper_c (dest : dest) = function
     | CIte (CAtom (AConst (Frontend.Parsetree.PConst_bool true)), bth, _bel) ->
       helper dest bth
