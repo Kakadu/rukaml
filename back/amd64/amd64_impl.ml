@@ -96,7 +96,10 @@ type dest =
   (* rukaml_discard is reserved word in .bss where result of vb with '_' pattern is discarded *)
   | DDiscard
   | DReg of string
+  (* DStack_var's are allocated in stack and access to them is performed via offset of rbp *)
   | DStack_var of Frontend.Ident.t
+    (* DStatic_var's are allocated in .bss and access to them is performed via labels *)
+  | DStatic_var of Frontend.Ident.t
 
 module Addr_of_local = struct
   let store : (Frontend.Ident.t, _) Hashtbl.t = Hashtbl.create 13
@@ -368,6 +371,7 @@ let pp_dest ppf = function
   | DDiscard -> fprintf ppf "[rukaml_discard]"
   | DReg s -> fprintf ppf "%s" s
   | DStack_var name -> Addr_of_local.pp_local_exn ppf name
+  | DStatic_var name -> fprintf ppf "[%a]" Toplevel.pp_label_exn name
 ;;
 
 let emit_alloc_closure ppf ~fname ~argc =
