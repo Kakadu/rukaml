@@ -467,6 +467,22 @@ let rec generate_body ppf body =
           (Base.String.to_list s);
         printfn ppf "  mov qword [rax+8*%d], %d" payload_words_n (String.length s);
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+      | AVar vname when is_toplevel vname ->
+        (match Toplevel.find_exn vname with
+         | { kind = Function { argc = 0 }; ident } ->
+           printfn ppf "  call %a" Ident.pp ident;
+           printfn ppf "  mov qword [rsp+%d*8], rax" (count - 1 - i)
+         | { kind = Function { argc }; ident = fname } ->
+           assert (argc > 0);
+           emit_alloc_closure ppf ~fname ~argc;
+           printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
+         | { kind = Immediate Constant; ident } ->
+           printfn ppf "  mov rax, [%a]" Toplevel.pp_label_exn ident;
+           printfn ppf "  mov qword [rsp+%d*8], rax" (count - 1 - i)
+         | { kind = Main; _ } -> assert false
+         | { kind = Alias _; _ } -> assert false
+         | { kind = Immediate Eval; _ } -> assert false
+         | { kind = Immediate Match; _ } -> assert false)
       | APrimitive ("stdin", 0) ->
         printfn ppf "  call rukaml_stdin";
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
