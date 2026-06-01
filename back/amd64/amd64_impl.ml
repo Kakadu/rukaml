@@ -134,7 +134,8 @@ module Addr_of_local = struct
     match Hashtbl.find store name with
     | v -> v
     | exception Not_found ->
-      failwiths "Can't find location of a variable %a" Ident.pp name
+      log "Can't find location of a variable %a" Ident.pp name;
+      raise Not_found
   ;;
 
   let lookup_exn = find_exn
@@ -447,7 +448,7 @@ let rec generate_body ppf body =
     printfn ppf "  sub rsp, 8*%d ; fun arguments" count;
     ListLabels.iteri args ~f:(fun i ->
       let pp_access ?(doc = "") v =
-        Format.fprintf ppf "  mov qword [rsp%+d*8], %d" i v;
+        Format.fprintf ppf "  mov qword [rsp%+d*8], %d" (count - 1 - i) v;
         if doc <> "" then printfn ppf " ; %s" doc else printfn ppf ""
       in
       function
