@@ -1138,6 +1138,38 @@ iterate:
 ;;
 
 let use_custom_main = false
+
+let put_init_stdlib ppf =
+  List.iter
+    (fun (argc, name) ->
+       Toplevel.extend (Ident.ident name 0) ~kind:(Function { argc });
+       printfn ppf "extern %s" name)
+    stdlib_externs;
+  List.iter
+    (fun (alias, _aliasee) ->
+       Toplevel.extend
+         (Ident.ident alias 0)
+         ~kind:(Alias { aliasee = Ident.ident _aliasee 0 }))
+    stdlib_aliases
+;;
+
+let put_init_global_immediates ppf =
+  printfn ppf "section .text";
+  printfn ppf "rukaml_init_global_immediates:";
+  printfn ppf "  push rbp";
+  printfn ppf "  mov rbp, rsp";
+  Toplevel.iter_immediates (fun { ident; _ } ->
+    printfn ppf "  call init_%a" Toplevel.pp_label_exn ident);
+  printfn ppf "  pop rbp";
+  printfn ppf "  ret ;;; rukaml_init_global_immediates"
+;;
+
+(* TODO: may be it is useless and rax should be used for DDiscard *)
+let put_discard ppf =
+  printfn ppf "section .bss";
+  printfn ppf "  rukaml_discard: resq 1"
+;;
+
 (* let <name> = ... *)
 let emit_global_constant ppf ident expr =
   printfn ppf "section .bss";
