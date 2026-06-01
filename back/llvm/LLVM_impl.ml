@@ -33,7 +33,12 @@ end = struct
 end
 
 let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
-  fun (_flg, name, body) ->
+  fun (_flg, apat, body) ->
+  let name =
+    match apat with
+    | Apat_var name -> name
+    | _ -> failwith "not implemented"
+  in
   (* log "vb %s" name; *)
   let top_look_exn name =
     try LL.lookup_func_exn name, TD.find_typ_exn name with
@@ -227,7 +232,7 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
       Format.eprintf "ANF: %a\n%!" ANF.pp_c anf;
       failwiths "Unsupported case %s %d" __FUNCTION__ __LINE__
   and gen : _ -> Llvm.llvalue = function
-    | ELet (_, Tpat_var name, rhs, wher) ->
+    | ELet (_, Apat_var name, rhs, wher) ->
       let new_virt = gen_c rhs in
       with_virt_binding ~key:name new_virt ~f:(fun () ->
         let rez = gen wher in
@@ -242,7 +247,7 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
   in
   let the_function = Llvm.declare_function name.hum_name fun_typ LL.module_ in
   List.iteri
-    (fun n (ANF.APname key) ->
+    (fun n (ANF.Apat_var key) ->
        let param = Llvm.param the_function n in
        log "  formal parameter %d: %s" n (Llvm.string_of_llvalue param);
        add_virt_binding ~key param)
