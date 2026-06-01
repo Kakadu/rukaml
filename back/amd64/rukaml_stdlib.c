@@ -42,7 +42,7 @@ static uint64_t log_level = 0;
 
 #define MAX_STRING_FROM_STDIN (2 << 15)
 
-int HEAP_SIZE = 160;
+int HEAP_SIZE = 1024 * 1024;
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
@@ -255,60 +255,77 @@ void dfs(uint64_t *allocated, uint64_t *root)
     return;
   uint64_t size = SIZE(root);
   assert(size >= 1);
-  uint64_t *new_loc = (uint64_t *)GC.backup_bank + *allocated;
+  if (*allocated + size + 1 > HEAP_SIZE)
+    mk_err_fatal("GC: out of memory in backup bank");
+  uint64_t *new_loc = GC.backup_bank + *allocated + 1;
   logGC("new_loc = 0x%lX\n", (uint64_t)new_loc);
-  *new_loc = HEADER(size, tag);
+  memcpy(new_loc - 1, root - 1, (size + 1) * sizeof(uint64_t));
   *allocated += size + 1;
-
-  uint64_t first_child_ptr = *root;
-
-  logGC("Copying %lX to %lX\n", (uint64_t)root, (uint64_t)new_loc);
+  logGC("Copying %lX to %lX\n", (uint64_t)root, (uint64_t)(new_loc));
   root[-1] = HEADER(1, Forward_tag);
   root[0] = (uint64_t)new_loc;
-
-  dfs(allocated, (uint64_t *)first_child_ptr);
-  for (uint8_t i = 1; i < size; ++i)
-    dfs(allocated, (uint64_t *)(*(root + i)));
+  for (uint64_t i = 0; i < size; ++i)
+  {
+    uint64_t *child = (uint64_t *)new_loc[i];
+    if (is_old_bank(child))
+    {
+      if (TAG(child) != Forward_tag)
+        dfs(allocated, child);
+      new_loc[i] = *child;
+    }
+  }
   logGC("%s root = 0x%lX finished\n", __func__, (uint64_t)root);
 }
 
 void rukaml_gc_compact(uint64_t rsp)
 {
-  assert(GC.ebp > rsp);
+  assert(GC.ebp >= rsp);
   logGC("=== %s. EBP=0x%lX, RSP=0x%lX\n", __func__, GC.ebp, rsp);
   logGC("stack width = 0x%lX / 8\n", GC.ebp - rsp);
-
   uint64_t cur = GC.ebp;
   uint64_t new_size = 0;
-  while (cur > rsp)
-  {
-    // looking for pointers, that are in the current bank
-    int64_t obj = *((uint64_t *)cur);
-    cur -= 8;
 
-    if ((uint64_t)GC.main_bank <= obj && obj < (uint64_t)GC.main_bank_fin)
+  logGC("begin stack walking\n");
+  for (uint64_t cur = GC.ebp; cur >= rsp; cur -= 8)
+  {
+    uint64_t *obj = *((uint64_t **)cur);
+    if (GC.main_bank <= obj && obj < GC.main_bank_fin)
     {
-      logGC("\t0x%lX a candidate?\n", obj);
-      dfs(&new_size, (uint64_t *)obj);
+      if (SIZE(obj) > HEAP_SIZE)
+        continue;
+
+      logGC("\t0x%lX a candidate?\n", (uint64_t)obj);
+      if (TAG(obj) != Forward_tag)
+      {
+        dfs(&new_size, obj);
+      }
+
+      *((uint64_t *)cur) = *obj;
     }
   }
-  // cur = GC.ebp;
 
-  //
-  // while (cur > rsp)
-  // {
-  //   // looking for pointers, that are in the current bank
-  //   int64_t obj = *((uint64_t *)cur);
-  //   // printf("obj = 0x%lX, addr = 0x%lX\n", obj, cur);
-  //   cur -= 8;
+  logGC("begin static roots walking\n");
+  for (uint64_t i = 0; i < GC.static_roots.counter; i++)
+  {
+    uint64_t *root = GC.static_roots.roots[i];
+    uint64_t *obj = (uint64_t *)(*root);
+    if (!is_old_bank(obj) || is_backup_bank(obj))
+      continue;
 
-  //   if ((uint64_t)GC.main_bank <= obj && obj < (uint64_t)GC.main_bank_fin)
-  //   {
-  //     printf("\t0x%lX a candidate?\n", obj);
-  //     dfs(&new_size, (uint64_t *)obj);
-  //   }
-  // }
+    if (TAG(obj) != Forward_tag)
+      dfs(&new_size, obj);
+
+    *root = *obj;
+  }
+
   GC.allocated_words = new_size;
+
+  // swap banks
+  uint64_t *tmp = GC.main_bank;
+  GC.main_bank = GC.backup_bank;
+  GC.backup_bank = tmp;
+  GC.main_bank_fin = GC.main_bank + HEAP_SIZE;
+  GC.backup_bank_fin = GC.backup_bank + HEAP_SIZE;
 }
 
 void rukaml_gc_print_stats(void)
