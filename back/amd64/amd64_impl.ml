@@ -957,9 +957,19 @@ let generate_body is_toplevel ppf body =
     | APrimitive ("print", 1) ->
       emit_alloc_closure ppf ~fname:(Ident.ident "rukaml_print_int_kaml" 0) ~argc:1;
       printfn ppf "  mov %a, rax" pp_dest dest
-    | AVar vname ->
-      (match is_toplevel vname with
-       | None ->
+    | APrimitive ("stdin", 0) ->
+      printfn ppf "  call rukaml_stdin";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | APrimitive ("stdout", 0) ->
+      printfn ppf "  call rukaml_stdout";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | APrimitive ("stderr", 0) ->
+      printfn ppf "  call rukaml_stderr";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | APrimitive ("sys_argv", 0) ->
+      printfn ppf "  call rukaml_argv";
+      printfn ppf "  mov %a, rax" pp_dest dest
+    | AVar vname when Addr_of_local.has_key vname ->
          printfn
            ppf
            "  mov qword rdx, %a ; use temp rdx to move from stack to stack"
