@@ -984,36 +984,42 @@ let generate_body is_toplevel ppf body =
       printfn ppf "  call rukaml_argv";
       printfn ppf "  mov %a, rax" pp_dest dest
     | AVar vname when Addr_of_local.has_key vname ->
-         printfn
-           ppf
-           "  mov qword rdx, %a ; use temp rdx to move from stack to stack"
-           Addr_of_local.pp_local_exn
-           vname;
-         printfn
-           ppf
-           "  mov qword %a, rdx ; access a var \"%a\""
-           pp_dest
-           dest
-           Ident.pp
-           vname
-       | Some arity ->
-         alloc_closure ppf vname arity;
-         printfn ppf "  mov %a, rax" pp_dest dest)
-    | AConstruct (tag, args) ->
-      printfn ppf "  mov rdi, %d ; arity" (List.length args);
-      printfn ppf "  mov rsi, %d ; tag" tag;
-      printfn ppf "  call rukaml_alloc_constructor";
-      List.iteri
-        (fun i x ->
-           helper_a (DReg "rdi") x;
-           printfn ppf "  mov [rax+8*%d], rdi" i)
-        args;
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | ATuple (a, b, []) ->
-      helper_a (DReg "rdi") a;
-      helper_a (DReg "rsi") b;
-      printfn ppf "  call rukaml_alloc_pair";
-      printfn ppf "  mov %a, rax" pp_dest dest
+      printfn
+        ppf
+        "  mov qword rdx, %a ; access local var \"%a\" [1/2]"
+        Addr_of_local.pp_local_exn
+        vname
+        Ident.pp
+        vname;
+      printfn
+        ppf
+        "  mov qword %a, rdx  ; access local var \"%a\" [2/2]"
+        pp_dest
+        dest
+        Ident.pp
+        vname
+    | AVar vname when Toplevel.is_toplevel vname ->
+      (match Toplevel.find_exn vname with
+       | { kind = Function { argc = 0 }; ident } ->
+         (* TODO: it's weird *)
+         printfn ppf "  call %a" Ident.pp ident;
+         printfn ppf "  mov %a, rax" pp_dest dest
+       | { kind = Function { argc }; ident = fname } ->
+         assert (argc > 0);
+         emit_alloc_closure ppf ~fname ~argc;
+         printfn ppf "  mov %a, rax" pp_dest dest
+       | { kind = Immediate Constant; ident } ->
+         printfn ppf "  mov rax, [%a]" Toplevel.pp_label_exn ident;
+         printfn ppf "  mov qword %a, rax" pp_dest dest
+       | { kind = Main; _ } -> assert false
+       | { kind = Alias _; _ } -> assert false
+       | { kind = Immediate Eval; _ } -> assert false
+       | { kind = Immediate Match; _ } -> assert false)
+    | AConstruct (tag, []) -> printfn ppf "  mov qword %a, %d" pp_dest dest tag
+    | AConstruct (tag, fields) -> emit_initialize_block dest ~fields ~tag ~name:"adt"
+    | ATuple (x1, x2, xs) ->
+      emit_initialize_block dest ~fields:(x1 :: x2 :: xs) ~tag:0 ~name:"tuple"
+    | AArray fields -> emit_initialize_block dest ~fields ~tag:1 ~name:"array"
     | APrimitive ("match_failure", _) -> printfn ppf "  call rukaml_match_failure"
     | AConst (PConst_string s) ->
       (* notice: DO NOT use emit_initialize_block here. strings representation differs *)
