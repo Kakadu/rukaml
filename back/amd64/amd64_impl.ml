@@ -15,7 +15,7 @@
    stack explicitly
    3) It's easy to forget that after function prologue argments start from RSP+2*8
    (RBP and code ptr take two words)
-   4) arguments go to the stack from rigth to the left (unexpected order)
+   4) arguments go to the stack from right to the left (unexpected order)
    5) Variadic functions should AL:=0 to say that we don't have floating arguments.
 *)
 
