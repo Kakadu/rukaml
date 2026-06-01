@@ -492,17 +492,8 @@ let rec generate_body ppf body =
       | APrimitive ("stderr", 0) ->
         printfn ppf "  call rukaml_stderr";
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
-      | AVar { Ident.hum_name = "get_arg"; _ } ->
-        emit_alloc_closure ppf (Ident.of_string "rukaml_constructor_arg") 2;
-        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
-      | AVar { Ident.hum_name = "get"; _ } ->
-        emit_alloc_closure ppf (Ident.of_string "rukaml_array_get") 2;
-        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
-      | AVar { Ident.hum_name = "set"; _ } ->
-        emit_alloc_closure ppf (Ident.of_string "rukaml_array_set") 3;
-        printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
-      | AVar { Ident.hum_name = "stdin"; _ } ->
-        printfn ppf "  call rukaml_array_stdin";
+      | APrimitive ("sys_argv", 0) ->
+        printfn ppf "  call rukaml_argv";
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
       | AVar vname ->
         printfn
@@ -514,14 +505,15 @@ let rec generate_body ppf body =
           vname;
         printfn ppf "  mov qword [rsp%+d*8], r8" (count - 1 - i)
       | ALam _ -> failwith "Should it be representable in ANF?"
-      | APrimitive ("print", (1 as parity)) ->
-        emit_alloc_closure ppf (Ident.of_string "rukaml_print_int_kaml") parity;
+      | APrimitive ("print", (1 as argc)) ->
+        emit_alloc_closure ppf ~fname:(Ident.ident "rukaml_print_int_kaml" 0) ~argc;
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
-      | AConstruct _ -> assert false
-      | APrimitive _ as arg -> failwiths "Primitive %a is not supported" ANF.pp_a arg
+      | AConstruct (tag, []) ->
+        printfn ppf "  mov qword [rsp%+d*8], %d" (count - 1 - i) tag
+      | AConstruct (_, _ :: _) -> assert false
+      | APrimitive _ -> assert false
       | ATuple _ -> assert false
-      | AArray _ -> assert false
-      | _ -> failwith "not implemented");
+      | AArray _ -> assert false);
     count + _stack_padding
   in
   let rec helper dest = function
