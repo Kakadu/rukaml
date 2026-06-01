@@ -162,6 +162,84 @@ module Addr_of_local = struct
     |> Seq.fold_left (fun acc x -> Format.asprintf "%s %a" acc Ident.pp x) ""
   ;;
 end
+
+(* int stands for formal arity *)
+let stdlib_externs =
+  [ 1, "add_gc_static_root"
+  ; 2, "rukaml_alloc_closure"
+  ; 1, "rukaml_print_int"
+  ; 7, "rukaml_print_int_kaml"
+  ; 2, "rukaml_applyN"
+  ; 2, "rukaml_field"
+  ; 1, "rukaml_tag"
+  ; 1, "rukaml_size"
+  ; 2, "rukaml_alloc_pair"
+  ; 2, "rukaml_alloc_block"
+  ; 0, "rukaml_array_stdin"
+  ; 8, "rukaml_array_set"
+  ; 6, "rukaml_array_read_in"
+  ; 7, "rukaml_block_size"
+  ; 7, "rukaml_block_tag"
+  ; 8, "rukaml_block_nth"
+  ; 0, "rukaml_match_failure"
+  ; 3, "rukaml_initialize"
+  ; 1, "rukaml_gc_compact"
+  ; 1, "rukaml_gc_print_stats"
+  ; 1, "rukaml_print_alloc_closure_count"
+  ; 7, "rukaml_alloc_printf_closure"
+  ; 8, "rukaml_alloc_fprintf_closure"
+  ; 7, "rukaml_alloc_sprintf_closure"
+  ; 0, "rukaml_stdout"
+  ; 2, "rukaml_equal_struct"
+  ; 7, "rukaml_string_of_char_list"
+  ; 8, "rukaml_string_equal"
+  ; 8, "rukaml_string_nth"
+  ; 7, "rukaml_string_len"
+  ; 2, "rukaml_apply1"
+  ; 3, "rukaml_apply2"
+  ; 0, "rukaml_stdin"
+  ; 0, "rukaml_stdout"
+  ; 0, "rukaml_stderr"
+  ; 7, "rukaml_open_in"
+  ; 7, "rukaml_open_out"
+  ; 7, "rukaml_close_channel"
+  ; 7, "rukaml_end_of_input"
+  ; 7, "rukaml_input_char"
+  ; 0, "rukaml_argv"
+  ]
+;;
+
+let stdlib_aliases =
+  [ "print", "rukaml_print_int_kaml"
+  ; "printf", "rukaml_alloc_printf_closure"
+  ; "fprintf", "rukaml_alloc_fprintf_closure"
+  ; "sprintf", "rukaml_alloc_sprintf_closure"
+  ; "string_len", "rukaml_string_len"
+  ; "string_nth", "rukaml_string_nth"
+  ; "string_equal", "rukaml_string_equal"
+  ; "string_of_char_list", "rukaml_string_of_char_list"
+  ; "array_len", "rukaml_block_size"
+  ; "array_get", "rukaml_block_nth"
+  ; "array_set", "rukaml_array_set"
+  ; "block_nth", "rukaml_block_nth"
+  ; "block_size", "rukaml_block_size"
+  ; "block_tag", "rukaml_block_tag"
+  ; "stdin", "rukaml_stdin"
+  ; "stdout", "rukaml_stdout"
+  ; "stderr", "rukaml_stderr"
+  ; "end_of_input", "rukaml_end_of_input"
+  ; "input_char", "rukaml_input_char"
+  ; "gc_stats", "rukaml_gc_print_stats"
+  ; "gc_compact", "rukaml_gc_compact"
+  ; "closure_count", "rukaml_print_alloc_closure_count"
+  ; "open_in", "rukaml_open_in"
+  ; "open_out", "rukaml_open_out"
+  ; "close_in", "rukaml_close_channel"
+  ; "close_out", "rukaml_close_channel"
+  ; "sys_argv", "rukaml_argv"
+  ]
+;;
+
 module Toplevel = struct
   (* immediate is anything that needs to be evaluated before control flow enters main *)
   type immediate =
@@ -1025,32 +1103,6 @@ let codegen ?(wrap_main_into_start = true) anf file =
     then (
       put_print_newline ppf;
       put_print_hex ppf);
-    (* externs *)
-    List.iter
-      (printfn ppf "extern %s")
-      [ "rukaml_alloc_closure"
-      ; "rukaml_print_int"
-      ; "rukaml_print_int_kaml"
-      ; "rukaml_applyN"
-      ; "rukaml_field"
-      ; (* printfn ppf "extern rukaml_alloc_tuple"; *)
-        "rukaml_alloc_pair"
-      ; "rukaml_alloc_array"
-      ; "rukaml_array_stdin"
-      ; "rukaml_array_length"
-      ; "rukaml_array_get"
-      ; "rukaml_array_set"
-      ; "rukaml_array_read_in"
-      ; "rukaml_alloc_constructor"
-      ; "rukaml_constructor_arity"
-      ; "rukaml_constructor_arg"
-      ; "rukaml_constructor_tag"
-      ; "rukaml_match_failure"
-      ; "rukaml_initialize"
-      ; "rukaml_gc_compact"
-      ; "rukaml_gc_print_stats"
-      ; "rukaml_print_alloc_closure_count"
-      ];
     printfn ppf "";
     if use_custom_main
     then
