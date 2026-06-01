@@ -910,45 +910,6 @@ let generate_body is_toplevel ppf body =
       Addr_of_local.remove_local temp_padding;
       printfn ppf "  add rsp, 8*2 ; free space for args of function \"%a\"" Ident.pp f;
       printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (APrimitive ("field", 2), AConst (PConst_int n), [ (AVar _ as cont) ]) ->
-      (* TODO(Kakadu): field vs get_arg? *)
-      helper_a (DReg "rsi") cont;
-      printfn ppf "  mov rdi, %d" n;
-      printfn ppf "  call rukaml_field";
-      printfn ppf "  mov %a, rax" pp_dest dest
-    | CApp (APrimitive ("print", 1), AConst (PConst_int n), []) ->
-      printfn ppf "  mov rdi, %d" n;
-      printfn ppf "  call rukaml_print_int";
-      printfn ppf "  mov qword %a, 0" pp_dest dest
-    | CApp (APrimitive ("get_arg", 2), AConst (PConst_int n), [ constr ]) ->
-      (match constr with
-       | AVar v when Addr_of_local.has_key v ->
-         let name1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
-         let name2 = Ident.of_string @@ gen_name ~prefix:"constr" () in
-         Addr_of_local.extend name1;
-         Addr_of_local.extend name2;
-         printfn ppf "  add rsp, -8*2";
-         printfn ppf "  mov r11, %a" Addr_of_local.pp_local_exn v;
-         printfn ppf "  mov qword [rsp], %d" n;
-         printfn ppf "  mov qword [rsp+8], r11";
-         printfn ppf "  call rukaml_constructor_arg";
-         printfn ppf "  mov %a, rax" pp_dest dest;
-         printfn ppf "  add rsp, 8*2";
-         Addr_of_local.remove_local name2;
-         Addr_of_local.remove_local name1
-       | _ -> failwith "Should not happen")
-    | CApp (AVar id, AUnit, []) when id.Frontend.Ident.hum_name = "gc_compact" ->
-      printfn ppf "  mov rdi, rsp";
-      printfn ppf "  mov rsi, 0";
-      printfn ppf "  call rukaml_gc_compact"
-    | CApp (AVar id, AUnit, []) when id.Frontend.Ident.hum_name = "gc_stats" ->
-      printfn ppf "  mov rdi, 0";
-      printfn ppf "  mov rsi, 0";
-      printfn ppf "  call rukaml_gc_print_stats"
-    | CApp (AVar id, AUnit, []) when id.Frontend.Ident.hum_name = "closure_count" ->
-      printfn ppf "  mov rdi, 0";
-      printfn ppf "  mov rsi, 0";
-      printfn ppf "  call rukaml_print_alloc_closure_count"
     | CAtom atom -> helper_a dest atom
     | CApp _ as anf ->
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_c anf;
