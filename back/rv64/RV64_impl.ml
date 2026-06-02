@@ -1100,7 +1100,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
       let names =
         List.map
           (function
-            | ANF.Apat_var name -> name)
+            | ANF.Apat_var name -> name
+            | _ -> failwith "not implemented")
           pats
       in
       (* let _ = if argc mod 2 = 0 then argc else argc + 1 in *)
@@ -1114,7 +1115,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
         else
           List.rev pats
           |> ListLabels.iteri ~f:(fun i -> function
-            | ANF.Apat_var name -> Addr_of_local.add_arg ~argc i name)
+            | ANF.Apat_var name -> Addr_of_local.add_arg ~argc i name
+            | _ -> failwith "not implemented")
       in
       generate_body is_toplevel body;
       Addr_of_local.remove_args names;
