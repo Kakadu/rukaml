@@ -895,31 +895,40 @@ let generate_body is_toplevel body =
          emit sd_dest (RU "a0") dest
          (* printfn ppf "  sd a0, %a" Addr_of_local.pp_dest dest *))
     | AArray r ->
-      emit li a0 (List.length r);
-      emit call "rukaml_alloc_array";
-      List.iteri
-        (fun i x ->
-           helper_a (DReg "t0") x;
-           emit sd t0 (ROffset (a0, 8 * i)))
-        r;
-      emit sd_dest a0 dest
+      with_two_slots (fun ra_name arr_slot ->
+        emit addi SP SP (-16);
+        emit sd (RU "ra") (pp_to_mach ra_name);
+        emit li a0 (List.length r);
+        emit call "rukaml_alloc_array";
+        emit sd a0 (pp_to_mach arr_slot);
+        List.iteri
+          (fun i x ->
+             helper_a (DReg "t0") x;
+             emit ld t1 (pp_to_mach arr_slot);
+             emit sd t0 (ROffset (t1, 8 * i)))
+          r;
+        emit ld ra (pp_to_mach ra_name);
+        emit ld t0 (pp_to_mach arr_slot);
+        emit sd_dest t0 dest;
+        emit addi SP SP 16)
     | AConstruct (tag, args) ->
       with_two_slots (fun ra_name rez_slot ->
-        emit addi SP SP (-16) ~comm:(sprintf "padding for construct %d" tag);
+        emit addi SP SP (-16);
         emit sd (RU "ra") (pp_to_mach ra_name);
-        emit li a0 (List.length args) ~comm:"size";
+        emit li a0 (List.length args);
         emit li a1 tag;
         emit call "rukaml_alloc_block";
         emit sd a0 (pp_to_mach rez_slot);
         List.iteri
           (fun i x ->
              helper_a (DReg "t0") x;
-             emit sd t0 (ROffset (a0, 8 * i)))
+             emit ld t1 (pp_to_mach rez_slot);
+             emit sd t0 (ROffset (t1, 8 * i)))
           args;
-        emit ld ra (Addr_of_local.pp_to_mach ra_name);
+        emit ld ra (pp_to_mach ra_name);
         emit ld t0 (pp_to_mach rez_slot);
         emit sd_dest t0 dest;
-        emit addi SP SP 16 ~comm:(sprintf "FUN consturctor creation"))
+        emit addi SP SP 16)
     | ATuple (_a, _b, []) ->
       failwiths "not implemented %s %d" __FILE__ __LINE__
       (* store_ra_temp ppf (fun ra_name -> *)
