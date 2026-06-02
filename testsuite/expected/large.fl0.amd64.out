@@ -1,83 +1,126 @@
 section .note.GNU-stack noalloc noexec nowrite progbits
 section .text
+extern add_gc_static_root
 extern rukaml_alloc_closure
 extern rukaml_print_int
+extern rukaml_print_int_kaml
 extern rukaml_applyN
 extern rukaml_field
+extern rukaml_tag
+extern rukaml_size
 extern rukaml_alloc_pair
-extern rukaml_alloc_array
-extern rukaml_array_length
-extern rukaml_array_get
+extern rukaml_alloc_block
+extern rukaml_array_stdin
 extern rukaml_array_set
+extern rukaml_array_read_in
+extern rukaml_block_size
+extern rukaml_block_tag
+extern rukaml_block_nth
+extern rukaml_match_failure
 extern rukaml_initialize
 extern rukaml_gc_compact
 extern rukaml_gc_print_stats
 extern rukaml_print_alloc_closure_count
+extern rukaml_alloc_printf_closure
+extern rukaml_alloc_fprintf_closure
+extern rukaml_alloc_sprintf_closure
+extern rukaml_stdout
+extern rukaml_equal_struct
+extern rukaml_string_of_char_list
+extern rukaml_string_equal
+extern rukaml_string_nth
+extern rukaml_string_len
+extern rukaml_apply1
+extern rukaml_apply2
+extern rukaml_stdin
+extern rukaml_stdout
+extern rukaml_stderr
+extern rukaml_open_in
+extern rukaml_open_out
+extern rukaml_close_channel
+extern rukaml_end_of_input
+extern rukaml_input_char
+extern rukaml_argv
 
-_start:
+section .bss
+  rukaml_discard: resq 1
+
+
+        section .text
+        _start:
               push    rbp
               mov     rbp, rsp   ; prologue
               call main
               mov rdi, rax    ; rdi stores return code
               mov rax, 60     ; exit syscall
               syscall
-GLOBAL large
+section .text
+GLOBAL large_id71
 
-large:
+large_id71:
   push rbp
   mov  rbp, rsp
   mov qword rdx, [rbp+2*8]
   cmp rdx, 0
   je lab_then_9
-  add rsp, -8*2
-  mov qword [rbp-2*8], 0
+  mov rdi, 0
   call rukaml_print_int
-  add rsp, 8*2
-  mov rax, rax
+  mov qword rax, 0
   jmp lab_endif_10
 lab_then_9:
-  add rsp, -8*2
-  mov qword [rbp-2*8], 1
+  mov rdi, 1
   call rukaml_print_int
-  add rsp, 8*2
-  mov rax, rax
+  mov qword rax, 0
 lab_endif_10:
   pop rbp
-  ret  ;;;; large
+  ret  ;;;; large_id71
+section .text
+rukaml_init_global_immediates:
+  push rbp
+  mov rbp, rsp
+  pop rbp
+  ret ;;; rukaml_init_global_immediates
+section .text
 GLOBAL main
+
 main:
   push rbp
   mov  rbp, rsp
-  mov rdi, rsp
+  push rdi          ; save argc
+  push rsi          ; save argv
+  mov rdi, rbp      ; ebp  (for gc initialization)
+  mov rsi, [rsp+8]  ; argc (for Sys.argv initialization)
+  mov rdx, [rsp]    ; argv (for Sys.argv initialization)
   call rukaml_initialize
+  call rukaml_init_global_immediates
+  pop rsi           ; pass argv to main
+  pop rdi           ; pass argc to main
   sub rsp, 8*4 ; allocate for local variables x, temp5, t42, temp4
-  add rsp, -8*2
-  mov qword [rbp-6*8], 42
+  mov rdi, 42
   call rukaml_print_int
-  add rsp, 8*2
-  mov [rbp-2*8], rax
+  mov qword [rbp-2*8], 0
   mov qword [rbp-1*8], 1
   mov qword rdx, [rbp-1*8]
   cmp rdx, 0
-  je lab_then_17
+  je lab_then_11
   mov qword [rbp-3*8], 0
-  jmp lab_endif_18
-lab_then_17:
+  jmp lab_endif_12
+lab_then_11:
   mov qword [rbp-3*8], 1
-lab_endif_18:
+lab_endif_12:
   mov qword rdx, [rbp-3*8]
   cmp rdx, 0
-  je lab_then_19
+  je lab_then_13
   mov qword [rbp-4*8], 0
-  jmp lab_endif_20
-lab_then_19:
+  jmp lab_endif_14
+lab_then_13:
   mov qword [rbp-4*8], 1
-lab_endif_20:
+lab_endif_14:
   sub rsp, 8 ; trying to save alignment 16 bytes
   sub rsp, 8*1 ; fun arguments
   mov qword r8, [rbp-4*8]  ; arg "x"
   mov qword [rsp+0*8], r8
-  call large
+  call large_id71
   add rsp, 8*2 ; dealloc args
   mov rax, rax
   add rsp, 8*4 ; deallocate local variables x, temp5, t42, temp4

@@ -5,7 +5,7 @@ test
   (run
     (stdout
       "rukaml_print_int 8"
-      "Total closure allocations: 56"))
+      "Total closure allocations: 55"))
 *)
 
 let fibst m =
