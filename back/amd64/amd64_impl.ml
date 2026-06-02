@@ -1029,7 +1029,13 @@ let rec generate_body ppf body =
       let pats, body = ANF.group_abstractions body in
       let pats = pat :: pats in
       let argc = List.length pats in
-      let names = List.map (fun (ANF.Apat_var name) -> name) pats in
+      let names =
+        List.filter_map
+          (function
+            | ANF.Apat_var name -> Some name
+            | _ -> None)
+          pats
+      in
       let lam_name = Ident.of_string (Printf.sprintf "__lam_%d" (gensym ())) in
       Toplevel.extend lam_name ~kind:(Function { argc });
       printfn ppf "section .text";
@@ -1339,10 +1345,15 @@ let emit_global_function ppf name body =
     printfn ppf "@[<h>%a:@]" Toplevel.pp_label_exn name;
     let pats, body = ANF.group_abstractions body in
     let argc = List.length pats in
-    let names = List.map (fun (ANF.Apat_var name) -> name) pats in
-    List.rev pats
-    |> ListLabels.iteri ~f:(fun i -> function
-      | ANF.Apat_var name -> Addr_of_local.add_arg ~argc i name);
+    let names =
+      List.filter_map
+        (function
+          | ANF.Apat_var name -> Some name
+          | _ -> None)
+        pats
+    in
+    ListLabels.iteri (List.rev names) ~f:(fun i name ->
+      Addr_of_local.add_arg ~argc i name);
     printfn ppf "  push rbp";
     printfn ppf "  mov  rbp, rsp";
     if Toplevel.is_main name
