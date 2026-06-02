@@ -970,7 +970,9 @@ let rec input_all ic =
 let usage () =
   let () = fprintf stderr "[compiler] Invalid args\n" in
   let () =
-    fprintf stderr "[compiler] Usage: compiler <input-file> [-o <output-file>]\n"
+    fprintf
+      stderr
+      "[compiler] Usage: compiler <input-file> [-o <output-file>] [--target rv64|parsetree]\n"
   in
   exit 1
 ;;
