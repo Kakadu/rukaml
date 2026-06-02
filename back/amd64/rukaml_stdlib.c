@@ -6,7 +6,6 @@
 #include <stdarg.h>
 #include <assert.h>
 #include <stdbool.h>
-#include <errno.h>
 #include <unistd.h>
 
 #include "rukaml_stdlib.h"
@@ -358,7 +357,7 @@ void rukaml_print_alloc_closure_count(void)
 
 void rukaml_print_int(int64_t x)
 {
-  printf("%s %d\n", __func__, x);
+  printf("%s %ld\n", __func__, x);
   fflush(stdout);
 }
 
@@ -380,7 +379,7 @@ void **rukaml_array_stdin(void)
 
   for (int i = 0; i < size; i++)
   {
-    arr[i] = (void *)(buf[i]);
+    arr[i] = (void *)((size_t)(buf[i]));
   }
   return arr;
 }
@@ -394,7 +393,7 @@ void **rukaml_array_read_in(int a0, int a1, int a2, int a3, int a4, int a5,
   char path[len];
   for (int i = 0; i < len; i++)
   {
-    path[i] = (char)str[i];
+    path[i] = (char)((size_t)str[i]);
   }
 
   FILE *fp = fopen(path, "r");
@@ -412,7 +411,7 @@ void **rukaml_array_read_in(int a0, int a1, int a2, int a3, int a4, int a5,
   for (int i = 0; i < size; i++)
   {
     int c = fgetc(fp);
-    arr[i] = (void *)(c);
+    arr[i] = (void *)((int64_t)(c));
   }
   fread(arr, sizeof(void *), size, fp);
   fclose(fp);
@@ -726,9 +725,9 @@ void **rukaml_string_of_char_list(int r0, int r1, int r2, int r3, int r4,
 
   for (size_t n = 0; n < chars_n; ++n)
   {
-    assert(TAG(chs) == 1);                 // tag of ( :: )
-    ((char *)(block))[n] = (char)(chs[0]); // get head
-    chs = (void **)(chs[1]);               // get next list node
+    assert(TAG(chs) == 1);                             // tag of ( :: )
+    ((char *)(block))[n] = (char)((uint64_t)(chs[0])); // get head
+    chs = (void **)(chs[1]);                           // get next list node
   }
 
   return (void **)block;
