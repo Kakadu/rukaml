@@ -7,7 +7,6 @@
 #include <stdarg.h>
 #include <assert.h>
 #include <stdbool.h>
-#include <errno.h>
 #include <unistd.h>
 
 /* #define clean_errno() (errno == 0 ? "None" : strerror(errno))
@@ -317,7 +316,7 @@ void *rukaml_alloc_pair(void *l, void *r)
     fprintf(stderr, "Not enough memory\n");
     exit(1);
   }
-  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
+  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words ));
   GC.allocated_words += 3;
   GC.stats.gs_allocated_words += 3;
   rez[0] = (uint64_t *)HEADER(2, Tuple_tag);
@@ -381,7 +380,7 @@ void **rukaml_array_stdin(void) {
   void **arr = rukaml_alloc_array(size);
 
   for (int i = 0; i < size; i++) {
-    arr[i] = (void *) (buf[i]);
+    arr[i] = (void *)((uint64_t)(buf[i]));
   }
   return arr;
 }
@@ -394,7 +393,7 @@ void **rukaml_array_read_in(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
     ;
   char path[len];
   for (int i = 0; i < len; i++) {
-    path[i] = (char)str[i];
+    path[i] = (char)((uint64_t)(str[i]));
   }
 
   FILE *fp = fopen(path, "r");
@@ -410,7 +409,7 @@ void **rukaml_array_read_in(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
 
   for (int i = 0; i < size; i++) {
     int c = fgetc(fp);
-    arr[i] = (void *) (c);
+    arr[i] = (void *)((int64_t)(c));
   }
   fread(arr, sizeof(void *), size, fp);
   fclose(fp);
