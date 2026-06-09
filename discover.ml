@@ -119,10 +119,9 @@ let () =
   let toolchain_amd64 = discover_toolchain cfg defaults_amd64 ~suffix:"amd64" in
   export_toolchain toolchain_amd64 ~suffix:"amd64";
   print_toolchain toolchain_amd64;
-
   let gcc_rv64 = "riscv64-linux-gnu-gcc-13" in
   let defaults_rv64 =
-    { cc = { defaults_amd64.cc with path = gcc_rv64 }
+    { cc = { path = gcc_rv64; flags = "-g -fPIC -Wall -Wpedantic" }
     ; as_ = { path = gcc_rv64; flags = "-x assembler -c -march=rv64gc" }
     ; ld = { path = gcc_rv64; flags = "" }
     ; run = { path = "qemu-riscv64"; flags = "-L /usr/riscv64-linux-gnu" }
