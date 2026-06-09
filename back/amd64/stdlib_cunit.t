@@ -4,8 +4,8 @@
        CUnit - A unit testing framework for C - Version 2.1-3
        http://cunit.sourceforge.net/
   
-  rukaml_print_int 541
-  rukaml_print_int 542
+  rukaml_print_int 0
+  rukaml_print_int 0
   
   
   Run Summary:    Type  Total    Ran Passed Failed Inactive
