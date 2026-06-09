@@ -313,7 +313,7 @@ module Toplevel = struct
 
   let pp_toplevel_exn ppf (ident : Ident.t) =
     let toplevel = find_exn ident in
-    Format.fprintf ppf "[%a]" pp_toplevel_ident toplevel
+    Format.fprintf ppf "[rel %a]" pp_toplevel_ident toplevel
   ;;
 
   let is_toplevel_function (ident : Ident.t) =
@@ -368,10 +368,10 @@ module Addr_of_var = struct
 end
 
 let pp_dest ppf = function
-  | DDiscard -> fprintf ppf "[rukaml_discard]"
+  | DDiscard -> fprintf ppf "[rel rukaml_discard]"
   | DReg s -> fprintf ppf "%s" s
   | DStack_var name -> Addr_of_local.pp_local_exn ppf name
-  | DStatic_var name -> fprintf ppf "[%a]" Toplevel.pp_label_exn name
+  | DStatic_var name -> fprintf ppf "[rel %a]" Toplevel.pp_label_exn name
 ;;
 
 let emit_alloc_closure ppf ~fname ~argc =
@@ -484,7 +484,7 @@ let rec generate_body ppf body =
            emit_alloc_closure ppf ~fname ~argc;
            printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
          | { kind = Immediate Constant; ident } ->
-           printfn ppf "  mov rax, [%a]" Toplevel.pp_label_exn ident;
+           printfn ppf "  mov rax, [rel %a]" Toplevel.pp_label_exn ident;
            printfn ppf "  mov qword [rsp+%d*8], rax" (count - 1 - i)
          | { kind = Main; _ } -> assert false
          | { kind = Alias _; _ } -> assert false
@@ -856,7 +856,7 @@ let rec generate_body ppf body =
       (* f is closure *)
       helper_a (DReg "rdx") arg1;
       printfn ppf "  mov rax, 0  ; no float arguments";
-      printfn ppf "  mov rdi, [%a]" Toplevel.pp_label_exn f;
+      printfn ppf "  mov rdi, [rel %a]" Toplevel.pp_label_exn f;
       printfn ppf "  mov rsi, 1 ; argc";
       printfn ppf "  call rukaml_applyN";
       printfn ppf "  mov %a, rax" pp_dest dest
@@ -1001,7 +1001,7 @@ let rec generate_body ppf body =
          emit_alloc_closure ppf ~fname ~argc;
          printfn ppf "  mov %a, rax" pp_dest dest
        | { kind = Immediate Constant; ident } ->
-         printfn ppf "  mov rax, [%a]" Toplevel.pp_label_exn ident;
+         printfn ppf "  mov rax, [rel %a]" Toplevel.pp_label_exn ident;
          printfn ppf "  mov qword %a, rax" pp_dest dest
        | { kind = Main; _ } -> assert false
        | { kind = Alias _; _ } -> assert false
@@ -1243,8 +1243,8 @@ let emit_global_constant ppf ident expr =
   printfn ppf "  push rbp";
   printfn ppf "  mov rbp, rsp";
   generate_body ppf expr;
-  printfn ppf "  mov qword [%a], rax" Toplevel.pp_label_exn ident;
-  printfn ppf "  lea rdi, [%a]" Toplevel.pp_label_exn ident;
+  printfn ppf "  mov qword [rel %a], rax" Toplevel.pp_label_exn ident;
+  printfn ppf "  lea rdi, [rel %a]" Toplevel.pp_label_exn ident;
   printfn ppf "  call add_gc_static_root";
   printfn ppf "  pop rbp";
   printfn ppf "  ret ;;; init_%a" Toplevel.pp_label_exn ident
