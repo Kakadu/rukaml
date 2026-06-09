@@ -2,6 +2,7 @@
 #define RUKAML_STDLIB_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 void rukaml_initialize(uint64_t ebp, int argc, char **argv);
 

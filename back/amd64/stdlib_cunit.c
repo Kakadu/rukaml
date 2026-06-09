@@ -2,15 +2,18 @@
 #include <CUnit/Basic.h>
 #include "rukaml_stdlib.h"
 
-static void test_print_int(void) {
-    rukaml_initialize(0L);
-    void* clos = rukaml_alloc_closure(rukaml_print_int, 1);
+static void test_print_int(void)
+{
+    static char *argv[] = {"test"};
+    rukaml_initialize(0L, 1, argv);
+    void *clos = rukaml_alloc_closure(rukaml_print_int, 1);
     rukaml_applyN(clos, 1, 541);
-    rukaml_apply1((void*)rukaml_print_int, (void*)542);
+    rukaml_apply1((void *)rukaml_print_int, (void *)542);
     CU_ASSERT(1);
 }
 
-int main() {
+int main()
+{
     CU_initialize_registry();
 
     {
