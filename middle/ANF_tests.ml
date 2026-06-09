@@ -199,3 +199,46 @@ let%expect_test "Substitution of variable renames" =
       (x + 1)
     |}]
 ;;
+
+let%expect_test "Substitution of variable renames" =
+  test_anf
+    ~simplify:true
+    {|
+
+let test_keywords () =
+  let is_keyword k = true in
+    let sq = "let2" in
+    if is_keyword sq then 0
+    else
+      let () = output_string stdout sq in
+      1
+
+    |};
+  [%expect
+    {|
+    let __lifted_let_5_is_keyword k =
+      1
+    let test_keywords () =
+      let temp1 = "let2" in
+      let temp2 = __lifted_let_5_is_keyword temp1  in
+      (if temp2
+      then 0
+      else let () = output_string stdout temp1 in
+           1)
+    |}]
+;;
+
+let%expect_test "ANF function with unit args" =
+  test_anf
+    ~simplify:true
+    {|
+
+let test_keywords () () x = x+1
+
+    |};
+  [%expect
+    {|
+    let test_keywords () () x =
+      (x + 1)
+    |}]
+;;

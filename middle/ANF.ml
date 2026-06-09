@@ -322,9 +322,17 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
        | _ -> assert false)
     | CApp ((APrimitive _ as f), _arg1, _args) ->
       CApp (f, helperi _arg1, List.map helperi _args)
-    | CApp ((AVar _ as _f), _arg1, _args) (* not ident1 *) as is ->
-      (* TODO: Do we  need to lookup inside args? *)
-      is
+    | CApp ((AVar _ as _f), _arg1, _args) ->
+      let map = function
+        | AVar v when Ident.equal ident1 v ->
+          (match rhs with
+           | CAtom rhs -> rhs
+           | _ ->
+             Format.eprintf "rhs = %a\n" pp_c rhs;
+             failwiths "Substitution implemented badly")
+        | x -> x
+      in
+      CApp (_f, map _arg1, List.map map _args)
     | c ->
       Format.eprintf "%a\n%!" pp_c c;
       Format.eprintf "can't substitute %a -> %a\n%!" Ident.pp ident1 pp_c rhs;
@@ -456,7 +464,7 @@ let simplify : _ Arity_map.t -> expr -> expr =
           , ELet (NonRecursive, var2, CAtom (AVar name2), wher_) )
         when Ident.equal name1 name2 ->
         (* let name1 = ... in
-           let name1 = ... in *)
+           let ...  = name1 in *)
         helper acc (ELet (NonRecursive, var2, body, wher_))
       | ELet (NonRecursive, Apat_var v1, rhs, where)
         when used_once_in_if v1 ~where && is_comparison rhs && cfg.opt_cmp_into_if_inline
@@ -641,12 +649,10 @@ let anf =
         helper arg1 (fun arg1 ->
           let name = gensym_id () in
           ELet (NonRecursive, Apat_var name, CApp (f, arg1, []), k (AVar name))))
+    | TLam (Typedtree.Tpat_unit, body, _) ->
+      EComplex (CAtom (ALam (Apat_unit, helper body k)))
     | TLam (pat, body, _) ->
       anf_pat pat ~kbefore:(fun name e -> elam name e) (fun _pat -> helper body k)
-    (* | TLam (PVar pat, body, _) ->
-       let name = gensym_s () in
-       let body = helper body complex_of_atom in
-       make_let_nonrec name (CAtom (ALam (APname pat, body))) (k (AVar name)) *)
     | TLet (flag, Tpat_var name, _typ, TLam (Tpat_var vname, body, _), wher) ->
       ELet
         ( flag
