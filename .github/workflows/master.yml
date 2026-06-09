@@ -5,10 +5,12 @@ on:
     branches:
       - 'master'
       - 'dev'
+      - 'dev+ADT-RV64'
   push:
     branches:
       - 'master'
       - 'dev'
+      - 'dev+ADT-RV64'
 
 env:
   OPAMROOT: /home/opam/.opam
