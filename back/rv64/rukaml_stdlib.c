@@ -1,35 +1,45 @@
+#include <assert.h>
 #include <alloca.h>
-#include <stdlib.h>
-#include <stdio.h>
+#include <errno.h>
 #include <inttypes.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdarg.h>
-#include <assert.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <unistd.h>
 
-/* #define clean_errno() (errno == 0 ? "None" : strerror(errno))
-#define log_error(M, ...) fprintf(stderr, "[ERROR] (%s:%d: errno: %s) " M "\n", __FILE__, __LINE__, clean_errno(), ##__VA_ARGS__)
-#define assertf(A, M, ...)       \
-  if (!(A))                      \
-  {                              \
-    log_error(M, ##__VA_ARGS__); \
-    fflush(stderr);              \
-    assert(A);                   \
-  } */
+void __mk_err_fatal(const char *file, int line, const char *msg)
+{
+  fprintf(stderr, "[fatal] file=%s line=%d msg=\"%s\"\n", file, line, msg);
+  fflush(stderr);
+  exit(1);
+}
 
-#define DEBUG
-#undef DEBUG
+void __mk_err_warning(const char *file, int line, const char *msg)
+{
+  fprintf(stderr, "[warning] file=%s line=%d msg=\"%s\"\n", file, line, msg);
+}
 
-static uint64_t log_level = 0x0;
+#define mk_err_fatal(msg) __mk_err_fatal(__FILE__, __LINE__, msg)
+#define mk_err_warning(msg) __mk_err_warning(__FILE__, __LINE__, msg)
 
-#define logGC(...)       \
-  if (log_level & 0x800) \
-  printf(__VA_ARGS__)
+#undef RUKAML_DEBUG
 
-#define HEADER(size, tag) ((uint64_t)((size << 10u) + (tag % 256u)))
-#define SIZE(ptr) (*((uint64_t *)ptr - 1) >> 10)
+#ifdef RUKAML_DEBUG
+#define log(...)         \
+  if (1)                 \
+  {                      \
+    printf(__VA_ARGS__); \
+    fflush(stdout);      \
+  }
+#else
+#define log(...)
+#endif
+
+#define HEADER(size, tag) ((uint64_t)((size << 8u) + (tag % 256u)))
+#define SIZE(ptr) (*((uint64_t *)ptr - 1) >> 8)
 #define TAG(ptr) (*((uint64_t *)ptr - 1) & 0xFF)
 #define FIELD(ptr, n) ((uint64_t *)ptr + n)
 
@@ -40,10 +50,28 @@ static uint64_t log_level = 0x0;
 
 #define MAX_STRING_FROM_STDIN (2 << 15)
 
-int HEAP_SIZE = 160;
+#define IS_ON_HEAP(v) (is_backup_bank((uint64_t *)v) || is_old_bank((uint64_t *)v))
+#define IS_BLOCK(v) (is_backup_bank((uint64_t *)v) || is_old_bank((uint64_t *)v))
+#define IS_IMM(v) (!IS_BLOCK(v))
+#define Val_unit 0
+#define Val_int(n) (n)
+#define Val_nil 0
+
+#if defined(__riscv) && __riscv_xlen == 64
+#define DECLARE_FAKE_ARGS int a0, int a1, int a2, int a3, int a4, int a5, int a6, int a7
+#define FAKE_ARGS 0, 1, 2, 3, 4, 5, 6, 7
+#define value uint64_t *
+#define Set_field(dest, idx, newval) *((value *)dest + idx) = newval
+#define Field(dest, idx) *((value *)dest + idx)
+
+#endif
+
+int HEAP_SIZE = 32768; // in words
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
+const uint8_t String_tag = 252;
+const uint8_t Closure_tag = 247;
 
 struct gc_stats
 {
@@ -81,15 +109,16 @@ void rukaml_initialize(uint64_t ebp)
         {
         case 'v':
         {
-          uint64_t v = strtol(temp + 2, (char **)NULL, 10);
-          log_level = v;
+          // Loglevel temporary removed and this functionality too
+          // uint64_t v = strtol(temp + 2, (char **)NULL, 10);
+          // log_level = v;
           break;
         }
         case 'm':
         {
           long v = strtol(temp + 2, (char **)NULL, 10);
           assert(v > 0);
-          logGC("Setting heap size to be %ld words\n", v);
+          log("Setting heap size to be %ld words\n", v);
           HEAP_SIZE = (uint32_t)v;
           break;
         }
@@ -102,16 +131,24 @@ void rukaml_initialize(uint64_t ebp)
     }
   }
   GC.ebp = ebp;
-  logGC("%s. EBP=0x%lX\n", __func__, GC.ebp);
+  // log("%s. EBP=0x%lX\n", __func__, GC.ebp);
   const uint64_t size = sizeof(uint64_t *) * HEAP_SIZE;
   GC.main_bank = malloc(size);
+  memset(GC.main_bank, 0x80, size);
+  const uint64_t right_alignment = 0x20;
+  uint64_t delta = (uint64_t)GC.main_bank % right_alignment;
+  // log("delta = 0x%LX\n", delta);
+  if (delta != 0)
+  {
+    GC.main_bank += (right_alignment - delta) / 8;
+  }
   GC.main_bank_fin = GC.main_bank + HEAP_SIZE;
-  GC.backup_bank = malloc(size);
+  GC.backup_bank = malloc(sizeof(uint64_t *) * HEAP_SIZE);
   GC.backup_bank_fin = GC.backup_bank + HEAP_SIZE;
   GC.allocated_words = 0;
   GC.stats.gs_current_bank = 0;
-  logGC("main   bank: 0x%lX..0x%lX\n", (uint64_t)GC.main_bank, (uint64_t)GC.main_bank_fin);
-  logGC("backup bank: 0x%lX..0x%lX\n", (uint64_t)GC.backup_bank, (uint64_t)GC.backup_bank_fin);
+  log("main   bank: 0x%lX..0x%lX\n", (uint64_t)GC.main_bank, (uint64_t)GC.main_bank_fin);
+  // log("backup bank: 0x%lX..0x%lX\n", (uint64_t)GC.backup_bank, (uint64_t)GC.backup_bank_fin);
 }
 
 static bool is_old_bank(uint64_t *ptr)
@@ -132,33 +169,33 @@ void dfs(uint64_t *allocated, uint64_t *root)
     return;
 
   uint8_t tag = TAG(root);
-  logGC("%s root = 0x%lX, tag = %u\n", __func__, (uint64_t)root, tag);
+  log("%s root = 0x%lX, tag = %u\n", __func__, (uint64_t)root, tag);
   if (tag == Forward_tag)
     return;
   uint64_t size = SIZE(root);
   assert(size >= 1);
   uint64_t *new_loc = (uint64_t *)GC.backup_bank + *allocated;
-  logGC("new_loc = 0x%lX\n", (uint64_t)new_loc);
+  log("new_loc = 0x%lX\n", (uint64_t)new_loc);
   *new_loc = HEADER(size, tag);
   *allocated += size + 1;
 
   uint64_t first_child_ptr = *root;
 
-  logGC("Copying %lX to %lX\n", (uint64_t)root, (uint64_t)new_loc);
+  log("Copying %lX to %lX\n", (uint64_t)root, (uint64_t)new_loc);
   root[-1] = HEADER(1, Forward_tag);
   root[0] = (uint64_t)new_loc;
 
   dfs(allocated, (uint64_t *)first_child_ptr);
   for (uint8_t i = 1; i < size; ++i)
     dfs(allocated, (uint64_t *)(*(root + i)));
-  logGC("%s root = 0x%lX finished\n", __func__, (uint64_t)root);
+  log("%s root = 0x%lX finished\n", __func__, (uint64_t)root);
 }
 
 void rukaml_gc_compact(uint64_t rsp)
 {
   assert(GC.ebp > rsp);
-  logGC("=== %s. EBP=0x%lX, RSP=0x%lX\n", __func__, GC.ebp, rsp);
-  logGC("stack width = 0x%lX / 8\n", GC.ebp - rsp);
+  log("=== %s. EBP=0x%lX, RSP=0x%lX\n", __func__, GC.ebp, rsp);
+  log("stack width = 0x%lX / 8\n", GC.ebp - rsp);
 
   uint64_t cur = GC.ebp;
   uint64_t new_size = 0;
@@ -170,7 +207,7 @@ void rukaml_gc_compact(uint64_t rsp)
 
     if ((uint64_t)GC.main_bank <= obj && obj < (uint64_t)GC.main_bank_fin)
     {
-      logGC("\t0x%lX a candidate?\n", obj);
+      log("\t0x%lX a candidate?\n", obj);
       dfs(&new_size, (uint64_t *)obj);
     }
   }
@@ -211,8 +248,8 @@ void rukaml_print_int(int64_t x)
   fflush(stdout);
 }
 void rukaml_print_int_kaml(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
-                      uint64_t a4 , uint64_t a5, uint64_t a6, uint64_t a7,
-                      int64_t x)
+                           uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
+                           int64_t x)
 {
   rukaml_print_int(x);
 }
@@ -232,7 +269,7 @@ void *rukaml_apply0(fun0 f)
   // TODO: I'm not sure that zero-argument call is needed
   return f();
 }
-#define ZERO6 0,0,0,0,0,0
+#define ZERO6 0, 0, 0, 0, 0, 0
 // NOTE: Below we pass first 6 arguments as zeros, because they go to the registers.
 // Others will go on stack
 void *rukaml_apply1(fun7 foo, void *arg1)
@@ -250,7 +287,7 @@ void *rukaml_apply2(fun8 f, void *arg1, void *arg2)
   printf("arg1 = 0x%" PRIx64 "; arg2 = 0x%" PRIx64 "\n", (uint64_t)arg1, (uint64_t)arg2);
   fflush(stdout);
 #endif
-  void* rez = f(ZERO6, arg1, arg2);
+  void *rez = f(ZERO6, arg1, arg2);
 #ifdef DEBUG
   printf("Returned from function with a value 0x%" PRIx64 "\n", rez);
 #endif
@@ -261,11 +298,11 @@ void *rukaml_apply3(fun9 f, void *arg1, void *arg2, void *arg3)
 {
 #ifdef DEBUG
   printf("call %s with code ptr = 0x%" PRIx64 "\n", __func__, (uint64_t)f);
-  printf("arg1 = 0x%" PRIx64 "; arg2 = 0x%" PRIx64"; arg3 = 0x%" PRIx64 "\n",
-    (uint64_t)arg1, (uint64_t)arg2, (uint64_t)arg3);
+  printf("arg1 = 0x%" PRIx64 "; arg2 = 0x%" PRIx64 "; arg3 = 0x%" PRIx64 "\n",
+         (uint64_t)arg1, (uint64_t)arg2, (uint64_t)arg3);
   fflush(stdout);
 #endif
-  void* rez = f(ZERO6, arg1, arg2, arg3);
+  void *rez = f(ZERO6, arg1, arg2, arg3);
 #ifdef DEBUG
   printf("Returned from function with a value 0x%" PRIx64 "\n", rez);
 #endif
@@ -275,8 +312,8 @@ void *rukaml_apply4(fun10 f, void *arg1, void *arg2, void *arg3, void *arg4)
 {
 #ifdef DEBUG
   printf("call %s with code ptr = 0x%" PRIx64 "\n", __func__, (uint64_t)f);
-  printf("arg1 = 0x%" PRIx64 "; arg2 = 0x%" PRIx64"; arg3 = 0x%" PRIx64"; arg4 = 0x%" PRIx64 "\n",
-    (uint64_t)arg1, (uint64_t)arg2, (uint64_t)arg3, (uint64_t)arg4);
+  printf("arg1 = 0x%" PRIx64 "; arg2 = 0x%" PRIx64 "; arg3 = 0x%" PRIx64 "; arg4 = 0x%" PRIx64 "\n",
+         (uint64_t)arg1, (uint64_t)arg2, (uint64_t)arg3, (uint64_t)arg4);
   fflush(stdout);
 #endif
   return f(ZERO6, arg1, arg2, arg3, arg4);
@@ -294,18 +331,8 @@ typedef struct
   void *args[0];
 } rukaml_closure;
 
-rukaml_closure *copy_closure(rukaml_closure *src)
+void *rukaml_identity(void *x)
 {
-  size_t size = sizeof(rukaml_closure) + sizeof(void *) * src->argsc;
-  rukaml_closure *dst = (rukaml_closure *)malloc(size);
-#ifdef DEBUG
-  printf("%s    %p    ~~>     %p\n", __func__, src, dst);
-  fflush(stdout);
-#endif
-  return memcpy(dst, src, size);
-}
-
-void *rukaml_identity(void *x) {
   return x;
 }
 
@@ -316,7 +343,7 @@ void *rukaml_alloc_pair(void *l, void *r)
     fprintf(stderr, "Not enough memory\n");
     exit(1);
   }
-  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words ));
+  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words * sizeof(void *)));
   GC.allocated_words += 3;
   GC.stats.gs_allocated_words += 3;
   rez[0] = (uint64_t *)HEADER(2, Tuple_tag);
@@ -324,7 +351,7 @@ void *rukaml_alloc_pair(void *l, void *r)
 
   (rez)[1] = l;
   (rez)[2] = r;
-  logGC("A pair %lX created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
+  log("A pair %lX created. Allocated words = %lu\n", (uint64_t)(rez + 1), GC.allocated_words);
   return rez + 1;
 }
 
@@ -335,15 +362,41 @@ void *rukaml_alloc_block(int64_t size, uint8_t tag)
     fprintf(stderr, "Not enough memory\n");
     exit(1);
   }
-  uint64_t **rez = ((uint64_t **)(GC.main_bank + GC.allocated_words));
+  uint64_t *rez = (uint64_t *)(GC.main_bank + GC.allocated_words);
   GC.allocated_words += size + 1;
   GC.stats.gs_allocated_words += size + 1;
-  rez[0] = (uint64_t *)HEADER(size, tag);
-  assert(TAG(rez + 1) == tag);
-  assert(SIZE(rez + 1) == size);
-  logGC("A block %lX is created. Allocated words = %lu\n",
-        (uint64_t)(rez + 1), GC.allocated_words);
-  return rez + 1;
+  Set_field(rez, 0, (value)HEADER(size, tag));
+  uint64_t *ans = rez + 1;
+  assert(TAG(ans) == tag);
+  assert(SIZE(ans) == size);
+  log("A block %lX is created. Allocated words = %lu\n",
+      (uint64_t)(rez + 1), GC.allocated_words);
+  return ans;
+}
+
+void *rukaml_alloc_closure(void *func, int32_t argsc)
+{
+  assert(func != NULL);
+  assert(argsc > 0);
+  // log("%s\n", __func__);
+  // code_ptr + argsc + argmax + args[]
+  size_t size = 3 + argsc;
+  rukaml_closure *ans = (rukaml_closure *)rukaml_alloc_block(size, Closure_tag);
+  assert(TAG(ans) == Closure_tag);
+  assert(SIZE(ans) == size);
+  // printf("%s ans = 0x%" PRIx64 "\n", __func__, (uint64_t*)ans); fflush(stdout);
+
+  ans->code = func;
+#ifdef DEBUG
+  printf("store code ptr = %" PRIx64 "\n", (uint64_t)(ans->code));
+#endif
+  ans->argsc = argsc;
+  ans->args_received = 0;
+  memset(ans->args, 0, argsc * sizeof(void *));
+#ifdef DEBUG
+  printf("%s argc = %u,   %" PRIx64 "\n\n", __func__, argsc, (uint64_t)ans);
+#endif
+  return ans;
 }
 
 void *rukaml_alloc_array(int64_t size)
@@ -352,13 +405,15 @@ void *rukaml_alloc_array(int64_t size)
 }
 
 // Standart CC
-void *rukaml_tag0(void **obj) {
+void *rukaml_tag0(void **obj)
+{
+  assert(obj != NULL);
   return (void *)(uint64_t)(TAG(obj));
 }
 
 void *rukaml_tag(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
-                  uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
-                  void **obj)
+                 uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
+                 void **obj)
 {
   return rukaml_tag0(obj);
 }
@@ -367,37 +422,44 @@ uint64_t rukaml_array_length(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
                              uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
                              void **arr)
 {
+  assert(arr != NULL);
   return SIZE(arr);
 }
 
-void **rukaml_array_stdin(void) {
+void **rukaml_array_stdin(void)
+{
   char buf[MAX_STRING_FROM_STDIN];
   int code = scanf("%s", buf);
-  if (!code) {
+  if (!code)
+  {
     return rukaml_alloc_array(0);
   }
   size_t size = strlen(buf);
   void **arr = rukaml_alloc_array(size);
 
-  for (int i = 0; i < size; i++) {
-    arr[i] = (void *)((uint64_t)(buf[i]));
+  for (int i = 0; i < size; i++)
+  {
+    arr[i] = (void *)(buf[i]);
   }
   return arr;
 }
 
 void **rukaml_array_read_in(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
-			    uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
-                            void **str) {
+                            uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
+                            void **str)
+{
   int len = 0;
   while (str[len++] != 0)
     ;
   char path[len];
-  for (int i = 0; i < len; i++) {
+  for (int i = 0; i < len; i++)
+  {
     path[i] = (char)((uint64_t)(str[i]));
   }
 
   FILE *fp = fopen(path, "r");
-  if (!fp) {
+  if (!fp)
+  {
     return rukaml_alloc_array(0);
   }
 
@@ -407,7 +469,8 @@ void **rukaml_array_read_in(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
 
   void **arr = rukaml_alloc_array(size);
 
-  for (int i = 0; i < size; i++) {
+  for (int i = 0; i < size; i++)
+  {
     int c = fgetc(fp);
     arr[i] = (void *)((int64_t)(c));
   }
@@ -454,31 +517,26 @@ void *rukaml_field(int n, void **r)
   return a * b;
 } */
 
-void *rukaml_alloc_closure(void *func, int32_t argsc)
+rukaml_closure *copy_closure(rukaml_closure *src)
 {
-  rukaml_closure *ans = (rukaml_closure *)malloc(sizeof(rukaml_closure) + sizeof(void *) * argsc);
-  //  { .code = func, .argsc = argsc }
-  ans->code = func;
-  // ans->code = &myadd;
-#ifdef DEBUG
-  printf("store code ptr = %" PRIx64 "\n", (uint64_t)(ans->code));
-#endif
-  ans->argsc = argsc;
-  ans->args_received = 0;
-  memset(ans->args, 0, argsc * sizeof(void *));
-#ifdef DEBUG
-  printf("%s argc = %u,   %" PRIx64 "\n\n", __func__, argsc, (uint64_t)ans);
-  fflush(stdout);
-#endif
-  return ans;
+  rukaml_closure *dst = (rukaml_closure *)rukaml_alloc_closure(src->code, src->argsc);
+  dst->args_received = src->args_received;
+  for (size_t i = 0; i < src->args_received; i++)
+  {
+    dst->args[i] = src->args[i];
+  }
+  assert(TAG(dst) == Closure_tag);
+  assert(dst->argsc == src->argsc);
+  return dst;
 }
 
 void *rukaml_applyN(void *f, int64_t argc, ...)
 {
+  assert(IS_ON_HEAP(f));
+  assert(TAG(f) == Closure_tag);
 
-#ifdef DEBUG
-  write(STDERR_FILENO, "HERE\n", 5);
-  printf("%s argc = %lu, closure = %" PRIx64 "\n\n", __func__, argc, (uint64_t)f);
+#ifdef RUKAML_DEBUG
+  printf("%s argc = %lu, closure = 0x%" PRIX64 "\n\n", __func__, argc, (uint64_t)f);
   fflush(stdout);
   // printf("\tsaved code ptr = %" PRIx64, (uint64_t)(((rukaml_closure *)f)->code));
   // fflush(stdout);
@@ -486,7 +544,6 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
 #endif
   va_list argp;
   va_start(argp, argc);
-  // rukaml_closure *f_closure = copy_closure((rukaml_closure *)f);
   rukaml_closure *f_closure = f;
 #ifdef DEBUG
   printf("\nf->arg_received = %lu, f->argc = %lu\n",
@@ -498,59 +555,55 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
   //  printf("%d\n", __LINE__);
   assert(f_closure->args_received + argc <= f_closure->argsc);
 
-  if (f_closure->args_received + argc == f_closure->argsc) {
+  if (f_closure->args_received + argc == f_closure->argsc)
+  {
     // for full application we can omit copying closure
-    void* *args_copy = malloc(f_closure->argsc * sizeof(void*));
-    for (size_t i=0; i<f_closure->args_received; ++i)
-      args_copy[i] = f_closure->args[i];
+    size_t i = 0, j;
+    fun0 callable;
+    // log("argsc = %d, args_received=%d, new_args=%d\n",
+    //     f_closure->argsc, f_closure->args_received, argc);
+    void **stack_args = alloca(f_closure->argsc * sizeof(void *));
+    for (i = 0; i < f_closure->args_received; ++i)
+    {
+      // log("Setting arg %d\n", i);
+      stack_args[i] = f_closure->args[i];
+    }
 
     // rest of the args
-    for (size_t i = 0; i < argc; i++) {
-      void *arg1 = va_arg(argp, void *);
-      args_copy[f_closure->args_received+i] = arg1;
-#ifdef DEBUG
-      printf("Add new arg 0x0%x at pos %d\n", arg1, f_closure->args_received+i);
-      printf("args_copy[%d] = 0x0%x\n", f_closure->args_received+i, arg1);
-      fflush(stdout);
-#endif
+    for (j = f_closure->args_received; j < f_closure->argsc; j++)
+    {
+      // printf("Setting arg j=%d, f_closure->args_received+argc=%d\n", j, f_closure->args_received + argc);
+      stack_args[j] = va_arg(argp, void *);
     }
-
-    // all args in stack
-#ifdef DEBUG
-    for (int i=0; i<f_closure->argsc; ++i) {
-      printf("args_copy[%d] = 0x0%x\n", i, args_copy[i]);
-      fflush(stdout);
-    }
-#endif
-
-    void** stack_args = alloca(f_closure->argsc * 8); //8 bytes per argument (int64)
-    for (int i=0; i<f_closure->argsc; ++i)
-      stack_args[i] = (void*)args_copy[i];
-
-    return ((fun0)f_closure->code)();
+    va_end(argp);
+    callable = (fun0)f_closure->code;
+    return callable();
   }
+  else
+  {
+    // There we have under application
+    rukaml_closure *ans_closure = copy_closure(f_closure);
+    f_closure = NULL; // error avoidance
 
-  // There we have under application
-  rukaml_closure *ans_closure = copy_closure(f_closure);
-  f_closure = NULL; // error avoidance
-
-
-  for (size_t i = 0; i < argc; i++) {
-    // printf("%d\n", __LINE__);
-    void *arg = va_arg(argp, void *);
-    //printf("arg[%lu] = %p, ", i, arg1);
+    for (size_t i = 0; i < argc; i++)
+    {
+      // printf("%d\n", __LINE__);
+      void *arg = va_arg(argp, void *);
+      // printf("arg[%lu] = %p, ", i, arg1);
+      fflush(stdout);
+      ans_closure->args[ans_closure->args_received++] = arg;
+    }
+#ifdef DEBUG
+    printf("\nf->arg_received = %lu, f->argc = %lu\n",
+           ans_closure->args_received,
+           ans_closure->argsc);
     fflush(stdout);
-    ans_closure->args[ans_closure->args_received++] = arg;
-  }
-#ifdef DEBUG
-  printf("\nf->arg_received = %lu, f->argc = %lu\n",
-         ans_closure->args_received,
-         ans_closure->argsc);
-  fflush(stdout);
 #endif
-  va_end(argp);
+    va_end(argp);
 
-  return ans_closure;
+    return ans_closure;
+  }
+  __builtin_unreachable();
 }
 
 void *rukaml_match_failure()
@@ -560,30 +613,352 @@ void *rukaml_match_failure()
   exit(1);
 }
 
-#define PAD(n) \
-  { for (unsigned int i = 0; i < n; i++) \
-      printf(" "); }
+#define PAD(n)                           \
+  {                                      \
+    for (unsigned int i = 0; i < n; i++) \
+      printf(" ");                       \
+  }
 void rukaml_trace_val(void *arg, unsigned int level)
 {
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wunused-parameter"
-  #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
 
   PAD(level);
-  printf("BLOCK: 0x%" PRIx64 ", tag=%lu, size=%lu" "\n", (uint64_t)arg, TAG(arg), SIZE(arg));
+  printf("BLOCK: 0x%" PRIx64 ", tag=%lu, size=%lu"
+         "\n",
+         (uint64_t)arg, TAG(arg), SIZE(arg));
   // Need to implement tagged integers
   for (uint64_t i = 0; i < SIZE(arg); i++)
   {
-    void **field = (void**) FIELD(arg, i);
-    if ((unsigned)(*field) < 100) {
+    void **field = (void **)FIELD(arg, i);
+    if ((unsigned)(*field) < 100)
+    {
       PAD(level + 1);
       printf("%lu -> Int %ld\n", i, (int64_t)(*field));
     }
-    else {
-      rukaml_trace_val(*field, level  + 1);
-
+    else
+    {
+      rukaml_trace_val(*field, level + 1);
     }
   }
   fflush(stdout);
-  #pragma GCC diagnostic pop
+#pragma GCC diagnostic pop
+}
+
+void *rukaml_alloc_string(size_t len)
+{
+  size_t payload_words_n = (len + 1 + 7) / 8;
+  void *block = rukaml_alloc_block(payload_words_n, String_tag);
+  assert(TAG(block) == String_tag);
+  assert(SIZE(block) == payload_words_n);
+  memset(block, '\0', payload_words_n * sizeof(void *));
+  // printf("String created at addr = 0x%lX\n", block);
+  return block;
+}
+
+uint64_t rukaml_string_len_imm(value str)
+{
+  if (str == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(str) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  // uint64_t ans = (uint64_t)(str[SIZE(str) - 1]);
+  uint64_t ans = strlen((char *)str);
+  // log("Len of rukaml string '%s' is %d\n", str, ans);
+  return ans;
+}
+
+void *rukaml_make_string_of_lit(const char *const s)
+{
+#ifdef RUKAML_DEBUG
+  // printf("%s, str = '%s'\n", __func__, s); fflush(stdout);
+  // pp_string_as_HEX( (char*)s);
+#endif
+  const size_t len = strlen(s);
+  value block = (value)rukaml_alloc_string(len);
+
+  for (size_t i = 0; i < len; ++i)
+    ((char *)(block))[i] = s[i];
+
+#ifdef RUKAML_DEBUG
+  // log("block contents = ", (char*)block);
+  // pp_string_as_HEX((char*)block);
+  // log ("\n");
+#endif
+
+  assert(rukaml_string_len_imm(block) == len);
+  // printf("String created at addr = 0x%lX\n", block);
+  return (void *)block;
+}
+
+char rukaml_string_nth_sysv(value str, uint64_t n)
+{
+  // puts("HERR\n");
+  assert(str != NULL);
+  // printf("%s n = %d, str = '%s', \n", __FUNCTION__, n, str);
+  if (str == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(str) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  uint64_t str_len = 0;
+  str_len = rukaml_string_len_imm(str);
+  // log("%s str = '%s', n = %d, strlen = %d\n", __func__, str, n, str_len);
+
+  if (n >= str_len)
+  {
+    mk_err_fatal("index out of bounds");
+  }
+
+  return ((char *)str)[n];
+}
+
+void *rukaml_output_string_sysv(int dest, value str)
+{
+  assert(dest == STDOUT_FILENO);
+  // printf("str addr = 0x%lX, str = '%s', len=%d\n", str, str, strlen(str));
+  if (TAG(str) != String_tag)
+  {
+    printf("str argument = 0x%" PRIx64 ", tag = %ld\n", (long unsigned)str, TAG(str));
+    mk_err_fatal("tag mismatch");
+  }
+  printf("%s", (char *)str);
+  // puts(str); //fflush(stdout);
+  return 0;
+}
+
+// TODO: we are currently printing only to stdout
+// Need to fix this.
+void rukaml_fprintf_impl(void *dest, void **fmt, va_list args)
+{
+  log("%s %d\n", __func__, __LINE__);
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(fmt) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  uint64_t fmt_len = rukaml_string_len_imm((value)fmt);
+
+  // log("%s, fmtlen = %d\n", __func__, fmt_len);
+  for (size_t pos = 0; pos < fmt_len; ++pos)
+  {
+    char ch = rukaml_string_nth_sysv((value)fmt, pos);
+    // printf("ch = '%c'\n", ch);
+    if (ch != '%')
+    {
+      // TODO: fix hardcoded stdout
+      putc(ch, stdout);
+      // log("continue\n");
+      if (ch == '\n')
+        fflush(stdout);
+      continue;
+    }
+    pos++;
+
+    if (pos >= fmt_len)
+    {
+      mk_err_fatal("invalid fmt");
+    }
+
+    ch = rukaml_string_nth_sysv((value)fmt, pos);
+
+    switch (ch)
+    {
+    case 'a':
+    {
+      log("Trying to handle %%a\n");
+      fflush(stdout);
+      void *pp_item_closure = va_arg(args, void *);
+      void *item = va_arg(args, void *);
+      rukaml_applyN(pp_item_closure, 2, dest, item);
+      break;
+    }
+    case 'b':
+    {
+      int64_t v = va_arg(args, int64_t);
+      // TODO: fix hardcoded stdout
+      fprintf(stdout, "%s", v ? "true" : "false");
+      break;
+    }
+    case 'c':
+    {
+      int64_t v = va_arg(args, int64_t);
+      // TODO: fix hardcoded stdout
+      fprintf(stdout, "%c", (char)v);
+      break;
+    }
+    case 'd':
+    {
+      int64_t v = va_arg(args, int64_t);
+      // log("%s %d, dest = %d, v=%ld\n", __func__, __LINE__, dest, v);
+      // TODO: fix hardcoded stdout
+      fprintf(stdout, "%ld", v);
+      break;
+    }
+    case 's':
+    {
+      value str = (value)va_arg(args, void **);
+      // rukaml_fprintf_string(dest, str);
+      // log("%s %d, dest = %d, v=%ld\n", __func__, __LINE__, dest, str);
+      // log("%s, stdout = %lx, STDOUT_FILENO = %lx\n", __func__, stdout, STDOUT_FILENO);
+      rukaml_output_string_sysv(STDOUT_FILENO, str);
+      break;
+    }
+
+    case '%':
+    {
+      fputc('%', dest);
+      break;
+    }
+
+    default:
+    {
+      mk_err_fatal("invalid fmt");
+      break;
+    }
+    }
+  }
+
+  // log("%s LEAVE\n", __func__);
+}
+
+void *rukaml_fprintf_wrap(DECLARE_FAKE_ARGS, void *out_channel, void **fmt, ...)
+{
+  // if (out_channel == NULL)
+  // {
+  //   mk_err_fatal("unexpected null ptr");
+  // }
+  log("%s, ch=%X, fmt=%" PRIx64 "\n", __func__, out_channel, fmt);
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(fmt) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  va_list args;
+  va_start(args, fmt);
+  rukaml_fprintf_impl(out_channel, fmt, args);
+  va_end(args);
+  return NULL;
+}
+
+// arity stands for amount of arguments which fprintf (or other format printer) expects after a format string
+// for example, arity for "123" is equal to 0, for "%a" is equal to 2, for "%a %s" is equal to 3
+uint64_t eval_fmt_arity(void **fmt)
+{
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+  assert(TAG(fmt) == String_tag);
+
+  uint64_t fmt_len = rukaml_string_len_imm((value)fmt);
+  log("\n%s len = %ld\n", __func__, fmt_len);
+  // pp_string_as_HEX(fmt);
+
+  uint64_t arity_acc = 0;
+
+  for (size_t pos = 0; pos < fmt_len; ++pos)
+  {
+    char ch = rukaml_string_nth_sysv((value)fmt, pos);
+    log("%d: char = '%c'\n", __LINE__, ch);
+    if (ch != '%')
+    {
+      continue;
+    }
+
+    pos++;
+
+    if (pos >= fmt_len)
+    {
+      mk_err_fatal("invalid fmt");
+    }
+
+    ch = rukaml_string_nth_sysv((value)fmt, pos);
+
+    switch (ch)
+    {
+    case 'a':
+      arity_acc += 2;
+      break;
+    case 'b':
+    case 'c':
+    case 'd':
+    case 's':
+    case 'x':
+      arity_acc++;
+      break;
+    case '%':
+      break;
+
+    default:
+      mk_err_fatal("invalid fmt");
+    }
+  }
+
+  log("%s finished\n", __func__);
+  return arity_acc;
+}
+
+void *rukaml_alloc_fprintf_closure(DECLARE_FAKE_ARGS, void *out_channel, void **fmt)
+{
+  log("%s %d\n", __func__, __LINE__);
+  if (out_channel == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+  assert(TAG(fmt) == String_tag);
+
+  uint64_t arity = eval_fmt_arity(fmt);
+  log("%s, arity = %lu\n", __func__, arity);
+  fflush(stdout);
+  if (arity == 0)
+  {
+    return rukaml_fprintf_wrap(FAKE_ARGS, out_channel, fmt);
+  }
+
+  value closure = rukaml_alloc_closure((void *)rukaml_fprintf_wrap, 2 + arity);
+  assert(TAG(closure) == Closure_tag);
+
+  return rukaml_applyN(closure, 2, out_channel, fmt);
+}
+
+void *rukaml_alloc_fprintf_closure0(int dest, void **fmt)
+{
+  assert(TAG(fmt) == String_tag);
+  return rukaml_alloc_fprintf_closure(FAKE_ARGS, dest, fmt);
+}
+
+void *rukaml_alloc_printf_closure0(void **fmt)
+{
+  log("fmt = 0x%LX\n", fmt);
+  assert(TAG(fmt) == String_tag);
+  log("%s %d\n", __func__, __LINE__);
+  return rukaml_alloc_fprintf_closure(FAKE_ARGS, stdout, fmt);
 }
