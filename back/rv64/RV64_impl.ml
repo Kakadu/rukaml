@@ -654,6 +654,15 @@ let generate_body is_toplevel body =
       else
         failwiths "not implemented %d" __LINE__
         (* printfn ppf "  mov qword %a, 0" Addr_of_local.pp_dest dest *)
+    | CApp (APrimitive ("&&", _), al, [ ar ]) ->
+      let on_arg dest = function
+        | ANF.AVar vname -> emit ld dest (pp_to_mach vname)
+        | _ -> failwiths "Not implemented: %s %d" __FILE__ __LINE__
+      in
+      on_arg t0 al;
+      on_arg t1 ar;
+      emit and_ t0 t0 t1;
+      emit sd_dest t0 dest
     | CApp (APrimitive (("=" as op), _), AConst (PConst_int n), [ AVar vname ])
     | CApp (APrimitive ((("=" | "<") as op), _), AVar vname, [ AConst (PConst_int n) ]) ->
       let branch_instr =
@@ -674,58 +683,20 @@ let generate_body is_toplevel body =
            (Addr_of_local.find_exn vname)
            !Addr_of_local.last_pos);
       emit ld t0 (pp_to_mach vname) ~comm:(sprintf "locals = %d" locals);
-      (* printfn ppf "  ld t0, %a # locals = %d" Addr_of_local.pp_local_exn vname
-           locals; *)
       emit li t1 n;
-      (* printfn ppf "  li t1, %d" n; *)
       branch_instr t0 t1 eq_lab;
       emit sd_dest zero dest;
-      (* printfn ppf "  sd zero, %a" Addr_of_local.pp_dest dest; *)
       emit beq zero zero exit_lab;
-      (* printfn ppf "  beq zero, zero, %s # Where is unconditional jump?"
-           exit_lab; *)
       emit label eq_lab;
-      (* printfn ppf "%s:" eq_lab; *)
       emit li t0 1;
-      (* printfn ppf "  li t0, 1 # (* RISC is weird *)"; *)
       emit sd_dest t0 dest ~comm:(Format.asprintf "dest = %a" Addr_of_local.pp_dest dest);
-      (* printfn ppf "  sd t0, %a # dest = %a" Addr_of_local.pp_dest dest
-           Addr_of_local.pp_dest dest; *)
       emit beq zero zero exit_lab;
-      (* printfn ppf "  beq zero, zero, %s # not needed?" exit_lab; *)
       emit label exit_lab
-      (* printfn ppf "%s:" exit_lab *)
-      (* failwiths "not implemented %d" __LINE__ *)
-      (* let left_name = LoI.alloc_temp () in
-           printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
-           let left_dest = DStack_var left_name in
-           helper_a left_dest arg1;
-           let right_name = LoI.alloc_temp () in
-           printfn ppf "  sub rsp, 8 ; allocate for var %S" right_name;
-           let right_dest = DStack_var right_name in
-           helper_a right_dest arg2;
-           printfn ppf "  mov rax, %a" pp_dest left_dest;
-           printfn ppf "  mov r8, %a" pp_dest right_dest;
-           printfn ppf "  cmp rax, r8";
-           let eq_lab = Printf.sprintf "lab_%d" (gensym ()) in
-           let exit_lab = Printf.sprintf "lab_%d" (gensym ()) in
-           printfn ppf "  je %s" eq_lab;
-           printfn ppf "  mov qword %a, 0" pp_dest dest;
-           printfn ppf "  jmp %s" exit_lab;
-           printfn ppf "%s:" eq_lab;
-           printfn ppf "  mov qword %a, 1" pp_dest dest;
-           printfn ppf "  jmp %s" exit_lab;
-           printfn ppf "%s:" exit_lab;
-           dealloc_var ppf right_name;
-           dealloc_var ppf left_name *)
     | CApp (APrimitive ("-", 2), AVar vname, [ AConst (PConst_int n) ]) ->
       (match is_toplevel vname with
        | None ->
          emit ld t5 (pp_to_mach vname);
-         (* printfn ppf "  ld t5, %a #" Addr_of_local.pp_local_exn vname; *)
          emit addi t5 t5 (-n);
-         (* printfn ppf "  addi t5, t5, -%d" n; *)
-         (* printfn ppf "  sd t5, %a" Addr_of_local.pp_dest dest *)
          emit sd_dest t5 dest
        | Some _ ->
          (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
@@ -750,6 +721,15 @@ let generate_body is_toplevel body =
        | Some _ ->
          (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
          failwiths "not implemented %d" __LINE__)
+    | CApp (APrimitive (">=", info), vl, [ vr ]) ->
+      (* This could be buggy *)
+      helper_c dest (ANF.CApp (ANF.APrimitive ("<=", info), vr, [ vl ]))
+    | CApp (APrimitive ("<=", _), AVar vl, [ AVar vr ]) ->
+      emit ld t0 (Addr_of_local.pp_to_mach vl);
+      emit ld t1 (Addr_of_local.pp_to_mach vr);
+      emit addi t1 t1 1;
+      emit slt t2 t0 t1;
+      emit sd_dest t2 dest
     | CApp (APrimitive ((("+" | "*" | "-") as prim), _), AVar vl, [ AVar vr ]) ->
       emit comment (sprintf "%s is stored in %d" vl.hum_name (Addr_of_local.find_exn vl));
       emit comment (sprintf "%s is stored in %d" vr.hum_name (Addr_of_local.find_exn vr));
@@ -1005,7 +985,7 @@ let generate_body is_toplevel body =
       emit sd_dest t0 dest
     | APrimitive ("match_failure", _) -> emit call "rukaml_match_failure"
     | _atom ->
-      Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_a _atom;
+      Format.eprintf "Unsupported atom: @[`%a`@]\n%!" Compile_lib.ANF.pp_a _atom;
       failwiths "not implemented %s %d" __FILE__ __LINE__
   in
   helper (DReg "a0") body;

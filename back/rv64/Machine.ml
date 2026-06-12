@@ -21,6 +21,9 @@ type instr =
   | Add of reg * reg * reg
   | Sub of reg * reg * reg
   | Mulw of reg * reg * reg (** RV64M *)
+  | And_ of reg * reg * reg (** AND. and rd, rs1, rs2. ▸rd = rs1 & rs2 *)
+  | Or_ of reg * reg * reg
+  | Slt of reg * reg * reg (** Set Less Than.  slt rd, rs1, rs2.  rd = (rs1 < rs2) *)
   | Li of reg * int
   | Ecall
   | Call of string
@@ -42,6 +45,9 @@ let pp_instr ppf =
   | Add (r1, r2, r3) -> fprintf ppf "add  %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
   | Sub (r1, r2, r3) -> fprintf ppf "sub %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
   | Mulw (r1, r2, r3) -> fprintf ppf "mulw %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | And_ (r1, r2, r3) -> fprintf ppf "and %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Or_ (r1, r2, r3) -> fprintf ppf "or %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Slt (r1, r2, r3) -> fprintf ppf "slt %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
   | Li (r, n) -> fprintf ppf "li %a, %d" pp_reg r n
   | Ecall -> fprintf ppf "ecall"
   | Call f -> fprintf ppf "call %s" f
@@ -65,6 +71,9 @@ let addi k r1 r2 n = k @@ Addi (r1, r2, n)
 let add k r1 r2 r3 = k @@ Add (r1, r2, r3)
 let sub k r1 r2 r3 = k @@ Sub (r1, r2, r3)
 let mulw k r1 r2 r3 = k @@ Mulw (r1, r2, r3)
+let and_ k r1 r2 r3 = k (And_ (r1, r2, r3))
+let or_ k r1 r2 r3 = k (Or_ (r1, r2, r3))
+let slt k r1 r2 r3 = k (Slt (r1, r2, r3))
 let li k r n = k (Li (r, n))
 let ecall k = k Ecall
 let call k name = k (Call name)
