@@ -88,11 +88,6 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
       let len = LL.const_int i64_typ (List.length l) in
       let alloc, typ = top_look_exn "rukaml_alloc_array" in
       LL.build_call typ alloc [ ptr; len ]
-    | ATuple (a, b, []) ->
-      let a = gen_a a in
-      let b = gen_a b in
-      let alloc, typ = top_look_exn "rukaml_alloc_pair" in
-      LL.build_call typ alloc [ a; b ]
     | anf ->
       Format.eprintf "ANF: %a\n%!" ANF.pp_a anf;
       Format.eprintf
@@ -229,6 +224,11 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
       (* merge point *)
       Llvm.position_at_end merge_bb LL.builder;
       Llvm.build_phi [ t, then_bb; e, else_bb ] "phi_result" LL.builder
+    | CTuple (a, b, []) ->
+      let a = gen_a a in
+      let b = gen_a b in
+      let alloc, typ = top_look_exn "rukaml_alloc_pair" in
+      LL.build_call typ alloc [ a; b ]
     | anf ->
       Format.eprintf "ANF: %a\n%!" ANF.pp_c anf;
       failwiths "Unsupported case %s %d" __FUNCTION__ __LINE__

@@ -108,7 +108,7 @@ let%expect_test _ =
     let double =
       let b = 1 in
       let temp1 = (b, 2) in
-      temp1
+        temp1
     |}]
 ;;
 
@@ -122,7 +122,7 @@ let%expect_test _ =
       y
     let foo =
       let temp1 = (__lifted_lam_2, __lifted_lam_3) in
-      temp1
+        temp1
     |}]
 ;;
 

@@ -26,7 +26,6 @@ type imm_expr =
   | AConst of Parsetree.const
   | AVar of Ident.t
   | APrimitive of string * int
-  | ATuple of imm_expr * imm_expr * imm_expr list
   | AConstruct of int * imm_expr list
   | AArray of imm_expr list
   | ALam of apat * expr
@@ -36,6 +35,7 @@ type imm_expr =
 and c_expr =
   | CApp of imm_expr * imm_expr * imm_expr list
   | CIte of c_expr * expr * expr
+  | CTuple of imm_expr * imm_expr * imm_expr list
   | CAtom of imm_expr
 [@@deriving show { with_path = false }]
 
@@ -145,6 +145,7 @@ include struct
         (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " ") helper_a)
         args
     | CAtom a -> helper_a ppf a
+    | CTuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
     | CIte (acond, th, el) ->
       fprintf
         ppf
@@ -175,7 +176,6 @@ include struct
     | AConst c -> Pprint.pp_const ppf c
     | APrimitive (s, _arity) -> fprintf ppf "%s" s
     | AVar s -> Ident.pp ppf s
-    | ATuple (a, b, ts) -> fprintf ppf "@[(%a)@]" (pp_comma_list helper_a) (a :: b :: ts)
     | AArray xs -> fprintf ppf "@[[|%a|]@]" (pp_comma_list helper_a) xs
     | AUnit -> fprintf ppf "()"
     | AConstruct (id, []) -> fprintf ppf "Constr_%d" id
@@ -234,16 +234,16 @@ let used_once_as_function ~where name =
       helper_i f;
       helper_i arg1;
       List.iter helper_i args
+    | CTuple (a, b, cs) ->
+      helper_i a;
+      helper_i b;
+      List.iter helper_i cs
     | CAtom i -> helper_i i
   and helper_i = function
     | AVar id when Ident.equal id name -> incr used
     | APrimitive _ | AUnit | AConst _ | AVar _ -> ()
     | ALam (_, e) -> helper e
     | AArray xs -> List.iter helper_i xs
-    | ATuple (a, b, cs) ->
-      helper_i a;
-      helper_i b;
-      List.iter helper_i cs
     | AConstruct (_, args) -> List.iter helper_i args
   and helper : expr -> unit = function
     | EComplex c -> helper_c c
@@ -273,6 +273,10 @@ let used_once_in_if ~where name =
       helper_i f;
       helper_i arg1;
       List.iter helper_i args
+    | CTuple (a, b, cs) ->
+      helper_i a;
+      helper_i b;
+      List.iter helper_i cs
     | CAtom (AVar id) when Ident.equal id name -> incr used
     | CAtom i -> helper_i i
   and helper_i = function
@@ -280,10 +284,6 @@ let used_once_in_if ~where name =
     | APrimitive _ | AUnit | AConst _ | AVar _ -> ()
     | ALam (_, e) -> helper e
     | AArray xs -> List.iter helper_i xs
-    | ATuple (a, b, cs) ->
-      helper_i a;
-      helper_i b;
-      List.iter helper_i cs
     | AConstruct (_, args) -> List.iter helper_i args
   and helper : expr -> unit = function
     | EComplex c -> helper_c c
@@ -333,6 +333,7 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
         | x -> x
       in
       CApp (_f, map _arg1, List.map map _args)
+    | CTuple (i1, i2, is) -> CTuple (helperi i1, helperi i2, List.map helperi is)
     | c ->
       Format.eprintf "%a\n%!" pp_c c;
       Format.eprintf "can't substitute %a -> %a\n%!" Ident.pp ident1 pp_c rhs;
@@ -344,7 +345,6 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
     | AConst (PConst_bool true) -> AConst (PConst_int 1)
     | AConst (PConst_bool false) -> AConst (PConst_int 0)
     | (APrimitive _ | AConst _ | AUnit) as i -> i
-    | ATuple (i1, i2, is) -> ATuple (helperi i1, helperi i2, List.map helperi is)
     | AArray is -> AArray (List.map helperi is)
     | AConstruct (tag, is) -> AConstruct (tag, List.map helperi is)
     | AVar name when Ident.equal ident1 name ->
@@ -416,6 +416,7 @@ let simplify : _ Arity_map.t -> expr -> expr =
     let rez =
       match e with
       | CAtom a -> CAtom (helper_a acc a)
+      | CTuple (a, b, bs) -> CTuple (a, b, bs)
       | CApp (f, arg1, args) ->
         CApp (helper_a acc f, helper_a acc arg1, List.map (helper_a acc) args)
       | CIte (cond, th, el) -> CIte (helper_c acc cond, helper acc th, helper acc el)
@@ -686,8 +687,8 @@ let anf =
             | hd :: tl -> helper hd (fun imm -> helper_fold tl (imm :: imms))
             | [] ->
               let name = gensym_id () in
-              let atuple = ATuple (aimm, bimm, List.rev imms) in
-              make_let_nonrec name (CAtom atuple) (k (AVar name))
+              let atuple = CTuple (aimm, bimm, List.rev imms) in
+              make_let_nonrec name atuple (k (AVar name))
           in
           helper_fold es []))
     | TArray (xs, _) ->
@@ -874,7 +875,7 @@ let default_iterator =
       (fun self x ->
         match x with
         | CAtom imm -> self.catom self imm
-        (* | CTuple (a, b, cs) -> self.ctuple self a b cs *)
+        | CTuple (a, b, cs) -> self.ctuple self a b cs
         | CIte (c, th, el) -> self.cite self c th el
         | CApp (f, arg1, args) -> self.capp self f arg1 args)
   ; on_imm =
@@ -882,7 +883,6 @@ let default_iterator =
          | AUnit -> ()
          | AConst c -> self.aconst self c
          | AVar v -> self.avar self v
-         | ATuple (a, b, cs) -> self.ctuple self a b cs
          | APrimitive (name, arity) -> self.aprimitive self name arity
          | AConstruct (tag, ass) -> self.aconstruct self tag ass
          | AArray xs -> self.aarray self xs

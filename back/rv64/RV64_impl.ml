@@ -228,12 +228,15 @@ let allocate_locals input_anf : (now:unit -> unit) * _ =
       local_names := Ident.Ident_set.add name !local_names;
       helper_c rhs;
       helper where_
+    | ELet (_flg, Apat_unit, rhs, where_) ->
+      helper_c rhs;
+      helper where_
     | ELet _ -> assert false
   and helper_c = function
     | CIte (_, th, el) ->
       helper th;
       helper el
-    | CApp _ | CAtom _ -> ()
+    | CTuple _ | CApp _ | CAtom _ -> ()
   in
   helper input_anf;
   let local_names = Ident.Ident_set.to_list !local_names in
@@ -430,14 +433,13 @@ let generate_body is_toplevel body =
       | APrimitive ("print", (1 as parity)) ->
         emit_alloc_closure "rukaml_print_int_kaml" parity;
         emit sd a0 (ROffset (SP, 8 * i))
+      | APrimitive ("stdout", 0) -> emit li a0 1
       | APrimitive _ as arg -> failwiths "Primitive %a is not supported" ANF.pp_a arg
-      | ATuple _ -> assert false
       | AArray _ -> assert false
       | AConstruct _ -> assert false
       | _ -> failwith "not implemented"
     in
     ListLabels.iteri args ~f:on_arg;
-    (* printfn ppf "  addi sp, sp, -8*%d # fun %S arguments" count (Option.get f); *)
     count
   in
   let rec helper dest = function
@@ -445,12 +447,12 @@ let generate_body is_toplevel body =
     | ELet (_, Apat_var name, rhs, wher) ->
       assert (Addr_of_local.contains name);
       let local = DStack_var name in
-      (* printfn ppf "    ;; calculate rhs and put into %a. offset = %d" pp_dest
-           dest
-           (Addr_of_local.find_exn name); *)
       helper_c local rhs;
       helper dest wher
-    | ELet _ -> assert false
+    | ELet (_, Apat_unit, rhs, wher) ->
+      helper_c (DReg "zero") rhs;
+      helper dest wher
+    | ELet _ as anf -> failwiths "Not implemented: @[%a@]" ANF.pp anf
   and helper_c (dest : dest) = function
     | CIte (CAtom (AConst (Parsetree.PConst_bool true)), bth, _bel) -> helper dest bth
     | CIte (CAtom (AConst (Parsetree.PConst_bool false)), _bth, bel) -> helper dest bel
@@ -559,7 +561,6 @@ let generate_body is_toplevel body =
        | AConst (PConst_bool _)
        | AConst (PConst_char _)
        | AArray _ | AVar _ | APrimitive _ | AConstruct _
-       | ATuple (_, _, _)
        | ALam (_, _)
        | AUnit -> failwith "Should not happen: print_int"
        | _ -> failwith "not implemented")
@@ -891,6 +892,8 @@ let generate_body is_toplevel body =
     | CApp _ as anf ->
       Format.eprintf "Unsupported: @[`%a`@]\n%!" Compile_lib.ANF.pp_c anf;
       failwiths "Not implemented %d" __LINE__
+    | CTuple (x1, x2, xs) ->
+      emit_initialize_block dest ~fields:(x1 :: x2 :: xs) ~tag:0 ~name:"tuple"
     | _rest ->
       Format.eprintf "@[%a@]\n%!" Compile_lib.ANF.pp_c _rest;
       failwiths "Not implemented %s %d" __FILE__ __LINE__
@@ -965,15 +968,6 @@ let generate_body is_toplevel body =
         emit ld t0 (pp_to_mach rez_slot);
         emit sd_dest t0 dest;
         emit addi SP SP 16)
-    | ATuple (_a, _b, []) ->
-      failwiths "not implemented %s %d" __FILE__ __LINE__
-      (* store_ra_temp ppf (fun ra_name -> *)
-      (*       helper_a (DReg "r0") a; *)
-      (*       helper_a (DReg "r1") b; *)
-
-      (*       printfn ppf "  sd ra, %a" Addr_of_local.pp_local_exn ra_name; *)
-      (*       printfn ppf "  call rukaml_alloc_pair"; *)
-      (*       printfn ppf "  mv %a, a0" Addr_of_local.pp_dest dest) *)
     | AConst (PConst_bool true) ->
       emit li t0 1;
       emit sd_dest t0 dest
@@ -987,6 +981,38 @@ let generate_body is_toplevel body =
     | _atom ->
       Format.eprintf "Unsupported atom: @[`%a`@]\n%!" Compile_lib.ANF.pp_a _atom;
       failwiths "not implemented %s %d" __FILE__ __LINE__
+  and emit_initialize_block dest ~tag ~fields ~name =
+    emit
+      comment
+      (Format.asprintf
+         "Init block with fields: @[[ %a ]@]"
+         (pp_space_list ANF.pp_a)
+         fields);
+    emit li a0 (List.length fields) ~comm:(sprintf "%s size" name);
+    emit li a1 tag ~comm:(sprintf "%s tag" name);
+    emit call "rukaml_alloc_block";
+    (* fresh block stored in a0 *)
+    with_two_slots (fun _ block_addr ->
+      emit addi SP SP (-16) ~comm:"block_addr :: i :: ...";
+      emit sd a0 (Addr_of_local.pp_to_mach block_addr);
+      List.iteri
+        (fun i -> function
+           | ANF.AConst (PConst_int n) ->
+             emit li t1 n;
+             let comm = sprintf "setting field %d to be const %d" i n in
+             emit sd t1 (ROffset (a0, 8 * i)) ~comm
+           | ANF.AVar vname when is_toplevel vname = None ->
+             emit ld t1 (Addr_of_local.pp_to_mach vname);
+             emit sd t1 (ROffset (a0, 8 * i))
+           | x ->
+             helper_a (DReg "t1") x;
+             emit ld t0 (Addr_of_local.pp_to_mach block_addr);
+             emit sd t1 (ROffset (t0, 8 * i)) ~comm:(sprintf "setting field %d" i);
+             ())
+        fields;
+      emit ld t0 (Addr_of_local.pp_to_mach block_addr);
+      emit sd_dest t0 dest;
+      emit addi SP SP 16)
   in
   helper (DReg "a0") body;
   dealloc_locals ~now:()

@@ -5,7 +5,6 @@ type imm_expr =
   | AConst of Frontend.Parsetree.const
   | AVar of Frontend.Ident.t
   | APrimitive of string * int
-  | ATuple of imm_expr * imm_expr * imm_expr list
   | AConstruct of int * imm_expr list
   | AArray of imm_expr list
   | ALam of apat * expr
@@ -13,6 +12,7 @@ type imm_expr =
 and c_expr =
   | CApp of imm_expr * imm_expr * imm_expr list
   | CIte of c_expr * expr * expr
+  | CTuple of imm_expr * imm_expr * imm_expr list
   | CAtom of imm_expr
 
 and expr =

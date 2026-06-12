@@ -63,11 +63,6 @@ let rec mangle_names_a ~(bounded : Ident.t list) : ANF.imm_expr -> ANF.imm_expr 
   | (AUnit | AConst _ | APrimitive _) as i -> i
   | AVar v when contains v && not (List.mem v bounded) -> AVar (find v)
   | AVar _ as i -> i
-  | ATuple (x1, x2, xs) ->
-    ATuple
-      ( mangle_names_a ~bounded x1
-      , mangle_names_a ~bounded x2
-      , List.map (mangle_names_a ~bounded) xs )
   | AConstruct (constr_name, fields) ->
     AConstruct (constr_name, List.map (mangle_names_a ~bounded) fields)
   | AArray items -> AArray (List.map (mangle_names_a ~bounded) items)
@@ -85,6 +80,11 @@ and mangle_names_c ~(bounded : Ident.t list) : ANF.c_expr -> ANF.c_expr = functi
       ( (mangle_names_c ~bounded) x1
       , (mangle_names_e ~bounded) x2
       , (mangle_names_e ~bounded) x3 )
+  | CTuple (x1, x2, xs) ->
+    CTuple
+      ( mangle_names_a ~bounded x1
+      , mangle_names_a ~bounded x2
+      , List.map (mangle_names_a ~bounded) xs )
   | CAtom atom -> CAtom (mangle_names_a ~bounded atom)
 
 and mangle_names_e ~(bounded : Ident.t list) : ANF.expr -> ANF.expr = function
@@ -271,11 +271,11 @@ let%expect_test "shadowing global function with local one" =
   let input =
     {|
       let id x = x
-      
+
       let () =
         let id y = y in
-        id () 
-      
+        id ()
+
       let () = id ()
     |}
   in
