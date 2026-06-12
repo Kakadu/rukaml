@@ -1,0 +1,49 @@
+(rule
+ (target demo.s)
+ (deps demo.ml)
+ (mode
+  (promote (until-clean)))
+ (action
+  (run %{project_root}/driver/driver.exe %{deps} --target amd64 -o %{target})))
+
+(rule
+ (target demo.anf.ml)
+ (deps demo.ml)
+ (mode
+  (promote (until-clean)))
+ (action
+  (run %{project_root}/driver/driver.exe %{deps} --target anf -o %{target})))
+
+(rule
+ (targets demo.exe)
+ (deps
+  %{project_root}/driver/driver.exe
+  (:src demo.s)
+  (:stdlib %{project_root}/back/amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run nasm -f elf64 %{src} -o demo.o)
+   (run
+    x86_64-linux-gnu-gcc
+    --sysroot=/mnt/oldoldhome/kakadu/x86_64-redhat-linux/sys-root/fc42/usr
+    -I
+    /mnt/oldoldhome/kakadu/x86_64-redhat-linux/sys-root/fc42/usr/include
+    -fPIC
+    -Wall
+    -Wpedantic
+    -g
+    %{stdlib}
+    demo.o
+    -o
+    %{targets}))))
+
+(cram
+ (applies_to demo)
+ (deps
+  %{project_root}/back/amd64/rukaml_stdlib.o
+  ./demo.exe
+  demo.anf.ml
+  demo.ml
+  demo.s))

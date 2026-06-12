@@ -1,4 +1,14 @@
 (rule
+ (target rukaml_stdlib.o)
+ (enabled_if
+  (not
+   (= none %{read:../../cc_rv64})))
+ (deps %{project_root}/back/rv64/rukaml_stdlib.c)
+ (action
+  (system
+   "%{read:../../cc_rv64} -DRUKAML_DEBUG=1 -march=rv64g -c %{deps} -Wno-pedantic -ffreestanding -nostdlib -std=c99 -ggdb -o %{target}")))
+
+(rule
  (target demo.s)
  (deps demo.ml)
  (mode
@@ -17,9 +27,9 @@
 (rule
  (targets demo.exe)
  (deps
-  %{project_root}//driver/driver.exe
+  %{project_root}/driver/driver.exe
   (:src demo.s)
-  (:stdlib %{project_root}/back/rv64/rukaml_stdlib.o))
+  (:stdlib ./rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
@@ -29,9 +39,4 @@
 
 (cram
  (applies_to demo)
- (deps
-  %{project_root}/back/rv64/rukaml_stdlib.o
-  ./demo.exe
-  demo.anf.ml
-  demo.ml
-  demo.s))
+ (deps ./demo.exe demo.anf.ml demo.ml demo.s))
