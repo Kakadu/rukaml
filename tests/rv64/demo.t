@@ -8,5 +8,3 @@ $ cat program.s | grep -v 'section .note.GNU-stack'
 $ riscv64-linux-gnu-gcc-13 -c -g program.s -o program.o # 2>&1 | head -n5
 $ riscv64-linux-gnu-gcc-13 -g program.o ../../back_rv64/rukaml_stdlib.o -o fac.exe 2>&1 | head -n5
   $ qemu-riscv64 -L /usr/riscv64-linux-gnu ./demo.exe
-  ./demo.exe: error while loading shared libraries: libc.so.6: cannot open shared object file: No such file or directory
-  [127]

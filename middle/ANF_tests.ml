@@ -84,13 +84,20 @@ let%expect_test "CPS factorial" =
     {|
     let __lifted_lam_1 n k p =
       let temp1 = (p * n) in
-      k temp1
+      let temp2 = k temp1  in
+      temp2
     let rec fack n k =
-      (if (n = 0)
-      then k 1
-      else let temp5 = (n - 1) in
-           let temp8 = __lifted_lam_1 n k in
-           fack temp5 temp8)
+      let temp3 = (n = 0) in
+      let temp4 = (if temp3
+                  then let temp10 = k 1  in
+                       temp10
+                  else let temp5 = (n - 1) in
+                       let temp6 = fack temp5  in
+                       let temp7 = __lifted_lam_1 n  in
+                       let temp8 = temp7 k  in
+                       let temp9 = temp6 temp8  in
+                       temp9) in
+        temp4
     |}]
 ;;
 
@@ -100,7 +107,8 @@ let%expect_test _ =
     {|
     let double =
       let b = 1 in
-      (b, 2)
+      let temp1 = (b, 2) in
+      temp1
     |}]
 ;;
 
@@ -113,7 +121,8 @@ let%expect_test _ =
     let __lifted_lam_3 y =
       y
     let foo =
-      (__lifted_lam_2, __lifted_lam_3)
+      let temp1 = (__lifted_lam_2, __lifted_lam_3) in
+      temp1
     |}]
 ;;
 
@@ -216,13 +225,13 @@ let test_keywords () =
   [%expect
     {|
     let __lifted_let_5_is_keyword k =
-      1
+      true
     let test_keywords () =
-      let temp1 = "let2" in
-      let temp2 = __lifted_let_5_is_keyword temp1  in
-      (if temp2
+      let sq = "let2" in
+      let temp1 = __lifted_let_5_is_keyword sq  in
+      (if temp1
       then 0
-      else let () = output_string stdout temp1 in
+      else let () = output_string stdout sq in
            1)
     |}]
 ;;

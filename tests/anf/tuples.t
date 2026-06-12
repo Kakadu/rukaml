@@ -9,15 +9,15 @@ Polyvariadic uncurrying
   > EOF
   let two f tuple1 =
     let a = block_nth tuple1 0 in
-      let b = block_nth tuple1 1 in
-        let temp2 = f a  in
-          temp2 b 
+    let b = block_nth tuple1 1 in
+    let temp2 = f a  in
+    temp2 b 
   let succ prev f tuple4 =
     let a = block_nth tuple4 0 in
-      let rest = block_nth tuple4 1 in
-        let temp5 = f a  in
-          let temp6 = prev temp5  in
-            temp6 rest 
+    let rest = block_nth tuple4 1 in
+    let temp5 = f a  in
+    let temp6 = prev temp5  in
+    temp6 rest 
   let three =
     succ two 
   let four =
@@ -32,9 +32,9 @@ let (_,_) = ...
   > EOF
   let mydiv a b =
     let temp1 = (a + b) in
-      (temp1, a)
+    (temp1, a)
   let f a b =
     let tuple5 = mydiv a b in
-      let u = block_nth tuple5 0 in
-        let v = block_nth tuple5 1 in
-          (u + v)
+    let u = block_nth tuple5 0 in
+    let v = block_nth tuple5 1 in
+    (u + v)
