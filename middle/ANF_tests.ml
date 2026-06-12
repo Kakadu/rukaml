@@ -56,20 +56,19 @@ let%expect_test _ =
 ;;
 
 let test_anf ?(simplify = false) ?(print_before = false) text =
-  let _ = simplify in
   reset_gensym ();
+  let simplify_anf = if simplify then simplify_stru else Fun.id in
   let ( let* ) x f = Result.bind x f in
   match
     let stru = Frontend.Parsing.parse_vb_exn text in
     let vbs = CConv.structure [ Parsetree.Pstr_value stru ] in
     let* _env, stru_typed = Inferencer.structure Typedtree.empty_table vbs in
-    (* Format.printf "%s %d\n%!" __FILE__ __LINE__; *)
     let anf = anf_stru stru_typed in
     if print_before
     then (
       Format.printf "Before simplify:\n%!";
       Format.printf "@[<v>%a@]\n\n%!" pp_stru anf);
-    anf |> simplify_stru |> Result.ok
+    anf |> simplify_anf |> Result.ok
   with
   | Result.Error err -> Format.printf "%a\n%!" Inferencer.pp_error err
   | Ok anf -> Format.printf "@[<v>%a@]\n%!" pp_stru anf
