@@ -827,3 +827,65 @@ let anf_stru stru =
   in
   aux stru []
 ;;
+
+type iterator =
+  { aconst : iterator -> Parsetree.const -> unit
+  ; avar : iterator -> Ident.t -> unit
+  ; aprimitive : iterator -> string -> int -> unit
+  ; ctuple : iterator -> imm_expr -> imm_expr -> imm_expr list -> unit
+  ; aconstruct : iterator -> int -> imm_expr list -> unit
+  ; aarray : iterator -> imm_expr list -> unit
+  ; alam : iterator -> apat -> expr -> unit
+  ; catom : iterator -> imm_expr -> unit
+  ; cite : iterator -> c_expr -> expr -> expr -> unit
+  ; capp : iterator -> imm_expr -> imm_expr -> imm_expr list -> unit
+  ; elet : iterator -> Parsetree.rec_flag -> apat -> c_expr -> expr -> unit
+  ; cconst_string : iterator -> string -> unit
+  ; on_expr : iterator -> expr -> unit
+  ; on_cexpr : iterator -> c_expr -> unit
+  ; on_imm : iterator -> imm_expr -> unit
+  }
+
+let default_iterator =
+  { avar = (fun _self _ -> ())
+  ; aconst = (fun _self _ -> ())
+  ; aprimitive = (fun _self _ _ -> ())
+  ; ctuple = (fun self a1 a2 ass -> List.iter (self.on_imm self) (a1 :: a2 :: ass))
+  ; aconstruct = (fun self _tag es -> List.iter (self.on_imm self) es)
+  ; aarray = (fun self es -> List.iter (self.on_imm self) es)
+  ; alam = (fun self _ e -> self.on_expr self e)
+  ; catom = (fun self x -> self.on_imm self x)
+  ; cite =
+      (fun self c th el ->
+        self.on_cexpr self c;
+        self.on_expr self th;
+        self.on_expr self el)
+  ; capp = (fun self a1 a2 ass -> List.iter (self.on_imm self) (a1 :: a2 :: ass))
+  ; cconst_string = (fun _ _ -> ())
+  ; elet =
+      (fun self _flg _pat cexpr expr ->
+        self.on_cexpr self cexpr;
+        self.on_expr self expr)
+  ; on_expr =
+      (fun self -> function
+         | EComplex c -> self.on_cexpr self c
+         | ELet (flg, _pat, c, e) -> self.elet self flg _pat c e)
+  ; on_cexpr =
+      (fun self x ->
+        match x with
+        | CAtom imm -> self.catom self imm
+        (* | CTuple (a, b, cs) -> self.ctuple self a b cs *)
+        | CIte (c, th, el) -> self.cite self c th el
+        | CApp (f, arg1, args) -> self.capp self f arg1 args)
+  ; on_imm =
+      (fun self -> function
+         | AUnit -> ()
+         | AConst c -> self.aconst self c
+         | AVar v -> self.avar self v
+         | ATuple (a, b, cs) -> self.ctuple self a b cs
+         | APrimitive (name, arity) -> self.aprimitive self name arity
+         | AConstruct (tag, ass) -> self.aconstruct self tag ass
+         | AArray xs -> self.aarray self xs
+         | ALam (pat, e) -> self.alam self pat e)
+  }
+;;
