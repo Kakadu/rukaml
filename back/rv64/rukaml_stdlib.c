@@ -25,7 +25,7 @@ void __mk_err_warning(const char *file, int line, const char *msg)
 #define mk_err_fatal(msg) __mk_err_fatal(__FILE__, __LINE__, msg)
 #define mk_err_warning(msg) __mk_err_warning(__FILE__, __LINE__, msg)
 
-#undef RUKAML_DEBUG
+// #undef RUKAML_DEBUG
 
 #ifdef RUKAML_DEBUG
 #define log(...)         \
@@ -53,9 +53,11 @@ void __mk_err_warning(const char *file, int line, const char *msg)
 #define IS_ON_HEAP(v) (is_backup_bank((uint64_t *)v) || is_old_bank((uint64_t *)v))
 #define IS_BLOCK(v) (is_backup_bank((uint64_t *)v) || is_old_bank((uint64_t *)v))
 #define IS_IMM(v) (!IS_BLOCK(v))
-#define Val_unit 0
+#define Val_unit ((value)0)
 #define Val_int(n) (n)
-#define Val_nil 0
+#define Val_nil ((value)0)
+#define Val_true ((value)1)
+#define Val_false ((value)0)
 
 #if defined(__riscv) && __riscv_xlen == 64
 #define DECLARE_FAKE_ARGS int a0, int a1, int a2, int a3, int a4, int a5, int a6, int a7
@@ -247,6 +249,7 @@ void rukaml_print_int(int64_t x)
   printf("%s %ld\n", __func__, x);
   fflush(stdout);
 }
+
 void rukaml_print_int_kaml(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
                            uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
                            int64_t x)
@@ -538,17 +541,23 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
 #ifdef RUKAML_DEBUG
   printf("%s argc = %lu, closure = 0x%" PRIX64 "\n\n", __func__, argc, (uint64_t)f);
   fflush(stdout);
-  // printf("\tsaved code ptr = %" PRIx64, (uint64_t)(((rukaml_closure *)f)->code));
-  // fflush(stdout);
-
 #endif
   va_list argp;
   va_start(argp, argc);
   rukaml_closure *f_closure = f;
-#ifdef DEBUG
+#ifdef RUKAML_DEBUG
   printf("\nf->arg_received = %lu, f->argc = %lu\n",
          f_closure->args_received,
          f_closure->argsc);
+  for (size_t i = 0; i < f_closure->args_received; ++i)
+  {
+    if (IS_ON_HEAP(f_closure->args[i]))
+    {
+      rukaml_trace_val(f_closure->args[i], 7);
+    }
+    else
+      log("    Arg %d is not on heap: 0x%" PRIX64 "\n", i, f_closure->args[i]);
+  }
   fflush(stdout);
 #endif
   // printf("f->arg_received = %u\n", f_closure->args_received);
@@ -565,8 +574,12 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
     void **stack_args = alloca(f_closure->argsc * sizeof(void *));
     for (i = 0; i < f_closure->args_received; ++i)
     {
-      // log("Setting arg %d\n", i);
       stack_args[i] = f_closure->args[i];
+      // log("Setting arg %d: 0x%lX\n", i, stack_args[i]);
+      // if (IS_ON_HEAP(stack_args[i]))
+      //   rukaml_trace_val(stack_args[i], 3);
+      // else
+      //   log(" not on heap");
     }
 
     // rest of the args
@@ -587,10 +600,10 @@ void *rukaml_applyN(void *f, int64_t argc, ...)
 
     for (size_t i = 0; i < argc; i++)
     {
-      // printf("%d\n", __LINE__);
-      void *arg = va_arg(argp, void *);
-      // printf("arg[%lu] = %p, ", i, arg1);
-      fflush(stdout);
+      value arg = (value)va_arg(argp, void *);
+      // printf("partial application \n", __LINE__);
+      // rukaml_trace_val(arg, 3);
+      // fflush(stdout);
       ans_closure->args[ans_closure->args_received++] = arg;
     }
 #ifdef DEBUG
@@ -624,10 +637,29 @@ void rukaml_trace_val(void *arg, unsigned int level)
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
 
+  if (!IS_ON_HEAP(arg))
+  {
+    printf("Out of heap value: 0x%" PRIX64 "\n", (uint64_t)arg);
+    return;
+  }
   PAD(level);
-  printf("BLOCK: 0x%" PRIx64 ", tag=%lu, size=%lu"
+  printf("BLOCK:  0x%" PRIX64 ", he=0x%lX, tag=%lu, size=%lu"
          "\n",
-         (uint64_t)arg, TAG(arg), SIZE(arg));
+         (uint64_t)arg, ((uint64_t *)arg)[-1], TAG(arg), SIZE(arg));
+  if (TAG(arg) == String_tag)
+  {
+    PAD(level + 1);
+    printf("\"%s\"\n", (char *)arg);
+    return;
+  }
+  if (TAG(arg) == Closure_tag)
+  {
+    PAD(level + 1);
+    rukaml_closure *clo = (rukaml_closure *)arg;
+    printf("closure, code = 0x%" PRIx64 ", argc=%" PRId64 ", arg_got=%" PRId64 "\n",
+           clo->code, clo->argsc, clo->args_received);
+    return;
+  }
   // Need to implement tagged integers
   for (uint64_t i = 0; i < SIZE(arg); i++)
   {
@@ -639,6 +671,8 @@ void rukaml_trace_val(void *arg, unsigned int level)
     }
     else
     {
+      PAD(level + 1);
+      printf("%lu -> ", i);
       rukaml_trace_val(*field, level + 1);
     }
   }
@@ -664,9 +698,14 @@ uint64_t rukaml_string_len_imm(value str)
     mk_err_fatal("unexpected null ptr");
   }
 
+  assert(IS_ON_HEAP(str));
   if (TAG(str) != String_tag)
   {
-    mk_err_fatal("tag mismatch");
+    // mk_err_fatal("tag mismatch");
+    fprintf(stderr, "[warning] file=%s line=%d msg=tag mismatch, got %d\n",
+            __FILE__, __LINE__, TAG(str));
+    fflush(stderr);
+    exit(1);
   }
 
   // uint64_t ans = (uint64_t)(str[SIZE(str) - 1]);
@@ -700,9 +739,9 @@ void *rukaml_make_string_of_lit(const char *const s)
 
 char rukaml_string_nth_sysv(value str, uint64_t n)
 {
-  // puts("HERR\n");
   assert(str != NULL);
-  // printf("%s n = %d, str = '%s', \n", __FUNCTION__, n, str);
+  // log("%s n = %d, str = '%s', \n", __FUNCTION__, n, str);
+
   if (str == NULL)
   {
     mk_err_fatal("unexpected null ptr");
@@ -735,7 +774,8 @@ void *rukaml_output_string_sysv(int dest, value str)
     mk_err_fatal("tag mismatch");
   }
   printf("%s", (char *)str);
-  // puts(str); //fflush(stdout);
+  // puts(str);
+  fflush(stdout);
   return 0;
 }
 
@@ -743,7 +783,7 @@ void *rukaml_output_string_sysv(int dest, value str)
 // Need to fix this.
 void rukaml_fprintf_impl(void *dest, void **fmt, va_list args)
 {
-  log("%s %d\n", __func__, __LINE__);
+  // log("%s %d\n", __func__, __LINE__);
   if (fmt == NULL)
   {
     mk_err_fatal("unexpected null ptr");
@@ -765,7 +805,6 @@ void rukaml_fprintf_impl(void *dest, void **fmt, va_list args)
     {
       // TODO: fix hardcoded stdout
       putc(ch, stdout);
-      // log("continue\n");
       if (ch == '\n')
         fflush(stdout);
       continue;
@@ -845,7 +884,7 @@ void *rukaml_fprintf_wrap(DECLARE_FAKE_ARGS, void *out_channel, void **fmt, ...)
   // {
   //   mk_err_fatal("unexpected null ptr");
   // }
-  log("%s, ch=%X, fmt=%" PRIx64 "\n", __func__, out_channel, fmt);
+  // log("%s, ch=%X, fmt=%" PRIx64 "\n", __func__, out_channel, fmt);
   if (fmt == NULL)
   {
     mk_err_fatal("unexpected null ptr");
@@ -874,7 +913,7 @@ uint64_t eval_fmt_arity(void **fmt)
   assert(TAG(fmt) == String_tag);
 
   uint64_t fmt_len = rukaml_string_len_imm((value)fmt);
-  log("\n%s len = %ld\n", __func__, fmt_len);
+  // log("\n%s len = %ld\n", __func__, fmt_len);
   // pp_string_as_HEX(fmt);
 
   uint64_t arity_acc = 0;
@@ -882,7 +921,7 @@ uint64_t eval_fmt_arity(void **fmt)
   for (size_t pos = 0; pos < fmt_len; ++pos)
   {
     char ch = rukaml_string_nth_sysv((value)fmt, pos);
-    log("%d: char = '%c'\n", __LINE__, ch);
+    // log("%d: char = '%c'\n", __LINE__, ch);
     if (ch != '%')
     {
       continue;
@@ -917,13 +956,13 @@ uint64_t eval_fmt_arity(void **fmt)
     }
   }
 
-  log("%s finished\n", __func__);
+  // log("%s finished\n", __func__);
   return arity_acc;
 }
 
 void *rukaml_alloc_fprintf_closure(DECLARE_FAKE_ARGS, void *out_channel, void **fmt)
 {
-  log("%s %d\n", __func__, __LINE__);
+  // log("%s %d\n", __func__, __LINE__);
   if (out_channel == NULL)
   {
     mk_err_fatal("unexpected null");
@@ -957,8 +996,354 @@ void *rukaml_alloc_fprintf_closure0(int dest, void **fmt)
 
 void *rukaml_alloc_printf_closure0(void **fmt)
 {
-  log("fmt = 0x%LX\n", fmt);
+  // log("fmt = 0x%LX\n", fmt);
   assert(TAG(fmt) == String_tag);
-  log("%s %d\n", __func__, __LINE__);
+  // log("%s %d\n", __func__, __LINE__);
   return rukaml_alloc_fprintf_closure(FAKE_ARGS, stdout, fmt);
+}
+
+// SPRINTF
+
+static void sprintf_insert_arg(value *__args_start, value *__args_fin, value x)
+{
+  value ans = rukaml_alloc_block(2, 0);
+  if (*__args_start == NULL)
+  {
+    assert(*__args_fin == NULL);
+    *__args_start = ans;
+    Set_field(*(value **)__args_start, 0, x);
+    Set_field(*(value **)__args_start, 1, Val_nil);
+    // **__args_start = x;
+    *__args_fin = *__args_start + 1;
+    *__args_fin = *__args_start; // last/first cons cell
+  }
+  else
+  {
+    assert(*__args_fin != NULL);
+    Set_field(ans, 0, x);
+    Set_field(ans, 1, Val_nil);
+    Set_field(*(value **)__args_fin, 1, ans);
+    *__args_fin = ans;
+  }
+  assert(*__args_start != NULL);
+  assert(*__args_fin != NULL);
+  // printf("Start is: \n");
+  // rukaml_trace_val(*__args_start, 0);
+  // fflush(stdout);
+  return;
+}
+
+static size_t eval_int_repr(uint64_t v)
+{
+  size_t ans = 0;
+  while (true)
+  {
+    if (v < 10)
+    {
+      ans++;
+      break;
+    }
+    if (v < 100)
+    {
+      ans += 2;
+      break;
+    }
+    if (v < 1000)
+    {
+      ans += 3;
+      break;
+    }
+    v = v / 1000;
+    ans += 3;
+  }
+  return ans;
+}
+
+value rukaml_sprintf_impl(value fmt, va_list args)
+{
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(fmt) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  size_t pos;
+  size_t fmt_len = rukaml_string_len_imm(fmt);
+  size_t output_len = 1; // for '\0'
+  // log("%s, fmtlen = %" PRIu64 "\n", __func__, fmt_len);
+  uint64_t *__args_start = NULL;
+  uint64_t *__args_fin = NULL;
+  size_t argslen = 0;
+
+  // Collection loop
+  for (pos = 0; pos < fmt_len; ++pos)
+  {
+    char ch = rukaml_string_nth_sysv(fmt, pos);
+    // printf("ch = '%c'\n", ch);
+    if (ch != '%')
+    {
+      output_len++;
+      continue;
+    }
+
+    pos++;
+
+    if (pos >= fmt_len)
+    {
+      mk_err_fatal("invalid fmt");
+    }
+
+    ch = rukaml_string_nth_sysv(fmt, pos);
+
+    switch (ch)
+    {
+    case 'a':
+    {
+      value pp_item_closure = va_arg(args, void *);
+      value arg1 = va_arg(args, void *);
+      value rez = rukaml_applyN(pp_item_closure, 2, Val_unit, arg1);
+      argslen++;
+      sprintf_insert_arg(&__args_start, &__args_fin, (void *)rez);
+      break;
+    }
+    case 'b':
+    {
+      int64_t v = va_arg(args, int64_t);
+      if (v == 0)
+        output_len += 5;
+      else
+        output_len += 4;
+      argslen++;
+      sprintf_insert_arg(&__args_start, &__args_fin, (void *)v);
+      break;
+    }
+    case 'c':
+    {
+      char c = (char)va_arg(args, int64_t);
+      output_len++;
+      argslen++;
+      sprintf_insert_arg(&__args_start, &__args_fin, (void *)c);
+      break;
+    }
+    case 'd':
+    {
+      int64_t v = va_arg(args, int64_t);
+      if (v < 0)
+        output_len++;
+      output_len += eval_int_repr(v);
+      argslen++;
+      sprintf_insert_arg(&__args_start, &__args_fin, (void *)v);
+      break;
+    }
+    case 's':
+    {
+      value str = (value)va_arg(args, void **);
+      // rukaml_trace_val(str, 5);
+      sprintf_insert_arg(&__args_start, &__args_fin, str);
+      // printf("args_start = 0x%Lx\n", __args_start);
+      output_len += rukaml_string_len_imm(str);
+      argslen++;
+      break;
+    }
+    case '%':
+    {
+      output_len++;
+      break;
+    }
+
+    default:
+    {
+      mk_err_fatal("invalid fmt");
+      break;
+    }
+    }
+  }
+
+  // printf("Args are collected, output_len = %lu, args_start = 0x%Lx\n", output_len, __args_start);
+  // rukaml_trace_val((value)__args_start, 0);
+  // fflush(stdout);
+  value ans = rukaml_alloc_string(output_len);
+
+  // Main sprintfing loop
+  // log("\nMAIN sprintfing loop\n");
+  // printf("rez = '%s'\n", (char*) ans);
+  // fflush(stdout);
+
+  size_t i = 0;
+  for (pos = 0; pos < fmt_len; ++pos)
+  {
+    char ch = rukaml_string_nth_sysv(fmt, pos);
+
+    if (ch != '%')
+    {
+      ((char *)ans)[i] = ch;
+      i++;
+      continue;
+    }
+
+    pos++;
+
+    if (pos >= fmt_len)
+    {
+      mk_err_fatal("invalid fmt");
+    }
+
+    ch = rukaml_string_nth_sysv(fmt, pos);
+
+    switch (ch)
+    {
+    case 'b':
+    {
+      assert(argslen > 0);
+      bool arg = (bool)Field(__args_start, 0);
+      if (arg)
+      {
+        memcpy((char *)ans + i, "true\0", 1 + 4);
+        i += 4;
+      }
+      else
+      {
+        memcpy((char *)ans + i, "false\0", 1 + 5);
+        i += 5;
+      }
+      __args_start = (value)Field((value *)__args_start, 1);
+      break;
+    }
+    case 'c':
+    {
+      char c = (char)va_arg(args, int64_t);
+      ans[i] = c;
+      i++;
+      __args_start = (value)Field((value *)__args_start, 1);
+      break;
+    }
+    case 'd':
+    {
+      int64_t arg = (int64_t)Field(__args_start, 0);
+      // log("going to print integer %ld\n", arg);
+      size_t printed = sprintf((char *)ans + i, "%ld", arg);
+      i += printed;
+      __args_start = (value)Field((value *)__args_start, 1);
+      break;
+    }
+    case 'a':
+    case 's':
+    {
+      assert(argslen > 0);
+      value arg = Field(__args_start, 0);
+      // log("Got %%s specifier, __args_start = 0x%lx, arg = 0x%lx, arg = '%s'\n", __args_start, arg, (char*)arg);
+      assert(TAG(arg) == String_tag);
+      size_t l = strlen((char *)arg);
+      memcpy((char *)ans + i, (char *)arg, l);
+      i += l;
+      argslen--;
+      __args_start = (value)Field((value *)__args_start, 1);
+      // printf("New args_start = %LX\n", __args_start); fflush(stdout);
+      break;
+    }
+
+    case '%':
+    {
+      ((char *)ans)[i] = '%';
+      i++;
+      break;
+    }
+
+    default:
+    {
+      mk_err_fatal("invalid fmt");
+      break;
+    }
+    }
+  }
+
+  // printf("Sprintf finished, output_len = %lu, rez = '%s'\n", output_len, (char*) ans);
+  // pp_string_as_HEX((char*)ans);
+  return ans;
+}
+
+void *rukaml_sprintf_wrap(DECLARE_FAKE_ARGS, value fmt, ...)
+{
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(fmt) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  va_list args;
+  va_start(args, fmt);
+  uint64_t *ans = rukaml_sprintf_impl(fmt, args);
+  va_end(args);
+
+  // uint64_t payload_words_n = (bytes_n + 7) / 8;                     // amount of (64-bits) words req
+  // void **obj = rukaml_alloc_block(payload_words_n + 1, String_tag); // +1 stands for additional word
+  // obj[payload_words_n] = (void *)bytes_n;                           // stores String.length
+
+  // uint64_t n = fread((void *)obj, sizeof(char), bytes_n, tmp);
+
+  return ans;
+}
+
+void *rukaml_alloc_sprintf_closure(DECLARE_FAKE_ARGS, void **fmt)
+{
+  if (fmt == NULL)
+  {
+    mk_err_fatal("unexpected null");
+  }
+
+  if (TAG(fmt) != String_tag)
+  {
+    mk_err_fatal("tag mismatch");
+  }
+
+  uint64_t arity = eval_fmt_arity(fmt);
+
+  if (arity == 0)
+  {
+    return rukaml_sprintf_wrap(FAKE_ARGS, fmt);
+  }
+
+  void *closure = rukaml_alloc_closure(rukaml_sprintf_wrap, 1 + arity);
+
+  return rukaml_applyN(closure, 1, fmt);
+}
+
+void *rukaml_alloc_sprintf_closure_sysv(void **fmt)
+{
+  assert(TAG(fmt) == String_tag);
+  return rukaml_alloc_sprintf_closure(FAKE_ARGS, fmt);
+}
+
+// rukaml polymorphic equality for SysV ABI
+value rukaml_equal_sysv(value l, value r)
+{
+  if (l == r)
+  {
+    return Val_true;
+  }
+  if (IS_ON_HEAP(l) && IS_ON_HEAP(r))
+  {
+    // mk_err_fatal("not implemented");
+    assert(IS_ON_HEAP(r));
+    assert(TAG(l) == TAG(r));
+    assert(SIZE(l) == SIZE(r));
+    for (size_t i = 0; i < SIZE(l); i++)
+    {
+      if (!rukaml_equal_sysv(FIELD(l, i), FIELD(r, i)))
+      {
+        return Val_false;
+      }
+    }
+    return Val_true;
+  }
+
+  return Val_false;
 }
