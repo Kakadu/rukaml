@@ -465,8 +465,9 @@ let generate_body is_toplevel body =
         , bel ) ->
       emit ld t0 (pp_to_mach vname);
       let rukaml_val_loc n = sprintf "my_STRING_LIT_%d" n in
-      emit lla t1 (rukaml_val_loc (String_lit_hash.find string_list_hash str));
-      emit ld t1 (ROffset (Temp_reg 1, 0));
+      emit lla a1 (rukaml_val_loc (String_lit_hash.find string_list_hash str));
+      emit ld a1 (ROffset (a1, 0));
+      emit mv t0 a0;
       emit call "rukaml_equal_sysv";
       emit mv a0 t0;
       let el_lab = Printf.sprintf "lab_else_%d" (gensym ()) in
@@ -848,11 +849,19 @@ let generate_body is_toplevel body =
       emit sd_dest a0 dest ~comm:(Format.asprintf "got tag of '%a'" Ident.pp arg)
     | CApp (APrimitive ("block_nth", _), AVar from, [ AConst (PConst_int idx) ])
       when Addr_of_local.has_key from ->
-      with_ra_saving (fun () ->
+      (* with_ra_saving (fun () ->
         emit li a0 idx;
         emit ld a1 (pp_to_mach from);
         emit call "rukaml_field";
-        emit sd_dest a0 dest)
+        emit sd_dest a0 dest) *)
+      emit
+        ld
+        a1
+        (pp_to_mach from)
+        ~comm:(Format.asprintf "block_nth: from = '%a'" Ident.pp from);
+      emit li a0 idx;
+      emit call "rukaml_field";
+      emit sd_dest a0 dest
     | CApp (APrimitive ("match_failure", 1), _, []) ->
       with_ra_saving (fun () ->
         emit li a0 0;

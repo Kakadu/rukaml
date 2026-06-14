@@ -56,7 +56,7 @@ void __mk_err_warning(const char *file, int line, const char *msg)
 #define Val_unit ((value)0)
 #define Val_int(n) (n)
 #define Val_nil ((value)0)
-#define Val_true ((value)1)
+#define Val_true ((value) true)
 #define Val_false ((value)0)
 
 #if defined(__riscv) && __riscv_xlen == 64
@@ -509,9 +509,16 @@ void rukaml_array_set(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
   return;
 }
 
-void *rukaml_field(int n, void **r)
+void *rukaml_field(size_t n, value r)
 {
-  return r[n];
+  assert(IS_ON_HEAP(r));
+  assert(n < SIZE(r));
+  value *arr = (value *)r;
+  value ans = (arr)[n];
+  if (0)
+    printf("%s: field %d = 0x%" PRIx64 "\n", __func__, n, (uint64_t)ans);
+  // rukaml_trace_val(ans, 3);
+  return ans;
 }
 
 /* int64_t myadd(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t a, int64_t b)
@@ -688,6 +695,7 @@ void *rukaml_alloc_string(size_t len)
   assert(SIZE(block) == payload_words_n);
   memset(block, '\0', payload_words_n * sizeof(void *));
   // printf("String created at addr = 0x%lX\n", block);
+
   return block;
 }
 
@@ -716,21 +724,21 @@ uint64_t rukaml_string_len_imm(value str)
 
 void *rukaml_make_string_of_lit(const char *const s)
 {
-#ifdef RUKAML_DEBUG
-  // printf("%s, str = '%s'\n", __func__, s); fflush(stdout);
-  // pp_string_as_HEX( (char*)s);
-#endif
+  // #ifdef RUKAML_DEBUG
+  //   // printf("%s, str = '%s'\n", __func__, s); fflush(stdout);
+  //   // pp_string_as_HEX( (char*)s);
+  // #endif
   const size_t len = strlen(s);
   value block = (value)rukaml_alloc_string(len);
 
   for (size_t i = 0; i < len; ++i)
     ((char *)(block))[i] = s[i];
 
-#ifdef RUKAML_DEBUG
-  // log("block contents = ", (char*)block);
-  // pp_string_as_HEX((char*)block);
-  // log ("\n");
-#endif
+  // #ifdef RUKAML_DEBUG
+  //   // log("block contents = ", (char*)block);
+  //   // pp_string_as_HEX((char*)block);
+  //   // log ("\n");
+  // #endif
 
   assert(rukaml_string_len_imm(block) == len);
   // printf("String created at addr = 0x%lX\n", block);
@@ -1329,15 +1337,26 @@ value rukaml_equal_sysv(value l, value r)
   {
     return Val_true;
   }
+  // printf("%s: l = 0x%lX, r = 0x%lX\n", __func__, l, r);
   if (IS_ON_HEAP(l) && IS_ON_HEAP(r))
   {
-    // mk_err_fatal("not implemented");
-    assert(IS_ON_HEAP(r));
     assert(TAG(l) == TAG(r));
+    if (TAG(l) == String_tag)
+    {
+      int ans = strcmp((char *)l, (char *)r);
+      // log("Check string equality: '%s' vs '%s' = (bool)%d\n", (char *)l, (char *)r, ans);
+      log("Check string equality: '%s' vs '%s' \n", (char *)l, (char *)r);
+      // log("Check string equality:  = %d\n", ans);
+      printf(" %d\n", ans); // Why commenting this line changes behaviour?
+      // fflush(stdout);
+      // log("Check string equality: '%s' vs '%s' \n", (char *)l, (char *)r);
+      // return Val_true;
+      return ans == 0 ? Val_true : Val_false;
+    }
     assert(SIZE(l) == SIZE(r));
     for (size_t i = 0; i < SIZE(l); i++)
     {
-      if (!rukaml_equal_sysv(FIELD(l, i), FIELD(r, i)))
+      if (Val_false == rukaml_equal_sysv(FIELD(l, i), FIELD(r, i)))
       {
         return Val_false;
       }
