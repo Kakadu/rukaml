@@ -250,3 +250,25 @@ let test_keywords () () x = x+1
       (x + 1)
     |}]
 ;;
+
+let%expect_test "... simplify match list " =
+  test_anf
+    ~simplify:true
+    {|
+      let f xs = match xs with
+          [] -> let w = 1 in 1
+        | h::tl -> let z = 5 in  2
+|};
+  [%expect
+    {|
+    let f xs =
+      let temp2 = block_tag xs  in
+      (if (temp2 = 0)
+      then let w = 1 in
+           1
+      else let h = block_nth xs 0 in
+           let tl = block_nth xs 1 in
+           let z = 5 in
+           2)
+    |}]
+;;

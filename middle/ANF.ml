@@ -630,6 +630,80 @@ let anf_pat pat ?(kbefore = fun _ -> Fun.id) k =
 ;;
 
 let anf =
+  let has_list_typ e =
+    let rec helper t =
+      match t.Typedtree.typ_desc with
+      | TConstr ([ _ ], "list") ->
+        log "has_list_typ says true";
+        true
+      | TLink t -> helper t
+      | _ ->
+        log "%a" Typedtree.pp_ty t;
+        log "has_list_typ says false";
+        false
+    in
+    let t = Typedtree.type_of_expr e in
+    helper t
+  in
+  let get_tag x = CApp (APrimitive ("block_tag", 1), x, []) in
+  let access obj n = CApp (APrimitive ("block_nth", 2), obj, [ AConst (PConst_int n) ]) in
+  let on_matching helper scrutinee cases (k : imm_expr -> expr) =
+    let match_failure =
+      CApp (APrimitive ("match_failure", 1), AConst (Parsetree.PConst_int 666), [])
+    in
+    let cmp a b = CApp (APrimitive ("=", 2), a, [ b ]) in
+    let rec process_cases scrut cases k =
+      match cases with
+      | [] ->
+        let fresh = gensym_id () in
+        make_let_nonrec fresh match_failure (k (AVar fresh))
+      | (pattern, expr) :: rest ->
+        let success = helper expr k in
+        let failure = process_cases scrut rest k in
+        match_pattern pattern scrut success failure
+    and match_pattern pat scrut_var success failure =
+      let make_ite cond success = EComplex (CIte (CAtom (AVar cond), success, failure)) in
+      let compare_with_constant constant =
+        let fresh = gensym_id () in
+        let rhs = cmp scrut_var constant in
+        make_let_nonrec fresh rhs @@ make_ite fresh success
+      in
+      let compare_tag (ident : Ident.t) success =
+        let expected_tag = AConst (PConst_int ident.id) in
+        let fresh_for_tag = gensym_id () in
+        let compare_tags = cmp (AVar fresh_for_tag) expected_tag in
+        let fresh_for_cmp = gensym_id () in
+        make_let_nonrec fresh_for_tag (get_tag scrut_var)
+        @@ make_let_nonrec fresh_for_cmp compare_tags
+        @@ make_ite fresh_for_cmp success
+      in
+      let match_many pats =
+        let rec aux i = function
+          | [] -> success
+          | pat :: tl ->
+            let fresh = gensym_id () in
+            let success = aux (i + 1) tl in
+            let scrut = access scrut_var i in
+            make_let_nonrec fresh scrut @@ match_pattern pat (AVar fresh) success failure
+        in
+        aux 0 pats
+      in
+      match pat with
+      | Typedtree.Tpat_any -> success
+      | Tpat_var var -> make_let_nonrec var (CAtom scrut_var) success
+      | Tpat_const c -> compare_with_constant (AConst c)
+      | Tpat_unit -> compare_with_constant (AConst (PConst_int 0))
+      | Tpat_constr (ident, []) -> compare_tag ident success (* TODO? : delete it *)
+      | Tpat_constr (ident, args) -> compare_tag ident @@ match_many args
+      | Tpat_tuple (p1, p2, ps) -> match_many (p1 :: p2 :: ps)
+    in
+    let k scrut =
+      let fresh = gensym_id () in
+      let wher = process_cases (AVar fresh) cases k in
+      make_let_nonrec fresh (CAtom scrut) wher
+    in
+    helper scrutinee k
+  in
   (* Standard pitfall: forgot to call continuation *)
   let rec helper e (k : imm_expr -> expr) =
     match e with
@@ -709,70 +783,33 @@ let anf =
           make_let_nonrec name rhs (k (AVar name))
       in
       aux (args, [])
+    (* A specialization to detect list matching  *)
+    | TMatch (scrutinee, (case1, [ (p2, rhs2) ]), _) when has_list_typ scrutinee ->
+      (* log "p2 = %a" Typedtree.pp_pattern p2; *)
+      (match fst case1, p2 with
+       | Tpat_constr (pi1, []), Tpat_constr (pi2, [ Tpat_var pih; Tpat_var pitl ])
+         when pi1.Ident.hum_name = "[]" && pi2.Ident.hum_name = "::" ->
+         helper scrutinee (fun scrut ->
+           let fresh = gensym_id () in
+           make_let_nonrec fresh (CAtom scrut)
+           @@
+           let fresh_tag = gensym_id () in
+           make_let_nonrec fresh_tag (get_tag (AVar fresh))
+           @@ EComplex
+                (CIte
+                   ( CApp
+                       ( APrimitive ("=", 2)
+                       , AVar fresh_tag
+                       , [ AConst (Parsetree.PConst_int 0) ] )
+                   , helper (snd case1) (fun nil_branch -> k @@ nil_branch)
+                   , make_let_nonrec pih (access scrut 0)
+                     @@ make_let_nonrec pitl (access scrut 1)
+                     @@ helper rhs2 (fun cons_branch -> k cons_branch) )))
+       | _ -> on_matching helper scrutinee [ case1; p2, rhs2 ] k)
     (* converts TMatch into if-then-else *)
     | TMatch (scrutinee, (case1, cases), _) ->
-      let access obj n =
-        CApp (APrimitive ("block_nth", 2), obj, [ AConst (PConst_int n) ])
-      in
-      let get_tag x = CApp (APrimitive ("block_tag", 1), x, []) in
-      let match_failure =
-        CApp (APrimitive ("match_failure", 1), AConst (Parsetree.PConst_int 666), [])
-      in
-      let cmp a b = CApp (APrimitive ("=", 2), a, [ b ]) in
-      let rec process_cases scrut cases k =
-        match cases with
-        | [] ->
-          let fresh = gensym_id () in
-          make_let_nonrec fresh match_failure (k (AVar fresh))
-        | (pattern, expr) :: rest ->
-          let success = helper expr k in
-          let failure = process_cases scrut rest k in
-          match_pattern pattern scrut success failure
-      and match_pattern pat scrut_var success failure =
-        let make_ite cond success =
-          EComplex (CIte (CAtom (AVar cond), success, failure))
-        in
-        let compare_with_constant constant =
-          let fresh = gensym_id () in
-          let rhs = cmp scrut_var constant in
-          make_let_nonrec fresh rhs @@ make_ite fresh success
-        in
-        let compare_tag (ident : Ident.t) success =
-          let expected_tag = AConst (PConst_int ident.id) in
-          let fresh_for_tag = gensym_id () in
-          let compare_tags = cmp (AVar fresh_for_tag) expected_tag in
-          let fresh_for_cmp = gensym_id () in
-          make_let_nonrec fresh_for_tag (get_tag scrut_var)
-          @@ make_let_nonrec fresh_for_cmp compare_tags
-          @@ make_ite fresh_for_cmp success
-        in
-        let match_many pats =
-          let rec aux i = function
-            | [] -> success
-            | pat :: tl ->
-              let fresh = gensym_id () in
-              let success = aux (i + 1) tl in
-              let scrut = access scrut_var i in
-              make_let_nonrec fresh scrut
-              @@ match_pattern pat (AVar fresh) success failure
-          in
-          aux 0 pats
-        in
-        match pat with
-        | Typedtree.Tpat_any -> success
-        | Tpat_var var -> make_let_nonrec var (CAtom scrut_var) success
-        | Tpat_const c -> compare_with_constant (AConst c)
-        | Tpat_unit -> compare_with_constant (AConst (PConst_int 0))
-        | Tpat_constr (ident, []) -> compare_tag ident success (* TODO? : delete it *)
-        | Tpat_constr (ident, args) -> compare_tag ident @@ match_many args
-        | Tpat_tuple (p1, p2, ps) -> match_many (p1 :: p2 :: ps)
-      in
-      let k scrut =
-        let fresh = gensym_id () in
-        let wher = process_cases (AVar fresh) (case1 :: cases) k in
-        make_let_nonrec fresh (CAtom scrut) wher
-      in
-      helper scrutinee k
+      (* log "case1 = %a" Typedtree.pp_pattern (fst case1); *)
+      on_matching helper scrutinee (case1 :: cases) k
   in
   fun e -> helper e complex_of_atom
 ;;

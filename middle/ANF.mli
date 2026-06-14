@@ -1,5 +1,6 @@
 open Frontend
 
+(* TODO: constructors should not be atomic/immediate *)
 type imm_expr =
   | AUnit
   | AConst of Frontend.Parsetree.const
