@@ -571,6 +571,22 @@ let rec generate_body ppf body =
         , bel ) ->
       (* This is not entirely correct, because OCaml number and target could be different *)
       helper dest (if l = r then bth else bel)
+    | CIte
+        ( CApp (APrimitive ("=", 2), AVar v, [ AConst (Frontend.Parsetree.PConst_int l) ])
+        , bth
+        , bel ) ->
+      printfn ppf "  mov qword r11, %d" l;
+      printfn ppf "  mov qword r12, %a" Addr_of_var.pp_var_exn v;
+      printfn ppf "  cmp r11, r12";
+      let eq_lab = Printf.sprintf "lab_%d" (gensym ()) in
+      let exit_lab = Printf.sprintf "lab_%d" (gensym ()) in
+      printfn ppf "  jne %s" eq_lab;
+      helper dest bth;
+      printfn ppf "  jmp %s" exit_lab;
+      printfn ppf "%s:" eq_lab;
+      helper dest bel;
+      printfn ppf "  jmp %s" exit_lab;
+      printfn ppf "%s:" exit_lab
     | CIte (CAtom (AVar econd), bth, bel) when Addr_of_var.is_defined econd ->
       printfn ppf "  mov qword rdx, %a" Addr_of_var.pp_var_exn econd;
       printfn ppf "  cmp rdx, 0";
@@ -690,29 +706,6 @@ let rec generate_body ppf body =
       printfn ppf "  mov qword %a, 1" pp_dest dest;
       printfn ppf "  jmp %s" exit_lab;
       printfn ppf "%s:" exit_lab
-      (* failwiths "not implemented %d" __LINE__ *)
-      (* let left_name = LoI.alloc_temp () in
-           printfn ppf "  sub rsp, 8 ; allocate for var %S" left_name;
-           let left_dest = DStack_var left_name in
-           helper_a left_dest arg1;
-           let right_name = LoI.alloc_temp () in
-           printfn ppf "  sub rsp, 8 ; allocate for var %S" right_name;
-           let right_dest = DStack_var right_name in
-           helper_a right_dest arg2;
-           printfn ppf "  mov rax, %a" pp_dest left_dest;
-           printfn ppf "  mov r8, %a" pp_dest right_dest;
-           printfn ppf "  cmp rax, r8";
-           let eq_lab = Printf.sprintf "lab_%d" (gensym ()) in
-           let exit_lab = Printf.sprintf "lab_%d" (gensym ()) in
-           printfn ppf "  je %s" eq_lab;
-           printfn ppf "  mov qword %a, 0" pp_dest dest;
-           printfn ppf "  jmp %s" exit_lab;
-           printfn ppf "%s:" eq_lab;
-           printfn ppf "  mov qword %a, 1" pp_dest dest;
-           printfn ppf "  jmp %s" exit_lab;
-           printfn ppf "%s:" exit_lab;
-           dealloc_var ppf right_name;
-           dealloc_var ppf left_name *)
     | CApp (APrimitive ("=", 2), AVar v1, [ AVar v2 ])
       when Addr_of_var.(is_defined v1 && is_defined v2) ->
       printfn ppf "  mov qword rdi, %a" Addr_of_var.pp_var_exn v1;
@@ -951,7 +944,9 @@ let rec generate_body ppf body =
       emit_initialize_block dest ~fields:(x1 :: x2 :: xs) ~tag:0 ~name:"tuple"
     | rest ->
       printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
-      printfn ppf "; @[<h>%a@]" Compile_lib.ANF.pp_c rest
+      printfn ppf "; @[<h>%a@]" Compile_lib.ANF.pp_c rest;
+      Format.eprintf "Unsupported: @[`%a`@]\n%!" ANF.pp_c rest;
+      failwiths "Not implemented %d" __LINE__
   and helper_a (dest : dest) x =
     (* log "  %s: dest=`%a`, expr = %a" __FUNCTION__ pp_dest dest ANF.pp_a x; *)
     match x with
