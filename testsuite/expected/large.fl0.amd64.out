@@ -95,11 +95,11 @@ main:
   call rukaml_init_global_immediates
   pop rsi           ; pass argv to main
   pop rdi           ; pass argc to main
-  sub rsp, 8*4 ; allocate for local variables x, temp5, t42, temp4
+  sub rsp, 8*4 ; allocate for local variables temp6, temp5, temp8, temp4
   mov rdi, 42
   call rukaml_print_int
   mov qword [rbp-2*8], 0
-  mov qword [rbp-1*8], 1
+  mov qword [rbp-1*8],  1
   mov qword rdx, [rbp-1*8]
   cmp rdx, 0
   je lab_then_11
@@ -118,11 +118,11 @@ lab_then_13:
 lab_endif_14:
   sub rsp, 8 ; trying to save alignment 16 bytes
   sub rsp, 8*1 ; fun arguments
-  mov qword r8, [rbp-4*8]  ; arg "x"
+  mov qword r8, [rbp-4*8]  ; arg "temp6"
   mov qword [rsp+0*8], r8
   call large_id71
   add rsp, 8*2 ; dealloc args
   mov rax, rax
-  add rsp, 8*4 ; deallocate local variables x, temp5, t42, temp4
+  add rsp, 8*4 ; deallocate local variables temp6, temp5, temp8, temp4
   pop rbp
   ret  ;;;; main

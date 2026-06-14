@@ -1,50 +1,49 @@
 
+.text
+
 .globl __lifted_lam_1
 __lifted_lam_1:
-  addi sp, sp, -16 # allocate for RA, and 1 locals temp5
+  addi sp, sp, -16
+  sd zero, (sp) # loc for temp5
   sd ra, 8(sp)
   ld t0, 16(sp)
   li t1, 0
 # going to do some arithmetic
   add  t2, t0, t1
   sd t2, (sp)
-  addi sp, sp, -16 # pad and 1st arg of function k2
-  ld t5, 16(sp)
-  sd t5, (sp) # access a var "temp5"
-  ld a0, 40(sp)
+  ld t5, (sp)
+  addi a2, t5, 0
+  ld a0, 24(sp)
   li a1, 1
-  ld a2, (sp)
   call rukaml_applyN
-  addi sp, sp, 16 # DEalloc for pad and arg 1 of function "k2"
   ld ra, 8(sp)
   addi sp, sp, 16 # DEallocate for RA, and 1 locals temp5
   ret # __lifted_lam_1
 
 .globl f
 f:
-  addi sp, sp, -16 # allocate for RA, and 1 locals y
+  addi sp, sp, -16
+  sd zero, (sp) # loc for temp7
   sd ra, 8(sp)
   ld a0, 16(sp)
   call rukaml_print_int
   sd zero, (sp)
-  addi sp, sp, -16 # pad and 1st arg of function k1
   lla a0, __lifted_lam_1
   li a1, 2
   call rukaml_alloc_closure
-  sd a0, (sp)
-  ld a0, 40(sp)
+  mv a2, a0
+  ld a0, 24(sp)
   li a1, 1
-  ld a2, (sp)
   call rukaml_applyN
-  addi sp, sp, 16 # DEalloc for pad and arg 1 of function "k1"
   ld ra, 8(sp)
-  addi sp, sp, 16 # DEallocate for RA, and 1 locals y
+  addi sp, sp, 16 # DEallocate for RA, and 1 locals temp7
   ret # f
 
 .globl __lifted_lam_3
 __lifted_lam_3:
-  addi sp, sp, -16 # allocate for Pad, RA, and 0 locals 
+  addi sp, sp, -16
   sd ra, (sp)
+  sd zero, 8(sp) # padding
   li a0, 0
   ld ra, (sp)
   addi sp, sp, 16 # DEallocate for Pad, RA and 0 locals variables 
@@ -52,8 +51,9 @@ __lifted_lam_3:
 
 .globl __lifted_lam_2
 __lifted_lam_2:
-  addi sp, sp, -16 # allocate for Pad, RA, and 0 locals 
+  addi sp, sp, -16
   sd ra, (sp)
+  sd zero, 8(sp) # padding
 # Allocate args to call fun "f" with args
   addi sp, sp, -16 # last_pos = 4
   li t0, 1
@@ -75,8 +75,9 @@ main:
   call rukaml_initialize
 # this is main
   li a0, 0
-  addi sp, sp, -16 # allocate for Pad, RA, and 0 locals 
+  addi sp, sp, -16
   sd ra, (sp)
+  sd zero, 8(sp) # padding
 # Allocate args to call fun "f" with args
   addi sp, sp, -16 # last_pos = 4
   li t0, 1

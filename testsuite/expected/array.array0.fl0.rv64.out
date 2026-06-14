@@ -1,12 +1,17 @@
 
+.text
+
 .globl main
 main:
   mv a0, sp
   call rukaml_initialize
 # this is main
   li a0, 0
-  addi sp, sp, -32 # allocate for Pad, RA, and 2 locals n, r
+  addi sp, sp, -32
+  sd zero, (sp) # loc for temp2
+  sd zero, 8(sp) # loc for temp1
   sd ra, 16(sp)
+  sd zero, 24(sp) # padding
   addi sp, sp, -16
   sd ra, 8(sp)
   li a0, 3
@@ -37,7 +42,7 @@ main:
   call rukaml_print_int
   mv a0, zero
   ld ra, 16(sp)
-  addi sp, sp, 32 # DEallocate for Pad, RA and 2 locals variables n, r
+  addi sp, sp, 32 # DEallocate for Pad, RA and 2 locals variables temp2, temp1
 #  fin
   addi a0, x0, 0 # Use 0 return code
   addi a7, x0, 93 # Service command code 93 terminates

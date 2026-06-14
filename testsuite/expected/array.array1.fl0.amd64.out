@@ -75,7 +75,7 @@ main:
   call rukaml_init_global_immediates
   pop rsi           ; pass argv to main
   pop rdi           ; pass argc to main
-  sub rsp, 8*6 ; allocate for local variables temp6, temp5, unit, temp3, temp2, r
+  sub rsp, 8*6 ; allocate for local variables temp6, temp5, temp4, temp3, temp2, temp1
   mov rdi, 4 ; array size
   mov rsi, 1 ; array tag
   call rukaml_alloc_block
@@ -147,6 +147,6 @@ main:
   mov rdi, [rbp-6*8]
   call rukaml_print_int
   mov rax, rax
-  add rsp, 8*6 ; deallocate local variables temp6, temp5, unit, temp3, temp2, r
+  add rsp, 8*6 ; deallocate local variables temp6, temp5, temp4, temp3, temp2, temp1
   pop rbp
   ret  ;;;; main

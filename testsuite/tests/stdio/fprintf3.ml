@@ -1,6 +1,6 @@
 (*
    test
-  (targets amd64)
+  (targets amd64 rv64)
   (run (stdout "1 | true | a | foo"))
 *)
 
@@ -10,6 +10,6 @@ let pp_bool oc b = fprintf oc "%b" b
 let pp_string oc s = fprintf oc "%s" s
 
 let main =
-  let t = printf "%a | %a | %a | %a" pp_int 1 pp_bool true pp_char 'a' pp_string "foo" in
+  let t = printf "%a | %a | %a | %a\n" pp_int 1 pp_bool true pp_char 'a' pp_string "foo" in
   0
 ;;

@@ -1,6 +1,6 @@
 (*
    test
-  (targets amd64)
+  (targets amd64  )
   (run (stdout "h+e+l+l+o+ +w+o+r+l+d"))
 *)
 
