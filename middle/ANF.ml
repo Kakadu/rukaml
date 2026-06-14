@@ -319,6 +319,7 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
     | CApp (AVar x, arg1, args) when Ident.equal x ident1 ->
       (match rhs with
        | CApp (f, arg0, arg_mid) -> CApp (f, arg0, arg_mid @ (arg1 :: args))
+       | CAtom (AVar _ as new_) -> CApp (new_, arg1, args)
        | _ -> assert false)
     | CApp ((APrimitive _ as f), _arg1, _args) ->
       CApp (f, helperi _arg1, List.map helperi _args)
@@ -458,7 +459,7 @@ let simplify : _ Arity_map.t -> expr -> expr =
         when Ident.equal name1 name2 ->
         (* let x = x in ... *)
         EComplex (helper_c acc body)
-      | ELet
+      (* | ELet
           ( NonRecursive
           , Apat_var name1
           , body
@@ -466,7 +467,7 @@ let simplify : _ Arity_map.t -> expr -> expr =
         when Ident.equal name1 name2 ->
         (* let name1 = ... in
            let ...  = name1 in *)
-        helper acc (ELet (NonRecursive, var2, body, wher_))
+        helper acc (ELet (NonRecursive, var2, body, wher_)) *)
       | ELet (NonRecursive, Apat_var v1, rhs, where)
         when used_once_in_if v1 ~where && is_comparison rhs && cfg.opt_cmp_into_if_inline
         -> helper acc (substitute ~where v1 rhs)

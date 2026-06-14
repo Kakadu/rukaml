@@ -135,7 +135,7 @@ let%expect_test "Check string literal is put to separate let" =
   [%expect
     {|
     let main =
-      let t = output_string stdout "hello world!" in
+      let temp2 = output_string stdout "hello world!" in
       0
     |}]
 ;;
@@ -231,7 +231,8 @@ let test_keywords () =
       let temp1 = __lifted_let_5_is_keyword sq  in
       (if temp1
       then 0
-      else let () = output_string stdout sq in
+      else let temp4 = output_string stdout sq in
+           let () = temp4 in
            1)
     |}]
 ;;
@@ -270,5 +271,33 @@ let%expect_test "... simplify match list " =
            let tl = block_nth xs 1 in
            let z = 5 in
            2)
+    |}]
+;;
+
+let%expect_test "...  " =
+  (* ANF.set_logging true; *)
+  test_anf
+    ~simplify:true
+    {|
+  let main =
+  let s0 = [ 0 ] in
+  let s1 = [ s0 ] in
+  let s2 = [ s1 ] in
+  match s2 with
+  | [] -> s2
+  | x :: xs -> s2
+|};
+  [%expect
+    {|
+    let main =
+      let temp1 = (Constr_1 (0, Constr_0)) in
+      let temp2 = (Constr_1 (temp1, Constr_0)) in
+      let temp3 = (Constr_1 (temp2, Constr_0)) in
+      let temp5 = block_tag temp3  in
+      (if (temp5 = 0)
+      then temp3
+      else let x = block_nth temp3 0 in
+           let xs = block_nth temp3 1 in
+           temp3)
     |}]
 ;;
