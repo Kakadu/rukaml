@@ -469,7 +469,7 @@ let generate_body is_toplevel body =
       emit ld a1 (ROffset (a1, 0));
       emit mv t0 a0;
       emit call "rukaml_equal_sysv";
-      emit mv a0 t0;
+      emit mv t0 a0;
       let el_lab = Printf.sprintf "lab_else_%d" (gensym ()) in
       let fin_lab = Printf.sprintf "lab_endif_%d" (gensym ()) in
       emit beq t0 zero el_lab;

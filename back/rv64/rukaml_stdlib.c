@@ -1337,21 +1337,13 @@ value rukaml_equal_sysv(value l, value r)
   {
     return Val_true;
   }
-  // printf("%s: l = 0x%lX, r = 0x%lX\n", __func__, l, r);
   if (IS_ON_HEAP(l) && IS_ON_HEAP(r))
   {
     assert(TAG(l) == TAG(r));
     if (TAG(l) == String_tag)
     {
       int ans = strcmp((char *)l, (char *)r);
-      // log("Check string equality: '%s' vs '%s' = (bool)%d\n", (char *)l, (char *)r, ans);
-      log("Check string equality: '%s' vs '%s' \n", (char *)l, (char *)r);
-      // log("Check string equality:  = %d\n", ans);
-      printf(" %d\n", ans); // Why commenting this line changes behaviour?
-      // fflush(stdout);
-      // log("Check string equality: '%s' vs '%s' \n", (char *)l, (char *)r);
-      // return Val_true;
-      return ans == 0 ? Val_true : Val_false;
+      return (ans == 0) ? Val_true : Val_false;
     }
     assert(SIZE(l) == SIZE(r));
     for (size_t i = 0; i < SIZE(l); i++)
