@@ -436,7 +436,7 @@ let generate_body is_toplevel body =
       | APrimitive ("print", (1 as parity)) ->
         emit_alloc_closure "rukaml_print_int_kaml" parity;
         emit sd a0 (ROffset (SP, 8 * i))
-      | APrimitive ("stdout", 0) -> emit li a0 1
+      | APrimitive ("stdout", 0) -> pp_access 1 i
       | APrimitive _ as arg -> failwiths "Primitive %a is not supported" ANF.pp_a arg
       | AArray _ -> failwiths "Arrays are not atomic. Fix and implement this TODO"
       | AConstruct _ -> assert false
@@ -891,33 +891,42 @@ let generate_body is_toplevel body =
       emit ld a1 (pp_to_mach arg1);
       emit call "rukaml_alloc_fprintf_closure0";
       emit sd_dest a0 dest
-    | CApp (APrimitive ("fprintf", 2), AVar arg0, [ AVar arg1 ]) ->
-      emit ld a0 (pp_to_mach arg0);
-      emit ld a1 (pp_to_mach arg1);
-      emit call "rukaml_alloc_fprintf_closure0";
-      emit sd_dest a0 dest
     | CApp
-        (APrimitive ("fprintf", 2), AVar arg0, [ AConst (Parsetree.PConst_string fstr) ])
-      ->
-      emit ld a0 (pp_to_mach arg0);
+        ( APrimitive ("fprintf", 2)
+        , ((AVar _ | APrimitive _) as arg0)
+        , [ AConst (Parsetree.PConst_string fstr) ] ) ->
+      helper_a (DReg "a0") arg0;
       let rukaml_val_loc n = sprintf "my_STRING_LIT_%d" n in
       emit lla t0 (rukaml_val_loc (String_lit_hash.find string_list_hash fstr));
       emit ld a1 (ROffset (Temp_reg 0, 0));
       emit call "rukaml_alloc_fprintf_closure0";
       emit sd_dest a0 dest
     | CApp
+        ( APrimitive ("fprintf", 2)
+        , ((AVar _ | APrimitive _) as arg0)
+        , [ (AVar _ as arg1) ] ) ->
+      helper_a (DReg "a0") arg0;
+      helper_a (DReg "a1") arg1;
+      emit call "rukaml_alloc_fprintf_closure0";
+      emit sd_dest a0 dest
+    | CApp
         ( APrimitive ("output_string", 2)
-        , APrimitive ("stdout", 0)
+        , ((APrimitive ("stdout", 0) | AVar _) as arg0)
         , [ AConst (Parsetree.PConst_string str) ] ) ->
       let rukaml_val_loc n = sprintf "my_STRING_LIT_%d" n in
       emit lla t0 (rukaml_val_loc (String_lit_hash.find string_list_hash str));
       emit ld a1 (ROffset (t0, 0));
-      emit li a0 1;
+      helper_a (DReg "a0") arg0;
       emit call "rukaml_output_string_sysv";
       emit sd_dest a0 dest
     | CApp (APrimitive ("output_string", 2), APrimitive ("stdout", 0), [ AVar arg1 ]) ->
       emit ld a1 (pp_to_mach arg1);
       emit li a0 1;
+      emit call "rukaml_output_string_sysv";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("output_string", 2), AVar arg0, [ AVar arg1 ]) ->
+      emit ld a1 (pp_to_mach arg1);
+      emit ld a0 (pp_to_mach arg0);
       emit call "rukaml_output_string_sysv";
       emit sd_dest a0 dest
     | CApp (APrimitive (pname, partiy), arg1, args) ->
@@ -979,20 +988,21 @@ let generate_body is_toplevel body =
         emit sd_dest t0 dest;
         emit addi SP SP 16)
     | AConstruct (tag, args) ->
-      with_two_slots (fun ra_name rez_slot ->
+      with_two_slots (fun _ra_name rez_slot ->
         emit addi SP SP (-16);
-        emit sd (RU "ra") (pp_to_mach ra_name);
+        (* emit sd (RU "ra") (pp_to_mach ra_name); *)
         emit li a0 (List.length args);
         emit li a1 tag;
-        emit call "rukaml_alloc_block";
+        emit call "rukaml_alloc_block" ~comm:(sprintf "argsc = %d" (List.length args));
         emit sd a0 (pp_to_mach rez_slot);
         List.iteri
           (fun i x ->
              helper_a (DReg "t0") x;
+             emit comment (Format.asprintf "@[%a@]" ANF.pp_a x);
              emit ld t1 (pp_to_mach rez_slot);
              emit sd t0 (ROffset (t1, 8 * i)))
           args;
-        emit ld ra (pp_to_mach ra_name);
+        (* emit ld ra (pp_to_mach ra_name); *)
         emit ld t0 (pp_to_mach rez_slot);
         emit sd_dest t0 dest;
         emit addi SP SP 16)
@@ -1006,6 +1016,12 @@ let generate_body is_toplevel body =
       emit ld t0 (ROffset (Temp_reg 0, 0));
       emit sd_dest t0 dest
     | APrimitive ("match_failure", _) -> emit call "rukaml_match_failure"
+    | APrimitive ("stdout", 0) ->
+      (match dest with
+       | DReg rname -> emit li (RU rname) 1
+       | DStack_var _ ->
+         emit li t0 1;
+         emit sd_dest t0 dest)
     | _atom ->
       Format.eprintf "Unsupported atom: @[`%a`@]\n%!" Compile_lib.ANF.pp_a _atom;
       failwiths "not implemented %s %d" __FILE__ __LINE__
@@ -1013,7 +1029,7 @@ let generate_body is_toplevel body =
     emit
       comment
       (Format.asprintf
-         "Init block with fields: @[[ %a ]@]"
+         "Init tuple with fields: @[[ %a ]@]"
          (pp_space_list ANF.pp_a)
          fields);
     emit li a0 (List.length fields) ~comm:(sprintf "%s size" name);
@@ -1033,9 +1049,9 @@ let generate_body is_toplevel body =
              emit ld t1 (Addr_of_local.pp_to_mach vname);
              emit sd t1 (ROffset (a0, 8 * i))
            | x ->
-             helper_a (DReg "t1") x;
-             emit ld t0 (Addr_of_local.pp_to_mach block_addr);
-             emit sd t1 (ROffset (t0, 8 * i)) ~comm:(sprintf "setting field %d" i);
+             helper_a (DReg "t0") x;
+             emit ld a0 (Addr_of_local.pp_to_mach block_addr);
+             emit sd t0 (ROffset (a0, 8 * i)) ~comm:(sprintf "setting field %d" i);
              ())
         fields;
       emit ld t0 (Addr_of_local.pp_to_mach block_addr);

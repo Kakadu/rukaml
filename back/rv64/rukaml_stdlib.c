@@ -68,7 +68,7 @@ void __mk_err_warning(const char *file, int line, const char *msg)
 
 #endif
 
-int HEAP_SIZE = 32768; // in words
+int HEAP_SIZE = 1024; // in words
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
@@ -774,7 +774,11 @@ char rukaml_string_nth_sysv(value str, uint64_t n)
 
 void *rukaml_output_string_sysv(int dest, value str)
 {
-  assert(dest == STDOUT_FILENO);
+  if (dest != 1)
+  {
+    log("dest = %ld\n", (int64_t)dest);
+    assert(dest == 1);
+  };
   // printf("str addr = 0x%lX, str = '%s', len=%d\n", str, str, strlen(str));
   if (TAG(str) != String_tag)
   {
@@ -865,7 +869,7 @@ void rukaml_fprintf_impl(void *dest, void **fmt, va_list args)
       // rukaml_fprintf_string(dest, str);
       // log("%s %d, dest = %d, v=%ld\n", __func__, __LINE__, dest, str);
       // log("%s, stdout = %lx, STDOUT_FILENO = %lx\n", __func__, stdout, STDOUT_FILENO);
-      rukaml_output_string_sysv(STDOUT_FILENO, str);
+      rukaml_output_string_sysv(1, str);
       break;
     }
 
@@ -983,7 +987,8 @@ void *rukaml_alloc_fprintf_closure(DECLARE_FAKE_ARGS, void *out_channel, void **
   assert(TAG(fmt) == String_tag);
 
   uint64_t arity = eval_fmt_arity(fmt);
-  log("%s, arity = %lu\n", __func__, arity);
+  // log("%s, arity = %lu, fmt = '%s'\n", __func__, arity, (char *)fmt);
+  // log("out_channel = %ld\n", (int64_t)out_channel);
   fflush(stdout);
   if (arity == 0)
   {
@@ -1007,7 +1012,7 @@ void *rukaml_alloc_printf_closure0(void **fmt)
   // log("fmt = 0x%LX\n", fmt);
   assert(TAG(fmt) == String_tag);
   // log("%s %d\n", __func__, __LINE__);
-  return rukaml_alloc_fprintf_closure(FAKE_ARGS, stdout, fmt);
+  return rukaml_alloc_fprintf_closure(FAKE_ARGS, 1, fmt);
 }
 
 // SPRINTF
