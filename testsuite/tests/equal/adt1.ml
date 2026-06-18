@@ -1,6 +1,6 @@
 (*
    test
-  (targets amd64)
+  (targets amd64 rv64)
   (run
     (stdout "(1) test passed" "(2) test passed"))
 *)

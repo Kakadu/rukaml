@@ -27,107 +27,99 @@ main:
   sd zero, 128(sp) # loc for x
   sd ra, 136(sp)
   addi sp, sp, -16
-  sd ra, 8(sp)
   li a0, 1
   li a1, 0
-  call rukaml_alloc_block
+  call rukaml_alloc_block # argsc = 1
   sd a0, (sp)
   li t0, 0
+# 0
   ld t1, (sp)
   sd t0, (t1)
-  ld ra, 8(sp)
   ld t0, (sp)
   sd t0, 112(sp)
   addi sp, sp, 16
   addi sp, sp, -16
-  sd ra, 8(sp)
   li a0, 2
   li a1, 1
-  call rukaml_alloc_block
+  call rukaml_alloc_block # argsc = 2
   sd a0, (sp)
   ld t5, 112(sp)
   addi t0, t5, 0
+# temp1
   ld t1, (sp)
   sd t0, (t1)
   addi sp, sp, -16
-  sd ra, 8(sp)
   li a0, 0
   li a1, 0
-  call rukaml_alloc_block
+  call rukaml_alloc_block # argsc = 0
   sd a0, (sp)
-  ld ra, 8(sp)
   ld t0, (sp)
   mv t0, t0
   addi sp, sp, 16
+# Constr_0
   ld t1, (sp)
   sd t0, 8(t1)
-  ld ra, 8(sp)
   ld t0, (sp)
   sd t0, 104(sp)
   addi sp, sp, 16
   addi sp, sp, -16
-  sd ra, 8(sp)
   li a0, 2
   li a1, 1
-  call rukaml_alloc_block
+  call rukaml_alloc_block # argsc = 2
   sd a0, (sp)
   addi sp, sp, -16
-  sd ra, 8(sp)
   li a0, 0
   li a1, 1
-  call rukaml_alloc_block
+  call rukaml_alloc_block # argsc = 0
   sd a0, (sp)
-  ld ra, 8(sp)
   ld t0, (sp)
   mv t0, t0
   addi sp, sp, 16
+# Constr_1
   ld t1, (sp)
   sd t0, (t1)
   ld t5, 104(sp)
   addi t0, t5, 0
+# temp2
   ld t1, (sp)
   sd t0, 8(t1)
-  ld ra, 8(sp)
   ld t0, (sp)
   sd t0, 96(sp)
   addi sp, sp, 16
   addi sp, sp, -16
-  sd ra, 8(sp)
   li a0, 1
   li a1, 0
-  call rukaml_alloc_block
+  call rukaml_alloc_block # argsc = 1
   sd a0, (sp)
   ld t5, 96(sp)
   addi t0, t5, 0
+# temp3
   ld t1, (sp)
   sd t0, (t1)
-  ld ra, 8(sp)
   ld t0, (sp)
   sd t0, 88(sp)
   addi sp, sp, 16
   addi sp, sp, -16
-  sd ra, 8(sp)
   li a0, 2
   li a1, 1
-  call rukaml_alloc_block
+  call rukaml_alloc_block # argsc = 2
   sd a0, (sp)
   ld t5, 88(sp)
   addi t0, t5, 0
+# temp4
   ld t1, (sp)
   sd t0, (t1)
   addi sp, sp, -16
-  sd ra, 8(sp)
   li a0, 0
   li a1, 0
-  call rukaml_alloc_block
+  call rukaml_alloc_block # argsc = 0
   sd a0, (sp)
-  ld ra, 8(sp)
   ld t0, (sp)
   mv t0, t0
   addi sp, sp, 16
+# Constr_0
   ld t1, (sp)
   sd t0, 8(t1)
-  ld ra, 8(sp)
   ld t0, (sp)
   sd t0, 80(sp)
   addi sp, sp, 16
@@ -137,123 +129,99 @@ main:
   ld t0, 56(sp) # access temp7
   li t1, 0
   beq t0, t1, lab_then_45
-  addi sp, sp, -16
-  sd ra, (sp)
+  ld a1, 64(sp) # block_nth: from = 'temp5'
   li a0, 0
-  ld a1, 80(sp)
   call rukaml_field
-  sd a0, 144(sp)
-  ld ra, (sp)
-  addi sp, sp, 16
-  addi sp, sp, -16
-  sd ra, (sp)
+  sd a0, 128(sp)
+  ld a1, 64(sp) # block_nth: from = 'temp5'
   li a0, 1
-  ld a1, 80(sp)
   call rukaml_field
-  sd a0, 136(sp)
-  ld ra, (sp)
-  addi sp, sp, 16
+  sd a0, 120(sp)
   ld a0, 128(sp)
   call rukaml_tag0
   sd a0, (sp) # got tag of 'x'
   ld t0, (sp) # access temp26
   li t1, 1
-  beq t0, t1, lab_then_51
+  beq t0, t1, lab_then_47
   ld a0, 128(sp)
   call rukaml_tag0
   sd a0, 8(sp) # got tag of 'x'
   ld t0, 8(sp) # access temp24
   li t1, 0
-  beq t0, t1, lab_then_53
+  beq t0, t1, lab_then_49
   addi sp, sp, -16
   sd ra, (sp)
   li a0, 0
   call rukaml_match_failure
   ld ra, (sp)
   addi sp, sp, 16
-  beq zero, zero, lab_fin_54
-lab_then_53:
-  addi sp, sp, -16
-  sd ra, (sp)
+  beq zero, zero, lab_fin_50
+lab_then_49:
+  ld a1, 128(sp) # block_nth: from = 'x'
   li a0, 0
-  ld a1, 144(sp)
   call rukaml_field
-  sd a0, 32(sp)
-  ld ra, (sp)
-  addi sp, sp, 16
+  sd a0, 16(sp)
   ld a0, 16(sp)
   call rukaml_tag0
   sd a0, 48(sp) # got tag of 'temp23'
   ld t0, 48(sp) # access temp11
   li t1, 0
-  beq t0, t1, lab_then_59
-  addi sp, sp, -16
-  sd ra, (sp)
+  beq t0, t1, lab_then_53
+  ld a1, 16(sp) # block_nth: from = 'temp23'
   li a0, 0
-  ld a1, 32(sp)
   call rukaml_field
-  sd a0, 128(sp)
-  ld ra, (sp)
-  addi sp, sp, 16
-  addi sp, sp, -16
-  sd ra, (sp)
+  sd a0, 112(sp)
+  ld a1, 16(sp) # block_nth: from = 'temp23'
   li a0, 1
-  ld a1, 32(sp)
   call rukaml_field
-  sd a0, 120(sp)
-  ld ra, (sp)
-  addi sp, sp, 16
+  sd a0, 104(sp)
   ld a0, 112(sp)
   call rukaml_tag0
   sd a0, 24(sp) # got tag of 'z'
   ld t0, 24(sp) # access temp19
   li t1, 1
-  beq t0, t1, lab_then_65
+  beq t0, t1, lab_then_55
   ld a0, 112(sp)
   call rukaml_tag0
   sd a0, 32(sp) # got tag of 'z'
   ld t0, 32(sp) # access temp17
   li t1, 0
-  beq t0, t1, lab_then_67
+  beq t0, t1, lab_then_57
   addi sp, sp, -16
   sd ra, (sp)
   li a0, 0
   call rukaml_match_failure
   ld ra, (sp)
   addi sp, sp, 16
-  beq zero, zero, lab_fin_68
-lab_then_67:
-  addi sp, sp, -16
-  sd ra, (sp)
+  beq zero, zero, lab_fin_58
+lab_then_57:
+  ld a1, 112(sp) # block_nth: from = 'z'
   li a0, 0
-  ld a1, 128(sp)
   call rukaml_field
-  sd a0, 56(sp)
-  ld ra, (sp)
-  addi sp, sp, 16
+  sd a0, 40(sp)
   li a0, 4
   call rukaml_print_int
   mv a0, zero
-lab_fin_68:
-  beq zero, zero, lab_fin_66
-lab_then_65:
+lab_fin_58:
+  beq zero, zero, lab_fin_56
+lab_then_55:
   li a0, 3
   call rukaml_print_int
   mv a0, zero
-lab_fin_66:
-  beq zero, zero, lab_fin_60
-lab_then_59:
+lab_fin_56:
+  beq zero, zero, lab_fin_54
+lab_then_53:
   li a0, 2
   call rukaml_print_int
   mv a0, zero
-lab_fin_60:
 lab_fin_54:
-  beq zero, zero, lab_fin_52
-lab_then_51:
+lab_fin_50:
+  beq zero, zero, lab_fin_48
+lab_then_47:
   li a0, 1
   call rukaml_print_int
   mv a0, zero
-lab_fin_52:
+lab_fin_48:
   beq zero, zero, lab_fin_46
 lab_then_45:
   li a0, 0
