@@ -63,13 +63,13 @@ let rec mangle_names_a ~(bounded : Ident.t list) : ANF.imm_expr -> ANF.imm_expr 
   | (AUnit | AConst _ | APrimitive _) as i -> i
   | AVar v when contains v && not (List.mem v bounded) -> AVar (find v)
   | AVar _ as i -> i
-  | AConstruct (constr_name, fields) ->
-    AConstruct (constr_name, List.map (mangle_names_a ~bounded) fields)
   | AArray items -> AArray (List.map (mangle_names_a ~bounded) items)
   | ALam (Apat_var v, rhs) -> ALam (Apat_var v, mangle_names_e ~bounded:(v :: bounded) rhs)
   | ALam (lhs, rhs) -> ALam (lhs, mangle_names_e ~bounded rhs)
 
 and mangle_names_c ~(bounded : Ident.t list) : ANF.c_expr -> ANF.c_expr = function
+  | CConstruct (constr_name, fields) ->
+    CConstruct (constr_name, List.map (mangle_names_a ~bounded) fields)
   | CApp (x1, x2, xs) ->
     CApp
       ( (mangle_names_a ~bounded) x1

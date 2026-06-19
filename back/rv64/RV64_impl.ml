@@ -236,7 +236,7 @@ let allocate_locals input_anf : (now:unit -> unit) * _ =
     | CIte (_, th, el) ->
       helper th;
       helper el
-    | CTuple _ | CApp _ | CAtom _ -> ()
+    | CConstruct _ | CTuple _ | CApp _ | CAtom _ -> ()
   in
   helper input_anf;
   let local_names = Ident.Ident_set.to_list !local_names in
@@ -439,7 +439,6 @@ let generate_body is_toplevel body =
       | APrimitive ("stdout", 0) -> pp_access 1 i
       | APrimitive _ as arg -> failwiths "Primitive %a is not supported" ANF.pp_a arg
       | AArray _ -> failwiths "Arrays are not atomic. Fix and implement this TODO"
-      | AConstruct _ -> assert false
     in
     ListLabels.iteri args ~f:on_arg;
     count
@@ -578,7 +577,7 @@ let generate_body is_toplevel body =
          emit sd_dest zero dest
        | AConst (PConst_bool _)
        | AConst (PConst_char _)
-       | AArray _ | AVar _ | APrimitive _ | AConstruct _
+       | AArray _ | AVar _ | APrimitive _
        | ALam (_, _)
        | AUnit -> failwith "Should not happen: print_int"
        | _ -> failwith "not implemented")
@@ -938,6 +937,25 @@ let generate_body is_toplevel body =
       failwiths "Not implemented %d" __LINE__
     | CTuple (x1, x2, xs) ->
       emit_initialize_block dest ~fields:(x1 :: x2 :: xs) ~tag:0 ~name:"tuple"
+    | CConstruct (tag, args) ->
+      with_two_slots (fun _ra_name rez_slot ->
+        emit addi SP SP (-16);
+        (* emit sd (RU "ra") (pp_to_mach ra_name); *)
+        emit li a0 (List.length args);
+        emit li a1 tag;
+        emit call "rukaml_alloc_block" ~comm:(sprintf "argsc = %d" (List.length args));
+        emit sd a0 (pp_to_mach rez_slot);
+        List.iteri
+          (fun i x ->
+             helper_a (DReg "t0") x;
+             emit comment (Format.asprintf "@[%a@]" ANF.pp_a x);
+             emit ld t1 (pp_to_mach rez_slot);
+             emit sd t0 (ROffset (t1, 8 * i)))
+          args;
+        (* emit ld ra (pp_to_mach ra_name); *)
+        emit ld t0 (pp_to_mach rez_slot);
+        emit sd_dest t0 dest;
+        emit addi SP SP 16)
     | _rest ->
       Format.eprintf "@[%a@]\n%!" Compile_lib.ANF.pp_c _rest;
       failwiths "Not implemented %s %d" __FILE__ __LINE__
@@ -985,25 +1003,6 @@ let generate_body is_toplevel body =
           r;
         emit ld ra (pp_to_mach ra_name);
         emit ld t0 (pp_to_mach arr_slot);
-        emit sd_dest t0 dest;
-        emit addi SP SP 16)
-    | AConstruct (tag, args) ->
-      with_two_slots (fun _ra_name rez_slot ->
-        emit addi SP SP (-16);
-        (* emit sd (RU "ra") (pp_to_mach ra_name); *)
-        emit li a0 (List.length args);
-        emit li a1 tag;
-        emit call "rukaml_alloc_block" ~comm:(sprintf "argsc = %d" (List.length args));
-        emit sd a0 (pp_to_mach rez_slot);
-        List.iteri
-          (fun i x ->
-             helper_a (DReg "t0") x;
-             emit comment (Format.asprintf "@[%a@]" ANF.pp_a x);
-             emit ld t1 (pp_to_mach rez_slot);
-             emit sd t0 (ROffset (t1, 8 * i)))
-          args;
-        (* emit ld ra (pp_to_mach ra_name); *)
-        emit ld t0 (pp_to_mach rez_slot);
         emit sd_dest t0 dest;
         emit addi SP SP 16)
     | AConst (PConst_bool true) ->

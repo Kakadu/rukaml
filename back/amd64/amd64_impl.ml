@@ -396,7 +396,7 @@ let allocate_locals ppf input_anf : now:unit -> unit =
     | CIte (_, th, el) ->
       helper th;
       helper el
-    | CTuple _ | CApp _ | CAtom _ -> ()
+    | CConstruct _ | CTuple _ | CApp _ | CAtom _ -> ()
   in
   helper input_anf;
   let count = List.length !names in
@@ -515,9 +515,6 @@ let rec generate_body ppf body =
       | APrimitive ("print", (1 as argc)) ->
         emit_alloc_closure ppf ~fname:(Ident.ident "rukaml_print_int_kaml" 0) ~argc;
         printfn ppf "  mov qword [rsp%+d*8], rax" (count - 1 - i)
-      | AConstruct (tag, []) ->
-        printfn ppf "  mov qword [rsp%+d*8], %d" (count - 1 - i) tag
-      | AConstruct (_, _ :: _) -> assert false
       | APrimitive _ -> assert false
       | AArray _ -> assert false);
     count + _stack_padding
@@ -854,7 +851,6 @@ let rec generate_body ppf body =
       printfn ppf "  mov %a, rax" pp_dest dest
     (* TODO: | CApp (AVar f, (AUnit as arg), []) *)
     | CApp (AVar f, (AConst _ as arg), [])
-    | CApp (AVar f, (AConstruct _ as arg), [])
     | CApp (AVar f, (APrimitive _ as arg), [])
     | CApp (AVar f, (AVar _ as arg), [])
       when Addr_of_local.has_key f ->
@@ -942,6 +938,8 @@ let rec generate_body ppf body =
       failwiths "Not implemented %d" __LINE__
     | CTuple (x1, x2, xs) ->
       emit_initialize_block dest ~fields:(x1 :: x2 :: xs) ~tag:0 ~name:"tuple"
+    | CConstruct (tag, []) -> printfn ppf "  mov qword %a, %d" pp_dest dest tag
+    | CConstruct (tag, fields) -> emit_initialize_block dest ~fields ~tag ~name:"adt"
     | rest ->
       printfn ppf ";;; TODO %s %d" __FUNCTION__ __LINE__;
       printfn ppf "; @[<h>%a@]" Compile_lib.ANF.pp_c rest;
@@ -1005,8 +1003,6 @@ let rec generate_body ppf body =
        | { kind = Alias _; _ } -> assert false
        | { kind = Immediate Eval; _ } -> assert false
        | { kind = Immediate Match; _ } -> assert false)
-    | AConstruct (tag, []) -> printfn ppf "  mov qword %a, %d" pp_dest dest tag
-    | AConstruct (tag, fields) -> emit_initialize_block dest ~fields ~tag ~name:"adt"
     | AArray fields -> emit_initialize_block dest ~fields ~tag:1 ~name:"array"
     | AConst (PConst_string s) ->
       (* notice: DO NOT use emit_initialize_block here. strings representation differs *)
