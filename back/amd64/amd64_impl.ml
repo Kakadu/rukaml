@@ -284,7 +284,7 @@ module Toplevel = struct
     | Some { kind = Alias { aliasee }; _ } -> find_exn aliasee
     | Some x -> x
     | None ->
-      Format.eprintf "Can't find toplevel %a" Ident.pp ident;
+      Format.eprintf "Can't find toplevel %a\n" Ident.pp ident;
       raise Not_found
   ;;
 

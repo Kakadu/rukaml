@@ -751,6 +751,16 @@ let generate_body is_toplevel body =
       emit addi t1 t1 1;
       emit slt t2 t0 t1;
       emit sd_dest t2 dest
+    | CApp (APrimitive ("=", _), AVar vl, [ AVar vr ]) ->
+      (* This case is complicated when arguments are closures. *)
+      helper_a (DReg "t5") (AVar vl);
+      helper_a (DReg "t6") (AVar vr);
+      (* emit ld t5 (Addr_of_local.pp_to_mach vl); *)
+      (* emit ld t6 (Addr_of_local.pp_to_mach vr); *)
+      emit sub t0 t5 t6;
+      (* Unsigned integer <1 is only zero *)
+      emit sltiu t0 t0 1;
+      emit sd_dest t0 dest
     | CApp (APrimitive ((("+" | "*" | "-") as prim), _), AVar vl, [ AVar vr ]) ->
       emit comment (sprintf "%s is stored in %d" vl.hum_name (Addr_of_local.find_exn vl));
       emit comment (sprintf "%s is stored in %d" vr.hum_name (Addr_of_local.find_exn vr));
@@ -772,6 +782,7 @@ let generate_body is_toplevel body =
       emit call "rukaml_trace_val";
       if dest <> DReg "a0" then emit sd_dest (RU "a0") dest
     | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
+      emit comment "HERR: use new Toplevel module";
       (* Calling a rukaml function uses custom calling convention.
            Pascal convention: all arguments on stack, LTR *)
       let expected_arity = Option.get (is_toplevel f) in
@@ -981,16 +992,30 @@ let generate_body is_toplevel body =
          emit li t0 n;
          emit sd_dest t0 dest)
     | AVar vname ->
-      (match Toplevel.find_exn vname with
-       | { kind = Function { argc = 0 }; ident } -> assert false
-       | { kind = Function { argc }; ident = fname } ->
+      (match Toplevel.find_opt vname with
+       | Some { kind = Function { argc = 0 }; ident } -> assert false
+       | Some { kind = Function { argc }; ident = fname } ->
          assert (argc > 0);
-         failwith "TODO: create a closure"
-       | { kind = Immediate Constant; ident } -> failwith "TODO"
-       | { kind = Main; _ } -> assert false
-       | { kind = Alias _; _ } -> assert false
-       | { kind = Immediate Eval; _ } -> assert false
-       | { kind = Immediate Match; _ } -> assert false)
+         (* failwith "TODO: create a closure" *)
+         emit_alloc_closure vname.hum_name argc;
+         emit sd_dest (RU "a0") dest
+       | Some { kind = Immediate Constant; ident } ->
+         emit ld t0 (RU (Format.asprintf "%a" Toplevel.pp_label_exn ident));
+         emit comment "imm constant";
+         emit sd_dest (RU "t0") dest
+         (* printfn ppf "  mov rax, [rel %a]" Toplevel.pp_label_exn ident; *)
+         (* printfn ppf "  mov qword [rsp+%d*8], rax" (count - 1 - i) *)
+         (* failwith "TODO imm" *)
+       | Some { kind = Main; _ } -> assert false
+       | Some { kind = Alias _; _ } -> assert false
+       | Some { kind = Immediate Eval; _ } -> assert false
+       | Some { kind = Immediate Match; _ } -> assert false
+       | None ->
+         emit ld t5 (Addr_of_local.pp_to_mach vname);
+         (match dest with
+          | DReg _ -> emit addi1dest dest t5 0
+          | DStack_var _ ->
+            emit sd_dest t5 dest ~comm:(sprintf "access a var %S" vname.hum_name)))
       (* (match is_toplevel vname with
        | None ->
          emit ld t5 (Addr_of_local.pp_to_mach vname);
@@ -1182,6 +1207,52 @@ let prepare_string_lit_init ppf anf =
         emit sd a0 (ROffset (Temp_reg 1, 0))))
 ;;
 
+let emit_global_constant is_toplevel ppf ident expr =
+  printfn ppf ".data";
+  printfn ppf "#  global %a" Toplevel.pp_label_exn ident;
+  printfn ppf "%a: .quad 0x0" Toplevel.pp_label_exn ident;
+  printfn ppf ".text";
+  printfn ppf "init_%a:" Toplevel.pp_label_exn ident;
+  (* printfn ppf "  push rbp"; *)
+  (* printfn ppf "  mov rbp, rsp"; *)
+  generate_body is_toplevel expr;
+  emit lla t1 (Format.asprintf "%a" Toplevel.pp_label_exn ident);
+  emit sd a0 (ROffset (Temp_reg 1, 0));
+  (* emit addi sp sp (-16); *)
+  (* emit sd ra (ROffset (SP, 0)); *)
+  emit comment "call rukaml_add_gc_static_root";
+  (* emit ld ra (ROffset (SP, 0)); *)
+  (* emit addi sp sp 16; *)
+  emit ret;
+  Machine.flush_queue ppf
+;;
+
+(* printfn ppf "  mov qword [rel %a], rax" Toplevel.pp_label_exn ident;
+  printfn ppf "  lea rdi, [rel %a]" Toplevel.pp_label_exn ident;
+  printfn ppf "  call add_gc_static_root";
+  printfn ppf "  pop rbp";
+  printfn ppf "  ret ;;; init_%a" Toplevel.pp_label_exn ident;
+  Machine.flush_queue ppf *)
+
+let put_init_global_immediates ppf =
+  printfn ppf "";
+  printfn ppf ".text";
+  printfn ppf "rukaml_init_global_immediates:";
+  emit addi sp sp (-16);
+  emit sd ra (ROffset (SP, 0));
+  (* printfn ppf "  push rbp"; *)
+  (* printfn ppf "  mov rbp, rsp"; *)
+  Toplevel.iter_immediates (fun { ident; _ } ->
+    (* printfn ppf "  call init_%a" Toplevel.pp_label_exn ident *)
+    emit call (Format.asprintf "init_%a" Toplevel.pp_label_exn ident));
+  (* printfn ppf "  pop rbp"; *)
+  (* printfn ppf "  ret ;;; rukaml_init_global_immediates"; *)
+  emit ld ra (ROffset (SP, 0));
+  emit addi sp sp 16;
+  emit ret;
+  Machine.flush_queue ppf
+;;
+
 let codegen ?(wrap_main_into_start = true) anf file =
   (* log "Going to generate code here %s %d" __FUNCTION__ __LINE__; *)
   (* log "ANF: @[%a@]" Compile_lib.ANF.pp_stru anf; *)
@@ -1197,6 +1268,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
          then Toplevel.extend name ~kind:Toplevel.(Immediate Constant)
          else (
            let () = assert (argc >= 1 || name.Ident.hum_name = "main") in
+           let () = Toplevel.extend name ~kind:(Toplevel.Function { argc }) in
            Hashtbl.add hash name argc))
       anf;
     fun name ->
@@ -1279,18 +1351,26 @@ let codegen ?(wrap_main_into_start = true) anf file =
         print_epilogue ppf name.hum_name;
         Machine.flush_queue ppf
       | { kind = Main } ->
+        put_init_global_immediates ppf;
+        printfn ppf "\n.text";
+        printfn ppf ".globl main";
+        printfn ppf "main:";
         emit mv a0 sp;
         emit call "rukaml_initialize";
-        emit comment "this is main";
         do_string_init ();
+        emit call "rukaml_init_global_immediates";
+        emit comment "this is main";
         emit li a0 0;
-        failwith "TODO main"
-      | { kind = Immediate _ } -> failwith "TODO imm"
+        (* failwith "TODO main" *)
+        Toplevel.extend name ~kind:Main;
+        generate_body is_toplevel expr;
+        print_epilogue ppf name.Ident.hum_name;
+        Machine.flush_queue ppf
+      | { kind = Immediate _ } -> emit_global_constant is_toplevel ppf name expr
       | { kind = Alias _ } -> failwith "TODO alias"
       (* | _ -> failwith "TODO" *)
       (* let _ = if argc mod 2 = 0 then argc else argc + 1 in *)
     in
-    printfn ppf "\n.text";
     List.iter on_vb anf;
     Format.pp_print_flush ppf ());
   Result.Ok ()
