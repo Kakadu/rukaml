@@ -272,6 +272,7 @@ module Toplevel = struct
   let has_key = contains
   let is_toplevel = contains
 
+  (* TODO: rename to 'find' *)
   let rec find_opt (ident : Ident.t) =
     match Hashtbl.find_opt store ident with
     | Some { kind = Alias { aliasee }; _ } -> find_opt aliasee

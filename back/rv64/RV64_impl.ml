@@ -96,6 +96,7 @@ let list_take n xs =
 ;;
 
 open Frontend
+module Toplevel = Amd64_impl.Toplevel
 
 type dest =
   | DReg of string
@@ -500,12 +501,14 @@ let generate_body is_toplevel body =
     | CIte
         ( CApp
             ( APrimitive ((("<" | "=" | "<=") as op), _)
-            , AVar vname
-            , [ AConst (PConst_int n) ] )
+            , ((AConst (PConst_int _) | AVar _) as lhs)
+            , [ ((AConst (PConst_int _) | AVar _) as rhs) ] )
         , bthen
         , belse ) ->
-      emit ld t0 (pp_to_mach vname) ~comm:(Format.asprintf "access %a" Ident.pp vname);
-      emit li t1 n;
+      helper_a (DReg "t0") lhs;
+      (* emit ld t0 (pp_to_mach vname) ~comm:(Format.asprintf "access %a" Ident.pp vname);
+      emit li t1 n; *)
+      helper_a (DReg "t1") rhs;
       let lab_then = Printf.sprintf "lab_then_%d" (gensym ()) in
       let lab_fin = Printf.sprintf "lab_fin_%d" (gensym ()) in
       let op_mnem =
@@ -978,7 +981,17 @@ let generate_body is_toplevel body =
          emit li t0 n;
          emit sd_dest t0 dest)
     | AVar vname ->
-      (match is_toplevel vname with
+      (match Toplevel.find_exn vname with
+       | { kind = Function { argc = 0 }; ident } -> assert false
+       | { kind = Function { argc }; ident = fname } ->
+         assert (argc > 0);
+         failwith "TODO: create a closure"
+       | { kind = Immediate Constant; ident } -> failwith "TODO"
+       | { kind = Main; _ } -> assert false
+       | { kind = Alias _; _ } -> assert false
+       | { kind = Immediate Eval; _ } -> assert false
+       | { kind = Immediate Match; _ } -> assert false)
+      (* (match is_toplevel vname with
        | None ->
          emit ld t5 (Addr_of_local.pp_to_mach vname);
          (match dest with
@@ -987,7 +1000,7 @@ let generate_body is_toplevel body =
             emit sd_dest t5 dest ~comm:(sprintf "access a var %S" vname.hum_name))
        | Some arity ->
          emit_alloc_closure vname.hum_name arity;
-         emit sd_dest (RU "a0") dest)
+         emit sd_dest (RU "a0") dest) *)
     | AArray r ->
       with_two_slots (fun ra_name arr_slot ->
         emit addi SP SP (-16);
@@ -1178,8 +1191,13 @@ let codegen ?(wrap_main_into_start = true) anf file =
       (fun (_, name, body) ->
          let pats, _ = Compile_lib.ANF.group_abstractions body in
          let argc = List.length pats in
-         assert (argc >= 1 || name.Ident.hum_name = "main");
-         Hashtbl.add hash name argc)
+         if String.equal name.Ident.hum_name "main"
+         then Toplevel.extend name ~kind:Toplevel.Main
+         else if argc = 0
+         then Toplevel.extend name ~kind:Toplevel.(Immediate Constant)
+         else (
+           let () = assert (argc >= 1 || name.Ident.hum_name = "main") in
+           Hashtbl.add hash name argc))
       anf;
     fun name ->
       match Hashtbl.find hash name with
@@ -1188,19 +1206,6 @@ let codegen ?(wrap_main_into_start = true) anf file =
   in
   Stdio.Out_channel.with_file file ~f:(fun ch ->
     let ppf = Format.formatter_of_out_channel ch in
-    (* printfn ppf "section .note.GNU-stack noalloc noexec nowrite progbits"; *)
-    if use_custom_main
-    then
-      printfn
-        ppf
-        {|section .data
-            newline_char: db 10
-            codes: db '0123456789abcdef' |};
-    (* printfn ppf "section .text"; *)
-    if use_custom_main
-    then (
-      put_print_newline ppf;
-      put_print_hex ppf);
     let do_string_init = prepare_string_lit_init ppf anf in
     (* externs *)
     let __ () =
@@ -1241,66 +1246,49 @@ let codegen ?(wrap_main_into_start = true) anf file =
                  mov rax, 60     ; exit syscall
                  syscall|}
          else *)
-    if wrap_main_into_start
-    then
-      printfn
-        ppf
-        {|_start:
-              push    rbp
-              mov     rbp, rsp   ; prologue
-              call main
-              mov rdi, rax    ; rdi stores return code
-              mov rax, 60     ; exit syscall
-              syscall|};
     let open Compile_lib in
     let on_vb (_flg, name, expr) =
-      if Addr_of_local.size () <> 0
+      (* if Addr_of_local.size () <> 0
       then
         failwiths
           "There are left over variables (before function %s): %s "
           name.Ident.hum_name
-          (Addr_of_local.keys ());
-      (* printfn ppf "";
-           fprintf ppf "\t; %a\n" Loc_of_ident.pp (); *)
-
-      (* print_prologue ppf name; *)
-
-      (* fprintf ppf "  ; There are %d known arguments in %s\n%!"
-           (Loc_of_ident.size ()) name; *)
-
-      (* printfn ppf "  sub rsp, %d" (8 * Loc_of_ident.size ()); *)
-      let () = printfn ppf "\n.globl %s" name.Ident.hum_name in
-      let () = printfn ppf "%s:" name.Ident.hum_name in
-      let pats, body = ANF.group_abstractions expr in
-      let argc = List.length pats in
-      let names =
-        List.filter_map
-          (function
-            | ANF.Apat_var name -> Some name
-            | Apat_unit -> None
-            | p -> failwiths "not implemented: pattern %a" ANF.pp_apat p)
-          pats
-      in
+          (Addr_of_local.keys ()); *)
+      match Toplevel.find_exn name with
+      | { Toplevel.kind = Toplevel.Function { argc } } ->
+        assert (argc > 0);
+        let () = printfn ppf "\n.globl %s" name.Ident.hum_name in
+        let () = printfn ppf "%s:" name.Ident.hum_name in
+        let pats, body = ANF.group_abstractions expr in
+        let argc = List.length pats in
+        let names =
+          List.filter_map
+            (function
+              | ANF.Apat_var name -> Some name
+              | Apat_unit -> None
+              | p -> failwiths "not implemented: pattern %a" ANF.pp_apat p)
+            pats
+        in
+        List.rev pats
+        |> ListLabels.iteri ~f:(fun i -> function
+          | ANF.Apat_var name -> Addr_of_local.add_arg ~argc i name
+          | Apat_unit -> ()
+          | _ -> failwith "not implemented");
+        generate_body is_toplevel body;
+        Addr_of_local.remove_args names;
+        print_epilogue ppf name.hum_name;
+        Machine.flush_queue ppf
+      | { kind = Main } ->
+        emit mv a0 sp;
+        emit call "rukaml_initialize";
+        emit comment "this is main";
+        do_string_init ();
+        emit li a0 0;
+        failwith "TODO main"
+      | { kind = Immediate _ } -> failwith "TODO imm"
+      | { kind = Alias _ } -> failwith "TODO alias"
+      (* | _ -> failwith "TODO" *)
       (* let _ = if argc mod 2 = 0 then argc else argc + 1 in *)
-      let () =
-        if name.Ident.hum_name = "main"
-        then (
-          emit mv a0 sp;
-          emit call "rukaml_initialize";
-          emit comment "this is main";
-          do_string_init ();
-          emit li a0 0)
-        else
-          List.rev pats
-          |> ListLabels.iteri ~f:(fun i -> function
-            | ANF.Apat_var name -> Addr_of_local.add_arg ~argc i name
-            | Apat_unit -> ()
-            | _ -> failwith "not implemented")
-      in
-      generate_body is_toplevel body;
-      Addr_of_local.remove_args names;
-      print_epilogue ppf name.hum_name;
-      Machine.flush_queue ppf
     in
     printfn ppf "\n.text";
     List.iter on_vb anf;
