@@ -1208,10 +1208,12 @@ let prepare_string_lit_init ppf anf =
 ;;
 
 let emit_global_constant is_toplevel ppf ident expr =
-  printfn ppf ".data";
-  printfn ppf "#  global %a" Toplevel.pp_label_exn ident;
+  printfn ppf "";
+  printfn ppf ".data # global %a" Toplevel.pp_label_exn ident;
+  printfn ppf ".align 3";
   printfn ppf "%a: .quad 0x0" Toplevel.pp_label_exn ident;
   printfn ppf ".text";
+  printfn ppf ".globl .init_%a" Toplevel.pp_label_exn ident;
   printfn ppf "init_%a:" Toplevel.pp_label_exn ident;
   (* printfn ppf "  push rbp"; *)
   (* printfn ppf "  mov rbp, rsp"; *)
@@ -1237,6 +1239,7 @@ let emit_global_constant is_toplevel ppf ident expr =
 let put_init_global_immediates ppf =
   printfn ppf "";
   printfn ppf ".text";
+  printfn ppf ".globl rukaml_init_global_immediates";
   printfn ppf "rukaml_init_global_immediates:";
   emit addi sp sp (-16);
   emit sd ra (ROffset (SP, 0));
@@ -1329,7 +1332,8 @@ let codegen ?(wrap_main_into_start = true) anf file =
       match Toplevel.find_exn name with
       | { Toplevel.kind = Toplevel.Function { argc } } ->
         assert (argc > 0);
-        let () = printfn ppf "\n.globl %s" name.Ident.hum_name in
+        printfn ppf "\n.text";
+        let () = printfn ppf ".globl %s" name.Ident.hum_name in
         let () = printfn ppf "%s:" name.Ident.hum_name in
         let pats, body = ANF.group_abstractions expr in
         let argc = List.length pats in
@@ -1366,7 +1370,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
         generate_body is_toplevel expr;
         print_epilogue ppf name.Ident.hum_name;
         Machine.flush_queue ppf
-      | { kind = Immediate _ } -> emit_global_constant is_toplevel ppf name expr
+      | { kind = Immediate _; _ } -> emit_global_constant is_toplevel ppf name expr
       | { kind = Alias _ } -> failwith "TODO alias"
       (* | _ -> failwith "TODO" *)
       (* let _ = if argc mod 2 = 0 then argc else argc + 1 in *)
