@@ -404,10 +404,16 @@ module Arity_map = struct
 end
 
 let simplify : _ Arity_map.t -> expr -> expr =
-  let is_comparison : c_expr -> bool = function
-    | CApp (APrimitive (("<" | "=" | "<="), _), _, [ _ ]) ->
+  let is_comparison : c_expr -> bool =
+    let arg_is_imm = function
+      | AConst (PConst_int _) | AConst (PConst_char _) | AConst (PConst_bool _) -> true
+      | _ -> false
+    in
+    function
+    (* There we want to detect integer comparison *)
+    | CApp (APrimitive (("<" | "=" | "<="), _), l, [ r ]) ->
       (* TODO(Kakadu): fix here, when we get user-defined operators *)
-      true
+      arg_is_imm l || arg_is_imm r
     | _ -> false
   in
   let rec helper_a acc = function

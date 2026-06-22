@@ -23,7 +23,7 @@ void __mk_err_warning(const char *file, int line, const char *msg) {
 #define mk_err_fatal(msg) __mk_err_fatal(__FILE__, __LINE__, msg)
 #define mk_err_warning(msg) __mk_err_warning(__FILE__, __LINE__, msg)
 
-// #undef RUKAML_DEBUG
+#undef RUKAML_DEBUG
 
 #ifdef RUKAML_DEBUG
 #define log(...)                                                               \
@@ -38,7 +38,6 @@ void __mk_err_warning(const char *file, int line, const char *msg) {
 #define HEADER(size, tag) ((uint64_t)((size << 8u) + (tag % 256u)))
 #define SIZE(ptr) (*((uint64_t *)ptr - 1) >> 8)
 #define TAG(ptr) (*((uint64_t *)ptr - 1) & 0xFF)
-#define FIELD(ptr, n) ((uint64_t *)ptr + n)
 
 // normal 00, gray 01, black 11
 #define MAKE_WHITE(ptr) (*ptr = (*ptr & ~(0b11 << 8)))
@@ -268,14 +267,14 @@ void rukaml_trace_val(value arg, unsigned int level) {
   }
   // Need to implement tagged integers
   for (uint64_t i = 0; i < SIZE(arg); i++) {
-    void **field = (void **)FIELD(arg, i);
-    if ((unsigned)(*field) < 100) {
+    value field = (value *)Field(arg, i);
+    if ((unsigned)(field) < 100) {
       PAD(level + 1);
-      printf("%lu -> Int %ld\n", i, (int64_t)(*field));
+      printf("%lu -> Int %ld\n", i, (int64_t)(field));
     } else {
       PAD(level + 1);
       printf("%lu -> ", i);
-      rukaml_trace_val(*field, level + 1);
+      rukaml_trace_val(field, level + 1);
     }
   }
   fflush(stdout);
@@ -1186,6 +1185,7 @@ value rukaml_equal_sysv(value l, value r) {
   if (l == r) {
     return Val_true;
   }
+
   if (IS_ON_HEAP(l) && IS_ON_HEAP(r)) {
     assert(TAG(l) == TAG(r));
     if (TAG(l) == String_tag) {
@@ -1193,8 +1193,12 @@ value rukaml_equal_sysv(value l, value r) {
       return (ans == 0) ? Val_true : Val_false;
     }
     assert(SIZE(l) == SIZE(r));
+    if (SIZE(l) == 0)
+      return Val_true;
     for (size_t i = 0; i < SIZE(l); i++) {
-      if (Val_false == rukaml_equal_sysv(FIELD(l, i), FIELD(r, i))) {
+      value lf = Field(l, i);
+      value rf = Field(r, i);
+      if (Val_false == rukaml_equal_sysv(lf, rf)) {
         return Val_false;
       }
     }
@@ -1204,3 +1208,6 @@ value rukaml_equal_sysv(value l, value r) {
   return Val_false;
 }
 //
+value rukaml_equal(DECLARE_FAKE_ARGS, value l, value r) {
+  return rukaml_equal_sysv(l, r);
+}

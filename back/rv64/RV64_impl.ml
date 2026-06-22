@@ -669,12 +669,8 @@ let generate_body is_toplevel body =
       if l = r
       then (
         emit li t0 1;
-        emit sd_dest t0 dest
-        (* failwiths "not implemented %d" __LINE__ *)
-        (* printfn ppf "  mov qword %a, 1" Addr_of_local.pp_dest dest *))
-      else
-        failwiths "not implemented %d" __LINE__
-        (* printfn ppf "  mov qword %a, 0" Addr_of_local.pp_dest dest *)
+        emit sd_dest t0 dest)
+      else failwiths "not implemented %d" __LINE__
     | CApp (APrimitive ("&&", _), al, [ ar ]) ->
       let on_arg dest = function
         | ANF.AVar vname -> emit ld dest (pp_to_mach vname)
@@ -684,8 +680,7 @@ let generate_body is_toplevel body =
       on_arg t1 ar;
       emit and_ t0 t0 t1;
       emit sd_dest t0 dest
-    | CApp (APrimitive (("=" as op), _), AConst (PConst_int n), [ AVar vname ])
-    | CApp (APrimitive ((("=" | "<") as op), _), AVar vname, [ AConst (PConst_int n) ]) ->
+    | CApp (APrimitive (("<" as op), _), AVar vname, [ AConst (PConst_int n) ]) ->
       let branch_instr =
         match op with
         | "=" -> emit beq
@@ -751,16 +746,22 @@ let generate_body is_toplevel body =
       emit addi t1 t1 1;
       emit slt t2 t0 t1;
       emit sd_dest t2 dest
-    | CApp (APrimitive ("=", _), AVar vl, [ AVar vr ]) ->
-      (* This case is complicated when arguments are closures. *)
+    | CApp (APrimitive ("%int_equality", _), AVar vl, [ AVar vr ]) ->
       helper_a (DReg "t5") (AVar vl);
       helper_a (DReg "t6") (AVar vr);
-      (* emit ld t5 (Addr_of_local.pp_to_mach vl); *)
-      (* emit ld t6 (Addr_of_local.pp_to_mach vr); *)
       emit sub t0 t5 t6;
       (* Unsigned integer <1 is only zero *)
       emit sltiu t0 t0 1;
       emit sd_dest t0 dest
+    | CApp (APrimitive ("=", _), vl, [ vr ]) ->
+      (* This case is complicated when arguments are non immediate. *)
+      (* TODO: add explicit primitive %rukaml_equal? *)
+      helper_a (DReg "t5") vl;
+      helper_a (DReg "t6") vr;
+      emit addi a0 t5 0;
+      emit addi a1 t6 0;
+      emit call "rukaml_equal_sysv";
+      emit sd_dest a0 dest
     | CApp (APrimitive ((("+" | "*" | "-") as prim), _), AVar vl, [ AVar vr ]) ->
       emit comment (sprintf "%s is stored in %d" vl.hum_name (Addr_of_local.find_exn vl));
       emit comment (sprintf "%s is stored in %d" vr.hum_name (Addr_of_local.find_exn vr));
