@@ -21,7 +21,7 @@ let pp_const ppf = function
   | PConst_bool b -> fprintf ppf "%b" b
   | PConst_int n -> fprintf ppf "%d" n
   | PConst_char c -> fprintf ppf "\'%c\'" c
-  | PConst_string s -> fprintf ppf "\"%s\"" s
+  | PConst_string s -> fprintf ppf "\"%s\"" (String.escaped s)
 ;;
 
 let pp_cons_brackets ppf ~pp_item hd tl =
