@@ -306,3 +306,22 @@ let%expect_test "...  " =
            temp6)
     |}]
 ;;
+
+let%expect_test "...  " =
+  (* ANF.set_logging true; *)
+  Printexc.record_backtrace false;
+  test_anf
+    ~simplify:true
+    {|
+  let array1 = [| 0; 1; 2; 3; 4; 5 |]
+  let () = array_set array1 1 42
+  let main =
+    42
+|};
+  [%expect.unreachable]
+[@@expect.uncaught_exn {|
+  (Failure "Error during parsing")
+  Trailing output
+  ---------------
+  Error: : end_of_input |}]
+;;
