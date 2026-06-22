@@ -53,6 +53,7 @@ void __mk_err_warning(const char *file, int line, const char *msg) {
 #define IS_IMM(v) (!IS_BLOCK(v))
 #define Val_unit ((value)0)
 #define Val_int(n) (n)
+#define Int_val(n) ((long)n)
 #define Val_nil ((value)0)
 #define Val_true ((value) true)
 #define Val_false ((value)0)
@@ -497,14 +498,18 @@ void *rukaml_array_get(DECLARE_FAKE_ARGS, void **arr, uint64_t n) {
   return arr[n];
 }
 
-void rukaml_array_set(DECLARE_FAKE_ARGS, void **arr, uint64_t n, void *a) {
+void rukaml_array_set_sysv(value arr, value n, value a) {
   assert(TAG(arr) == Array_tag);
-  if (n >= SIZE(arr)) {
+  if (Int_val(n) >= SIZE(arr)) {
     fprintf(stderr, "Index out of bounds");
     exit(1);
   }
-  arr[n] = a;
+  Set_field(arr, Int_val(n), a);
+  // ((value *)arr)[n] = a; // TODO: set_field
   return;
+}
+void rukaml_array_set(DECLARE_FAKE_ARGS, value arr, value n, value a) {
+  return rukaml_array_set_sysv(arr, n, a);
 }
 
 void *rukaml_field(size_t n, value r) {

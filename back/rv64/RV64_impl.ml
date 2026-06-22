@@ -644,7 +644,10 @@ let generate_body is_toplevel body =
       Addr_of_local.extend arr_slot (* 0 (sp) *);
       emit addi SP SP (-32);
       emit sd ra (pp_to_mach ra_slot);
-      (match arg1 with
+      helper_a (DReg "a0") arg1;
+      helper_a (DReg "a1") arg2;
+      helper_a (DReg "a2") arg3;
+      (* (match arg1 with
        | AVar arr ->
          emit ld a0 (pp_to_mach arr);
          emit sd a0 (pp_to_mach arr_slot)
@@ -657,8 +660,8 @@ let generate_body is_toplevel body =
          emit li a0 n;
          emit sd a0 (pp_to_mach pos_slot)
        | _ -> assert false);
-      helper_a (DStack_var item_slot) arg3;
-      emit call "rukaml_array_set";
+      helper_a (DStack_var item_slot) arg3; *)
+      emit call "rukaml_array_set_sysv";
       emit ld ra (pp_to_mach ra_slot);
       emit addi SP SP 32;
       Addr_of_local.remove_local arr_slot;
@@ -1305,6 +1308,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
               else if argc = 0
               then (
                 let () = Toplevel.extend name ~kind:Toplevel.(Immediate Constant) in
+                (* Format.eprintf "Toplvel: add immediate '%a'\n%!" Ident.pp name; *)
                 `Immediate (name, body))
               else (
                 let () = assert (argc >= 1 || name.Ident.hum_name = "main") in
