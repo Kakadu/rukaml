@@ -154,9 +154,11 @@ let%expect_test "Check string literal is put to separate let" =
   [%expect
     {|
     let __lifted_let_4_is_keyword s =
-      (if (s = "true")
+      let temp4 = (s = "true") in
+      (if temp4
       then 1
-      else (if (s = "false")
+      else let temp3 = (s = "false") in
+           (if temp3
            then 1
            else 0))
     let main =
@@ -290,14 +292,17 @@ let%expect_test "...  " =
   [%expect
     {|
     let main =
-      let temp1 = (Constr_1 (0, Constr_0)) in
-      let temp2 = (Constr_1 (temp1, Constr_0)) in
-      let temp3 = (Constr_1 (temp2, Constr_0)) in
-      let temp5 = block_tag temp3  in
-      (if (temp5 = 0)
-      then temp3
-      else let x = block_nth temp3 0 in
-           let xs = block_nth temp3 1 in
-           temp3)
+      let temp1 = Constr_0 in
+      let temp2 = (Constr_1 (0, temp1)) in
+      let temp3 = Constr_0 in
+      let temp4 = (Constr_1 (temp2, temp3)) in
+      let temp5 = Constr_0 in
+      let temp6 = (Constr_1 (temp4, temp5)) in
+      let temp8 = block_tag temp6  in
+      (if (temp8 = 0)
+      then temp6
+      else let x = block_nth temp6 0 in
+           let xs = block_nth temp6 1 in
+           temp6)
     |}]
 ;;

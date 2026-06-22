@@ -97,7 +97,7 @@ include struct
   ;;
 
   let is_simple_rhs = function
-    | CAtom _ | CApp _ -> true
+    | CConstruct _ | CAtom _ | CApp _ -> true
     | _ -> false
   ;;
 
