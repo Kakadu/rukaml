@@ -1,4 +1,3 @@
-open! Base
 open Stdio
 open Frontend
 open Compile_lib
@@ -12,6 +11,8 @@ let error fmt =
     err_formatter
     fmt
 ;;
+
+let failwiths fmt = Stdlib.Format.kasprintf failwith fmt
 
 (**
   This module forms some kind of a DSL that can be used
@@ -53,10 +54,10 @@ module Compiler = struct
       | Error err -> error "cps error: %a" CPSConv.pp_error err
       | Ok vbs when caa ->
         let open CPSLang.MACPS in
-        List.map ~f:cps_vb_to_parsetree_vb (CAA.call_arity_anal vbs)
+        List.map cps_vb_to_parsetree_vb (CAA.call_arity_anal vbs)
       | Ok vbs ->
         let open CPSLang.OneACPS in
-        List.map ~f:cps_vb_to_parsetree_vb vbs
+        List.map cps_vb_to_parsetree_vb vbs
     in
     let open Parsetree in
     (* merges structure items back together *)
@@ -77,20 +78,21 @@ module Compiler = struct
       let rec collect_from_patt acc = function
         | Parsetree.PAny | PConst _ | PUnit -> acc
         | PVar name -> CConv.String_set.add name acc
-        | PTuple (p1, p2, ps) -> List.fold ~f:collect_from_patt ~init:acc (p1 :: p2 :: ps)
-        | PConstruct (_, args) -> List.fold ~f:collect_from_patt ~init:acc args
+        | PTuple (p1, p2, ps) ->
+          Base.List.fold ~f:collect_from_patt ~init:acc (p1 :: p2 :: ps)
+        | PConstruct (_, args) -> Base.List.fold ~f:collect_from_patt ~init:acc args
       in
-      List.fold ~f:(fun acc (_rec, lhs, _rhs) -> collect_from_patt acc lhs)
+      Base.List.fold ~f:(fun acc (_rec, lhs, _rhs) -> collect_from_patt acc lhs)
     in
     let f (globals, acc) = function
       | Parsetree.Pstr_value vb ->
         let stru = CConv.conv ~standart_globals:globals vb in
         let globals = collect_globals ~init:globals stru in
-        globals, List.append acc (List.map ~f:(fun vb -> Parsetree.Pstr_value vb) stru)
+        globals, List.append acc (List.map (fun vb -> Parsetree.Pstr_value vb) stru)
       | Parsetree.Pstr_type _ as td -> globals, List.append acc [ td ]
     in
     fun (Parsetree stru) ->
-      let _, stru = List.fold_left stru ~init:(CConv.standart_globals, []) ~f in
+      let _, stru = ListLabels.fold_left stru ~init:(CConv.standart_globals, []) ~f in
       k (Parsetree stru)
   ;;
 
@@ -111,13 +113,13 @@ module Compiler = struct
   let rv64 (ANF stru) =
     let vbs =
       List.map
-        ~f:(function
+        (function
           | ANF.ANF_vb (flg, Apat_var name, body) -> flg, name, body
-          | _ -> failwith "not implemented")
+          | _ -> failwiths "not implemented %s %d" __FILE__ __LINE__)
         stru
     in
     let f ~path =
-      RV64_impl.codegen ~wrap_main_into_start:false vbs path |> Result.ok_or_failwith
+      RV64_impl.codegen ~wrap_main_into_start:false vbs path |> Base.Result.ok_or_failwith
     in
     k (Code f)
   ;;
@@ -125,7 +127,8 @@ module Compiler = struct
   (** Generate code for AMD64 *)
   let amd64 (ANF stru) =
     let f ~path =
-      Amd64_impl.codegen ~wrap_main_into_start:true stru path |> Result.ok_or_failwith
+      Amd64_impl.codegen ~wrap_main_into_start:true stru path
+      |> Base.Result.ok_or_failwith
     in
     k (Code f)
   ;;
@@ -134,11 +137,11 @@ module Compiler = struct
   let llvm (ANF stru) =
     let vbs =
       List.map
-        ~f:(function
+        (function
           | ANF.ANF_vb vb -> vb)
         stru
     in
-    let f ~path = LLVM_impl.codegen vbs path |> Result.ok_or_failwith in
+    let f ~path = LLVM_impl.codegen vbs path |> Base.Result.ok_or_failwith in
     k (Code f)
   ;;
 
@@ -190,8 +193,8 @@ module Target = struct
   let finish target p = (target p) (to_file p.out_path)
 
   let targets table =
-    Map.of_alist_exn
-      (module String)
+    Base.Map.of_alist_exn
+      (module Base.String)
       [ "rv64", finish (rv64 table)
       ; "amd64", finish (amd64 table)
       ; "llvm", finish (llvm table)
@@ -209,7 +212,7 @@ let print_targets () =
   printf
     "supported targets:@ %a@."
     (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp_print_string)
-    (Map.keys (Target.targets Typedtree.empty_table));
+    (Base.Map.keys (Target.targets Typedtree.empty_table));
   Stdlib.exit 0
 ;;
 
@@ -249,7 +252,7 @@ let () =
   let params =
     Target.{ text; out_path = !out_path; cps = !cps; caa = !caa; ppx = !ppx }
   in
-  match Map.find (Target.targets Typedtree.empty_table) !target with
+  match Base.Map.find (Target.targets Typedtree.empty_table) !target with
   | Some target -> target params
   | None -> error "invalid target %S" !target
 ;;

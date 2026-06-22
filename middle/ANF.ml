@@ -353,7 +353,7 @@ let substitute ~where ident1 (rhs : c_expr) : expr =
        | CAtom a -> a
        | _ ->
          Format.eprintf "Possible missing substitution. %s %d\n%!" __FILE__ __LINE__;
-         let _ = failwith "not implemented" in
+         let _ = failwiths "not implemented %s %d" __FILE__ __LINE__ in
          AVar name)
     | AVar _ as i -> i
     | i ->

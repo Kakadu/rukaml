@@ -583,7 +583,7 @@ let generate_body is_toplevel body =
        | AArray _ | AVar _ | APrimitive _
        | ALam (_, _)
        | AUnit -> failwith "Should not happen: print_int"
-       | _ -> failwith "not implemented")
+       | _ -> failwiths "not implemented %s %d" __FILE__ __LINE__)
     | CApp (APrimitive ("array_len", 1), arg1, []) ->
       (match arg1 with
        | AVar v when Addr_of_local.has_key v ->
@@ -664,6 +664,12 @@ let generate_body is_toplevel body =
       Addr_of_local.remove_local item_slot;
       Addr_of_local.remove_local ra_slot;
       emit sd_dest a0 dest
+    | CApp (APrimitive ("+", _), AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
+      emit li t0 (l + r);
+      emit sd_dest t0 dest
+    | CApp (APrimitive ("*", _), AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
+      emit li t0 (l * r);
+      emit sd_dest t0 dest
     | CApp (APrimitive ("=", _), AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
       (* TODO: user Addr_of_local.pp_local_exn *)
       if l = r

@@ -11,6 +11,8 @@ let log fmt =
   else Format.ifprintf Format.std_formatter fmt
 ;;
 
+let failwiths fmt = Format.kasprintf failwith fmt
+
 module String_set = struct
   include Set.Make (String)
 
@@ -459,7 +461,7 @@ let structure ?(standart_globals = standart_globals) stru =
             | _, PTuple _, _ ->
               (* TODO(Kakadu): add other names too *)
               acc
-            | _ -> failwith "not implemented")
+            | _ -> failwiths "not implemented %s %d" __FILE__ __LINE__)
         in
         new_glob, List.append ans (List.map (fun vb -> Parsetree.Pstr_value vb) new_strus)
       | Parsetree.Pstr_type _ as td -> glob, List.append ans [ td ])
