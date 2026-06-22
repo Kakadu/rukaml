@@ -516,7 +516,7 @@ let generate_body is_toplevel body =
         | "<" -> blt
         | "=" -> beq
         | "<=" -> ble
-        | _ -> failwith "Should not happen"
+        | _ -> failwiths "Should not happen %s %d" __FILE__ __LINE__
       in
       emit op_mnem t0 t1 lab_then;
       helper dest belse;
@@ -606,21 +606,21 @@ let generate_body is_toplevel body =
            emit ld a2 (pp_to_mach arr);
            emit call "rukaml_applyN";
            emit sd_dest a0 dest)
-       | _ -> failwith "Should not happen")
+       | _ -> failwiths "Should not happen %s %d" __FILE__ __LINE__)
     | CApp (APrimitive ("array_get", 2), arg1, [ arg2 ]) ->
       with_ra_saving (fun () ->
         emit_alloc_closure "rukaml_array_get" 2;
         emit li a1 2;
         (match arg1 with
          | AVar arr when Addr_of_local.has_key arr -> emit ld a2 (pp_to_mach arr)
-         | _ -> failwith "Should not happen");
+         | _ -> failwiths "Should not happen %s %d" __FILE__ __LINE__);
         (match arg2 with
          | AVar n when Addr_of_local.has_key n -> emit ld a3 (pp_to_mach n)
          | AConst (PConst_int n) -> emit li a3 n
-         | _ -> failwith "Should not happen");
+         | _ -> failwiths "Should not happen %s %d" __FILE__ __LINE__);
         emit call "rukaml_applyN";
         emit sd_dest a0 dest)
-    | CApp (APrimitive ("array_set", 3), arg1, []) ->
+    | CApp (APrimitive ("array_set", 3), arg1, []) as e ->
       (match arg1 with
        | AVar arr when Addr_of_local.has_key arr ->
          with_ra_saving (fun () ->
@@ -629,7 +629,9 @@ let generate_body is_toplevel body =
            emit ld a2 (pp_to_mach arr);
            emit call "rukaml_applyN";
            emit sd_dest a0 dest)
-       | _ -> failwith "Should not happen")
+       | _ ->
+         Format.eprintf "Error: @[%a@]\n%!" ANF.pp_c e;
+         failwiths "Should not happen %s %d" __FILE__ __LINE__)
     | CApp (APrimitive ("array_set", 3), arg1, [ arg2; arg3 ]) ->
       (* it's better to use registers for passing args *)
       let ra_slot = Ident.of_string @@ Printf.sprintf "ra%d" (gensym ()) in
@@ -1263,31 +1265,56 @@ let put_init_global_immediates ppf =
   Machine.flush_queue ppf
 ;;
 
+let emit_global_eval ppf is_toplevel ident expr =
+  printfn ppf "\n.text";
+  printfn ppf "init_%a:" Toplevel.pp_label_exn ident;
+  emit addi sp sp (-16);
+  emit sd ra (ROffset (SP, 0));
+  generate_body is_toplevel expr;
+  emit ld ra (ROffset (SP, 0));
+  emit ret;
+  Machine.flush_queue ppf
+;;
+
 let codegen ?(wrap_main_into_start = true) anf file =
-  (* log "Going to generate code here %s %d" __FUNCTION__ __LINE__; *)
-  (* log "ANF: @[%a@]" Compile_lib.ANF.pp_stru anf; *)
-  let is_toplevel =
-    let hash = Hashtbl.create (List.length anf) in
-    List.iter
-      (fun (_, name, body) ->
-         let pats, _ = Compile_lib.ANF.group_abstractions body in
-         let argc = List.length pats in
-         if String.equal name.Ident.hum_name "main"
-         then Toplevel.extend name ~kind:Toplevel.Main
-         else if argc = 0
-         then Toplevel.extend name ~kind:Toplevel.(Immediate Constant)
-         else (
-           let () = assert (argc >= 1 || name.Ident.hum_name = "main") in
-           let () = Toplevel.extend name ~kind:(Toplevel.Function { argc }) in
-           Hashtbl.add hash name argc))
-      anf;
-    fun name ->
-      match Hashtbl.find hash name with
-      | n -> Some n
-      | exception Not_found -> None
-  in
+  let _ = wrap_main_into_start in
   Stdio.Out_channel.with_file file ~f:(fun ch ->
     let ppf = Format.formatter_of_out_channel ch in
+    let is_toplevel, vbs =
+      let hash = Hashtbl.create (List.length anf) in
+      let is_toplevel =
+        fun name ->
+        match Hashtbl.find hash name with
+        | n -> Some n
+        | exception Not_found -> None
+      in
+      let vbs =
+        List.map
+          (function
+            | _, None, body ->
+              let fresh = ANF.gensym_id ~prefix:"eval" () in
+              Toplevel.extend fresh ~kind:(Immediate Eval);
+              `Global_eval (fresh, body)
+            | _, Some name, body ->
+              let pats, expr = Compile_lib.ANF.group_abstractions body in
+              let argc = List.length pats in
+              if String.equal name.Ident.hum_name "main"
+              then (
+                let () = Toplevel.extend name ~kind:Toplevel.Main in
+                `Main (name, body))
+              else if argc = 0
+              then (
+                let () = Toplevel.extend name ~kind:Toplevel.(Immediate Constant) in
+                `Immediate (name, body))
+              else (
+                let () = assert (argc >= 1 || name.Ident.hum_name = "main") in
+                let () = Toplevel.extend name ~kind:(Toplevel.Function { argc }) in
+                Hashtbl.add hash name argc;
+                `Function (name, pats, expr)))
+          anf
+      in
+      is_toplevel, vbs
+    in
     let do_string_init = prepare_string_lit_init ppf anf in
     (* externs *)
     let __ () =
@@ -1314,36 +1341,14 @@ let codegen ?(wrap_main_into_start = true) anf file =
         ];
       printfn ppf ""
     in
-    (* if use_custom_main then
-           (* TODO: use exit_group syscall (231)
-              https://filippo.io/linux-syscall-table/ *)
-           printfn ppf
-             {|_start:
-                 push    rbp
-                 mov     rbp, rsp   ; prologue
-                 push 5
-                 call sq
-                 add rsp, 8
-                 mov rdi, rax    ; rdi stores return code
-                 mov rax, 60     ; exit syscall
-                 syscall|}
-         else *)
     let open Compile_lib in
-    let on_vb (_flg, name, expr) =
-      (* if Addr_of_local.size () <> 0
-      then
-        failwiths
-          "There are left over variables (before function %s): %s "
-          name.Ident.hum_name
-          (Addr_of_local.keys ()); *)
-      match Toplevel.find_exn name with
-      | { Toplevel.kind = Toplevel.Function { argc } } ->
+    let on_vb = function
+      | `Function (name, pats, body) ->
+        let argc = List.length pats in
         assert (argc > 0);
         printfn ppf "\n.text";
         let () = printfn ppf ".globl %s" name.Ident.hum_name in
         let () = printfn ppf "%s:" name.Ident.hum_name in
-        let pats, body = ANF.group_abstractions expr in
-        let argc = List.length pats in
         let names =
           List.filter_map
             (function
@@ -1361,7 +1366,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
         Addr_of_local.remove_args names;
         print_epilogue ppf name.hum_name;
         Machine.flush_queue ppf
-      | { kind = Main } ->
+      | `Main (name, expr) ->
         put_init_global_immediates ppf;
         printfn ppf "\n.text";
         printfn ppf ".globl main";
@@ -1372,17 +1377,16 @@ let codegen ?(wrap_main_into_start = true) anf file =
         emit call "rukaml_init_global_immediates";
         emit comment "this is main";
         emit li a0 0;
-        (* failwith "TODO main" *)
         Toplevel.extend name ~kind:Main;
         generate_body is_toplevel expr;
         print_epilogue ppf name.Ident.hum_name;
         Machine.flush_queue ppf
-      | { kind = Immediate _; _ } -> emit_global_constant is_toplevel ppf name expr
-      | { kind = Alias _ } -> failwith "TODO alias"
+      | `Immediate (name, expr) -> emit_global_constant is_toplevel ppf name expr
+      | `Global_eval (name, expr) -> emit_global_eval ppf is_toplevel name expr
+      (* | { kind = Alias _ } -> failwith "TODO alias" *)
       (* | _ -> failwith "TODO" *)
-      (* let _ = if argc mod 2 = 0 then argc else argc + 1 in *)
     in
-    List.iter on_vb anf;
+    List.iter on_vb vbs;
     Format.pp_print_flush ppf ());
   Result.Ok ()
 ;;

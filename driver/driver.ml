@@ -114,7 +114,8 @@ module Compiler = struct
     let vbs =
       List.map
         (function
-          | ANF.ANF_vb (flg, Apat_var name, body) -> flg, name, body
+          | ANF.ANF_vb (flg, Apat_var name, body) -> flg, Some name, body
+          | ANF.ANF_vb ((NonRecursive as flg), Apat_unit, body) -> flg, None, body
           | _ -> failwiths "not implemented %s %d" __FILE__ __LINE__)
         stru
     in
