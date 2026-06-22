@@ -1187,7 +1187,8 @@ value rukaml_equal_sysv(value l, value r) {
   }
 
   if (IS_ON_HEAP(l) && IS_ON_HEAP(r)) {
-    assert(TAG(l) == TAG(r));
+    if (TAG(l) != TAG(r))
+      return Val_false;
     if (TAG(l) == String_tag) {
       int ans = strcmp((char *)l, (char *)r);
       return (ans == 0) ? Val_true : Val_false;
