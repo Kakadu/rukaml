@@ -673,6 +673,27 @@ let rec generate_body ppf body =
       emit_rukaml_apply1 dest ~fname ~arg
     | CApp (APrimitive (("array_set" as fname), (3 as argc)), arg1, []) ->
       emit_rukaml_applyN dest ~fname ~argc ~arg1
+    | CApp (APrimitive ("array_set", 3), arg1, [ arg2; arg3 ]) ->
+      printfn ppf "  add rsp, -8*4";
+      let pad1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
+      let name1 = Ident.of_string @@ gen_name ~prefix:"arg1" () in
+      let name2 = Ident.of_string @@ gen_name ~prefix:"arg2" () in
+      let name3 = Ident.of_string @@ gen_name ~prefix:"arg2" () in
+      Addr_of_local.extend pad1;
+      Addr_of_local.extend name1;
+      Addr_of_local.extend name2;
+      Addr_of_local.extend name3;
+      (* TODO: Understand again calling convention here *)
+      helper_a (DStack_var name3) arg1;
+      helper_a (DStack_var name2) arg2;
+      helper_a (DStack_var name1) arg3;
+      printfn ppf "  call rukaml_array_set";
+      Addr_of_local.remove_local name3;
+      Addr_of_local.remove_local name2;
+      Addr_of_local.remove_local name1;
+      Addr_of_local.remove_local pad1;
+      printfn ppf "  add rsp, 8*4";
+      printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (APrimitive (("array_get" as fname), 2), arg1, [ arg2 ]) ->
       emit_rukaml_apply2 dest ~fname ~arg1 ~arg2
     | CApp (APrimitive (("array_len" as fname), 1), arg, []) ->

@@ -90,7 +90,9 @@ struct gc_data
 };
 
 static struct gc_data GC = {
-    .ebp = 0, .allocated_words = 0, .stats = {.gs_allocated_words = 0},
+    .ebp = 0,
+    .allocated_words = 0,
+    .stats = {.gs_allocated_words = 0},
     // .static_roots is not compile-time constant, so it is not initialized here
 };
 
@@ -421,6 +423,8 @@ void **rukaml_array_read_in(int a0, int a1, int a2, int a3, int a4, int a5,
 void rukaml_array_set(int a0, int a1, int a2, int a3, int a4, int a5,
                       void **arr, uint64_t n, void *a)
 {
+  assert(is_backup_bank(arr) || is_old_bank(arr));
+
   assert(TAG(arr) == Array_tag);
   if (n >= SIZE(arr))
   {

@@ -1271,10 +1271,11 @@ let put_init_global_immediates ppf =
 let emit_global_eval ppf is_toplevel ident expr =
   printfn ppf "\n.text";
   printfn ppf "init_%a:" Toplevel.pp_label_exn ident;
-  emit addi sp sp (-16);
-  emit sd ra (ROffset (SP, 0));
+  (* emit addi sp sp (-16); *)
+  (* emit sd ra (ROffset (SP, 0)); *)
   generate_body is_toplevel expr;
-  emit ld ra (ROffset (SP, 0));
+  (* emit ld ra (ROffset (SP, 0)); *)
+  (* emit addi sp sp 16; *)
   emit ret;
   Machine.flush_queue ppf
 ;;
