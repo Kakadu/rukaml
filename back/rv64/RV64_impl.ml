@@ -773,6 +773,15 @@ let generate_body is_toplevel body =
       emit addi a1 t6 0;
       emit call "rukaml_equal_sysv";
       emit sd_dest a0 dest
+    | CApp (APrimitive ("<", _), vl, [ vr ]) ->
+      (* This case is complicated when arguments are non immediate. *)
+      (* TODO: add explicit primitive %rukaml_equal? *)
+      helper_a (DReg "t5") vl;
+      helper_a (DReg "t6") vr;
+      emit addi a0 t5 0;
+      emit addi a1 t6 0;
+      emit call "rukaml_compare_sysv";
+      emit sd_dest a0 dest
     | CApp (APrimitive ((("+" | "*" | "-") as prim), _), AVar vl, [ AVar vr ]) ->
       emit comment (sprintf "%s is stored in %d" vl.hum_name (Addr_of_local.find_exn vl));
       emit comment (sprintf "%s is stored in %d" vr.hum_name (Addr_of_local.find_exn vr));
@@ -953,6 +962,10 @@ let generate_body is_toplevel body =
       emit ld a1 (pp_to_mach arg1);
       emit ld a0 (pp_to_mach arg0);
       emit call "rukaml_output_string_sysv";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("exit", 1), arg0, []) ->
+      helper_a (DReg "a0") arg0;
+      emit call "rukaml_sys_exit_sysv";
       emit sd_dest a0 dest
     | CApp (APrimitive (pname, partiy), arg1, args) ->
       Format.eprintf "Unsupported primitive call: %s/%d\n%!" pname partiy;

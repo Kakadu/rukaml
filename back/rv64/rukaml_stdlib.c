@@ -1217,3 +1217,8 @@ value rukaml_equal_sysv(value l, value r) {
 value rukaml_equal(DECLARE_FAKE_ARGS, value l, value r) {
   return rukaml_equal_sysv(l, r);
 }
+
+value rukaml_sys_exit_sysv(value n) {
+  exit(Int_val(n));
+  __builtin_unreachable();
+}
