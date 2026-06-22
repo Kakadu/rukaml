@@ -74,20 +74,17 @@ let group_abstractions =
   helper []
 ;;
 
-[@@@ocaml.warnerror "-11"]
-
 let is_infix_binop = function
   | "=" | "+" | "-" | "*" | "/" | "<" | "<=" | ">" | ">=" | "&&" | "||" -> true
   | _ -> false
 ;;
 
-let pp_comma_list eta =
-  Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf ", ") eta
-;;
-
 (** Formatting *)
 include struct
   open Format
+
+  let pp_comma_list eta = pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") eta
+  let pp_semic_list eta = pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "; ") eta
 
   let pp_apat ppf = function
     | Apat_var s -> Ident.pp ppf s
