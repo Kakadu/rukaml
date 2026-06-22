@@ -1,10 +1,19 @@
 
 .text
+.globl rukaml_init_global_immediates
+rukaml_init_global_immediates:
+  addi sp, sp, -16
+  sd ra, (sp)
+  ld ra, (sp)
+  addi sp, sp, 16
+  ret
 
+.text
 .globl main
 main:
   mv a0, sp
   call rukaml_initialize
+  call rukaml_init_global_immediates
 # this is main
   li a0, 0
   addi sp, sp, -32

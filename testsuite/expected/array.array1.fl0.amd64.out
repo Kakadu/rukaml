@@ -75,7 +75,7 @@ main:
   call rukaml_init_global_immediates
   pop rsi           ; pass argv to main
   pop rdi           ; pass argc to main
-  sub rsp, 8*6 ; allocate for local variables temp6, temp5, temp4, temp3, temp2, temp1
+  sub rsp, 8*4 ; allocate for local variables temp4, temp3, temp2, temp1
   mov rdi, 4 ; array size
   mov rsi, 1 ; array tag
   call rukaml_alloc_block
@@ -96,35 +96,14 @@ main:
   mov rax, [rsp]
   add rsp, 8*2 ; pop array
   mov [rbp-1*8], rax
-  mov rdi, rukaml_array_set
-  mov rsi, 3
-  call rukaml_alloc_closure
-  mov rdi, rax
-  mov rsi, 1
-  mov rdx, [rbp-1*8]
-  mov rax, 0
-  call rukaml_applyN
+  add rsp, -8*4
+  mov qword rdx, [rbp-1*8] ; access local var "temp1" [1/2]
+  mov qword [rbp-8*8], rdx  ; access local var "temp1" [2/2]
+  mov qword [rbp-7*8],  1
+  mov qword [rbp-6*8],  42
+  call rukaml_array_set
+  add rsp, 8*4
   mov [rbp-2*8], rax
-  sub rsp, 8 ; padding
-  sub rsp, 8 ; first arg of a function temp2
-  mov qword [rbp-8*8],  1
-  mov rax, 0  ; no float arguments
-  mov rdi, [rbp-2*8]
-  mov rsi, 1
-  mov rdx, [rbp-8*8]
-  call rukaml_applyN
-  add rsp, 8*2 ; free space for args of function "temp2"
-  mov [rbp-3*8], rax
-  sub rsp, 8 ; padding
-  sub rsp, 8 ; first arg of a function temp3
-  mov qword [rbp-8*8],  42
-  mov rax, 0  ; no float arguments
-  mov rdi, [rbp-3*8]
-  mov rsi, 1
-  mov rdx, [rbp-8*8]
-  call rukaml_applyN
-  add rsp, 8*2 ; free space for args of function "temp3"
-  mov [rbp-4*8], rax
   mov rdi, rukaml_block_nth
   mov rsi, 2
   call rukaml_alloc_closure
@@ -133,20 +112,20 @@ main:
   mov rdx, [rbp-1*8]
   mov rax, 0
   call rukaml_applyN
-  mov [rbp-5*8], rax
+  mov [rbp-3*8], rax
   sub rsp, 8 ; padding
-  sub rsp, 8 ; first arg of a function temp5
-  mov qword [rbp-8*8],  1
+  sub rsp, 8 ; first arg of a function temp3
+  mov qword [rbp-6*8],  1
   mov rax, 0  ; no float arguments
-  mov rdi, [rbp-5*8]
+  mov rdi, [rbp-3*8]
   mov rsi, 1
-  mov rdx, [rbp-8*8]
+  mov rdx, [rbp-6*8]
   call rukaml_applyN
-  add rsp, 8*2 ; free space for args of function "temp5"
-  mov [rbp-6*8], rax
-  mov rdi, [rbp-6*8]
+  add rsp, 8*2 ; free space for args of function "temp3"
+  mov [rbp-4*8], rax
+  mov rdi, [rbp-4*8]
   call rukaml_print_int
   mov rax, rax
-  add rsp, 8*6 ; deallocate local variables temp6, temp5, temp4, temp3, temp2, temp1
+  add rsp, 8*4 ; deallocate local variables temp4, temp3, temp2, temp1
   pop rbp
   ret  ;;;; main

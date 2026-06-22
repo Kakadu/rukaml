@@ -1,6 +1,5 @@
 
 .text
-
 .globl __lifted_lam_1
 __lifted_lam_1:
   addi sp, sp, -16
@@ -20,6 +19,7 @@ __lifted_lam_1:
   addi sp, sp, 16 # DEallocate for RA, and 1 locals temp5
   ret # __lifted_lam_1
 
+.text
 .globl f
 f:
   addi sp, sp, -16
@@ -39,6 +39,7 @@ f:
   addi sp, sp, 16 # DEallocate for RA, and 1 locals temp7
   ret # f
 
+.text
 .globl __lifted_lam_3
 __lifted_lam_3:
   addi sp, sp, -16
@@ -49,11 +50,13 @@ __lifted_lam_3:
   addi sp, sp, 16 # DEallocate for Pad, RA and 0 locals variables 
   ret # __lifted_lam_3
 
+.text
 .globl __lifted_lam_2
 __lifted_lam_2:
   addi sp, sp, -16
   sd ra, (sp)
   sd zero, 8(sp) # padding
+# HERR: use new Toplevel module
 # Allocate args to call fun "f" with args
   addi sp, sp, -16 # last_pos = 4
   li t0, 1
@@ -69,15 +72,27 @@ __lifted_lam_2:
   addi sp, sp, 16 # DEallocate for Pad, RA and 0 locals variables 
   ret # __lifted_lam_2
 
+.text
+.globl rukaml_init_global_immediates
+rukaml_init_global_immediates:
+  addi sp, sp, -16
+  sd ra, (sp)
+  ld ra, (sp)
+  addi sp, sp, 16
+  ret
+
+.text
 .globl main
 main:
   mv a0, sp
   call rukaml_initialize
+  call rukaml_init_global_immediates
 # this is main
   li a0, 0
   addi sp, sp, -16
   sd ra, (sp)
   sd zero, 8(sp) # padding
+# HERR: use new Toplevel module
 # Allocate args to call fun "f" with args
   addi sp, sp, -16 # last_pos = 4
   li t0, 1

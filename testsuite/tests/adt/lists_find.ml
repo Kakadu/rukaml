@@ -1,6 +1,6 @@
 (*
 test
-  (targets amd64)
+  (targets amd64 rv64)
   (run
     (stdout "test passed"))
 *)
@@ -25,7 +25,7 @@ let not x = if x then false else true
 
 let rec is_even_positive x = if x = 0 then true else not (is_even_positive (x - 1))
 
-let rec print_ls ls = 
+let rec print_ls ls =
   match ls with
   | [] -> 0
   | x :: xs ->
@@ -38,6 +38,6 @@ let main =
   let ls3 = [ 1; 0; 1 ] in
   match find (forall is_even_positive) [ ls1; ls2; ls3 ] with
   | Some [ 2; 4; 6 ] -> printf "test passed"
-  | _ -> 
+  | _ ->
     let () = printf "test failed" in
     exit 1
