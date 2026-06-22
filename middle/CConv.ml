@@ -461,7 +461,10 @@ let structure ?(standart_globals = standart_globals) stru =
             | _, PTuple _, _ ->
               (* TODO(Kakadu): add other names too *)
               acc
-            | _ -> failwiths "not implemented %s %d" __FILE__ __LINE__)
+            | _, Parsetree.(PAny | PUnit), _ -> acc
+            | vb ->
+              Format.eprintf "@[%a@]\n%!" Parsetree.pp_value_binding vb;
+              failwiths "not implemented %s %d" __FILE__ __LINE__)
         in
         new_glob, List.append ans (List.map (fun vb -> Parsetree.Pstr_value vb) new_strus)
       | Parsetree.Pstr_type _ as td -> glob, List.append ans [ td ])

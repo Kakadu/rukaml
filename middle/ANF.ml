@@ -727,6 +727,19 @@ let anf =
             , Apat_var name
             , CApp (APrimitive (bname, 2), arg1, [ arg2 ])
             , k (AVar name) )))
+    | TApp
+        ( TApp (TApp (TVar (_varname, _, Builtin (bname, 3), _), arg1, _), arg2, _)
+        , arg3
+        , _ ) ->
+      helper arg1 (fun arg1 ->
+        helper arg2 (fun arg2 ->
+          helper arg3 (fun arg3 ->
+            let name = gensym_id () in
+            ELet
+              ( NonRecursive
+              , Apat_var name
+              , CApp (APrimitive (bname, 3), arg1, [ arg2; arg3 ])
+              , k (AVar name) ))))
     | TApp (f, arg1, _ty) ->
       helper f (fun f ->
         helper arg1 (fun arg1 ->

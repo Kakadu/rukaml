@@ -60,17 +60,26 @@ let test_anf ?(simplify = false) ?(print_before = false) text =
   let simplify_anf = if simplify then simplify_stru else Fun.id in
   let ( let* ) x f = Result.bind x f in
   match
-    let stru = Frontend.Parsing.parse_vb_exn text in
-    let vbs = CConv.structure [ Parsetree.Pstr_value stru ] in
-    let* _env, stru_typed = Inferencer.structure Typedtree.empty_table vbs in
+    let* stru = Frontend.Parsing.parse_value_bindings text in
+    let vbs = CConv.structure (List.map (fun x -> Parsetree.Pstr_value x) stru) in
+    let* _env, stru_typed =
+      Inferencer.structure Typedtree.empty_table vbs
+      |> Result.map_error (function
+          (* | #Frontend.Parsing.error as e ->
+          (e :> [ Frontend.Parsing.error | Inferencer.error ]) *)
+          | #Inferencer.error as e
+          -> (e :> [ Parsing.error | Inferencer.error ]))
+    in
     let anf = anf_stru stru_typed in
     if print_before
     then (
       Format.printf "Before simplify:\n%!";
       Format.printf "@[<v>%a@]\n\n%!" pp_stru anf);
-    anf |> simplify_anf |> Result.ok
+    Result.Ok (anf |> simplify_anf)
   with
-  | Result.Error err -> Format.printf "%a\n%!" Inferencer.pp_error err
+  | Result.Error (#Inferencer.error as err) ->
+    Format.printf "%a\n%!" Inferencer.pp_error err
+  | Result.Error (#Parsing.error as err) -> Format.printf "%a\n%!" Parsing.pp_error err
   | Ok anf -> Format.printf "@[<v>%a@]\n%!" pp_stru anf
 ;;
 
@@ -311,17 +320,16 @@ let%expect_test "...  " =
   (* ANF.set_logging true; *)
   Printexc.record_backtrace false;
   test_anf
-    ~simplify:true
+    ~simplify:false
     {|
-  let array1 = [| 0; 1; 2; 3; 4; 5 |]
+  let array1 = [| 0; 1; 2 |]
   let () = array_set array1 1 42
-  let main =
-    42
 |};
-  [%expect.unreachable]
-[@@expect.uncaught_exn {|
-  (Failure "Error during parsing")
-  Trailing output
-  ---------------
-  Error: : end_of_input |}]
+  [%expect{|
+    let array1 =
+      let temp1 = [|0, 1, 2|] in
+      temp1
+    let () =
+      let temp2 = array_set array1 1 42 in
+      temp2 |}]
 ;;
