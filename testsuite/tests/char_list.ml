@@ -1,6 +1,6 @@
 (*
    test
-  (targets amd64)
+  (targets amd64 rv64)
   (run (stdout "tests passed"))
 *)
 
@@ -13,7 +13,7 @@ let string_to_char_list s =
 let assert_equal msg a b =
   if a = b
     then ()
-  else 
+  else
     let () = printf "[error] test failed: %s\n" msg
     in exit 1
 
@@ -30,7 +30,7 @@ let test3 () =
 
 ;;
 
-let main = 
+let main =
   let () = test1 () in
   let () = test2 () in
   let () = test3 () in

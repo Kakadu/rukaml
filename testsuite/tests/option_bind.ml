@@ -1,12 +1,12 @@
 (*
 test
-  (targets amd64)
+  (targets amd64 rv64)
   (run (stdout "rukaml_print_int 0"
                "rukaml_print_int 1"
                "rukaml_print_int 0"
                "rukaml_print_int 0"))
 *)
-  
+
 type 'a option =
   | Some of 'a
   | None

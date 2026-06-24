@@ -1,6 +1,6 @@
 (*
 test
-  (targets amd64)
+  (targets amd64 rv64)
   (run
     (stdout "rukaml_print_int 1"
             "rukaml_print_int 2"
@@ -27,7 +27,7 @@ let unwrap ls =
   let rec aux ls acc =
     match ls with
     | [] -> Some (rev acc [])
-    | Some x :: xs -> 
+    | Some x :: xs ->
       aux xs (x :: acc)
     | _ -> None
   in
