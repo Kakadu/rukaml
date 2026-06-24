@@ -432,6 +432,7 @@ let simplify : _ Arity_map.t -> expr -> expr =
     let rez =
       match e with
       | EComplex e -> EComplex (helper_c acc e)
+      | ELet (_, Apat_any, CAtom (AVar _), wher) -> helper acc wher
       (* inline for variable application *)
       | ELet
           ( Parsetree.NonRecursive
