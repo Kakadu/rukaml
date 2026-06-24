@@ -637,7 +637,7 @@ void *rukaml_alloc_string(size_t len) {
   return block;
 }
 
-uint64_t rukaml_string_len_imm(value str) {
+uint64_t rukaml_string_length_sysv(value str) {
   if (str == NULL) {
     mk_err_fatal("unexpected null ptr");
   }
@@ -674,7 +674,7 @@ void *rukaml_make_string_of_lit(const char *const s) {
   //   // log ("\n");
   // #endif
 
-  assert(rukaml_string_len_imm(block) == len);
+  assert(rukaml_string_length_sysv(block) == len);
   // printf("String created at addr = 0x%lX\n", block);
   return (void *)block;
 }
@@ -692,7 +692,7 @@ char rukaml_string_nth_sysv(value str, uint64_t n) {
   }
 
   uint64_t str_len = 0;
-  str_len = rukaml_string_len_imm(str);
+  str_len = rukaml_string_length_sysv(str);
   // log("%s str = '%s', n = %d, strlen = %d\n", __func__, str, n, str_len);
 
   if (n >= str_len) {
@@ -730,7 +730,7 @@ void rukaml_fprintf_impl(void *dest, value fmt, va_list args) {
     mk_err_fatal("tag mismatch");
   }
 
-  uint64_t fmt_len = rukaml_string_len_imm((value)fmt);
+  uint64_t fmt_len = rukaml_string_length_sysv((value)fmt);
 
   // log("%s, fmtlen = %d\n", __func__, fmt_len);
   for (size_t pos = 0; pos < fmt_len; ++pos) {
@@ -827,7 +827,7 @@ uint64_t eval_fmt_arity(value fmt) {
   }
   assert(TAG(fmt) == String_tag);
 
-  uint64_t fmt_len = rukaml_string_len_imm((value)fmt);
+  uint64_t fmt_len = rukaml_string_length_sysv((value)fmt);
   // log("\n%s len = %ld\n", __func__, fmt_len);
   // pp_string_as_HEX(fmt);
 
@@ -965,7 +965,7 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
   }
 
   size_t pos;
-  size_t fmt_len = rukaml_string_len_imm(fmt);
+  size_t fmt_len = rukaml_string_length_sysv(fmt);
   size_t output_len = 1; // for '\0'
   // log("%s, fmtlen = %" PRIu64 "\n", __func__, fmt_len);
   uint64_t *__args_start = NULL;
@@ -1029,7 +1029,7 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
       // rukaml_trace_val(str, 5);
       sprintf_insert_arg(&__args_start, &__args_fin, str);
       // printf("args_start = 0x%Lx\n", __args_start);
-      output_len += rukaml_string_len_imm(str);
+      output_len += rukaml_string_length_sysv(str);
       argslen++;
       break;
     }
@@ -1264,4 +1264,40 @@ value rukaml_compare(DECLARE_FAKE_ARGS, value l, value r) {
 value rukaml_sys_exit_sysv(value n) {
   exit(Int_val(n));
   __builtin_unreachable();
+}
+
+value rukaml_list_length(DECLARE_FAKE_ARGS, value ls) {
+  for (uint64_t size = 0;; ++size) {
+    assert(IS_BLOCK(ls));
+    switch (TAG(ls)) {
+    case 1: // cons
+      assert(2 == SIZE(ls));
+      ls = Field(ls, 0);
+      break;
+    case 0:
+      return Int_val(size);
+    default:
+      mk_err_fatal("tag mismatch");
+    }
+  }
+}
+
+value rukaml_string_of_char_list_sysv(value chs) {
+  uint64_t chars_n = rukaml_list_length(FAKE_ARGS, chs);
+  uint64_t payload_words_n = (chars_n + 7) / 8;
+  value block = rukaml_alloc_block(payload_words_n + 1, String_tag);
+
+  assert(rukaml_string_length_sysv(block) == chars_n);
+
+  for (size_t n = 0; n < chars_n; ++n) {
+    assert(TAG(chs) == 1);                        // tag of ( :: )
+    ((char *)(block))[n] = (char)(Field(chs, 0)); // get head
+    chs = Field(chs, 1);                          // get next list node
+  }
+
+  return (void **)block;
+}
+
+value rukaml_string_of_char_list(DECLARE_FAKE_ARGS, value chs) {
+  return rukaml_string_of_char_list_sysv(chs);
 }

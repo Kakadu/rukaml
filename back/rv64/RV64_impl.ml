@@ -584,6 +584,19 @@ let generate_body is_toplevel body =
        | ALam (_, _)
        | AUnit -> failwith "Should not happen: print_int"
        | _ -> failwiths "not implemented %s %d" __FILE__ __LINE__)
+    | CApp (APrimitive ("string_nth", 2), arg1, [ arg2 ]) ->
+      helper_a (DReg "a0") arg1;
+      helper_a (DReg "a1") arg2;
+      emit call "rukaml_string_nth_sysv";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("string_len", 1), arg1, []) ->
+      helper_a (DReg "a0") arg1;
+      emit call "rukaml_string_length_sysv";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("string_of_char_list", 1), arg1, []) ->
+      helper_a (DReg "a0") arg1;
+      emit call "rukaml_string_of_char_list_sysv";
+      emit sd_dest a0 dest
     | CApp (APrimitive ("array_len", 1), arg1, []) ->
       (match arg1 with
        | AVar v when Addr_of_local.has_key v ->
