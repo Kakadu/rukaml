@@ -1018,8 +1018,8 @@ let generate_body is_toplevel body =
          emit sd_dest t0 dest)
     | AVar vname ->
       (match Toplevel.find_opt vname with
-       | Some { kind = Function { argc = 0 }; ident } -> assert false
-       | Some { kind = Function { argc }; ident = fname } ->
+       | Some { kind = Function { argc = 0 }; _ } -> assert false
+       | Some { kind = Function { argc }; _ } ->
          assert (argc > 0);
          (* failwith "TODO: create a closure" *)
          emit_alloc_closure vname.hum_name argc;
