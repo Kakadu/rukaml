@@ -1,0 +1,42 @@
+(rule
+ (target rukaml_stdlib.o)
+ (enabled_if
+  (not
+   (= none %{read:../../cc_rv64})))
+ (deps %{project_root}/back/rv64/rukaml_stdlib.c)
+ (action
+  (system
+   "%{read:../../cc_rv64} -DRUKAML_DEBUG=1 -march=rv64g -c %{deps} -Wno-pedantic -ffreestanding -nostdlib -std=c99 -ggdb -o %{target}")))
+
+(rule
+ (target compiler.s)
+ (deps compiler.ml)
+ (mode
+  (promote (until-clean)))
+ (action
+  (run %{project_root}/driver/driver.exe %{deps} --target rv64 -o %{target})))
+
+(rule
+ (target compiler.anf.ml)
+ (deps compiler.ml)
+ (mode
+  (promote (until-clean)))
+ (action
+  (run %{project_root}/driver/driver.exe %{deps} --target anf -o %{target})))
+
+(rule
+ (targets compiler.exe)
+ (deps
+  %{project_root}/driver/driver.exe
+  (:src compiler.s)
+  (:stdlib ./rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o demo.o)
+   (run riscv64-linux-gnu-gcc-13 -g %{stdlib} demo.o -o %{targets}))))
+
+(cram
+ (applies_to *)
+ (deps ./compiler.exe compiler.anf.ml))
