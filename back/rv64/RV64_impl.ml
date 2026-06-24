@@ -232,7 +232,9 @@ let allocate_locals input_anf : (now:unit -> unit) * _ =
     | ELet (_flg, Apat_unit, rhs, where_) ->
       helper_c rhs;
       helper where_
-    | ELet _ -> assert false
+    | ELet _ as expr ->
+      Format.eprintf "%a\n%!" ANF.pp expr;
+      failwiths "Not implemented %s %d" __FILE__ __LINE__
   and helper_c = function
     | CIte (_, th, el) ->
       helper th;
@@ -795,7 +797,7 @@ let generate_body is_toplevel body =
       emit addi a1 t6 0;
       emit call "rukaml_compare_sysv";
       emit sd_dest a0 dest
-    | CApp (APrimitive ((("+" | "*" | "-") as prim), _), AVar vl, [ AVar vr ]) ->
+    | CApp (APrimitive ((("+" | "*" | "-" | "||") as prim), _), AVar vl, [ AVar vr ]) ->
       emit comment (sprintf "%s is stored in %d" vl.hum_name (Addr_of_local.find_exn vl));
       emit comment (sprintf "%s is stored in %d" vr.hum_name (Addr_of_local.find_exn vr));
       emit comment (sprintf "last_pos = %d" !Addr_of_local.last_pos);
@@ -805,6 +807,7 @@ let generate_body is_toplevel body =
        | "+" -> emit add
        | "*" -> emit mulw
        | "-" -> emit sub
+       | "||" -> emit or_
        | op -> failwiths "not_implemeted  %S. %d" op __LINE__)
         t5
         t3
@@ -980,6 +983,9 @@ let generate_body is_toplevel body =
       helper_a (DReg "a0") arg0;
       emit call "rukaml_sys_exit_sysv";
       emit sd_dest a0 dest
+    | CApp (APrimitive ("char_code", 1), AConst (PConst_char c), []) ->
+      emit li t5 (Char.code c);
+      emit sd_dest t5 dest
     | CApp (APrimitive (pname, partiy), arg1, args) ->
       Format.eprintf "Unsupported primitive call: %s/%d\n%!" pname partiy;
       Format.eprintf " args = %a\n%!" (pp_space_list ANF.pp_a) (arg1 :: args);
@@ -1096,6 +1102,12 @@ let generate_body is_toplevel body =
        | DReg rname -> emit li (RU rname) 1
        | DStack_var _ ->
          emit li t0 1;
+         emit sd_dest t0 dest)
+    | APrimitive ("stderr", 0) ->
+      (match dest with
+       | DReg rname -> emit li (RU rname) 2
+       | DStack_var _ ->
+         emit li t0 2;
          emit sd_dest t0 dest)
     | _atom ->
       Format.eprintf "Unsupported atom: @[`%a`@]\n%!" Compile_lib.ANF.pp_a _atom;
