@@ -52,7 +52,7 @@ void __mk_err_warning(const char *file, int line, const char *msg) {
   (is_backup_bank((uint64_t *)v) || is_old_bank((uint64_t *)v))
 #define IS_IMM(v) (!IS_BLOCK(v))
 #define Val_unit ((value)0)
-#define Val_int(n) (n)
+#define Val_int(n) ((value)n)
 #define Int_val(n) ((long)n)
 #define Val_nil ((value)0)
 #define Val_true ((value) true)
@@ -1213,9 +1213,52 @@ value rukaml_equal_sysv(value l, value r) {
 
   return Val_false;
 }
-//
+
 value rukaml_equal(DECLARE_FAKE_ARGS, value l, value r) {
   return rukaml_equal_sysv(l, r);
+}
+
+value rukaml_compare_sysv(value l, value r) {
+  if (l == r) {
+
+    return Val_int(0);
+  }
+
+  if (IS_ON_HEAP(l) && IS_ON_HEAP(r)) {
+    if (TAG(l) < TAG(r))
+      return Val_int(-1);
+    if (TAG(l) > TAG(r))
+      return Val_int(1);
+    if (TAG(l) == String_tag) {
+      int ans = strcmp((char *)l, (char *)r);
+      if (ans < 0)
+        return Val_int(-1);
+      if (ans == 0)
+        return Val_int(0);
+      return Val_int(1);
+    }
+    assert(SIZE(l) == SIZE(r));
+    if (SIZE(l) == 0)
+      return Val_int(0);
+    for (size_t i = 0; i < SIZE(l); i++) {
+      value lf = Field(l, i);
+      value rf = Field(r, i);
+      value ans = rukaml_equal_sysv(lf, rf);
+      if (ans != Val_int(0)) {
+        return ans;
+      }
+    }
+    return Val_int(0);
+  }
+
+  if (!IS_ON_HEAP(l))
+    return Val_int(-1);
+
+  return Val_int(1);
+}
+
+value rukaml_compare(DECLARE_FAKE_ARGS, value l, value r) {
+  return rukaml_compare_sysv(l, r);
 }
 
 value rukaml_sys_exit_sysv(value n) {
