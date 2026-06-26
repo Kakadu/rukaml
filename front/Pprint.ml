@@ -20,6 +20,8 @@ let group_applications l r =
 let pp_const ppf = function
   | PConst_bool b -> fprintf ppf "%b" b
   | PConst_int n -> fprintf ppf "%d" n
+  | PConst_char '\n' -> fprintf ppf "\'\\n\'"
+  | PConst_char '\t' -> fprintf ppf "\'\\t\'"
   | PConst_char c -> fprintf ppf "\'%c\'" c
   | PConst_string s -> fprintf ppf "\"%s\"" (String.escaped s)
 ;;
