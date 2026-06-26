@@ -24,6 +24,7 @@ type instr =
   | And_ of reg * reg * reg (** AND. and rd, rs1, rs2. ▸rd = rs1 & rs2 *)
   | Or_ of reg * reg * reg
   | Slt of reg * reg * reg (** Set Less Than.  slt rd, rs1, rs2.  rd = (rs1 < rs2) *)
+  | Slti of reg * reg * int
   | Sltiu of reg * reg * int
   (** Set Less Than Immediate Unsigned.  sltiu rd,rs1,imm.  x[rd] = x[rs1] <u sext(immediate) *)
   | Li of reg * int
@@ -50,6 +51,7 @@ let pp_instr ppf =
   | And_ (r1, r2, r3) -> fprintf ppf "and %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
   | Or_ (r1, r2, r3) -> fprintf ppf "or %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
   | Slt (r1, r2, r3) -> fprintf ppf "slt %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Slti (r1, r2, n) -> fprintf ppf "slti %a, %a, %d" pp_reg r1 pp_reg r2 n
   | Sltiu (r1, r2, n) -> fprintf ppf "sltiu %a, %a, %d" pp_reg r1 pp_reg r2 n
   | Li (r, n) -> fprintf ppf "li %a, %d" pp_reg r n
   | Ecall -> fprintf ppf "ecall"
@@ -78,6 +80,7 @@ let and_ k r1 r2 r3 = k (And_ (r1, r2, r3))
 let or_ k r1 r2 r3 = k (Or_ (r1, r2, r3))
 let slt k r1 r2 r3 = k (Slt (r1, r2, r3))
 let sltiu k r1 r2 n = k (Sltiu (r1, r2, n))
+let slti k r1 r2 n = k (Slti (r1, r2, n))
 let li k r n = k (Li (r, n))
 let ecall k = k Ecall
 let call k name = k (Call name)

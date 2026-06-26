@@ -1219,12 +1219,16 @@ value rukaml_equal(DECLARE_FAKE_ARGS, value l, value r) {
 }
 
 value rukaml_compare_sysv(value l, value r) {
+  // printf("%s. %ld vs %ld\n", __func__, l, r);
   if (l == r) {
-
+    // printf("%s %d\n", __func__, __LINE__);
+    fflush(stdout);
     return Val_int(0);
   }
 
   if (IS_ON_HEAP(l) && IS_ON_HEAP(r)) {
+    // printf("Got two heap values\n");
+    // fflush(stdout);
     if (TAG(l) < TAG(r))
       return Val_int(-1);
     if (TAG(l) > TAG(r))
@@ -1251,9 +1255,19 @@ value rukaml_compare_sysv(value l, value r) {
     return Val_int(0);
   }
 
+  if (!IS_ON_HEAP(l) && !IS_ON_HEAP(r)) {
+    // printf("Got two immediates\n");
+    // fflush(stdout);
+    if (Int_val(l) < Int_val(r))
+      return Val_int(-1);
+    if (Int_val(l) == Int_val(r))
+      return Val_int(0);
+    return Val_int(1);
+  }
+  printf("other\n");
+  fflush(stdout);
   if (!IS_ON_HEAP(l))
     return Val_int(-1);
-
   return Val_int(1);
 }
 
@@ -1300,4 +1314,111 @@ value rukaml_string_of_char_list_sysv(value chs) {
 
 value rukaml_string_of_char_list(DECLARE_FAKE_ARGS, value chs) {
   return rukaml_string_of_char_list_sysv(chs);
+}
+
+value rukaml_end_of_input_sysv(value channel) {
+  assert(Int_val(channel) == 0); // stdin
+  int ch = fgetc(stdin);
+
+  if (ch == EOF) {
+    return Val_true;
+  }
+
+  ungetc(ch, stdin);
+
+  return Val_false;
+}
+value rukaml_end_of_input(DECLARE_FAKE_ARGS, value channel) {
+  return rukaml_end_of_input_sysv(channel);
+}
+void *rukaml_open_impl(void **path, const char *mode) {
+  if (path == NULL) {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  if (TAG(path) != String_tag) {
+    mk_err_fatal("tag mismatch");
+  }
+
+  if (mode == NULL) {
+    mk_err_fatal("unexpected null ptr");
+  }
+
+  uint64_t len = rukaml_string_length_sysv(path);
+
+  char *path_cstr = malloc(len + 1);
+
+  if (path_cstr == NULL) {
+    mk_err_fatal("memory allocation failed");
+  }
+
+  memcpy(path_cstr, (const void *)path, len);
+
+  path_cstr[len] = '\0';
+
+  FILE *file = fopen(path_cstr, mode);
+
+  if (file == NULL) {
+    mk_err_fatal("fopen failed");
+  }
+
+  free(path_cstr);
+
+  return (void *)file;
+}
+
+void *rukaml_open_in_sysv(value path) {
+  printf("%s. file = %s\n", __func__, (char *)path);
+  return rukaml_open_impl(path, "r");
+}
+
+void *rukaml_open_in(DECLARE_FAKE_ARGS, value path) {
+  printf("%s. file = %s\n", __func__, (char *)path);
+  return rukaml_open_impl(path, "r");
+}
+
+void *rukaml_open_out(DECLARE_FAKE_ARGS, void **path) {
+  return rukaml_open_impl(path, "w");
+}
+
+void rukaml_close_channel(DECLARE_FAKE_ARGS, void *channel) {
+  if (channel == NULL) {
+    mk_err_warning("unexpected null");
+  } else {
+    fclose((FILE *)channel);
+  }
+}
+
+value rukaml_input_all_sysv(value _file) {
+  if (_file == 0) {
+    printf("Can't read from stdin\n");
+    exit(1);
+  }
+  if (_file == 1) {
+    printf("Can't read from stdout\n");
+    exit(1);
+  }
+  printf("file = %ld\n", _file);
+  FILE *file = (FILE *)_file;
+  fseek(file, 0, SEEK_END);
+  size_t size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  printf("size = %ld\n", size);
+  fflush(stdout);
+  value ans = rukaml_alloc_string(size);
+
+  fread((char *)ans, 1, size, file);
+  return ans;
+}
+
+value rukaml_get_argv(void) {
+  value _ans = rukaml_alloc_array(2);
+  value _pname = rukaml_alloc_string(16);
+  value _infile = rukaml_alloc_string(16);
+  strcpy((char *)_pname, "program.exe\0");
+  strcpy((char *)_infile, "program.c\0");
+  Set_field(_ans, 0, _pname);
+  Set_field(_ans, 1, _infile);
+  return _ans;
 }

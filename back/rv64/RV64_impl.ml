@@ -411,12 +411,27 @@ let generate_body is_toplevel body =
         emit lla t0 (rukaml_val_loc (String_lit_hash.find string_list_hash s));
         emit ld t0 (ROffset (Temp_reg 0, 0));
         emit sd t0 (ROffset (SP, 8 * i)) ~comm:"string literal"
-      | AVar vname when Option.is_some (is_toplevel vname) ->
-        (match is_toplevel vname with
-         | Some arity ->
+      | AVar vname
+        when Toplevel.find_opt vname <> None (* Option.is_some (is_toplevel vname)  *) ->
+        (match Toplevel.find_exn vname with
+         | { kind = Toplevel.Function { argc = arity }; _ } ->
            emit_alloc_closure vname.hum_name arity;
            emit sd a0 (ROffset (SP, 8 * i))
-         | None -> assert false)
+         | { kind = Main; _ } -> failwith "Should not happen"
+         | { kind = Alias _; _ } -> failwith "Not implemented"
+         | { ident; kind = Immediate Constant } ->
+           assert (Ident.equal ident vname);
+           emit ld t0 (RU (Format.asprintf "%a" Toplevel.pp_label_exn ident));
+           emit comment "imm constant";
+           emit sd t0 (ROffset (SP, 8 * i))
+         | { kind = Immediate Eval; _ } ->
+           failwiths "Not implemented %s %d" __FILE__ __LINE__
+         | { kind = Immediate Match; _ } ->
+           failwiths "Not implemented %s %d" __FILE__ __LINE__)
+      | AVar vname ->
+        (* TODO: use pp_access *)
+        emit ld t0 (pp_to_mach vname) ~comm:(sprintf "arg %S" vname.hum_name);
+        emit sd t0 (ROffset (SP, 8 * i))
       | APrimitive ("char_code", 1) ->
         emit_alloc_closure "rukaml_identity" 1;
         emit sd a0 (ROffset (SP, 8 * i))
@@ -429,22 +444,36 @@ let generate_body is_toplevel body =
       | APrimitive ("array_set", 3) ->
         emit_alloc_closure "rukaml_array_set" 3;
         emit sd a0 (ROffset (SP, 8 * i))
-      | AVar { Ident.hum_name = "stdin"; _ } -> emit call "rukaml_array_stdin"
+      (* | AVar { Ident.hum_name = "stdin"; _ } -> emit call "rukaml_array_stdin" *)
       (* Result is in a0 *)
-      | AVar vname ->
-        (* TODO: use pp_access *)
-        emit ld t0 (pp_to_mach vname) ~comm:(sprintf "arg %S" vname.hum_name);
-        emit sd t0 (ROffset (SP, 8 * i))
       | ALam _ -> failwith "Should it be representable in ANF?"
       | APrimitive ("print", (1 as parity)) ->
         emit_alloc_closure "rukaml_print_int_kaml" parity;
         emit sd a0 (ROffset (SP, 8 * i))
       | APrimitive ("stdout", 0) -> pp_access 1 i
-      | APrimitive _ as arg -> failwiths "Primitive %a is not supported" ANF.pp_a arg
+      | APrimitive ("sys_argv", 0) ->
+        emit call "rukaml_get_argv";
+        emit sd a0 (ROffset (SP, 8 * i))
+      | APrimitive (_, arity) as arg ->
+        failwiths "Primitive %a/%d is not supported" ANF.pp_a arg arity
       | AArray _ -> failwiths "Arrays are not atomic. Fix and implement this TODO"
     in
     ListLabels.iteri args ~f:on_arg;
     count
+  in
+  let is_unary_prim, on_unary_prim =
+    let mangling = String_lit_hash.create 34 in
+    String_lit_hash.add mangling "close_out" "rukaml_close_out";
+    String_lit_hash.add mangling "rukaml_input_all" "rukaml_input_all";
+    let checker str = String_lit_hash.mem mangling str in
+    let codegen helper_a ?(sysv = true) ident arg0 dest =
+      helper_a (DReg "a0") arg0;
+      let ans = String_lit_hash.find mangling ident in
+      let ans = if sysv then ans ^ "_sysv" else ans in
+      emit call ans;
+      emit sd_dest a0 dest
+    in
+    checker, codegen
   in
   let rec helper dest = function
     | Compile_lib.ANF.EComplex c -> helper_c dest c
@@ -503,8 +532,8 @@ let generate_body is_toplevel body =
     | CIte
         ( CApp
             ( APrimitive ((("<" | "=" | "<=") as op), _)
-            , ((AConst (PConst_int _) | AVar _) as lhs)
-            , [ ((AConst (PConst_int _) | AVar _) as rhs) ] )
+            , ((AConst (PConst_int _) | AConst (PConst_char _) | AVar _) as lhs)
+            , [ ((AConst (PConst_int _) | AConst (PConst_char _) | AVar _) as rhs) ] )
         , bthen
         , belse ) ->
       helper_a (DReg "t0") lhs;
@@ -626,13 +655,15 @@ let generate_body is_toplevel body =
       with_ra_saving (fun () ->
         emit_alloc_closure "rukaml_array_get" 2;
         emit li a1 2;
-        (match arg1 with
+        helper_a (DReg "a2") arg1;
+        (* (match arg1 with
          | AVar arr when Addr_of_local.has_key arr -> emit ld a2 (pp_to_mach arr)
-         | _ -> failwiths "Should not happen %s %d" __FILE__ __LINE__);
-        (match arg2 with
+         | _ -> failwiths "Should not happen %s %d" __FILE__ __LINE__); *)
+        helper_a (DReg "a3") arg2;
+        (* (match arg2 with
          | AVar n when Addr_of_local.has_key n -> emit ld a3 (pp_to_mach n)
          | AConst (PConst_int n) -> emit li a3 n
-         | _ -> failwiths "Should not happen %s %d" __FILE__ __LINE__);
+         | _ -> failwiths "Should not happen %s %d" __FILE__ __LINE__); *)
         emit call "rukaml_applyN";
         emit sd_dest a0 dest)
     | CApp (APrimitive ("array_set", 3), arg1, []) as e ->
@@ -687,6 +718,9 @@ let generate_body is_toplevel body =
     | CApp (APrimitive ("+", _), AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
       emit li t0 (l + r);
       emit sd_dest t0 dest
+    | CApp (APrimitive ("-", _), AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
+      emit li t0 (l - r);
+      emit sd_dest t0 dest
     | CApp (APrimitive ("*", _), AConst (PConst_int l), [ AConst (PConst_int r) ]) ->
       emit li t0 (l * r);
       emit sd_dest t0 dest
@@ -734,7 +768,12 @@ let generate_body is_toplevel body =
       emit sd_dest t0 dest ~comm:(Format.asprintf "dest = %a" Addr_of_local.pp_dest dest);
       emit beq zero zero exit_lab;
       emit label exit_lab
-    | CApp (APrimitive ("-", 2), AVar vname, [ AConst (PConst_int n) ]) ->
+    | CApp (APrimitive ("-", 2), arg1, [ arg2 ]) ->
+      helper_a (DReg "t4") arg1;
+      helper_a (DReg "t5") arg2;
+      emit sub t4 t4 t5;
+      emit sd_dest t4 dest
+    (* | CApp (APrimitive ("-", 2), AVar vname, [ AConst (PConst_int n) ]) ->
       (match is_toplevel vname with
        | None ->
          emit ld t5 (pp_to_mach vname);
@@ -742,7 +781,7 @@ let generate_body is_toplevel body =
          emit sd_dest t5 dest
        | Some _ ->
          (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
-         failwiths "not implemented %d" __LINE__)
+         failwiths "not implemented %d" __LINE__) *)
     | CApp (APrimitive ((("+" | "*") as prim), _), AVar vname, [ AConst (PConst_int n) ])
     | CApp (APrimitive ((("+" | "*") as prim), _), AConst (PConst_int n), [ AVar vname ])
       ->
@@ -779,6 +818,7 @@ let generate_body is_toplevel body =
       (* Unsigned integer <1 is only zero *)
       emit sltiu t0 t0 1;
       emit sd_dest t0 dest
+    | CApp (APrimitive ("string_equal", 2), vl, [ vr ])
     | CApp (APrimitive ("=", _), vl, [ vr ]) ->
       (* This case is complicated when arguments are non immediate. *)
       (* TODO: add explicit primitive %rukaml_equal? *)
@@ -788,6 +828,8 @@ let generate_body is_toplevel body =
       emit addi a1 t6 0;
       emit call "rukaml_equal_sysv";
       emit sd_dest a0 dest
+    | CApp (APrimitive (">", arity), vl, [ vr ]) ->
+      helper_c dest (CApp (APrimitive ("<", arity), vr, [ vl ]))
     | CApp (APrimitive ("<", _), vl, [ vr ]) ->
       (* This case is complicated when arguments are non immediate. *)
       (* TODO: add explicit primitive %rukaml_equal? *)
@@ -796,7 +838,8 @@ let generate_body is_toplevel body =
       emit addi a0 t5 0;
       emit addi a1 t6 0;
       emit call "rukaml_compare_sysv";
-      emit sd_dest a0 dest
+      emit slti t5 a0 0;
+      emit sd_dest t5 dest
     | CApp (APrimitive ((("+" | "*" | "-" | "||") as prim), _), AVar vl, [ AVar vr ]) ->
       emit comment (sprintf "%s is stored in %d" vl.hum_name (Addr_of_local.find_exn vl));
       emit comment (sprintf "%s is stored in %d" vr.hum_name (Addr_of_local.find_exn vr));
@@ -818,7 +861,7 @@ let generate_body is_toplevel body =
       emit li (RU "a1") 0;
       emit call "rukaml_trace_val";
       if dest <> DReg "a0" then emit sd_dest (RU "a0") dest
-    | CApp (AVar f, arg1, args) when Option.is_some (is_toplevel f) ->
+    | CApp (AVar f, arg1, args) when Toplevel.is_toplevel_function f ->
       emit comment "HERR: use new Toplevel module";
       (* Calling a rukaml function uses custom calling convention.
            Pascal convention: all arguments on stack, LTR *)
@@ -983,9 +1026,35 @@ let generate_body is_toplevel body =
       helper_a (DReg "a0") arg0;
       emit call "rukaml_sys_exit_sysv";
       emit sd_dest a0 dest
+    | CApp (APrimitive ("end_of_input", 1), arg0, []) ->
+      helper_a (DReg "a0") arg0;
+      emit call "rukaml_end_of_input_sysv";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("input_char", 1), arg0, []) ->
+      helper_a (DReg "a0") arg0;
+      emit call "rukaml_input_char_sysv";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("open_in", 1), arg0, []) ->
+      helper_a (DReg "a0") arg0;
+      emit call "rukaml_open_in_sysv";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("close_in", 1), arg0, []) ->
+      helper_a (DReg "a0") arg0;
+      emit call "rukaml_close_in_sysv";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("open_out", 1), arg0, []) ->
+      helper_a (DReg "a0") arg0;
+      emit call "rukaml_open_out_sysv";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("close_out", 1), arg0, []) ->
+      helper_a (DReg "a0") arg0;
+      emit call "rukaml_close_out_sysv";
+      emit sd_dest a0 dest
     | CApp (APrimitive ("char_code", 1), AConst (PConst_char c), []) ->
       emit li t5 (Char.code c);
       emit sd_dest t5 dest
+    | CApp (APrimitive (name, 1), arg1, []) when is_unary_prim name ->
+      on_unary_prim helper_a ~sysv:true name arg1 dest
     | CApp (APrimitive (pname, partiy), arg1, args) ->
       Format.eprintf "Unsupported primitive call: %s/%d\n%!" pname partiy;
       Format.eprintf " args = %a\n%!" (pp_space_list ANF.pp_a) (arg1 :: args);
@@ -1055,11 +1124,11 @@ let generate_body is_toplevel body =
        | Some { kind = Immediate Eval; _ } -> assert false
        | Some { kind = Immediate Match; _ } -> assert false
        | None ->
-         emit ld t5 (Addr_of_local.pp_to_mach vname);
+         emit ld t0 (Addr_of_local.pp_to_mach vname);
          (match dest with
-          | DReg _ -> emit addi1dest dest t5 0
+          | DReg _ -> emit addi1dest dest t0 0
           | DStack_var _ ->
-            emit sd_dest t5 dest ~comm:(sprintf "access a var %S" vname.hum_name)))
+            emit sd_dest t0 dest ~comm:(sprintf "access a var %S" vname.hum_name)))
       (* (match is_toplevel vname with
        | None ->
          emit ld t5 (Addr_of_local.pp_to_mach vname);
@@ -1097,6 +1166,12 @@ let generate_body is_toplevel body =
       emit ld t0 (ROffset (Temp_reg 0, 0));
       emit sd_dest t0 dest
     | APrimitive ("match_failure", _) -> emit call "rukaml_match_failure"
+    | APrimitive ("stdin", 0) ->
+      (match dest with
+       | DReg rname -> emit li (RU rname) 1
+       | DStack_var _ ->
+         emit li t0 0;
+         emit sd_dest t0 dest)
     | APrimitive ("stdout", 0) ->
       (match dest with
        | DReg rname -> emit li (RU rname) 1

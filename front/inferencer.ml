@@ -920,6 +920,10 @@ let start_env =
        "close_out"
        (Scheme.make_mono (tarrow out_channel_typ unit_typ))
   (* Stdio reading primitives *)
+  |> extend_builtin (* Read everything from in_channel. Not present in OCaml stdlib *)
+       ~argc:1
+       "rukaml_input_all"
+       (Scheme.make_mono (tarrow in_channel_typ string_typ))
   |> extend_builtin
        ~argc:1
        "input_char"

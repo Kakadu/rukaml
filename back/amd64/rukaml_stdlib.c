@@ -34,6 +34,11 @@ static uint64_t log_level = 0;
 #define TAG(ptr) (*((uint64_t *)ptr - 1) & 0xFF)
 #define FIELD(ptr, n) ((uint64_t *)ptr + n)
 
+#define DECLARE_FAKE_ARGS \
+  int a0, int a1, int a2, int a3, int a4, int a5
+#define FAKE_ARGS 0, 1, 2, 3, 4, 5
+#define value uint64_t *
+
 // normal 00, gray 01, black 11
 #define MAKE_WHITE(ptr) (*ptr = (*ptr & ~(0b11 << 8)))
 #define MAKE_GRAY(ptr) (*ptr = (*ptr | (0b01 << 8)))
@@ -823,17 +828,17 @@ void *rukaml_open_impl(void **path, const char *mode)
   return (void *)file;
 }
 
-void *rukaml_open_in(int r0, int r1, int r2, int r3, int r4, int r5, void **path)
+void *rukaml_open_in(DECLARE_FAKE_ARGS, void **path)
 {
   return rukaml_open_impl(path, "r");
 }
 
-void *rukaml_open_out(int r0, int r1, int r2, int r3, int r4, int r5, void **path)
+void *rukaml_open_out(DECLARE_FAKE_ARGS, void **path)
 {
   return rukaml_open_impl(path, "w");
 }
 
-void rukaml_close_channel(int r0, int r1, int r2, int r3, int r4, int r5, void *channel)
+void rukaml_close_channel(DECLARE_FAKE_ARGS, void *channel)
 {
   if (channel == NULL)
   {
