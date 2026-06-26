@@ -303,6 +303,9 @@ let return x state = Prez_success (x, state)
 let fail err _state = Prez_error err
 
 let bind p f state =
+  let (_,pos) = state in
+  let () = printf "calling bind on pos %d\n" pos in
+
   match p state with
   | Prez_error err -> Prez_error err
   | Prez_success (x, state2) -> f x state2
@@ -324,9 +327,12 @@ let many p state =
 ;;
 
 let many1 p state =
+  let (_,pos) = state in
+  let () = printf "calling many1 on pos %d\n" pos in
   match p state with
   | Prez_error err -> Prez_error err
   | Prez_success (x, state2) ->
+    let () = printf "many1 first parser OK\n" in
     (match many p state2 with
      | Prez_error err -> Prez_error err
      | Prez_success (xs, state3) -> return (x :: xs) state3)
@@ -386,6 +392,9 @@ let take_while1 pred (str, pos) =
 ;;
 
 let drop_left p1 p2 state =
+
+  let (_,pos) = state in
+  let () = printf "calling drop_left on pos %d\n" pos in
   match p1 state with
   | Prez_error err -> Prez_error err
   | Prez_success (_, state2) -> p2 state2
@@ -411,13 +420,20 @@ let char ch (str, pos) =
 let string expected (str, pos) =
   let rec aux i =
     if i >= string_len expected
-    then return expected (str, pos + i)
+    then
+      let () = printf "string '%s' parsed\n" expected in
+      return expected (str, pos + i)
     else if pos + i >= string_len str
-    then Prez_error Perr_unexpected_eof
+    then
+      let () = printf "string '%s' parsing FAILED\n" expected in
+      Prez_error Perr_unexpected_eof
     else if string_nth str (pos + i) = string_nth expected i
     then aux (i + 1)
-    else Prez_error (Perr_message "unexpected string")
+    else
+      let () = printf "string '%s' parsing FAILED\n" expected in
+      Prez_error (Perr_message "unexpected string")
   in
+  let () = printf "looking for string '%s' on pos %d\n" expected pos in
   aux 0
 ;;
 
@@ -432,30 +448,52 @@ let rec drop_many ps p state =
 
 (* parser implementation *)
 
-let ws =
-  drop_left (many (choice [ char ' '; char '\t'; char '\n'; char '\r' ])) (return ())
+let ws eta =
+  let rec helper len s pos =
+    if pos >= len
+    then Prez_error Perr_unexpected_eof
+    else
+      let ch = string_nth str pos in
+      let cond = (ch = ' ') || (ch = '\n') in
+      if cond
+      then helper len s (pos+1)
+      else Prez_success ((), (s, pos))
+  in
+  let (str, pos) = eta in
+(*  let () = printf "calling ws on pos %d\n" pos in *)
+  helper (string_len str) str pos
 ;;
 
-let skip_ws p = drop_left ws p
+let skip_ws p state =
+
+  let (_,pos) = state in
+  let () = printf "calling skip_ws on pos %d\n" pos in
+  drop_left ws p state
+
 let trim p = drop_right (drop_left ws p) ws
 let parens p = drop_left (trim (char '(')) (drop_right p (trim (char ')')))
 let braces p = drop_left (trim (char '{')) (drop_right p (trim (char '}')))
 
-let parse_identifier =
+let parse_identifier  eta =
   bind (take_while1 is_alphanum) (fun chs ->
     let name = string_of_char_list chs in
     if is_cpp_keyword name
     then fail (Perr_message "keyword as identifier")
     else if is_digit (string_nth name 0)
     then fail (Perr_expected "identifier")
-    else return name)
+    else return name) eta
 ;;
 
-let parse_type =
+let parse_type eta =
+
+  let (_,pos) = eta in
+  let () = printf "calling parse_type on pos %d\n" pos in
+
   choice
     [ drop_left (string "int") (return Ptype_int)
     ; drop_left (string "void") (return Ptype_void)
     ]
+    eta
 ;;
 
 let make_binop_level expr_parser ops =
@@ -623,12 +661,12 @@ let rec parse_statement state =
     state
 ;;
 
-let parse_fun_param =
+let parse_fun_param eta =
   bind (skip_ws parse_type) (fun ty ->
-    bind (skip_ws parse_identifier) (fun name -> return (ty, name)))
+    bind (skip_ws parse_identifier) (fun name -> return (ty, name))) eta
 ;;
 
-let parse_fun_params =
+let parse_fun_params  eta =
   parens
     (choice2
        (* at least one param *)
@@ -638,19 +676,30 @@ let parse_fun_params =
             (fun ps -> return (p1 :: ps))))
        (* no params *)
        (return []))
+        eta
 ;;
 
-let parse_function =
-  bind (skip_ws parse_type) (fun ty ->
+let parse_function eta =
+  let (_,pos) = eta in
+  let () = printf "calling parse_function on pos %d\n" pos in
+
+  bind (skip_ws parse_type ) (fun ty ->
+    let () = printf "type parsed\n" in
     bind (skip_ws parse_identifier) (fun name ->
       bind parse_fun_params (fun params ->
         bind parse_statement (fun body ->
           match body with
           | Pstmt_block stmts -> return (Pitem_function (name, ty, params, stmts))
-          | _ -> fail (Perr_expected "function body")))))
+          | _ -> fail (Perr_expected "function body"))))) eta
 ;;
 
-let parse_program = many1 (skip_ws parse_function)
+let parse_program eta =
+  let (_,pos) = eta in
+  let () = printf "calling parse_progam on pos %d\n" pos in
+
+  bind (parse_function )
+    (fun x -> return [x])
+    eta
 
 let pp_parsing_error oc err =
   match err with
@@ -956,16 +1005,7 @@ type target =
   | Parsetree
   | RiscV64
 
-let rec input_all ic =
-  let rec loop acc =
-    match end_of_input ic with
-    | true -> string_of_char_list (list_rev acc)
-    | false ->
-      let ch = input_char ic in
-      loop (ch :: acc)
-  in
-  loop []
-;;
+
 
 let usage () =
   let () = fprintf stderr "[compiler] Invalid args\n" in
@@ -990,9 +1030,12 @@ let current_line state =
 ;;
 
 let run_single oc target input =
+  let() = trace_rukaml_val input in
+  let () = printf "\n" in
   match parse_program (input, 0) with
   | Prez_error err -> printf "parsing failed: %a" pp_parsing_error err
   | Prez_success (ast, (_, pos)) ->
+    let () = output_string stdout "Parsed\n" in
     if pos = string_len input
     then (
       match target with
@@ -1004,7 +1047,8 @@ let run_single oc target input =
         (current_line (input, pos) + 1)
 ;;
 
-let parse_args argv =
+let parse_args argv = (*
+  let () = trace_rukaml_val argv in
   let argc = array_len argv in
   let rec loop i input_opt output_opt target_opt =
     if i >= argc
@@ -1012,6 +1056,7 @@ let parse_args argv =
     else (
       (* TODO: rewrite using match with *)
       let arg = array_get argv i in
+
       if string_equal arg "-o"
       then
         if i + 1 >= argc
@@ -1055,17 +1100,18 @@ let parse_args argv =
     | None -> usage ()
     | Some s -> s
   in
-  input_path, output_path, target
+  input_path, output_path, target *)
+  ("program.c", "output.s", RiscV64)
 ;;
 
 (* main *)
 
 let main =
   let input_path, output_path, target = parse_args sys_argv in
-  let ic = open_in input_path in
-  let oc = open_out output_path in
-  let () = run_single oc target (input_all ic) in
-  let () = close_in ic in
-  let () = close_out oc in
+  let () = printf "HERE\n" in
+  let ch = open_in "program.c" in
+  let the_string = rukaml_input_all ch in
+  let () = printf "HERE\n" in
+  let () = run_single stdout target the_string in
   0
 ;;

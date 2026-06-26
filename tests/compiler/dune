@@ -39,4 +39,4 @@
 
 (cram
  (applies_to *)
- (deps ./compiler.exe compiler.anf.ml))
+ (deps ./compiler.exe compiler.anf.ml program.c))
