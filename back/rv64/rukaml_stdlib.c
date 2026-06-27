@@ -1286,7 +1286,7 @@ value rukaml_list_length(DECLARE_FAKE_ARGS, value ls) {
     switch (TAG(ls)) {
     case 1: // cons
       assert(2 == SIZE(ls));
-      ls = Field(ls, 0);
+      ls = Field(ls, 1);
       break;
     case 0:
       return Int_val(size);
@@ -1297,11 +1297,12 @@ value rukaml_list_length(DECLARE_FAKE_ARGS, value ls) {
 }
 
 value rukaml_string_of_char_list_sysv(value chs) {
+  assert(IS_BLOCK(chs));
   uint64_t chars_n = rukaml_list_length(FAKE_ARGS, chs);
   uint64_t payload_words_n = (chars_n + 7) / 8;
-  value block = rukaml_alloc_block(payload_words_n + 1, String_tag);
+  value block = rukaml_alloc_string(payload_words_n + 1);
 
-  assert(rukaml_string_length_sysv(block) == chars_n);
+  assert(rukaml_string_length_sysv(block) == 0);
 
   for (size_t n = 0; n < chars_n; ++n) {
     assert(TAG(chs) == 1);                        // tag of ( :: )
