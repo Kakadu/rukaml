@@ -4,6 +4,8 @@
   (not
    (= none %{read:../../cc_rv64})))
  (deps %{project_root}/back/rv64/rukaml_stdlib.c)
+ (mode
+  (promote (until-clean)))
  (action
   (system
    "%{read:../../cc_rv64} -DRUKAML_DEBUG=1 -march=rv64g -c %{deps} -Wno-pedantic -ffreestanding -nostdlib -std=c99 -ggdb -o %{target}")))

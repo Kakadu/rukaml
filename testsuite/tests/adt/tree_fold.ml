@@ -1,6 +1,6 @@
 (*
    test
-  (targets amd64 rv64)
+  (targets amd64 rv64 (anf promote))
   (run (stdout "test passed"))
 *)
 

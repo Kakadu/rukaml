@@ -10,8 +10,8 @@ __lifted_lam_1:
 # going to do some arithmetic
   add  t2, t0, t1
   sd t2, (sp)
-  ld t5, (sp)
-  addi a2, t5, 0
+  ld t0, (sp)
+  addi a2, t0, 0
   ld a0, 24(sp)
   li a1, 1
   call rukaml_applyN
@@ -84,7 +84,9 @@ rukaml_init_global_immediates:
 .text
 .globl main
 main:
-  mv a0, sp
+  mv a2, a1 # argv
+  mv a1, a0 # argc
+  mv a0, sp # Stack pointer is first
   call rukaml_initialize
   call rukaml_init_global_immediates
 # this is main

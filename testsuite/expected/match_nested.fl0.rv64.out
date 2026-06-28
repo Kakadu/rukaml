@@ -11,7 +11,9 @@ rukaml_init_global_immediates:
 .text
 .globl main
 main:
-  mv a0, sp
+  mv a2, a1 # argv
+  mv a1, a0 # argc
+  mv a0, sp # Stack pointer is first
   call rukaml_initialize
   call rukaml_init_global_immediates
 # this is main
@@ -72,13 +74,13 @@ main:
   li a1, 1
   call rukaml_alloc_block # argsc = 2
   sd a0, (sp)
-  ld t5, 136(sp)
-  addi t0, t5, 0
+  ld t0, 136(sp)
+  addi t0, t0, 0
 # temp1
   ld t1, (sp)
   sd t0, (t1)
-  ld t5, 120(sp)
-  addi t0, t5, 0
+  ld t0, 120(sp)
+  addi t0, t0, 0
 # temp3
   ld t1, (sp)
   sd t0, 8(t1)
@@ -90,13 +92,13 @@ main:
   li a1, 1
   call rukaml_alloc_block # argsc = 2
   sd a0, (sp)
-  ld t5, 128(sp)
-  addi t0, t5, 0
+  ld t0, 128(sp)
+  addi t0, t0, 0
 # temp2
   ld t1, (sp)
   sd t0, (t1)
-  ld t5, 112(sp)
-  addi t0, t5, 0
+  ld t0, 112(sp)
+  addi t0, t0, 0
 # temp4
   ld t1, (sp)
   sd t0, 8(t1)
@@ -108,8 +110,8 @@ main:
   li a1, 0
   call rukaml_alloc_block # argsc = 1
   sd a0, (sp)
-  ld t5, 104(sp)
-  addi t0, t5, 0
+  ld t0, 104(sp)
+  addi t0, t0, 0
 # temp5
   ld t1, (sp)
   sd t0, (t1)
@@ -129,13 +131,13 @@ main:
   li a1, 1
   call rukaml_alloc_block # argsc = 2
   sd a0, (sp)
-  ld t5, 96(sp)
-  addi t0, t5, 0
+  ld t0, 96(sp)
+  addi t0, t0, 0
 # temp6
   ld t1, (sp)
   sd t0, (t1)
-  ld t5, 88(sp)
-  addi t0, t5, 0
+  ld t0, 88(sp)
+  addi t0, t0, 0
 # temp7
   ld t1, (sp)
   sd t0, 8(t1)
@@ -145,8 +147,8 @@ main:
   ld a0, 64(sp)
   call rukaml_tag0
   sd a0, 56(sp) # got tag of 'temp8'
-  ld t5, 56(sp)
-  addi t0, t5, 0
+  ld t0, 56(sp)
+  addi t0, t0, 0
   li t1, 0
   beq t0, t1, lab_then_48
   ld a1, 64(sp) # block_nth: from = 'temp8'
@@ -160,15 +162,15 @@ main:
   ld a0, 152(sp)
   call rukaml_tag0
   sd a0, (sp) # got tag of 'x'
-  ld t5, (sp)
-  addi t0, t5, 0
+  ld t0, (sp)
+  addi t0, t0, 0
   li t1, 1
   beq t0, t1, lab_then_50
   ld a0, 152(sp)
   call rukaml_tag0
   sd a0, 8(sp) # got tag of 'x'
-  ld t5, 8(sp)
-  addi t0, t5, 0
+  ld t0, 8(sp)
+  addi t0, t0, 0
   li t1, 0
   beq t0, t1, lab_then_52
   addi sp, sp, -16
@@ -186,8 +188,8 @@ lab_then_52:
   ld a0, 16(sp)
   call rukaml_tag0
   sd a0, 48(sp) # got tag of 'temp26'
-  ld t5, 48(sp)
-  addi t0, t5, 0
+  ld t0, 48(sp)
+  addi t0, t0, 0
   li t1, 0
   beq t0, t1, lab_then_56
   ld a1, 16(sp) # block_nth: from = 'temp26'
@@ -201,15 +203,15 @@ lab_then_52:
   ld a0, 136(sp)
   call rukaml_tag0
   sd a0, 24(sp) # got tag of 'z'
-  ld t5, 24(sp)
-  addi t0, t5, 0
+  ld t0, 24(sp)
+  addi t0, t0, 0
   li t1, 1
   beq t0, t1, lab_then_58
   ld a0, 136(sp)
   call rukaml_tag0
   sd a0, 32(sp) # got tag of 'z'
-  ld t5, 32(sp)
-  addi t0, t5, 0
+  ld t0, 32(sp)
+  addi t0, t0, 0
   li t1, 0
   beq t0, t1, lab_then_60
   addi sp, sp, -16

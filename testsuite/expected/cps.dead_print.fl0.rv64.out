@@ -43,7 +43,9 @@ rukaml_init_global_immediates:
 .text
 .globl main
 main:
-  mv a0, sp
+  mv a2, a1 # argv
+  mv a1, a0 # argc
+  mv a0, sp # Stack pointer is first
   call rukaml_initialize
   call rukaml_init_global_immediates
 # this is main

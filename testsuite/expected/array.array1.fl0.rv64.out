@@ -11,7 +11,9 @@ rukaml_init_global_immediates:
 .text
 .globl main
 main:
-  mv a0, sp
+  mv a2, a1 # argv
+  mv a1, a0 # argc
+  mv a0, sp # Stack pointer is first
   call rukaml_initialize
   call rukaml_init_global_immediates
 # this is main
@@ -44,8 +46,8 @@ main:
   addi sp, sp, 16
   addi sp, sp, -32
   sd ra, 24(sp)
-  ld t5, 48(sp)
-  addi a0, t5, 0
+  ld t0, 48(sp)
+  addi a0, t0, 0
   li a1, 1
   li a2, 42
   call rukaml_array_set_sysv
@@ -58,7 +60,8 @@ main:
   li a1, 2
   call rukaml_alloc_closure
   li a1, 2
-  ld a2, 32(sp)
+  ld t0, 32(sp)
+  addi a2, t0, 0
   li a3, 1
   call rukaml_applyN
   sd a0, 16(sp)
