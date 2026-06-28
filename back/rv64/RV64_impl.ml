@@ -982,7 +982,7 @@ let generate_body is_toplevel body =
     | CApp (APrimitive ("fprintf", 2), APrimitive ("stdout", 0), [ AVar arg1 ]) ->
       emit li a0 1;
       emit ld a1 (pp_to_mach arg1);
-      emit call "rukaml_alloc_fprintf_closure0";
+      emit call "rukaml_alloc_fprintf_closure_sysv";
       emit sd_dest a0 dest
     | CApp
         ( APrimitive ("fprintf", 2)
@@ -992,7 +992,7 @@ let generate_body is_toplevel body =
       let rukaml_val_loc n = sprintf "my_STRING_LIT_%d" n in
       emit lla t0 (rukaml_val_loc (String_lit_hash.find string_list_hash fstr));
       emit ld a1 (ROffset (Temp_reg 0, 0));
-      emit call "rukaml_alloc_fprintf_closure0";
+      emit call "rukaml_alloc_fprintf_closure_sysv";
       emit sd_dest a0 dest
     | CApp
         ( APrimitive ("fprintf", 2)
@@ -1000,7 +1000,7 @@ let generate_body is_toplevel body =
         , [ (AVar _ as arg1) ] ) ->
       helper_a (DReg "a0") arg0;
       helper_a (DReg "a1") arg1;
-      emit call "rukaml_alloc_fprintf_closure0";
+      emit call "rukaml_alloc_fprintf_closure_sysv";
       emit sd_dest a0 dest
     | CApp
         ( APrimitive ("output_string", 2)
@@ -1053,6 +1053,12 @@ let generate_body is_toplevel body =
     | CApp (APrimitive ("char_code", 1), AConst (PConst_char c), []) ->
       emit li t5 (Char.code c);
       emit sd_dest t5 dest
+    | CApp (APrimitive ("substring", 3), arg1, [ arg2; arg3 ]) ->
+      helper_a (DReg "a0") arg1;
+      helper_a (DReg "a1") arg2;
+      helper_a (DReg "a2") arg3;
+      emit call "rukaml_substring_sysv";
+      emit sd_dest a0 dest
     | CApp (APrimitive (name, 1), arg1, []) when is_unary_prim name ->
       on_unary_prim helper_a ~sysv:true name arg1 dest
     | CApp (APrimitive (pname, partiy), arg1, args) ->
@@ -1489,7 +1495,9 @@ let codegen ?(wrap_main_into_start = true) anf file =
         printfn ppf "\n.text";
         printfn ppf ".globl main";
         printfn ppf "main:";
-        emit mv a0 sp;
+        emit mv a2 a1 ~comm:"argv";
+        emit mv a1 a0 ~comm:"argc";
+        emit mv a0 sp ~comm:"Stack pointer is first";
         emit call "rukaml_initialize";
         do_string_init ();
         emit call "rukaml_init_global_immediates";
