@@ -1008,21 +1008,25 @@ let start_env =
         Typedtree.S
           (Var_set.singleton 0, array_typ param @-> int_typ @-> param @-> unit_typ))
   (* strings stuff *)
-  |> extend_builtin ~argc:1 "string_len" (Scheme.make_mono (tarrow string_typ int_typ))
+  |> extend_builtin ~argc:1 "string_len" (Scheme.make_mono (string_typ @-> int_typ))
   |> extend_builtin
        ~argc:2
        "string_nth"
-       (Scheme.make_mono (tarrow string_typ (tarrow int_typ char_typ)))
+       (Scheme.make_mono (string_typ @-> int_typ @-> char_typ))
   |> extend_builtin
        ~argc:1
        "string_of_char_list"
-       (Scheme.make_mono (tarrow (list_typ char_typ) string_typ))
+       (Scheme.make_mono (list_typ char_typ @-> string_typ))
   |> extend_builtin
        ~argc:2
        "string_equal"
-       (Scheme.make_mono (tarrow string_typ (tarrow string_typ bool_typ)))
+       (Scheme.make_mono (string_typ @-> string_typ @-> bool_typ))
+  |> extend_builtin
+       ~argc:3
+       "substring"
+       (Scheme.make_mono (string_typ @-> int_typ @-> int_typ @-> string_typ))
   (* GC stuff *)
-  |> extend_builtin ~argc:1 "gc_compact" (Scheme.make_mono (tarrow unit_typ unit_typ))
+  |> extend_builtin ~argc:1 "gc_compact" (Scheme.make_mono (unit_typ @-> unit_typ))
   |> extend_builtin ~argc:1 "gc_stats" (Scheme.make_mono (tarrow unit_typ unit_typ))
   |> extend_builtin ~argc:1 "closure_count" (Scheme.make_mono (tarrow unit_typ unit_typ))
   |> extend_builtin

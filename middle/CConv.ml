@@ -169,11 +169,12 @@ let standart_globals =
   @ [ "exit"; "sys_argv" ]
   @ [ "input_all"; "input_char" ]
   @ [ "field"; "block_nth"; "block_tag"; "block_size" ]
-  @ [ "string_nth"; "string_len"; "string_equal"; "string_of_char_list" ]
+  @ [ "substring"; "string_nth"; "string_len"; "string_equal"; "string_of_char_list" ]
   @ [ "array_get"; "array_set"; "array_len" ]
   @ [ "char_code" ]
   @ [ "gc_compact"; "gc_stats" ]
   @ [ "closure_count" ]
+  @ [ "trace_rukaml_val" ]
   |> String_set.of_list
 ;;
 
