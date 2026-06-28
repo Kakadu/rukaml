@@ -303,12 +303,13 @@ let return x state = Prez_success (x, state)
 let fail err _state = Prez_error err
 
 let bind p f state =
-  let (_,pos) = state in
-  let () = printf "calling bind on pos %d\n" pos in
+  (* let (_,pos) = state in *)
+  (* let () = printf "calling bind on pos %d\n" pos in *)
 
   match p state with
   | Prez_error err -> Prez_error err
-  | Prez_success (x, state2) -> f x state2
+  | Prez_success (x, state2) ->
+      f x state2
 ;;
 
 let map p f state =
@@ -321,18 +322,19 @@ let many p state =
   let rec aux acc state =
     match p state with
     | Prez_success (rez, state2) -> aux (rez :: acc) state2
-    | Prez_error _ -> Prez_success (list_rev acc, state)
+    | Prez_error _ ->
+        let ans = list_rev acc in
+        (* let () = printf "Many finishes successfully\n" in *)
+
+        Prez_success (ans, state)
   in
   aux [] state
 ;;
 
 let many1 p state =
-  let (_,pos) = state in
-  let () = printf "calling many1 on pos %d\n" pos in
   match p state with
   | Prez_error err -> Prez_error err
   | Prez_success (x, state2) ->
-    let () = printf "many1 first parser OK\n" in
     (match many p state2 with
      | Prez_error err -> Prez_error err
      | Prez_success (xs, state3) -> return (x :: xs) state3)
@@ -392,9 +394,9 @@ let take_while1 pred (str, pos) =
 ;;
 
 let drop_left p1 p2 state =
-
+(*
   let (_,pos) = state in
-  let () = printf "calling drop_left on pos %d\n" pos in
+  let () = printf "calling drop_left on pos %d\n" pos in*)
   match p1 state with
   | Prez_error err -> Prez_error err
   | Prez_success (_, state2) -> p2 state2
@@ -412,29 +414,32 @@ let drop_right p1 p2 state =
 let char ch (str, pos) =
   if pos >= string_len str
   then Prez_error Perr_unexpected_eof
-  else if string_nth str pos = ch
+  else
+    let ch0 = string_nth str pos in
+    (* let() = printf "Trying to parse '%c' at pos %d = '%c'\n" ch pos ch0 in *)
+    if ch0 = ch
   then return ch (str, pos + 1)
   else Prez_error (Perr_message "unexpected char")
 ;;
 
 let string expected (str, pos) =
-  let rec aux i =
-    if i >= string_len expected
+
+  let rec aux explen len i =
+    if i >= explen
     then
-      let () = printf "string '%s' parsed\n" expected in
       return expected (str, pos + i)
-    else if pos + i >= string_len str
+    else if pos + i >= len
     then
-      let () = printf "string '%s' parsing FAILED\n" expected in
       Prez_error Perr_unexpected_eof
-    else if string_nth str (pos + i) = string_nth expected i
-    then aux (i + 1)
     else
-      let () = printf "string '%s' parsing FAILED\n" expected in
+      let c1 = string_nth str (pos + i) in
+      let c2 = string_nth expected i in
+      if c1 = c2
+    then aux explen len (i + 1)
+    else
       Prez_error (Perr_message "unexpected string")
   in
-  let () = printf "looking for string '%s' on pos %d\n" expected pos in
-  aux 0
+  aux (string_len expected) (string_len str) 0
 ;;
 
 let rec drop_many ps p state =
@@ -451,31 +456,33 @@ let rec drop_many ps p state =
 let ws eta =
   let rec helper len s pos =
     if pos >= len
-    then Prez_error Perr_unexpected_eof
+    then Prez_success ((), (s, pos))
     else
-      let ch = string_nth str pos in
+      let ch = string_nth s pos in
       let cond = (ch = ' ') || (ch = '\n') in
       if cond
       then helper len s (pos+1)
-      else Prez_success ((), (s, pos))
+      else
+        Prez_success ((), (s, pos))
   in
   let (str, pos) = eta in
-(*  let () = printf "calling ws on pos %d\n" pos in *)
   helper (string_len str) str pos
 ;;
 
 let skip_ws p state =
 
-  let (_,pos) = state in
-  let () = printf "calling skip_ws on pos %d\n" pos in
+  (* let (_,pos) = state in
+  let () = printf "calling skip_ws on pos %d\n" pos in *)
   drop_left ws p state
 
 let trim p = drop_right (drop_left ws p) ws
 let parens p = drop_left (trim (char '(')) (drop_right p (trim (char ')')))
 let braces p = drop_left (trim (char '{')) (drop_right p (trim (char '}')))
 
-let parse_identifier  eta =
+let parse_identifier eta =
   bind (take_while1 is_alphanum) (fun chs ->
+    let l = list_length chs in
+    (* let() = printf "list len = %d\n" l in *)
     let name = string_of_char_list chs in
     if is_cpp_keyword name
     then fail (Perr_message "keyword as identifier")
@@ -485,10 +492,10 @@ let parse_identifier  eta =
 ;;
 
 let parse_type eta =
-
+  (*
   let (_,pos) = eta in
   let () = printf "calling parse_type on pos %d\n" pos in
-
+  *)
   choice
     [ drop_left (string "int") (return Ptype_int)
     ; drop_left (string "void") (return Ptype_void)
@@ -591,13 +598,14 @@ let parse_decl =
         (fun vs -> Pdecl_var (t, v1 :: vs))))
 ;;
 
-let parse_stmt_return =
+let parse_stmt_return eta =
   drop_left
     (skip_ws (string "return"))
     (choice2
        (bind parse_expression (fun e ->
           drop_left (skip_ws (char ';')) (return (Pstmt_return (Some e)))))
        (skip_ws (drop_left (char ';') (return (Pstmt_return None)))))
+       eta
 ;;
 
 let parse_stmt_ite parse_stmt =
@@ -645,8 +653,8 @@ let parse_stmt_decl =
   bind parse_decl (fun decl -> drop_left (skip_ws (char ';')) (return (Pstmt_decl decl)))
 ;;
 
-let parse_stmt_expr =
-  bind parse_expression (fun e -> drop_left (skip_ws (char ';')) (return (Pstmt_expr e)))
+let parse_stmt_expr eta =
+  bind parse_expression (fun e -> drop_left (skip_ws (char ';')) (return (Pstmt_expr e))) eta
 ;;
 
 let rec parse_statement state =
@@ -680,11 +688,7 @@ let parse_fun_params  eta =
 ;;
 
 let parse_function eta =
-  let (_,pos) = eta in
-  let () = printf "calling parse_function on pos %d\n" pos in
-
-  bind (skip_ws parse_type ) (fun ty ->
-    let () = printf "type parsed\n" in
+  bind (skip_ws parse_type) (fun ty ->
     bind (skip_ws parse_identifier) (fun name ->
       bind parse_fun_params (fun params ->
         bind parse_statement (fun body ->
@@ -694,12 +698,7 @@ let parse_function eta =
 ;;
 
 let parse_program eta =
-  let (_,pos) = eta in
-  let () = printf "calling parse_progam on pos %d\n" pos in
-
-  bind (parse_function )
-    (fun x -> return [x])
-    eta
+  many1 (skip_ws parse_function) eta
 
 let pp_parsing_error oc err =
   match err with
@@ -1030,12 +1029,10 @@ let current_line state =
 ;;
 
 let run_single oc target input =
-  let() = trace_rukaml_val input in
   let () = printf "\n" in
   match parse_program (input, 0) with
   | Prez_error err -> printf "parsing failed: %a" pp_parsing_error err
   | Prez_success (ast, (_, pos)) ->
-    let () = output_string stdout "Parsed\n" in
     if pos = string_len input
     then (
       match target with
@@ -1047,8 +1044,39 @@ let run_single oc target input =
         (current_line (input, pos) + 1)
 ;;
 
-let parse_args argv = (*
-  let () = trace_rukaml_val argv in
+let test ok_msg input f =
+  match f (input,0) with
+  | Prez_error _ -> printf "Failed '%s'\n" ok_msg
+  | Prez_success (_,(_,pos)) -> printf "Success '%s' on pos %d\n" ok_msg pos
+
+let test1 () = test "demo1" "{return 1;}" (parse_stmt_block parse_statement)
+
+let test2 () = test "demo2" "int main() {return 1;}" parse_function
+
+let test3 () =
+  let input = "factrec1(){}" in
+  match parse_identifier (input,0) with
+  | Prez_error _ -> printf "Failed\n"
+  | Prez_success (name,(_,pos)) -> printf "Success '%s' on pos %d\n" name pos
+
+let test4 () =
+  let input = "void factrec1(){ return 5; }" in
+  match parse_function (input,0) with
+  | Prez_error _ -> printf "Failed\n"
+  | Prez_success (f, (_,pos)) ->
+    let () = pp_pprogram stdout [f] in
+    printf "Success 'test4' on pos %d\n" pos
+
+let test5 () =
+  let input = "factrec1(){}" in
+  match take_while is_alphanum (input,0) with
+  | Prez_error _ -> printf "Failed\n"
+  | Prez_success (chs,(_,pos)) ->
+      let l = list_length chs in
+      let name = string_of_char_list chs in
+      printf "Success '%s' on pos %d\n" name pos
+
+let parse_args argv =
   let argc = array_len argv in
   let rec loop i input_opt output_opt target_opt =
     if i >= argc
@@ -1100,18 +1128,23 @@ let parse_args argv = (*
     | None -> usage ()
     | Some s -> s
   in
-  input_path, output_path, target *)
-  ("program.c", "output.s", RiscV64)
+  input_path, output_path, target
+  (* ("program.c", "output.s", RiscV64) *)
 ;;
 
 (* main *)
 
 let main =
+  (* let () = test1 () in *)
+  (* let () = test2 () in *)
+  (* let () = test3 () in *)
+  (*let () = test4 () in*)
+  (* let () = test5 () in *)
+
   let input_path, output_path, target = parse_args sys_argv in
-  let () = printf "HERE\n" in
   let ch = open_in "program.c" in
   let the_string = rukaml_input_all ch in
-  let () = printf "HERE\n" in
   let () = run_single stdout target the_string in
+
   0
 ;;
