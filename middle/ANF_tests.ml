@@ -243,7 +243,6 @@ let test_keywords () =
       (if temp1
       then 0
       else let temp4 = output_string stdout sq in
-           let () = temp4 in
            1)
     |}]
 ;;
@@ -325,7 +324,8 @@ let%expect_test "...  " =
   let array1 = [| 0; 1; 2 |]
   let () = array_set array1 1 42
 |};
-  [%expect{|
+  [%expect
+    {|
     let array1 =
       let temp1 = [|0, 1, 2|] in
       temp1
