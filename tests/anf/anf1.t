@@ -91,7 +91,7 @@ Polyvariadic currying
   > EOF
   let fresh f arg rest =
     let temp1 = (arg, rest) in
-    f temp1 
+      f temp1 
 
 Polyvariadic currying
   $ run << EOF
@@ -102,10 +102,10 @@ Polyvariadic currying
   > EOF
   let two f a b =
     let temp1 = (a, b) in
-    f temp1 
+      f temp1 
   let __lifted_lam_1 f arg rest =
     let temp3 = (arg, rest) in
-    f temp3 
+      f temp3 
   let succ prev f arg =
     let temp6 = __lifted_lam_1 f arg in
     prev temp6 
@@ -143,7 +143,7 @@ Polyvariadic map
     x
   let temp =
     let temp13 = (1, 2) in
-    two __lifted_lam_1 temp13
+      two __lifted_lam_1 temp13
 
   $ run << EOF #-vcc -vanf
   > let foo f x = x

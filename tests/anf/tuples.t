@@ -34,7 +34,7 @@ let (_,_) = ...
     let temp1 = (a + b) in
     (temp1, a)
   let f a b =
-    let tuple5 = mydiv a b in
-    let u = block_nth tuple5 0 in
-    let v = block_nth tuple5 1 in
+    let temp4 = mydiv a b in
+    let u = block_nth temp4 0 in
+    let v = block_nth temp4 1 in
     (u + v)

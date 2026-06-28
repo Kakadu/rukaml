@@ -8,10 +8,10 @@
   >   | (x, y) -> x + y
   > EOF
   let main =
-    let temp2 = (1, 2) in
-    let x = block_nth temp2 0 in
-    let y = block_nth temp2 1 in
-    (x + y)
+    let temp1 = (1, 2) in
+      let temp5 = block_nth temp1 0 in
+      let temp6 = block_nth temp1 1 in
+      (temp5 + temp6)
 
   $ run << EOF
   > let main =
@@ -20,22 +20,22 @@
   >   | (n, true) -> n = 1
   > EOF
   let main =
-    let temp2 = (1, true) in
-    let temp8 = block_nth temp2 0 in
-    (if (temp8 = 1)
-    then let temp9 = block_nth temp2 1 in
-         (if (temp9 = 1)
-         then 1
-         else let n = block_nth temp2 0 in
-              let temp6 = block_nth temp2 1 in
-              (if (temp6 = 1)
-              then (n = 1)
-              else match_failure 666 ))
-    else let n = block_nth temp2 0 in
-         let temp6 = block_nth temp2 1 in
-         (if (temp6 = 1)
-         then (n = 1)
-         else match_failure 666 ))
+    let temp1 = (1, true) in
+      let temp8 = block_nth temp1 0 in
+      (if (temp8 = 1)
+      then let temp9 = block_nth temp1 1 in
+           (if (temp9 = 1)
+           then 1
+           else let temp5 = block_nth temp1 0 in
+                let temp6 = block_nth temp1 1 in
+                (if (temp6 = 1)
+                then (temp5 = 1)
+                else match_failure 666 ))
+      else let temp5 = block_nth temp1 0 in
+           let temp6 = block_nth temp1 1 in
+           (if (temp6 = 1)
+           then (temp5 = 1)
+           else match_failure 666 ))
 
 # exhausive
   $ run << EOF
@@ -45,14 +45,14 @@
   >   | x -> false
   > EOF
   let main =
-    let temp2 = (1, true) in
-    let temp4 = block_nth temp2 0 in
-    (if (temp4 = 1)
-    then let temp5 = block_nth temp2 1 in
-         (if (temp5 = 1)
-         then 1
-         else 0)
-    else 0)
+    let temp1 = (1, true) in
+      let temp4 = block_nth temp1 0 in
+      (if (temp4 = 1)
+      then let temp5 = block_nth temp1 1 in
+           (if (temp5 = 1)
+           then 1
+           else 0)
+      else 0)
 
   $ run << EOF
   > let main =
@@ -61,14 +61,14 @@
   >   | _ -> false
   > EOF
   let main =
-    let temp2 = (1, true) in
-    let temp4 = block_nth temp2 0 in
-    (if (temp4 = 1)
-    then let temp5 = block_nth temp2 1 in
-         (if (temp5 = 1)
-         then 1
-         else 0)
-    else 0)
+    let temp1 = (1, true) in
+      let temp4 = block_nth temp1 0 in
+      (if (temp4 = 1)
+      then let temp5 = block_nth temp1 1 in
+           (if (temp5 = 1)
+           then 1
+           else 0)
+      else 0)
 
   $ run << EOF
   > let main =
@@ -77,18 +77,18 @@
   >   | (x, y) -> false
   > EOF
   let main =
-    let temp2 = (1, true) in
-    let temp6 = block_nth temp2 0 in
-    (if (temp6 = 1)
-    then let temp7 = block_nth temp2 1 in
-         (if (temp7 = 1)
-         then 1
-         else let x = block_nth temp2 0 in
-              let y = block_nth temp2 1 in
-              0)
-    else let x = block_nth temp2 0 in
-         let y = block_nth temp2 1 in
-         0)
+    let temp1 = (1, true) in
+      let temp6 = block_nth temp1 0 in
+      (if (temp6 = 1)
+      then let temp7 = block_nth temp1 1 in
+           (if (temp7 = 1)
+           then 1
+           else let temp4 = block_nth temp1 0 in
+                let temp5 = block_nth temp1 1 in
+                0)
+      else let temp4 = block_nth temp1 0 in
+           let temp5 = block_nth temp1 1 in
+           0)
 #
 
 # non exhausive
@@ -99,22 +99,22 @@
   >   | (x, false) -> false
   > EOF
   let main =
-    let temp2 = (1, true) in
-    let temp7 = block_nth temp2 0 in
-    (if (temp7 = 1)
-    then let temp8 = block_nth temp2 1 in
-         (if (temp8 = 1)
-         then 1
-         else let x = block_nth temp2 0 in
-              let temp5 = block_nth temp2 1 in
-              (if (temp5 = 0)
-              then 0
-              else match_failure 666 ))
-    else let x = block_nth temp2 0 in
-         let temp5 = block_nth temp2 1 in
-         (if (temp5 = 0)
-         then 0
-         else match_failure 666 ))
+    let temp1 = (1, true) in
+      let temp7 = block_nth temp1 0 in
+      (if (temp7 = 1)
+      then let temp8 = block_nth temp1 1 in
+           (if (temp8 = 1)
+           then 1
+           else let temp4 = block_nth temp1 0 in
+                let temp5 = block_nth temp1 1 in
+                (if (temp5 = 0)
+                then 0
+                else match_failure 666 ))
+      else let temp4 = block_nth temp1 0 in
+           let temp5 = block_nth temp1 1 in
+           (if (temp5 = 0)
+           then 0
+           else match_failure 666 ))
 
   $ run << EOF
   > let main =
@@ -123,22 +123,22 @@
   >   | (0, x) -> false
   > EOF
   let main =
-    let temp2 = (1, true) in
-    let temp7 = block_nth temp2 0 in
-    (if (temp7 = 1)
-    then let temp8 = block_nth temp2 1 in
-         (if (temp8 = 1)
-         then 1
-         else let temp4 = block_nth temp2 0 in
-              (if (temp4 = 0)
-              then let x = block_nth temp2 1 in
-                   0
-              else match_failure 666 ))
-    else let temp4 = block_nth temp2 0 in
-         (if (temp4 = 0)
-         then let x = block_nth temp2 1 in
-              0
-         else match_failure 666 ))
+    let temp1 = (1, true) in
+      let temp7 = block_nth temp1 0 in
+      (if (temp7 = 1)
+      then let temp8 = block_nth temp1 1 in
+           (if (temp8 = 1)
+           then 1
+           else let temp4 = block_nth temp1 0 in
+                (if (temp4 = 0)
+                then let temp5 = block_nth temp1 1 in
+                     0
+                else match_failure 666 ))
+      else let temp4 = block_nth temp1 0 in
+           (if (temp4 = 0)
+           then let temp5 = block_nth temp1 1 in
+                0
+           else match_failure 666 ))
 
   $ run << EOF
   > let main =
@@ -147,26 +147,26 @@
   >   | (0, false) -> false
   > EOF
   let main =
-    let temp2 = (1, true) in
-    let temp8 = block_nth temp2 0 in
-    (if (temp8 = 1)
-    then let temp9 = block_nth temp2 1 in
-         (if (temp9 = 1)
-         then 1
-         else let temp4 = block_nth temp2 0 in
-              (if (temp4 = 0)
-              then let temp5 = block_nth temp2 1 in
-                   (if (temp5 = 0)
-                   then 0
-                   else match_failure 666 )
-              else match_failure 666 ))
-    else let temp4 = block_nth temp2 0 in
-         (if (temp4 = 0)
-         then let temp5 = block_nth temp2 1 in
-              (if (temp5 = 0)
-              then 0
-              else match_failure 666 )
-         else match_failure 666 ))
+    let temp1 = (1, true) in
+      let temp8 = block_nth temp1 0 in
+      (if (temp8 = 1)
+      then let temp9 = block_nth temp1 1 in
+           (if (temp9 = 1)
+           then 1
+           else let temp4 = block_nth temp1 0 in
+                (if (temp4 = 0)
+                then let temp5 = block_nth temp1 1 in
+                     (if (temp5 = 0)
+                     then 0
+                     else match_failure 666 )
+                else match_failure 666 ))
+      else let temp4 = block_nth temp1 0 in
+           (if (temp4 = 0)
+           then let temp5 = block_nth temp1 1 in
+                (if (temp5 = 0)
+                then 0
+                else match_failure 666 )
+           else match_failure 666 ))
 #
 
 # assert that some cases are unreachable
@@ -197,18 +197,18 @@
   >   | _ -> 6
   > EOF
   let main =
-    let temp2 = (1, 2) in
-    let temp12 = block_nth temp2 0 in
-    (if (temp12 = 1)
-    then let temp13 = block_nth temp2 1 in
-         (if (temp13 = 2)
-         then 1
-         else let x = block_nth temp2 0 in
-              let y = block_nth temp2 1 in
-              2)
-    else let x = block_nth temp2 0 in
-         let y = block_nth temp2 1 in
-         2)
+    let temp1 = (1, 2) in
+      let temp12 = block_nth temp1 0 in
+      (if (temp12 = 1)
+      then let temp13 = block_nth temp1 1 in
+           (if (temp13 = 2)
+           then 1
+           else let temp10 = block_nth temp1 0 in
+                let temp11 = block_nth temp1 1 in
+                2)
+      else let temp10 = block_nth temp1 0 in
+           let temp11 = block_nth temp1 1 in
+           2)
 #
 
   $ run << EOF
@@ -220,34 +220,34 @@
   >   | (n, b) -> 3
   > EOF
   let main =
-    let temp2 = (1, true) in
-    let temp12 = block_nth temp2 0 in
-    (if (temp12 = 1)
-    then let temp13 = block_nth temp2 1 in
-         (if (temp13 = 1)
-         then 0
-         else let n = block_nth temp2 0 in
-              let temp10 = block_nth temp2 1 in
-              (if (temp10 = 1)
-              then 1
-              else let temp6 = block_nth temp2 0 in
-                   (if (temp6 = 1)
-                   then let b = block_nth temp2 1 in
-                        2
-                   else let n = block_nth temp2 0 in
-                        let b = block_nth temp2 1 in
-                        3)))
-    else let n = block_nth temp2 0 in
-         let temp10 = block_nth temp2 1 in
-         (if (temp10 = 1)
-         then 1
-         else let temp6 = block_nth temp2 0 in
-              (if (temp6 = 1)
-              then let b = block_nth temp2 1 in
-                   2
-              else let n = block_nth temp2 0 in
-                   let b = block_nth temp2 1 in
-                   3)))
+    let temp1 = (1, true) in
+      let temp12 = block_nth temp1 0 in
+      (if (temp12 = 1)
+      then let temp13 = block_nth temp1 1 in
+           (if (temp13 = 1)
+           then 0
+           else let temp9 = block_nth temp1 0 in
+                let temp10 = block_nth temp1 1 in
+                (if (temp10 = 1)
+                then 1
+                else let temp6 = block_nth temp1 0 in
+                     (if (temp6 = 1)
+                     then let temp7 = block_nth temp1 1 in
+                          2
+                     else let temp4 = block_nth temp1 0 in
+                          let temp5 = block_nth temp1 1 in
+                          3)))
+      else let temp9 = block_nth temp1 0 in
+           let temp10 = block_nth temp1 1 in
+           (if (temp10 = 1)
+           then 1
+           else let temp6 = block_nth temp1 0 in
+                (if (temp6 = 1)
+                then let temp7 = block_nth temp1 1 in
+                     2
+                else let temp4 = block_nth temp1 0 in
+                     let temp5 = block_nth temp1 1 in
+                     3)))
 
   $ run << EOF
   > let main =
@@ -256,16 +256,16 @@
   >   | (1, b) -> 1
   > EOF
   let main =
-    let temp2 = (1, true) in
-    let n = block_nth temp2 0 in
-    let temp8 = block_nth temp2 1 in
-    (if (temp8 = true)
-    then 0
-    else let temp4 = block_nth temp2 0 in
-         (if (temp4 = 1)
-         then let b = block_nth temp2 1 in
-              1
-         else match_failure 666 ))
+    let temp1 = (1, true) in
+      let temp7 = block_nth temp1 0 in
+      let temp8 = block_nth temp1 1 in
+      (if (temp8 = 1)
+      then 0
+      else let temp4 = block_nth temp1 0 in
+           (if (temp4 = 1)
+           then let temp5 = block_nth temp1 1 in
+                1
+           else match_failure 666 ))
 
   $ run << EOF
   > let main =
@@ -275,30 +275,30 @@
   >   | (1, b) -> 2
   > EOF
   let main =
-    let temp2 = (1, true) in
-    let temp10 = block_nth temp2 0 in
-    (if (temp10 = 1)
-    then let temp11 = block_nth temp2 1 in
-         (if (temp11 = 1)
-         then 0
-         else let n = block_nth temp2 0 in
-              let temp8 = block_nth temp2 1 in
-              (if (temp8 = 1)
-              then 1
-              else let temp4 = block_nth temp2 0 in
-                   (if (temp4 = 1)
-                   then let b = block_nth temp2 1 in
-                        2
-                   else match_failure 666 )))
-    else let n = block_nth temp2 0 in
-         let temp8 = block_nth temp2 1 in
-         (if (temp8 = 1)
-         then 1
-         else let temp4 = block_nth temp2 0 in
-              (if (temp4 = 1)
-              then let b = block_nth temp2 1 in
-                   2
-              else match_failure 666 )))
+    let temp1 = (1, true) in
+      let temp10 = block_nth temp1 0 in
+      (if (temp10 = 1)
+      then let temp11 = block_nth temp1 1 in
+           (if (temp11 = 1)
+           then 0
+           else let temp7 = block_nth temp1 0 in
+                let temp8 = block_nth temp1 1 in
+                (if (temp8 = 1)
+                then 1
+                else let temp4 = block_nth temp1 0 in
+                     (if (temp4 = 1)
+                     then let temp5 = block_nth temp1 1 in
+                          2
+                     else match_failure 666 )))
+      else let temp7 = block_nth temp1 0 in
+           let temp8 = block_nth temp1 1 in
+           (if (temp8 = 1)
+           then 1
+           else let temp4 = block_nth temp1 0 in
+                (if (temp4 = 1)
+                then let temp5 = block_nth temp1 1 in
+                     2
+                else match_failure 666 )))
 
   $ run << EOF
   > let main =
@@ -309,34 +309,34 @@
   >   | (n, b) -> 3
   > EOF
   let main =
-    let temp2 = (1, true) in
-    let temp12 = block_nth temp2 0 in
-    (if (temp12 = 1)
-    then let temp13 = block_nth temp2 1 in
-         (if (temp13 = 1)
-         then 0
-         else let n = block_nth temp2 0 in
-              let temp10 = block_nth temp2 1 in
-              (if (temp10 = 1)
-              then 1
-              else let temp6 = block_nth temp2 0 in
-                   (if (temp6 = 1)
-                   then let b = block_nth temp2 1 in
-                        2
-                   else let n = block_nth temp2 0 in
-                        let b = block_nth temp2 1 in
-                        3)))
-    else let n = block_nth temp2 0 in
-         let temp10 = block_nth temp2 1 in
-         (if (temp10 = 1)
-         then 1
-         else let temp6 = block_nth temp2 0 in
-              (if (temp6 = 1)
-              then let b = block_nth temp2 1 in
-                   2
-              else let n = block_nth temp2 0 in
-                   let b = block_nth temp2 1 in
-                   3)))
+    let temp1 = (1, true) in
+      let temp12 = block_nth temp1 0 in
+      (if (temp12 = 1)
+      then let temp13 = block_nth temp1 1 in
+           (if (temp13 = 1)
+           then 0
+           else let temp9 = block_nth temp1 0 in
+                let temp10 = block_nth temp1 1 in
+                (if (temp10 = 1)
+                then 1
+                else let temp6 = block_nth temp1 0 in
+                     (if (temp6 = 1)
+                     then let temp7 = block_nth temp1 1 in
+                          2
+                     else let temp4 = block_nth temp1 0 in
+                          let temp5 = block_nth temp1 1 in
+                          3)))
+      else let temp9 = block_nth temp1 0 in
+           let temp10 = block_nth temp1 1 in
+           (if (temp10 = 1)
+           then 1
+           else let temp6 = block_nth temp1 0 in
+                (if (temp6 = 1)
+                then let temp7 = block_nth temp1 1 in
+                     2
+                else let temp4 = block_nth temp1 0 in
+                     let temp5 = block_nth temp1 1 in
+                     3)))
 
   $ run << EOF
   > let main =
@@ -346,30 +346,30 @@
   >   | (n2, b) -> if b then n2 = 1 else false
   > EOF
   let main =
-    let temp2 = (1, true) in
-    let temp12 = block_nth temp2 0 in
-    (if (temp12 = 1)
-    then let temp13 = block_nth temp2 1 in
-         (if (temp13 = 1)
-         then 1
-         else let n1 = block_nth temp2 0 in
-              let temp10 = block_nth temp2 1 in
-              (if (temp10 = 1)
-              then (n1 = 1)
-              else let n2 = block_nth temp2 0 in
-                   let b = block_nth temp2 1 in
-                   (if b
-                   then (n2 = 1)
-                   else 0)))
-    else let n1 = block_nth temp2 0 in
-         let temp10 = block_nth temp2 1 in
-         (if (temp10 = 1)
-         then (n1 = 1)
-         else let n2 = block_nth temp2 0 in
-              let b = block_nth temp2 1 in
-              (if b
-              then (n2 = 1)
-              else 0)))
+    let temp1 = (1, true) in
+      let temp12 = block_nth temp1 0 in
+      (if (temp12 = 1)
+      then let temp13 = block_nth temp1 1 in
+           (if (temp13 = 1)
+           then 1
+           else let temp9 = block_nth temp1 0 in
+                let temp10 = block_nth temp1 1 in
+                (if (temp10 = 1)
+                then (temp9 = 1)
+                else let temp7 = block_nth temp1 0 in
+                     let temp8 = block_nth temp1 1 in
+                     (if temp8
+                     then (temp7 = 1)
+                     else 0)))
+      else let temp9 = block_nth temp1 0 in
+           let temp10 = block_nth temp1 1 in
+           (if (temp10 = 1)
+           then (temp9 = 1)
+           else let temp7 = block_nth temp1 0 in
+                let temp8 = block_nth temp1 1 in
+                (if temp8
+                then (temp7 = 1)
+                else 0)))
 
 
   $ run << EOF
@@ -379,15 +379,16 @@
   >   | _ :: _ -> 1
   > EOF
   let main =
-    let temp1 = (Constr_1 (2, Constr_0)) in
-    let temp3 = (Constr_1 (1, temp1)) in
-    let temp9 = block_tag temp3  in
-    (if (temp9 = 0)
+    let temp1 = Constr_0 in
+    let temp2 = (Constr_1 (2, temp1)) in
+    let temp3 = (Constr_1 (1, temp2)) in
+    let temp10 = block_tag temp3  in
+    (if (temp10 = 0)
     then 0
-    else let temp7 = block_tag temp3  in
-         (if (temp7 = 1)
-         then let temp5 = block_nth temp3 0 in
-              let temp6 = block_nth temp3 1 in
+    else let temp8 = block_tag temp3  in
+         (if (temp8 = 1)
+         then let temp6 = block_nth temp3 0 in
+              let temp7 = block_nth temp3 1 in
               1
          else match_failure 666 ))
 
@@ -399,50 +400,50 @@
   >   | (false, true) -> 2
   > EOF
   let main =
-    let temp2 = (true, false) in
-    let temp12 = block_nth temp2 0 in
-    (if (temp12 = true)
-    then let temp13 = block_nth temp2 1 in
-         (if (temp13 = 0)
-         then 0
-         else let temp8 = block_nth temp2 0 in
-              (if (temp8 = 1)
-              then let temp9 = block_nth temp2 1 in
-                   (if (temp9 = 1)
-                   then 1
-                   else let temp4 = block_nth temp2 0 in
-                        (if (temp4 = 0)
-                        then let temp5 = block_nth temp2 1 in
-                             (if (temp5 = 1)
-                             then 2
-                             else match_failure 666 )
-                        else match_failure 666 ))
-              else let temp4 = block_nth temp2 0 in
-                   (if (temp4 = 0)
-                   then let temp5 = block_nth temp2 1 in
-                        (if (temp5 = 1)
-                        then 2
-                        else match_failure 666 )
-                   else match_failure 666 )))
-    else let temp8 = block_nth temp2 0 in
-         (if (temp8 = 1)
-         then let temp9 = block_nth temp2 1 in
-              (if (temp9 = 1)
-              then 1
-              else let temp4 = block_nth temp2 0 in
-                   (if (temp4 = 0)
-                   then let temp5 = block_nth temp2 1 in
-                        (if (temp5 = 1)
-                        then 2
-                        else match_failure 666 )
-                   else match_failure 666 ))
-         else let temp4 = block_nth temp2 0 in
-              (if (temp4 = 0)
-              then let temp5 = block_nth temp2 1 in
-                   (if (temp5 = 1)
-                   then 2
-                   else match_failure 666 )
-              else match_failure 666 )))
+    let temp1 = (true, false) in
+      let temp12 = block_nth temp1 0 in
+      (if (temp12 = 1)
+      then let temp13 = block_nth temp1 1 in
+           (if (temp13 = 0)
+           then 0
+           else let temp8 = block_nth temp1 0 in
+                (if (temp8 = 1)
+                then let temp9 = block_nth temp1 1 in
+                     (if (temp9 = 1)
+                     then 1
+                     else let temp4 = block_nth temp1 0 in
+                          (if (temp4 = 0)
+                          then let temp5 = block_nth temp1 1 in
+                               (if (temp5 = 1)
+                               then 2
+                               else match_failure 666 )
+                          else match_failure 666 ))
+                else let temp4 = block_nth temp1 0 in
+                     (if (temp4 = 0)
+                     then let temp5 = block_nth temp1 1 in
+                          (if (temp5 = 1)
+                          then 2
+                          else match_failure 666 )
+                     else match_failure 666 )))
+      else let temp8 = block_nth temp1 0 in
+           (if (temp8 = 1)
+           then let temp9 = block_nth temp1 1 in
+                (if (temp9 = 1)
+                then 1
+                else let temp4 = block_nth temp1 0 in
+                     (if (temp4 = 0)
+                     then let temp5 = block_nth temp1 1 in
+                          (if (temp5 = 1)
+                          then 2
+                          else match_failure 666 )
+                     else match_failure 666 ))
+           else let temp4 = block_nth temp1 0 in
+                (if (temp4 = 0)
+                then let temp5 = block_nth temp1 1 in
+                     (if (temp5 = 1)
+                     then 2
+                     else match_failure 666 )
+                else match_failure 666 )))
 
   $ run << EOF
   > let main =
@@ -452,16 +453,16 @@
   >   | x -> 3
   > EOF
   let main =
-    let temp2 = (true, false) in
-    let x = block_nth temp2 0 in
-    let temp8 = block_nth temp2 1 in
-    (if (temp8 = false)
-    then 1
-    else let temp4 = block_nth temp2 0 in
-         (if (temp4 = 1)
-         then let x = block_nth temp2 1 in
-              2
-         else 3))
+    let temp1 = (true, false) in
+      let temp7 = block_nth temp1 0 in
+      let temp8 = block_nth temp1 1 in
+      (if (temp8 = 0)
+      then 1
+      else let temp4 = block_nth temp1 0 in
+           (if (temp4 = 1)
+           then let temp5 = block_nth temp1 1 in
+                2
+           else 3))
 
 
   $ run << EOF
@@ -472,14 +473,14 @@
   >   | _ -> 3
   > EOF
   let main =
-    let temp2 = (true, false) in
-    let x = block_nth temp2 0 in
-    let temp7 = block_nth temp2 1 in
-    (if (temp7 = false)
-    then 1
-    else let x = block_nth temp2 0 in
-         let x = block_nth temp2 1 in
-         2)
+    let temp1 = (true, false) in
+      let temp6 = block_nth temp1 0 in
+      let temp7 = block_nth temp1 1 in
+      (if (temp7 = 0)
+      then 1
+      else let temp4 = block_nth temp1 0 in
+           let temp5 = block_nth temp1 1 in
+           2)
 
 
   $ run << EOF
@@ -491,20 +492,20 @@
   >   | _ -> 4
   > EOF
   let main =
-    let temp2 = (true, false) in
-    let x = block_nth temp2 0 in
-    let temp11 = block_nth temp2 1 in
-    (if (temp11 = false)
-    then 1
-    else let temp7 = block_nth temp2 0 in
-         (if (temp7 = 0)
-         then let x = block_nth temp2 1 in
-              2
-         else let temp4 = block_nth temp2 0 in
-              (if (temp4 = 1)
-              then let x = block_nth temp2 1 in
-                   3
-              else 4)))
+    let temp1 = (true, false) in
+      let temp10 = block_nth temp1 0 in
+      let temp11 = block_nth temp1 1 in
+      (if (temp11 = 0)
+      then 1
+      else let temp7 = block_nth temp1 0 in
+           (if (temp7 = 0)
+           then let temp8 = block_nth temp1 1 in
+                2
+           else let temp4 = block_nth temp1 0 in
+                (if (temp4 = 1)
+                then let temp5 = block_nth temp1 1 in
+                     3
+                else 4)))
 
   $ run << EOF
   > let main =
@@ -513,10 +514,11 @@
   >   | _ -> 1
   > EOF
   let main =
-    let temp1 = (Constr_1 (false, Constr_0)) in
-    let temp3 = (Constr_1 (true, temp1)) in
-    let temp5 = block_tag temp3  in
-    (if (temp5 = 0)
+    let temp1 = Constr_0 in
+    let temp2 = (Constr_1 (false, temp1)) in
+    let temp3 = (Constr_1 (true, temp2)) in
+    let temp6 = block_tag temp3  in
+    (if (temp6 = 0)
     then 0
     else 1)
 
@@ -529,17 +531,18 @@
   >   | _ -> 2
   > EOF
   let main =
-    let temp1 = (Constr_1 (false, Constr_0)) in
-    let temp3 = (Constr_1 (true, temp1)) in
-    let temp11 = block_tag temp3  in
-    (if (temp11 = 0)
+    let temp1 = Constr_0 in
+    let temp2 = (Constr_1 (false, temp1)) in
+    let temp3 = (Constr_1 (true, temp2)) in
+    let temp12 = block_tag temp3  in
+    (if (temp12 = 0)
     then 0
-    else let temp9 = block_tag temp3  in
-         (if (temp9 = 1)
-         then let x = block_nth temp3 0 in
-              let temp6 = block_nth temp3 1 in
-              let temp7 = block_tag temp6  in
-              (if (temp7 = 0)
+    else let temp10 = block_tag temp3  in
+         (if (temp10 = 1)
+         then let temp6 = block_nth temp3 0 in
+              let temp7 = block_nth temp3 1 in
+              let temp8 = block_tag temp7  in
+              (if (temp8 = 0)
               then 1
               else 2)
          else 2))
@@ -553,9 +556,10 @@
   >   | _ -> false
   > EOF
   let is_empty =
-    let temp2 = (Constr_1 (1, Constr_0)) in
-    let temp4 = block_tag temp2  in
-    (if (temp4 = 0)
+    let temp1 = Constr_0 in
+    let temp2 = (Constr_1 (1, temp1)) in
+    let temp5 = block_tag temp2  in
+    (if (temp5 = 0)
     then 1
     else 0)
 
@@ -597,19 +601,19 @@
   >   | 1, y -> 6
   > EOF
   let main =
-    let temp2 = (3, 4) in
-    let temp7 = block_nth temp2 0 in
-    (if (temp7 = 1)
-    then let temp8 = block_nth temp2 1 in
-         (if (temp8 = 2)
-         then 5
-         else let temp4 = block_nth temp2 0 in
-              (if (temp4 = 1)
-              then let y = block_nth temp2 1 in
-                   6
-              else match_failure 666 ))
-    else let temp4 = block_nth temp2 0 in
-         (if (temp4 = 1)
-         then let y = block_nth temp2 1 in
-              6
-         else match_failure 666 ))
+    let temp1 = (3, 4) in
+      let temp7 = block_nth temp1 0 in
+      (if (temp7 = 1)
+      then let temp8 = block_nth temp1 1 in
+           (if (temp8 = 2)
+           then 5
+           else let temp4 = block_nth temp1 0 in
+                (if (temp4 = 1)
+                then let temp5 = block_nth temp1 1 in
+                     6
+                else match_failure 666 ))
+      else let temp4 = block_nth temp1 0 in
+           (if (temp4 = 1)
+           then let temp5 = block_nth temp1 1 in
+                6
+           else match_failure 666 ))
