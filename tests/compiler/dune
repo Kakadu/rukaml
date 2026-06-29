@@ -37,6 +37,31 @@
    (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o demo.o)
    (run riscv64-linux-gnu-gcc-13 -g %{stdlib} demo.o -o %{targets}))))
 
+(rule
+ (target compiler.amd64.s)
+ (deps compiler.ml)
+ (mode
+  (promote (until-clean)))
+ (action
+  (run %{project_root}/driver/driver.exe %{deps} --target amd64 -o %{target})))
+
+(rule
+ (targets amd64.exe)
+ (deps
+  %{project_root}/driver/driver.exe
+  (:src compiler.amd64.s)
+  (:stdlib ../../back/amd64/rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run nasm -f elf64 %{src} -o demo.o)
+   (run gcc-13 -g %{stdlib} demo.o -o %{targets}))))
+
 (cram
- (applies_to *)
+ (applies_to 1)
  (deps ./compiler.exe compiler.anf.ml program.c))
+
+(cram
+ (applies_to amd64)
+ (deps ./amd64.exe program.c))

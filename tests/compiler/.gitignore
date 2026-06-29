@@ -1,3 +1,5 @@
 /*.anf.ml
 /compiler.exe
+/amd64.exe
+/compiler.amd64.s
 /compiler.s

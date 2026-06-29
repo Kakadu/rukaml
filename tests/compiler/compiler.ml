@@ -1138,12 +1138,14 @@ let main =
   (* let () = test1 () in *)
   (* let () = test2 () in *)
   (* let () = test3 () in *)
-  (*let () = test4 () in*)
-  (* let () = test5 () in *)
+  (* let () = test4 () in
+  let () = test5 () in *)
 
   let input_path, output_path, target = parse_args sys_argv in
   let ch = open_in "program.c" in
   let the_string = rukaml_input_all ch in
+  let () = printf "%s\n" the_string in
+  let () = trace_rukaml_val the_string in
   let () = run_single stdout target the_string in
 
   0
