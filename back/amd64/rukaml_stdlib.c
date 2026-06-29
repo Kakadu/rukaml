@@ -1,11 +1,11 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <inttypes.h>
-#include <stdint.h>
-#include <string.h>
-#include <stdarg.h>
 #include <assert.h>
+#include <inttypes.h>
+#include <stdarg.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "rukaml_stdlib.h"
@@ -1192,4 +1192,10 @@ uint64_t rukaml_equal_struct(void **left, void **right)
   }
 
   return true;
+}
+
+uint64_t rukaml_trace_val(void *)
+{
+  printf("%s not implemented\n", __func__);
+  fflush(stdout);
 }

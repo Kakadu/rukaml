@@ -213,6 +213,7 @@ let stdlib_externs =
   ; 7, "rukaml_end_of_input"
   ; 7, "rukaml_input_char"
   ; 0, "rukaml_argv"
+  ; 1, "rukaml_trace_val"
   ]
 ;;
 
@@ -244,6 +245,7 @@ let stdlib_aliases =
   ; "close_in", "rukaml_close_channel"
   ; "close_out", "rukaml_close_channel"
   ; "sys_argv", "rukaml_argv"
+  ; "trace_rukaml_val", "rukaml_trace_val"
   ]
 ;;
 
@@ -896,6 +898,14 @@ let rec generate_body ppf body =
       printfn ppf "  mov rdi, %d" n;
       printfn ppf "  call rukaml_print_int";
       printfn ppf "  mov qword %a, 0" pp_dest dest
+    | CApp (APrimitive ("rukaml_input_all", 1), arg1, []) ->
+      helper_a (DReg "rdi") arg1;
+      printfn ppf "  call rukaml_print_int";
+      printfn ppf "  mov qword %a, rax" pp_dest dest
+    | CApp (APrimitive ("trace_rukaml_val", 1), arg1, []) ->
+      helper_a (DReg "rdi") arg1;
+      printfn ppf "  call rukaml_trace_val";
+      printfn ppf "  mov qword %a, rax" pp_dest dest
     | CApp (APrimitive ("gc_compact", 1), _, []) ->
       printfn ppf "  mov rdi, rsp";
       printfn ppf "  mov rsi, 0";
