@@ -465,6 +465,8 @@ let generate_body is_toplevel body =
     let mangling = String_lit_hash.create 34 in
     String_lit_hash.add mangling "close_out" "rukaml_close_out";
     String_lit_hash.add mangling "rukaml_input_all" "rukaml_input_all";
+    String_lit_hash.add mangling "gc_compact" "rukaml_gc_compact";
+    String_lit_hash.add mangling "gc_stats" "rukaml_gc_stats";
     let checker str = String_lit_hash.mem mangling str in
     let codegen helper_a ?(sysv = true) ident arg0 dest =
       helper_a (DReg "a0") arg0;

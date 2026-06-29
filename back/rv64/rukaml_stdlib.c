@@ -208,7 +208,7 @@ void dfs(uint64_t *allocated, uint64_t *root) {
   log("%s root = 0x%lX finished\n", __func__, (uint64_t)root);
 }
 
-void rukaml_gc_compact(uint64_t rsp) {
+void rukaml_gc_compact_sysv(uint64_t rsp) {
   assert(GC.ebp > rsp);
   log("=== %s. EBP=0x%lX, RSP=0x%lX\n", __func__, GC.ebp, rsp);
   log("stack width = 0x%lX / 8\n", GC.ebp - rsp);
@@ -244,7 +244,7 @@ void rukaml_gc_compact(uint64_t rsp) {
   GC.allocated_words = new_size;
 }
 
-void rukaml_gc_print_stats(void) {
+void rukaml_gc_stats_sysv(void) {
   printf("GC statistics\n");
   printf("Total allocations: %ld(words)\n", GC.stats.gs_allocated_words);
   printf("Currently allocated: %ld(words)\n", GC.allocated_words);
