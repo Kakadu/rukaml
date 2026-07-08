@@ -1,7 +1,50 @@
-$ ls
+
   $ export FLAGS='-L /usr/riscv64-linux-gnu -cpu max'
 $ echo 'int main(){return;} ' > program.c
   $ qemu-riscv64 $FLAGS ./compiler.exe program.c -o file.out --target parsetree
+  int fact_rec(int n)
+  {
+      if (n < 1)
+      {
+          return 1;
+      }
+  
+      return n * fact_rec(n - 1);
+  }
+  
+  int fact_iter(int n)
+  {
+      int acc = 1;
+  
+      for (int i = 2; i <= n; i = i + 1)
+      {
+          acc = acc * i;
+      }
+  
+      return acc;
+  }
+  BLOCK:  0x2AAAAB477328, he=0x1EFC, tag=252, size=30
+   "int fact_rec(int n)
+  {
+      if (n < 1)
+      {
+          return 1;
+      }
+  
+      return n * fact_rec(n - 1);
+  }
+  
+  int fact_iter(int n)
+  {
+      int acc = 1;
+  
+      for (int i = 2; i <= n; i = i + 1)
+      {
+          acc = acc * i;
+      }
+  
+      return acc;
+  }"
   
   int fact_rec(int n) {
     if ((n < 1)) {
@@ -19,7 +62,51 @@ $ echo 'int main(){return;} ' > program.c
   }
     return acc;
   }
+
   $ qemu-riscv64 $FLAGS ./compiler.exe program.c -o file.out --target rv64
+  int fact_rec(int n)
+  {
+      if (n < 1)
+      {
+          return 1;
+      }
+  
+      return n * fact_rec(n - 1);
+  }
+  
+  int fact_iter(int n)
+  {
+      int acc = 1;
+  
+      for (int i = 2; i <= n; i = i + 1)
+      {
+          acc = acc * i;
+      }
+  
+      return acc;
+  }
+  BLOCK:  0x2AAAAB477320, he=0x1EFC, tag=252, size=30
+   "int fact_rec(int n)
+  {
+      if (n < 1)
+      {
+          return 1;
+      }
+  
+      return n * fact_rec(n - 1);
+  }
+  
+  int fact_iter(int n)
+  {
+      int acc = 1;
+  
+      for (int i = 2; i <= n; i = i + 1)
+      {
+          acc = acc * i;
+      }
+  
+      return acc;
+  }"
   
   .global fact_rec
   .text
@@ -112,3 +199,4 @@ $ echo 'int main(){return;} ' > program.c
     ld fp, 8(sp)
     addi sp, sp, 16
     ret
+
