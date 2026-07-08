@@ -95,6 +95,9 @@ let list_take n xs =
   fst (list_take_n n xs)
 ;;
 
+let march : [ `RV64 | `RV32 ] ref = ref `RV64
+let enable_32 () = march := `RV32
+
 open Frontend
 module Toplevel = Amd64_impl.Toplevel
 
@@ -214,6 +217,24 @@ let list_iter_revindex ~f xs =
 ;;
 
 open Machine
+
+let sd k a b =
+  match !march with
+  | `RV64 -> Machine.sd k a b
+  | `RV32 -> Machine.sw k a b
+;;
+
+let ld k a b =
+  match !march with
+  | `RV64 -> Machine.ld k a b
+  | `RV32 -> Machine.lw k a b
+;;
+
+let mulw k a b c =
+  match !march with
+  | `RV64 -> Machine.mulw k a b c
+  | `RV32 -> Machine.mul k a b c
+;;
 
 let allocate_locals input_anf : (now:unit -> unit) * _ =
   let __ _ =

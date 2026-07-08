@@ -19,6 +19,10 @@
   as_rv64
   ld_rv64
   run_rv64
+  cc_rv32
+  as_rv32
+  ld_rv32
+  run_rv32
   cc_llvm
   as_llvm
   ld_llvm
