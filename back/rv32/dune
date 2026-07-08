@@ -1,0 +1,8 @@
+(rule
+ (target rukaml_stdlib.o)
+ (enabled_if
+  (not
+   (= none %{read:../../cc_rv32})))
+ (deps ../rv64/rukaml_stdlib.c)
+ (action
+  (system "%{read:../../cc_rv32} -c %{deps} -std=c99 -ggdb -o %{target}")))

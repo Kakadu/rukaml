@@ -125,6 +125,11 @@ module Compiler = struct
     k (Code f)
   ;;
 
+  let rv32 x =
+    RV64_impl.enable_32 ();
+    rv64 x
+  ;;
+
   (** Generate code for AMD64 *)
   let amd64 (ANF stru) =
     let f ~path =
@@ -188,6 +193,7 @@ module Target = struct
     let anftree table p = (typedtree table p) anf
   end
 
+  let rv32 table p = (Intermediate.anftree table p) rv32
   let rv64 table p = (Intermediate.anftree table p) rv64
   let amd64 table p = (Intermediate.anftree table p) amd64
   let llvm table p = (Intermediate.anftree table p) llvm
@@ -197,6 +203,7 @@ module Target = struct
     Base.Map.of_alist_exn
       (module Base.String)
       [ "rv64", finish (rv64 table)
+      ; "rv32", finish (rv32 table)
       ; "amd64", finish (amd64 table)
       ; "llvm", finish (llvm table)
       ; "parsetree", finish Intermediate.parsetree
