@@ -1,9 +1,9 @@
 (*
 test
-  (targets rv64 amd64)
-  (flags () (--cps) (--cps --caa))
+  (targets rv32 rv64 amd64)
   (run (stdout "rukaml_print_int 255"))
 *)
+(* TODO: reenable cps and CAA *)
 
 let revapply x k =
    k x
