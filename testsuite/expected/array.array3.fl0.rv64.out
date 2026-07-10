@@ -44,19 +44,11 @@ main:
   ld t0, (sp)
   sd t0, 32(sp)
   addi sp, sp, 16
-  addi sp, sp, -16
-  sd ra, (sp)
-  lla a0, rukaml_array_get
-  li a1, 2
-  call rukaml_alloc_closure
-  li a1, 2
-  ld t0, 32(sp)
-  addi a2, t0, 0
-  li a3, 0
-  call rukaml_applyN
-  sd a0, 24(sp)
-  ld ra, (sp)
-  addi sp, sp, 16
+  ld t0, 16(sp)
+  addi a0, t0, 0
+  li a1, 0
+  call rukaml_array_get_sysv
+  sd a0, 8(sp)
   ld t0, 8(sp)
   sd t0, (sp)
   ld a0, (sp)

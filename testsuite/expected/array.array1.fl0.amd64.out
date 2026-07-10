@@ -41,6 +41,7 @@ extern rukaml_close_channel
 extern rukaml_end_of_input
 extern rukaml_input_char
 extern rukaml_argv
+extern rukaml_trace_val
 
 section .bss
   rukaml_discard: resq 1
