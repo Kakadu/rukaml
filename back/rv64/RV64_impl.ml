@@ -675,20 +675,10 @@ let generate_body is_toplevel body =
            emit sd_dest a0 dest)
        | _ -> failwiths "Should not happen %s %d" __FILE__ __LINE__)
     | CApp (APrimitive ("array_get", 2), arg1, [ arg2 ]) ->
-      with_ra_saving (fun () ->
-        emit_alloc_closure "rukaml_array_get" 2;
-        emit li a1 2;
-        helper_a (DReg "a2") arg1;
-        (* (match arg1 with
-         | AVar arr when Addr_of_local.has_key arr -> emit ld a2 (pp_to_mach arr)
-         | _ -> failwiths "Should not happen %s %d" __FILE__ __LINE__); *)
-        helper_a (DReg "a3") arg2;
-        (* (match arg2 with
-         | AVar n when Addr_of_local.has_key n -> emit ld a3 (pp_to_mach n)
-         | AConst (PConst_int n) -> emit li a3 n
-         | _ -> failwiths "Should not happen %s %d" __FILE__ __LINE__); *)
-        emit call "rukaml_applyN";
-        emit sd_dest a0 dest)
+      helper_a (DReg "a0") arg1;
+      helper_a (DReg "a1") arg2;
+      emit call "rukaml_array_get_sysv";
+      emit sd_dest a0 dest
     | CApp (APrimitive ("array_set", 3), arg1, []) as e ->
       (match arg1 with
        | AVar arr when Addr_of_local.has_key arr ->
@@ -1179,6 +1169,7 @@ let generate_body is_toplevel body =
           (fun i x ->
              helper_a (DReg "t0") x;
              emit ld t1 (pp_to_mach arr_slot);
+             (* TODO: Use wordsize below *)
              emit sd t0 (ROffset (t1, 8 * i)))
           r;
         emit ld ra (pp_to_mach ra_name);
