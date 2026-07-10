@@ -1,6 +1,5 @@
 #include <alloca.h>
 #include <assert.h>
-#include <errno.h>
 #include <inttypes.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -25,7 +24,7 @@ void __mk_err_warning(const char *file, int line, const char *msg) {
 
 #undef RUKAML_DEBUG
 
-#ifdef RUKAML_DEBUG
+#if RUKAML_DEBUG == 1
 #define log(...)                                                               \
   if (1) {                                                                     \
     printf(__VA_ARGS__);                                                       \
@@ -34,11 +33,6 @@ void __mk_err_warning(const char *file, int line, const char *msg) {
 #else
 #define log(...)
 #endif
-
-// TODO: use uintptr_t
-#define HEADER(size, tag) ((uint64_t)((size << 8u) + (tag % 256u)))
-#define SIZE(ptr) (*((uint64_t *)ptr - 1) >> 8)
-#define TAG(ptr) (*((uint64_t *)ptr - 1) & 0xFF)
 
 // normal 00, gray 01, black 11
 #define MAKE_WHITE(ptr) (*ptr = (*ptr & ~(0b11 << 8)))
@@ -59,15 +53,41 @@ void __mk_err_warning(const char *file, int line, const char *msg) {
 #define Val_true ((value) true)
 #define Val_false ((value)0)
 
-#if defined(__riscv) && __riscv_xlen == 64
+#if defined(__riscv)
 #define DECLARE_FAKE_ARGS                                                      \
   int a0, int a1, int a2, int a3, int a4, int a5, int a6, int a7
 #define FAKE_ARGS 0, 1, 2, 3, 4, 5, 6, 7
-#define value uint64_t *
-#define Set_field(dest, idx, newval) *((value *)dest + idx) = newval
-#define Field(dest, idx) *((value *)dest + idx)
+
+#if __riscv_xlen == 64
+#define HEADER(size, tag) ((uint64_t)((size << 8u) + (tag % 256u)))
+#define SIZE(ptr) (*((uint64_t *)ptr - 1) >> 8)
+#define TAG(ptr) (*((uint64_t *)ptr - 1) & 0xFF)
+
+typedef int64_t *value;
 
 #endif
+
+#if __riscv_xlen == 32
+#define HEADER(size, tag) ((uint32_t)((size << 8u) + (tag % 256u)))
+#define SIZE(ptr) (*((uint32_t *)ptr - 1) >> 8)
+#define TAG(ptr) (*((uint32_t *)ptr - 1) & 0xFF)
+
+typedef int32_t *value;
+#endif
+
+#define Set_field(dest, idx, newval) *((value *)dest + idx) = newval
+#define Field(dest, idx) *((value *)dest + idx)
+#endif
+
+#define Clo_code(ans) (Field(ans, 0))
+#define Clo_arity(ans) (Field(ans, 1))
+#define Clo_received(ans) (Field(ans, 2))
+#define Clo_arg(ans, i) (Field(ans, 3 + i))
+
+#define Set_clo_code(ans, code) (ans[0] = code)
+#define Set_clo_arity(ans, v) Set_field(ans, 1, v)
+#define Set_clo_received(ans, v) Set_field(ans, 2, v)
+#define Set_clo_arg(ans, i, v) Set_field(ans, 3 + i, v)
 
 int HEAP_SIZE = 8 * 4 * 4 * 1024; // in words
 const uint8_t Tuple_tag = 0;
@@ -252,18 +272,12 @@ void rukaml_gc_stats_sysv(void) {
   fflush(stdout);
 }
 
-typedef struct {
-  void *code;
-  int64_t argsc; // TODO(Kakadu): uint32_t or byte ???
-  int64_t args_received;
-  void *args[];
-} rukaml_closure;
-
-#define PAD(n)                                                                 \
-  {                                                                            \
-    for (unsigned int i = 0; i < n; i++)                                       \
-      printf(" ");                                                             \
+// clang-format off
+#define PAD(n) \
+  { for (unsigned int i = 0; i < n; i++) \
+      putc(" ", stdout); \
   }
+// clang-format on
 
 void rukaml_trace_val(value arg, unsigned int level) {
 #pragma GCC diagnostic push
@@ -287,10 +301,10 @@ void rukaml_trace_val(value arg, unsigned int level) {
   }
   if (TAG(arg) == Closure_tag) {
     PAD(level + 1);
-    rukaml_closure *clo = (rukaml_closure *)arg;
+    value *clo = arg;
     printf("closure, code = 0x%" PRIx64 ", argc=%" PRId64 ", arg_got=%" PRId64
            "\n",
-           (unsigned long)clo->code, clo->argsc, clo->args_received);
+           Clo_code(clo), Clo_arity(clo), Clo_received(clo));
     return;
   }
   // Need to implement tagged integers
@@ -435,28 +449,30 @@ void *rukaml_alloc_block(int64_t size, uint8_t tag) {
   return ans;
 }
 
-void *rukaml_alloc_closure(void *func, int32_t argsc) {
+void *rukaml_alloc_closure(void *func, int64_t argsc) {
   assert(func != NULL);
   assert(argsc > 0);
   // log("%s\n", __func__);
   // code_ptr + argsc + argmax + args[]
   size_t size = 3 + argsc;
-  rukaml_closure *ans = (rukaml_closure *)rukaml_alloc_block(size, Closure_tag);
+  value *ans = (value *)rukaml_alloc_block(size, Closure_tag);
   assert(TAG(ans) == Closure_tag);
   assert(SIZE(ans) == size);
   // printf("%s ans = 0x%" PRIx64 "\n", __func__, (uint64_t*)ans);
   // fflush(stdout);
 
-  ans->code = func;
+  Set_clo_code(ans, func);
+  Set_clo_arity(ans, Val_int(argsc));
+  Set_clo_received(ans, Val_int(0));
 #ifdef DEBUG
   printf("store code ptr = %" PRIx64 "\n", (uint64_t)(ans->code));
 #endif
-  ans->argsc = argsc;
-  ans->args_received = 0;
-  memset(ans->args, 0, argsc * sizeof(void *));
+  memset(ans + 3, 0, argsc * sizeof(void *));
 #ifdef DEBUG
-  printf("%s argc = %u,   %" PRIx64 "\n\n", __func__, argsc, (uint64_t)ans);
+  printf("%s argc = %u,   %" PRIx64 "\n\n", __func__, Clo_arity(ans), ans);
 #endif
+  assert(Clo_arity(ans) == Val_int(argsc));
+  assert(Clo_received(ans) == Val_int(0));
   return ans;
 }
 
@@ -516,21 +532,25 @@ value rukaml_array_read_in(DECLARE_FAKE_ARGS, void **str) {
   value arr = rukaml_alloc_array(Val_int(size));
 
   for (int i = 0; i < size; i++) {
-    int c = fgetc(fp);
-    arr[i] = (void *)((int64_t)(c));
+    value c = Val_int((uint64_t)fgetc(fp));
+    Set_field(arr, i, c);
   }
   fread(arr, sizeof(void *), size, fp);
   fclose(fp);
   return arr;
 }
 
-void *rukaml_array_get(DECLARE_FAKE_ARGS, void **arr, uint64_t n) {
+void *rukaml_array_get_sysv(value arr, value n) {
   assert(TAG(arr) == Array_tag);
-  if (n >= SIZE(arr)) {
+  if (Int_val(n) >= SIZE(arr)) {
     fprintf(stderr, "Index out of bounds");
     exit(1);
   }
-  return arr[n];
+  return (value)(arr[Int_val(n)]);
+}
+
+value rukaml_array_get(DECLARE_FAKE_ARGS, value arr, value n) {
+  return rukaml_array_get_sysv(arr, n);
 }
 
 void rukaml_array_set_sysv(value arr, value n, value a) {
@@ -567,15 +587,17 @@ a, int64_t b)
   return a * b;
 } */
 
-rukaml_closure *copy_closure(rukaml_closure *src) {
-  rukaml_closure *dst =
-      (rukaml_closure *)rukaml_alloc_closure(src->code, src->argsc);
-  dst->args_received = src->args_received;
-  for (size_t i = 0; i < src->args_received; i++) {
-    dst->args[i] = src->args[i];
+value copy_closure(value src) {
+  value dst = rukaml_alloc_closure(Clo_code(src), Int_val(Clo_arity(src)));
+  Set_clo_received(dst, Clo_received(src));
+  // dst->args_received = src->args_received;
+  for (size_t i = 0; i < Int_val(Clo_received(src)); i++) {
+    // dst->args[i] = src->args[i];
+    Set_clo_arg(dst, i, Clo_arg(src, i));
   }
   assert(TAG(dst) == Closure_tag);
-  assert(dst->argsc == src->argsc);
+  // assert(dst->argsc == src->argsc);
+  assert(Clo_arity(dst) == Clo_arity(src));
   return dst;
 }
 
@@ -584,37 +606,40 @@ void *rukaml_applyN(void *f, int64_t argc, ...) {
   assert(TAG(f) == Closure_tag);
 
 #ifdef RUKAML_DEBUG
-  printf("%s argc = %lu, closure = 0x%" PRIX64 "\n\n", __func__, argc,
-         (uint64_t)f);
+  log("%s argc = %lu, closure = 0x%" PRIX64 "\n\n", __func__, argc,
+      (uint64_t)f);
   fflush(stdout);
 #endif
   va_list argp;
   va_start(argp, argc);
-  rukaml_closure *f_closure = f;
-#ifdef RUKAML_DEBUG
-  printf("\nf->arg_received = %lu, f->argc = %lu\n", f_closure->args_received,
-         f_closure->argsc);
-  for (size_t i = 0; i < f_closure->args_received; ++i) {
-    if (IS_ON_HEAP(f_closure->args[i])) {
-      rukaml_trace_val(f_closure->args[i], 7);
+
+#if RUKAML_DEBUG == 1
+  log("%s Clo_code = 0x%" PRIXPTR "\n", __func__, (void *)(Clo_code(f)));
+  log("%s Clo_arity = %ld, Clo_received = 0x%lu\n\n", __func__,
+      Int_val(Clo_arity(f)), Int_val(Clo_received(f)));
+
+  for (size_t i = 0; i < Int_val(Clo_received(f)); ++i) {
+    value arg = Clo_arg(f, i);
+    if (IS_ON_HEAP(arg)) {
+      rukaml_trace_val(arg, 7);
     } else
-      log("    Arg %d is not on heap: 0x%" PRIX64 "\n", i, f_closure->args[i]);
+      log("    Arg %d is not on heap: 0x%" PRIX64 "\n", i, arg);
   }
   fflush(stdout);
 #endif
   // printf("f->arg_received = %u\n", f_closure->args_received);
   //  printf("%d\n", __LINE__);
-  assert(f_closure->args_received + argc <= f_closure->argsc);
-
-  if (f_closure->args_received + argc == f_closure->argsc) {
+  assert(Int_val(Clo_arity(f)) < 100);
+  assert(Clo_received(f) < Clo_arity(f));
+  if (Int_val(Clo_received(f)) + argc == Int_val(Clo_arity(f))) {
     // for full application we can omit copying closure
     size_t i = 0, j;
     fun0 callable;
     // log("argsc = %d, args_received=%d, new_args=%d\n",
     //     f_closure->argsc, f_closure->args_received, argc);
-    void **stack_args = alloca(f_closure->argsc * sizeof(void *));
-    for (i = 0; i < f_closure->args_received; ++i) {
-      stack_args[i] = f_closure->args[i];
+    void **stack_args = alloca(Int_val(Clo_arity(f)) * sizeof(void *));
+    for (i = 0; i < Int_val(Clo_received(f)); ++i) {
+      stack_args[i] = Clo_arg(f, i);
       // printf("Setting arg %d: 0x%lX\n", i, stack_args[i]);
       // fflush(stdout);
       // if (IS_ON_HEAP(stack_args[i]))
@@ -624,25 +649,28 @@ void *rukaml_applyN(void *f, int64_t argc, ...) {
     }
 
     // rest of the args
-    for (j = f_closure->args_received; j < f_closure->argsc; j++) {
+    for (j = Int_val(Clo_received(f)); j < Int_val(Clo_arity(f)); j++) {
       // printf("Setting arg j=%d, f_closure->args_received+argc=%d\n", j,
       // f_closure->args_received + argc);
       stack_args[j] = va_arg(argp, void *);
     }
     va_end(argp);
-    callable = (fun0)f_closure->code;
+    callable = (fun0)(Clo_code(f));
     return callable();
   } else {
     // There we have under application
-    rukaml_closure *ans_closure = copy_closure(f_closure);
-    f_closure = NULL; // error avoidance
+    value ans_closure = copy_closure(f);
 
     for (size_t i = 0; i < argc; i++) {
       value arg = (value)va_arg(argp, void *);
       // printf("partial application \n", __LINE__);
       // rukaml_trace_val(arg, 3);
       // fflush(stdout);
-      ans_closure->args[ans_closure->args_received++] = arg;
+      // ans_closure->args[ans_closure->args_received++] = arg;
+      size_t received = Int_val(Clo_received(ans_closure));
+      Set_clo_arg(ans_closure, received, arg);
+      received++;
+      Set_clo_received(ans_closure, Val_int(received));
     }
 #ifdef DEBUG
     printf("\nf->arg_received = %lu, f->argc = %lu\n",
