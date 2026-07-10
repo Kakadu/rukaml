@@ -67,7 +67,15 @@ export CC_AMD64=gcc
 export LD_AMD64=gcc
 export RUN_AMD64=""
 export RUN_FLAGS_AMD64=""
+```
 
+Or use [Syntacore SDK](https://syntacore.com/tools/development-tools) to build for RV32
+```fish
+export SCDT=/path/to/syntacore/sdk
+export CC_RV32=$SCDT/riscv-gcc/bin/riscv64-unknown-linux-gnu-gcc
+export LD_RV32=$SCDT/riscv-gcc/bin/riscv64-unknown-linux-gnu-gcc
+export RUN_RV32="$SCDT/tools/bin/qemu-riscv32"
+export RUN_FLAGS_RV32="-L $SCDT/riscv-gcc/sysroot/usr -E LD_LIBRARY_PATH=$SCDT/riscv-gcc/sysroot/usr/lib:$SCDT/riscv-gcc/sysroot/usr/lib32/ilp32"
 ```
 
 Once the environment is properly discovered run the [testsuite](testsuite):
