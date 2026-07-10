@@ -48,7 +48,6 @@ void __mk_err_warning(const char *file, int line, const char *msg) {
 #define IS_IMM(v) (!IS_BLOCK(v))
 #define Val_unit ((value)0)
 #define Val_int(n) ((value)n)
-#define Int_val(n) ((long)n)
 #define Val_nil ((value)0)
 #define Val_true ((value) true)
 #define Val_false ((value)0)
@@ -64,6 +63,7 @@ void __mk_err_warning(const char *file, int line, const char *msg) {
 #define TAG(ptr) (*((uint64_t *)ptr - 1) & 0xFF)
 
 typedef int64_t *value;
+#define Int_val(n) ((long)n)
 
 #endif
 
@@ -73,6 +73,8 @@ typedef int64_t *value;
 #define TAG(ptr) (*((uint32_t *)ptr - 1) & 0xFF)
 
 typedef int32_t *value;
+#define Int_val(n) ((int32_t)n)
+
 #endif
 
 #define Set_field(dest, idx, newval) *((value *)dest + idx) = newval
@@ -275,7 +277,7 @@ void rukaml_gc_stats_sysv(void) {
 // clang-format off
 #define PAD(n) \
   { for (unsigned int i = 0; i < n; i++) \
-      putc(" ", stdout); \
+      putc((int)" ",stdout); \
   }
 // clang-format on
 
@@ -301,17 +303,16 @@ void rukaml_trace_val(value arg, unsigned int level) {
   }
   if (TAG(arg) == Closure_tag) {
     PAD(level + 1);
-    value *clo = arg;
     printf("closure, code = 0x%" PRIx64 ", argc=%" PRId64 ", arg_got=%" PRId64
            "\n",
-           Clo_code(clo), Clo_arity(clo), Clo_received(clo));
+           Clo_code(arg), Clo_arity(arg), Clo_received(arg));
     return;
   }
   // Need to implement tagged integers
   for (uint64_t i = 0; i < SIZE(arg); i++) {
     printf("i = %d\n", i);
     fflush(stdout);
-    value field = (value *)Field(arg, i);
+    value field = Field(arg, i);
     if ((unsigned)(field) < 100) {
       PAD(level + 1);
       printf("%lu -> Int %ld\n", i, (int64_t)(field));
@@ -793,11 +794,11 @@ void rukaml_fprintf_impl(void *dest, value fmt, va_list args) {
     mk_err_fatal("tag mismatch");
   }
 
-  int64_t fmt_len = Int_val(rukaml_string_length_sysv((value)fmt));
+  value fmt_len = rukaml_string_length_sysv((value)fmt);
 
   // printf("%s, fmtlen = %ld\n", __func__, fmt_len);
   // fflush(stdout);
-  for (size_t pos = 0; pos < fmt_len; ++pos) {
+  for (size_t pos = 0; pos < Int_val(fmt_len); ++pos) {
     char ch = Int_val(rukaml_string_nth_sysv((value)fmt, Val_int(pos)));
     if (ch != '%') {
       // TODO: fix hardcoded stdout
@@ -823,15 +824,15 @@ void rukaml_fprintf_impl(void *dest, value fmt, va_list args) {
       break;
     }
     case 'b': {
-      int64_t v = va_arg(args, int64_t);
+      value v = va_arg(args, value);
       // TODO: fix hardcoded stdout
-      fprintf(stdout, "%s", v ? "true" : "false");
+      fprintf(stdout, "%s", Int_val(v) ? "true" : "false");
       break;
     }
     case 'c': {
-      int64_t v = va_arg(args, int64_t);
+      value v = va_arg(args, value);
       // TODO: fix hardcoded stdout
-      fprintf(stdout, "%c", (char)v);
+      fprintf(stdout, "%c", (char)Int_val(v));
       break;
     }
     case 'd': {
@@ -1034,8 +1035,8 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
   size_t fmt_len = Int_val(rukaml_string_length_sysv(fmt));
   size_t output_len = 1; // for '\0'
   // log("%s, fmtlen = %" PRIu64 "\n", __func__, fmt_len);
-  uint64_t *__args_start = NULL;
-  uint64_t *__args_fin = NULL;
+  value __args_start = NULL;
+  value __args_fin = NULL;
   size_t argslen = 0;
 
   // Collection loop
@@ -1095,7 +1096,7 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
       // rukaml_trace_val(str, 5);
       sprintf_insert_arg(&__args_start, &__args_fin, str);
       // printf("args_start = 0x%Lx\n", __args_start);
-      output_len += rukaml_string_length_sysv(str);
+      output_len += Int_val(rukaml_string_length_sysv(str));
       argslen++;
       break;
     }
@@ -1161,9 +1162,14 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
       break;
     }
     case 'd': {
-      int64_t arg = (int64_t)Field(__args_start, 0);
+      value arg = Field(__args_start, 0);
       // log("going to print integer %ld\n", arg);
-      size_t printed = sprintf((char *)ans + i, "%ld", arg);
+#if __riscv_xlen == 64
+      size_t printed = sprintf((char *)ans + i, "%ld", Int_val(arg));
+#endif
+#if __riscv_xlen == 32
+      size_t printed = sprintf((char *)ans + i, "%d", Int_val(arg));
+#endif
       i += printed;
       __args_start = (value)Field((value *)__args_start, 1);
       break;
@@ -1199,10 +1205,11 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
 
   // printf("Sprintf finished, output_len = %lu, rez = '%s'\n", output_len,
   // (char*) ans); pp_string_as_HEX((char*)ans);
+  assert(TAG(ans) == String_tag);
   return ans;
 }
 
-void *rukaml_sprintf_wrap(DECLARE_FAKE_ARGS, value fmt, ...) {
+value rukaml_sprintf_wrap(DECLARE_FAKE_ARGS, value fmt, ...) {
   if (fmt == NULL) {
     mk_err_fatal("unexpected null ptr");
   }
@@ -1213,7 +1220,7 @@ void *rukaml_sprintf_wrap(DECLARE_FAKE_ARGS, value fmt, ...) {
 
   va_list args;
   va_start(args, fmt);
-  uint64_t *ans = rukaml_sprintf_impl(fmt, args);
+  value ans = rukaml_sprintf_impl(fmt, args);
   va_end(args);
 
   // uint64_t payload_words_n = (bytes_n + 7) / 8;                     // amount
@@ -1246,7 +1253,7 @@ void *rukaml_alloc_sprintf_closure(DECLARE_FAKE_ARGS, value fmt) {
   return rukaml_applyN(closure, 1, fmt);
 }
 
-void *rukaml_alloc_sprintf_closure_sysv(void **fmt) {
+value rukaml_alloc_sprintf_closure_sysv(value fmt) {
   assert(TAG(fmt) == String_tag);
   return rukaml_alloc_sprintf_closure(FAKE_ARGS, fmt);
 }
@@ -1355,7 +1362,7 @@ value rukaml_list_length(DECLARE_FAKE_ARGS, value ls) {
       ls = Field(ls, 1);
       break;
     case 0:
-      return Int_val(size);
+      return Val_int(size);
     default:
       mk_err_fatal("tag mismatch");
     }
@@ -1382,7 +1389,7 @@ value rukaml_string_of_char_list_sysv(value chs) {
 
   // printf("result is '%s' of len = %lu\n", repr, strlen(repr));
   // fflush(stdout);
-  assert(Int_val(strlen(repr)) == rukaml_string_length_sysv(block));
+  assert(Int_val(strlen(repr)) == Int_val(rukaml_string_length_sysv(block)));
 
   return block;
 }
@@ -1430,7 +1437,7 @@ void *rukaml_open_impl(value path, const char *mode) {
     mk_err_fatal("unexpected null ptr");
   }
 
-  uint64_t len = rukaml_string_length_sysv(path);
+  size_t len = (size_t)Int_val(rukaml_string_length_sysv(path));
 
   char *path_cstr = malloc(len + 1);
 
@@ -1463,7 +1470,7 @@ void *rukaml_open_in(DECLARE_FAKE_ARGS, value path) {
   return rukaml_open_impl(path, "r");
 }
 
-void *rukaml_open_out(DECLARE_FAKE_ARGS, void **path) {
+value rukaml_open_out(DECLARE_FAKE_ARGS, value path) {
   return rukaml_open_impl(path, "w");
 }
 
