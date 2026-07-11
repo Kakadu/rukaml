@@ -68,12 +68,13 @@ typedef uint64_t rukaml_uint_t;
 #define Int_val(n) ((long)n)
 const size_t rukaml_word_size = 8;
 #define PRIxVAL "lx"
+#define PRIdVAL "ld"
 #endif
 
 #if __riscv_xlen == 32
 #define HEADER(size, tag) ((uint32_t)((size << 8u) + (tag % 256u)))
 #define SIZE(ptr) (*((uint32_t *)ptr - 1) >> 8)
-#define TAG(ptr) (*((uint32_t *)ptr - 1) & 0xFF)
+#define TAG(ptr) ((uint8_t)(*((uint32_t *)ptr - 1) & 0xFF))
 
 typedef int32_t *value;
 typedef int32_t rukaml_int_t;
@@ -81,6 +82,7 @@ typedef uint32_t rukaml_uint_t;
 #define Int_val(n) ((int32_t)n)
 const size_t rukaml_word_size = 4;
 #define PRIxVAL "x"
+#define PRIdVAL "d"
 #endif
 
 #define Set_field(dest, idx, newval) *((value *)dest + idx) = newval
@@ -278,13 +280,13 @@ void rukaml_trace_val(value arg, unsigned int level) {
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
 
   if (!IS_ON_HEAP(arg)) {
-    printf("Out of heap value: 0x%" PRIX64 "\n", (uint64_t)arg);
+    printf("Out of heap value: 0x%" PRIxVAL "\n", arg);
     return;
   }
   PAD(level);
-  printf("BLOCK:  0x%" PRIX64 ", he=0x%lX, tag=%lu, size=%lu"
+  printf("BLOCK:  0x%" PRIxVAL ", he=0x%" PRIxVAL ", tag = %hhu, size=%u"
          "\n",
-         (uint64_t)arg, ((uint64_t *)arg)[-1], TAG(arg), SIZE(arg));
+         arg, Field(arg, -1), TAG(arg), SIZE(arg));
   fflush(stdout);
   if (TAG(arg) == String_tag) {
     PAD(level + 1);
@@ -294,9 +296,15 @@ void rukaml_trace_val(value arg, unsigned int level) {
   }
   if (TAG(arg) == Closure_tag) {
     PAD(level + 1);
-    printf("closure, code = 0x%" PRIx64 ", argc=%" PRId64 ", arg_got=%" PRId64
-           "\n",
+    printf("closure, code = 0x%" PRIxVAL ", argc = %" PRIdVAL
+           ", arg_got = %" PRIdVAL "\n",
            Clo_code(arg), Clo_arity(arg), Clo_received(arg));
+    for (size_t i = 0; i < Clo_received((arg)); i++) {
+      PAD(level + 5);
+      printf("%u: ", i);
+      rukaml_trace_val(Clo_arg(arg, i), level + 6);
+      printf("\n");
+    }
     return;
   }
   // Need to implement tagged integers
@@ -321,14 +329,13 @@ void rukaml_trace_val(value arg, unsigned int level) {
 // and when we wrap function into closure, predefined functions should behave
 // the same. Because of that this dirty hack. Right thing to do is to switch
 // Rukaml calling convention to default one
-void rukaml_print_int(int64_t x) {
-  printf("%s %ld\n", __func__, x);
+void rukaml_print_int(value x) {
+  // printf("%s %" PRIdVAL " 0x%" PRIxVAL "\n", __func__, x, x);
+  printf("%s %" PRIdVAL "\n", __func__, x);
   fflush(stdout);
 }
 
-void rukaml_print_int_kaml(DECLARE_FAKE_ARGS, int64_t x) {
-  rukaml_print_int(x);
-}
+void rukaml_print_int_kaml(DECLARE_FAKE_ARGS, value x) { rukaml_print_int(x); }
 
 typedef void *(*fun0)(void);
 typedef void *(*fun1)(void *);
@@ -423,7 +430,8 @@ value rukaml_alloc_pair(value l, value r) {
 }
 
 value rukaml_alloc_block(size_t size, uint8_t tag) {
-  // printf("%s, size = %lu, tag = %u\n", __func__, size, tag);
+  // printf("\n%s, size = %lu, tag = %u\n", __func__, size,
+  //        ((unsigned)tag % 0xFF));
   if (GC.allocated_words + size + 1 > HEAP_SIZE) {
     fprintf(stderr, "Not enough memory\n");
     exit(1);
@@ -443,7 +451,12 @@ value rukaml_alloc_block(size_t size, uint8_t tag) {
   assert(SIZE(ans) == size);
   log("A block 0x%" PRIxVAL " is created of size %ld. Allocated words = %lu\n",
       (value)(rez + 1), size, GC.allocated_words);
-  fflush(stdout);
+
+  for (size_t i = 0; i < size; ++i)
+    Set_field(ans, i, Val_int(0));
+
+  // rukaml_trace_val(ans, 3);
+  // fflush(stdout);
   return ans;
 }
 
@@ -467,8 +480,8 @@ void *rukaml_alloc_closure(void *func, int32_t argsc) {
 #endif
   memset(ans + 3, 0, argsc * sizeof(void *));
 #if RUKAML_DEBUG == 1
-  printf("%s argc = %u, ans = 0x%" PRIxPTR "\n\n", __func__, Clo_arity(ans),
-         ans);
+  printf("%s argc = %" PRIdVAL ", ans = 0x%" PRIxPTR "\n\n", __func__,
+         Clo_arity(ans), ans);
   fflush(stdout);
 #endif
   assert(Clo_arity(ans) == Val_int(argsc));
@@ -596,17 +609,15 @@ value rukaml_field(size_t n, value r) {
 void *rukaml_applyN(value f, rukaml_int_t argc, ...) {
   assert(IS_ON_HEAP(f));
   assert(TAG(f) == Closure_tag);
-
-#ifdef RUKAML_DEBUG
-  log("%s argc = %" PRIxPTR ", closure = 0x%" PRIX64 "\n\n", __func__, argc, f);
-  fflush(stdout);
-#endif
   va_list argp;
   va_start(argp, argc);
+#if (RUKAML_DEBUG == 1)
+  rukaml_trace_val(f, 2);
+  log("%s argc = %" PRIx32 ", clo_val = 0x%" PRIxVAL "\n\n", __func__, argc, f);
+  fflush(stdout);
 
-#if RUKAML_DEBUG == 1
   log("%s Clo_code = 0x%" PRIXPTR "\n", __func__, (void *)(Clo_code(f)));
-  log("%s Clo_arity = %ld, Clo_received = 0x%lu\n\n", __func__,
+  log("%s Clo_arity = %" PRIdVAL ", Clo_received = %" PRIdVAL "\n\n", __func__,
       Int_val(Clo_arity(f)), Int_val(Clo_received(f)));
 
   for (size_t i = 0; i < Int_val(Clo_received(f)); ++i) {
@@ -624,6 +635,7 @@ void *rukaml_applyN(value f, rukaml_int_t argc, ...) {
   assert(Clo_received(f) < Clo_arity(f));
   if (Int_val(Clo_received(f)) + argc == Int_val(Clo_arity(f))) {
     // for full application we can omit copying closure
+    // log("Full application\n");
     size_t i = 0, j;
     fun0 callable;
     // log("argsc = %d, args_received=%d, new_args=%d\n",
@@ -631,7 +643,7 @@ void *rukaml_applyN(value f, rukaml_int_t argc, ...) {
     void **stack_args = alloca(Int_val(Clo_arity(f)) * sizeof(void *));
     for (i = 0; i < Int_val(Clo_received(f)); ++i) {
       stack_args[i] = Clo_arg(f, i);
-      // printf("Setting arg %d: 0x%lX\n", i, stack_args[i]);
+      // printf("Setting arg %u: 0x%" PRIxVAL "\n", i, stack_args[i]);
       // fflush(stdout);
       // if (IS_ON_HEAP(stack_args[i]))
       //   rukaml_trace_val(stack_args[i], 3);
@@ -641,9 +653,9 @@ void *rukaml_applyN(value f, rukaml_int_t argc, ...) {
 
     // rest of the args
     for (j = Int_val(Clo_received(f)); j < Int_val(Clo_arity(f)); j++) {
-      // printf("Setting arg j=%d, f_closure->args_received+argc=%d\n", j,
-      // f_closure->args_received + argc);
-      stack_args[j] = va_arg(argp, void *);
+      stack_args[j] = va_arg(argp, value);
+      // printf("Setting arg j=%u, next_arg = 0x%" PRIxVAL "\n", j,
+      // stack_args[j]);
     }
     va_end(argp);
     callable = (fun0)(Clo_code(f));
