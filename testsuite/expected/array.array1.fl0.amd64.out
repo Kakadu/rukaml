@@ -35,6 +35,7 @@ extern rukaml_apply2
 extern rukaml_stdin
 extern rukaml_stdout
 extern rukaml_stderr
+extern rukaml_substring_sysv
 extern rukaml_open_in
 extern rukaml_open_out
 extern rukaml_close_channel

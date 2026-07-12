@@ -1,6 +1,6 @@
 (*
 test
-  (targets rv64 )
+  (targets rv32 rv64)
   (run (stdout "Success 'factrec1' on pos 8" "Success 'factrec1' on pos 0"))
 *)
 

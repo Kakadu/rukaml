@@ -1,6 +1,6 @@
 (*
 test
-  (targets rv64 amd64)
+  (targets amd64 rv32 rv64)
   (run (stdout "rukaml_print_int 1"))
 *)
 
