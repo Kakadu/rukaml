@@ -1,6 +1,6 @@
 (*
    test
-  (targets amd64)
+  (targets rv32 amd64)
   (run (stdout
           "(1, one)"
           "(2, two)"
@@ -11,7 +11,7 @@
 
 let ls1 = [ 1; 2; 3; 4; 5 ]
 let ls2 = [ "one"; "two"; "three"; "four"; "five" ]
-let pp_pair = printf "(%d, %s)\n"
+let pp_pair x = printf "(%d, %s)\n" x
 
 let rec pp_lists ls1 ls2 =
   match ls1, ls2 with

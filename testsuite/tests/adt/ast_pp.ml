@@ -1,6 +1,6 @@
 (*
    test
-  (targets amd64 rv64)
+  (targets amd64 rv32 rv64)
   (run (stdout
     "infix: (((1 + 2) + 3) * (3 * (5 + (6 * 7))))"
     "rpn: 12+3+3567*+**"))

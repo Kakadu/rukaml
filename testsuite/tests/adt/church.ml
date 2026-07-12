@@ -1,6 +1,6 @@
 (*
 test
-  (targets amd64 rv64)
+  (targets amd64 rv32 rv64)
   (run (stdout "abs f . abs x . f (f (f (f (f x))))"))
 *)
 
