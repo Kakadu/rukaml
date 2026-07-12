@@ -1,6 +1,6 @@
 (*
 test
-  (targets (amd64 promote) (rv64 promote))
+  (targets (amd64 promote) rv32 (rv64 promote))
   (run (stdout "rukaml_print_int 42"))
 *)
 let main =

@@ -151,11 +151,15 @@ main:
   addi t0, t0, 0
   li t1, 0
   beq t0, t1, lab_then_50
-  ld a1, 64(sp) # block_nth: from = 'temp8'
+  ld t0, 64(sp)
+  addi a1, t0, 0
+# block_nth: from = 'temp8'
   li a0, 0
   call rukaml_field
   sd a0, 152(sp)
-  ld a1, 64(sp) # block_nth: from = 'temp8'
+  ld t0, 64(sp)
+  addi a1, t0, 0
+# block_nth: from = 'temp8'
   li a0, 1
   call rukaml_field
   sd a0, 144(sp)
@@ -181,7 +185,9 @@ main:
   addi sp, sp, 16
   beq zero, zero, lab_fin_55
 lab_then_54:
-  ld a1, 152(sp) # block_nth: from = 'x'
+  ld t0, 152(sp)
+  addi a1, t0, 0
+# block_nth: from = 'x'
   li a0, 0
   call rukaml_field
   sd a0, 16(sp)
@@ -192,11 +198,15 @@ lab_then_54:
   addi t0, t0, 0
   li t1, 0
   beq t0, t1, lab_then_58
-  ld a1, 16(sp) # block_nth: from = 'temp26'
+  ld t0, 16(sp)
+  addi a1, t0, 0
+# block_nth: from = 'temp26'
   li a0, 0
   call rukaml_field
   sd a0, 136(sp)
-  ld a1, 16(sp) # block_nth: from = 'temp26'
+  ld t0, 16(sp)
+  addi a1, t0, 0
+# block_nth: from = 'temp26'
   li a0, 1
   call rukaml_field
   sd a0, 128(sp)
@@ -222,7 +232,9 @@ lab_then_54:
   addi sp, sp, 16
   beq zero, zero, lab_fin_63
 lab_then_62:
-  ld a1, 136(sp) # block_nth: from = 'z'
+  ld t0, 136(sp)
+  addi a1, t0, 0
+# block_nth: from = 'z'
   li a0, 0
   call rukaml_field
   sd a0, 40(sp)

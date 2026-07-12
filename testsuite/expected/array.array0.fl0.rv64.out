@@ -45,7 +45,7 @@ main:
   sd ra, 8(sp)
   ld t0, 24(sp)
   sd t0, (sp)
-  call rukaml_array_length
+  call rukaml_array_length # AAAA
   ld ra, 8(sp)
   sd a0, 16(sp)
   addi sp, sp, 16

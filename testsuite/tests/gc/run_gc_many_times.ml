@@ -17,7 +17,7 @@ let () = assert_descending_from_n "test assert_descending_from_n" 10 (make_desce
 
 let global = make_descending 5
 
-let rec loop n = 
+let rec loop n =
   if n < 1 then () else
     let local = make_descending n in
     let () = gc_compact () in
