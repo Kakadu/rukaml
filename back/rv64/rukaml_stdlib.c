@@ -37,9 +37,9 @@ void __mk_err_warning(const char *file, int line, const char *msg) {
 // clang-format on
 
 // normal 00, gray 01, black 11
-#define MAKE_WHITE(ptr) (*ptr = (*ptr & ~(0b11 << 8)))
-#define MAKE_GRAY(ptr) (*ptr = (*ptr | (0b01 << 8)))
-#define MAKE_BLACK(ptr) (*ptr = (*ptr | (0b11 << 8)))
+// #define MAKE_WHITE(ptr) (*ptr = (*ptr & ~(0b11 << 8)))
+// #define MAKE_GRAY(ptr) (*ptr = (*ptr | (0b01 << 8)))
+// #define MAKE_BLACK(ptr) (*ptr = (*ptr | (0b11 << 8)))
 
 #define MAX_STRING_FROM_STDIN (2 << 15)
 
@@ -99,7 +99,7 @@ const size_t rukaml_word_size = 4;
 #define Set_clo_received(ans, v) Set_field(ans, 2, v)
 #define Set_clo_arg(ans, i, v) Set_field(ans, 3 + i, v)
 
-int HEAP_SIZE = 8 * 4 * 4 * 1024; // in words
+int HEAP_SIZE = 4 * 8 * 4 * 4 * 1024; // in words
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
@@ -340,76 +340,11 @@ void rukaml_print_int(value x) {
 void rukaml_print_int_kaml(DECLARE_FAKE_ARGS, value x) { rukaml_print_int(x); }
 
 typedef void *(*fun0)(void);
-typedef void *(*fun1)(void *);
-typedef void *(*fun2)(void *, void *);
-typedef void *(*fun3)(void *, void *, void *);
-typedef void *(*fun7)(void *, void *, void *, void *, void *, void *, void *);
-typedef void *(*fun8)(void *, void *, void *, void *, void *, void *, void *,
-                      void *);
-typedef void *(*fun9)(void *, void *, void *, void *, void *, void *, void *,
-                      void *, void *);
-typedef void *(*fun10)(void *, void *, void *, void *, void *, void *, void *,
-                       void *, void *, void *);
-typedef void *(*fun11)(void *, void *, void *, void *, void *, void *, void *,
-                       void *, void *, void *, void *);
 
 void *rukaml_apply0(fun0 f) {
   // TODO: I'm not sure that zero-argument call is needed
   return f();
 }
-// NOTE: Below we pass first 6 arguments as zeros, because they go to the
-// registers. Others will go on stack
-// void *rukaml_apply1(fun9 foo, void *arg1) {
-// #ifdef DEBUG
-//   printf("%s f = %" PRIx64 ", arg = %" PRIx64 "\n", __func__, foo, arg1);
-// #endif
-//   return foo(FAKE_ARGS, arg1);
-// }
-
-// void *rukaml_apply2(fun8 f, void *arg1, void *arg2) {
-// #ifdef DEBUG
-//   printf("call %s with code ptr = 0x%" PRIx64 "\n", __func__, (uint64_t)f);
-//   printf("arg1 = 0x%" PRIx64 "; arg2 = 0x%" PRIx64 "\n", (uint64_t)arg1,
-//          (uint64_t)arg2);
-//   fflush(stdout);
-// #endif
-//   void *rez = f(FAKE_ARGS, arg1, arg2);
-// #ifdef DEBUG
-//   printf("Returned from function with a value 0x%" PRIx64 "\n", rez);
-// #endif
-//   return rez;
-// }
-
-// void *rukaml_apply3(fun9 f, void *arg1, void *arg2, void *arg3) {
-// #ifdef DEBUG
-//   printf("call %s with code ptr = 0x%" PRIx64 "\n", __func__, (uint64_t)f);
-//   printf("arg1 = 0x%" PRIx64 "; arg2 = 0x%" PRIx64 "; arg3 = 0x%" PRIx64
-//   "\n",
-//          (uint64_t)arg1, (uint64_t)arg2, (uint64_t)arg3);
-//   fflush(stdout);
-// #endif
-//   void *rez = f(FAKE_ARGS, arg1, arg2, arg3);
-// #ifdef DEBUG
-//   printf("Returned from function with a value 0x%" PRIx64 "\n", rez);
-// #endif
-//   return rez;
-// }
-// void *rukaml_apply4(fun10 f, void *arg1, void *arg2, void *arg3, void *arg4)
-// { #ifdef DEBUG
-//   printf("call %s with code ptr = 0x%" PRIx64 "\n", __func__, (uint64_t)f);
-//   printf("arg1 = 0x%" PRIx64 "; arg2 = 0x%" PRIx64 "; arg3 = 0x%" PRIx64
-//          "; arg4 = 0x%" PRIx64 "\n",
-//          (uint64_t)arg1, (uint64_t)arg2, (uint64_t)arg3, (uint64_t)arg4);
-//   fflush(stdout);
-// #endif
-//   return f(FAKE_ARGS, arg1, arg2, arg3, arg4);
-// }
-// void *rukaml_apply5(fun11 f, void *arg1, void *arg2, void *arg3, void *arg4,
-//                     void *arg5) {
-//   return f(FAKE_ARGS, arg1, arg2, arg3, arg4, arg5);
-// }
-
-// void *rukaml_identity(void *x) { return x; }
 
 value rukaml_alloc_pair(value l, value r) {
   if (GC.allocated_words + 3 > HEAP_SIZE) {
@@ -608,8 +543,15 @@ value rukaml_field(size_t n, value r) {
   return ans;
 }
 
-void *rukaml_applyN(value f, rukaml_int_t argc, ...) {
-  assert(IS_ON_HEAP(f));
+value rukaml_applyN(value f, rukaml_int_t argc, ...) {
+  if (!IS_ON_HEAP(f)) {
+    printf("%s, 0x%" PRIxVAL "\n", __func__, f);
+    printf("main bank:     0x%" PRIxPTR "...0x%" PRIxPTR "\n", GC.main_bank,
+           GC.main_bank_fin);
+    mk_err_fatal("closure is not on heap");
+    assert(IS_ON_HEAP(f));
+  }
+
   assert(TAG(f) == Closure_tag);
   va_list argp;
   va_start(argp, argc);
@@ -1231,13 +1173,6 @@ value rukaml_sprintf_wrap(DECLARE_FAKE_ARGS, value fmt, ...) {
   value ans = rukaml_sprintf_impl(fmt, args);
   va_end(args);
 
-  // uint64_t payload_words_n = (bytes_n + 7) / 8;                     // amount
-  // of (64-bits) words req void **obj = rukaml_alloc_block(payload_words_n + 1,
-  // String_tag); // +1 stands for additional word obj[payload_words_n] = (void
-  // *)bytes_n;                           // stores String.length
-
-  // uint64_t n = fread((void *)obj, sizeof(char), bytes_n, tmp);
-
   return ans;
 }
 //
@@ -1381,7 +1316,6 @@ value rukaml_string_of_char_list_sysv(value chs) {
   assert(IS_BLOCK(chs));
   value chars_n = rukaml_list_length(FAKE_ARGS, chs);
   const size_t n = (size_t)Int_val(chars_n);
-  // uint64_t payload_words_n = (chars_n + 7) / 8;
   // printf("%s, charsN = %ld\n", __func__, n );
   value block = rukaml_alloc_string(chars_n + 1);
 
