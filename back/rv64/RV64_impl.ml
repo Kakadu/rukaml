@@ -697,12 +697,13 @@ let generate_body is_toplevel body =
       (match arg1 with
        | AVar v when Addr_of_local.has_key v ->
          with_two_slots (fun ra_name arg_name ->
+           (* TODO: make sysv call *)
            emit sd ra (pp_to_mach ra_name);
            emit ld t0 (pp_to_mach v);
-           emit mv (pp_to_mach arg_name) t0;
-           emit call "rukaml_array_length";
+           emit sd t0 (pp_to_mach arg_name);
+           emit call "rukaml_array_length" ~comm:"AAAA";
            emit ld ra (pp_to_mach ra_name);
-           emit sd_dest a0 dest (* emit shrink_stack 2 *))
+           emit sd_dest a0 dest)
        | AArray _ | _ -> failwith "Should not happen")
     | CApp (APrimitive ("array_get", 2), arg1, []) ->
       (match arg1 with
@@ -1005,18 +1006,9 @@ let generate_body is_toplevel body =
       emit ld a0 (pp_to_mach arg);
       emit call "rukaml_tag0";
       emit sd_dest a0 dest ~comm:(Format.asprintf "got tag of '%a'" Ident.pp arg)
-    | CApp (APrimitive ("block_nth", _), AVar from, [ AConst (PConst_int idx) ])
-      when Addr_of_local.has_key from ->
-      (* with_ra_saving (fun () ->
-        emit li a0 idx;
-        emit ld a1 (pp_to_mach from);
-        emit call "rukaml_field";
-        emit sd_dest a0 dest) *)
-      emit
-        ld
-        a1
-        (pp_to_mach from)
-        ~comm:(Format.asprintf "block_nth: from = '%a'" Ident.pp from);
+    | CApp (APrimitive ("block_nth", _), from, [ AConst (PConst_int idx) ]) ->
+      helper_a (DReg "a1") from;
+      emit_comment "block_nth: from = '%a'" ANF.pp_a from;
       emit li a0 idx;
       emit call "rukaml_field";
       emit sd_dest a0 dest

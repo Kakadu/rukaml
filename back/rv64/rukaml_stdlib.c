@@ -600,7 +600,6 @@ void rukaml_array_set(DECLARE_FAKE_ARGS, value arr, value n, value a) {
 value rukaml_field(size_t n, value r) {
   assert(IS_ON_HEAP(r));
   assert(n < SIZE(r));
-  // value *arr = (value *)r;
   value ans = Field(r, n);
   if (0) {
     printf("%s: field %" PRIx64 "d = 0x%" PRIxPTR "\n", __func__, n, ans);
