@@ -1,6 +1,6 @@
 (*
 test
-  (targets (rv64 promote))
+  (targets rv32 (rv64 promote))
   (flags () (--cps) (--cps --caa))
   (run
     (stdout
