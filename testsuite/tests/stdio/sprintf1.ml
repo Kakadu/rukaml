@@ -6,6 +6,6 @@
 
 let main =
   let msg = sprintf "%s %s!" "hello" "world" in
-  let () = printf "%s" msg in
+  let () = printf "%s\n" msg in
   0
 ;;

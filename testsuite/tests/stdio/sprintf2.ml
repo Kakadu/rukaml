@@ -13,6 +13,6 @@ let rec list_concat sep strs =
 
 let main =
   let ls = [ "123"; "45"; "6" ] in
-  let () = printf "(%s)" (list_concat "+" ls) in
+  let () = printf "(%s)\n" (list_concat "+" ls) in
   0
 ;;

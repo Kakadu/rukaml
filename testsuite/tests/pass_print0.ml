@@ -1,12 +1,14 @@
 (*
 test
-  (targets rv64 amd64)
-  (flags () (--cps) (--cps --caa))
+  (targets rv32 rv64 amd64)
+
   (run
     (stdout
      "rukaml_print_int 21"
      "rukaml_print_int 22"))
 *)
+
+(* (flags () (--cps) (--cps --caa)) *)
 
 let revapply a f = f a
 let apply f a = f a
