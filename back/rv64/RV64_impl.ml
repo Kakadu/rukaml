@@ -310,10 +310,10 @@ let allocate_locals input_anf : (now:unit -> unit) * _ =
       count
   in
   let ra_offset, sloc =
-    emit comment (sprintf "%s" __FUNCTION__);
+    (* emit comment (sprintf "%s" __FUNCTION__);
     emit comment (sprintf "keys = %s" (Addr_of_local.keys ()));
     emit comment (sprintf "last_pos = %d" !Addr_of_local.last_pos);
-    emit comment (sprintf "count = %d" count);
+    emit comment (sprintf "count = %d" count); *)
     let clotc = calc_sloc (count + 1) in
     emit grow_stack clotc;
     Addr_of_local.last_pos := !Addr_of_local.last_pos + clotc - count;
@@ -328,14 +328,13 @@ let allocate_locals input_anf : (now:unit -> unit) * _ =
     done;
     count, clotc
   in
-  let deallocate =
-    fun ~now ->
+  let deallocate ~now =
     let () = now in
     emit ld ra (make_sp_offset ra_offset);
-    emit
-      shrink_stack
-      sloc
-      ~comm:(sprintf "DEallocate for Pad, RA and %d locals variables %s" count args_repr);
+    let comm =
+      sprintf "Deallocate for Pad, RA and %d locals variables %s" count args_repr
+    in
+    emit shrink_stack sloc ~comm;
     List.iter Addr_of_local.remove_local local_names;
     Addr_of_local.last_pos := !Addr_of_local.last_pos - (sloc - count)
   in
@@ -479,7 +478,7 @@ let generate_body is_toplevel body =
         when Toplevel.find_opt vname <> None (* Option.is_some (is_toplevel vname)  *) ->
         (match Toplevel.find_exn vname with
          | { kind = Toplevel.Function { argc = arity }; _ } ->
-           emit comment (Format.asprintf "Alloc closure for '%a'" Ident.pp vname);
+           (* emit comment (Format.asprintf "Alloc closure for '%a'" Ident.pp vname); *)
            emit_alloc_closure vname.hum_name arity;
            emit sd a0 (make_sp_offset i)
          | { kind = Main; _ } -> failwith "Should not happen"
@@ -916,14 +915,16 @@ let generate_body is_toplevel body =
       emit call "rukaml_trace_val";
       if dest <> DReg "a0" then emit sd_dest (RU "a0") dest
     | CApp (AVar f, arg1, args) when Toplevel.is_toplevel_function f ->
-      emit
-        comment
-        (Format.asprintf
-           "long application: @[%a %a@]"
-           Ident.pp
-           f
-           (pp_space_list ANF.pp_a)
-           (arg1 :: args));
+      let __ _ =
+        emit
+          comment
+          (Format.asprintf
+             "long application: @[%a %a@]"
+             Ident.pp
+             f
+             (pp_space_list ANF.pp_a)
+             (arg1 :: args))
+      in
       (* Calling a rukaml function uses custom calling convention.
            Pascal convention: all arguments on stack, LTR *)
       let expected_arity = Option.get (is_toplevel f) in
@@ -933,7 +934,7 @@ let generate_body is_toplevel body =
            printfn ppf "\t; calling %S" f; *)
       if expected_arity = formal_arity
       then (
-        emit_comment "Full application of arity = %d" expected_arity;
+        (* emit_comment "Full application of arity = %d" expected_arity; *)
         let _ =
           let to_remove = allocate_args_for_call ~f (arg1 :: args) in
           emit call f.hum_name;
@@ -943,7 +944,7 @@ let generate_body is_toplevel body =
         emit sd_dest (RU "a0") dest)
       else if formal_arity < expected_arity
       then (
-        let () =
+        let __ () =
           emit_comment "Under-application of %d/%d args" formal_arity expected_arity
         in
         let () =
@@ -1182,8 +1183,7 @@ let generate_body is_toplevel body =
        | Some { kind = Function { argc = 0 }; _ } -> assert false
        | Some { kind = Function { argc }; _ } ->
          assert (argc > 0);
-         (* failwith "TODO: create a closure" *)
-         emit comment (Format.asprintf "Alloc closure for '%a'" Ident.pp vname);
+         (* emit comment (Format.asprintf "Alloc closure for '%a'" Ident.pp vname); *)
          emit_alloc_closure vname.hum_name argc;
          emit sd_dest (RU "a0") dest
        | Some { kind = Immediate Constant; ident } ->
@@ -1581,7 +1581,6 @@ let codegen ?(wrap_main_into_start = true) anf file =
         Toplevel.extend name ~kind:Main;
         log "\nGenerating function main";
         generate_body is_toplevel expr;
-        emit_comment "Main is generated";
         print_epilogue ppf name.Ident.hum_name;
         Machine.flush_queue ppf
       | `Immediate (name, expr) -> emit_global_constant is_toplevel ppf name expr

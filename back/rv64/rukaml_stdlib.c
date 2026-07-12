@@ -848,11 +848,11 @@ void rukaml_fprintf_impl(void *dest, value fmt, va_list args) {
       break;
     }
     case 'd': {
-      int64_t v = va_arg(args, int64_t);
+      value v = va_arg(args, value);
       // printf("%s %d, dest = %d, v=%ld\n", __func__, __LINE__, dest, v);
-      fflush(stdout);
+      // fflush(stdout);
       // TODO: fix hardcoded stdout
-      fprintf(stdout, "%ld", v);
+      fprintf(stdout, "%" PRIdVAL, Int_val(v));
       break;
     }
     case 's': {
