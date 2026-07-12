@@ -207,6 +207,7 @@ let stdlib_externs =
   ; 0, "rukaml_stdin"
   ; 0, "rukaml_stdout"
   ; 0, "rukaml_stderr"
+  ; 3, "rukaml_substring_sysv"
   ; 7, "rukaml_open_in"
   ; 7, "rukaml_open_out"
   ; 7, "rukaml_close_channel"
@@ -675,6 +676,12 @@ let rec generate_body ppf body =
       emit_rukaml_apply1 dest ~fname ~arg
     | CApp (APrimitive (("array_set" as fname), (3 as argc)), arg1, []) ->
       emit_rukaml_applyN dest ~fname ~argc ~arg1
+    | CApp (APrimitive ("substring", 3), arg1, [ arg2; arg3 ]) ->
+      helper_a (DReg "rdi") arg1;
+      helper_a (DReg "rsi") arg2;
+      helper_a (DReg "rdx") arg3;
+      printfn ppf "  call rukaml_substring_sysv";
+      printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (APrimitive ("array_set", 3), arg1, [ arg2; arg3 ]) ->
       printfn ppf "  add rsp, -8*4";
       let pad1 = Ident.of_string @@ gen_name ~prefix:"pad" () in
