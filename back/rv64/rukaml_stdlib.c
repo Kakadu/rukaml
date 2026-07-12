@@ -308,16 +308,16 @@ void rukaml_trace_val(value arg, unsigned int level) {
     return;
   }
   // Need to implement tagged integers
-  for (uint64_t i = 0; i < SIZE(arg); i++) {
-    printf("i = %d\n", i);
-    fflush(stdout);
+  for (size_t i = 0; i < SIZE(arg); i++) {
+    // printf("i = %d\n", i);
+    // fflush(stdout);
     value field = Field(arg, i);
     if ((unsigned)(field) < 100) {
       PAD(level + 1);
-      printf("%lu -> Int %ld\n", i, (int64_t)(field));
+      printf("%lu -> Int %" PRIdVAL "\n", i, Int_val(field));
     } else {
       PAD(level + 1);
-      printf("%lu -> ", i);
+      printf("%" PRIdVAL " -> ", i);
       rukaml_trace_val(field, level + 1);
     }
   }
@@ -452,8 +452,9 @@ value rukaml_alloc_block(size_t size, uint8_t tag) {
   log("A block 0x%" PRIxVAL " is created of size %ld. Allocated words = %lu\n",
       (value)(rez + 1), size, GC.allocated_words);
 
-  for (size_t i = 0; i < size; ++i)
+  for (size_t i = 0; i < size; ++i) {
     Set_field(ans, i, Val_int(0));
+  }
 
   // rukaml_trace_val(ans, 3);
   // fflush(stdout);
@@ -694,11 +695,13 @@ void *rukaml_match_failure() {
 }
 
 value rukaml_alloc_string(value len) {
-  size_t payload_words_n = (Int_val(len) + 1 + 7) / 8;
+  size_t payload_words_n = (Int_val(len) + rukaml_word_size) / rukaml_word_size;
+  assert(payload_words_n * rukaml_word_size > len);
   void *block = rukaml_alloc_block(payload_words_n, String_tag);
   assert(TAG(block) == String_tag);
   assert(SIZE(block) == payload_words_n);
-  memset(block, '\0', payload_words_n * sizeof(void *));
+  memset(block, '\0', payload_words_n * rukaml_word_size);
+  // log("payload_words_n = %u\n", payload_words_n);
   // printf("String created at addr = 0x%lX\n", block);
 
   return block;
@@ -724,22 +727,27 @@ value rukaml_string_length_sysv(value str) {
   return Val_int(ans);
 }
 
-void *rukaml_make_string_of_lit(const char *const s) {
-  // #ifdef RUKAML_DEBUG
-  //   // printf("%s, str = '%s'\n", __func__, s); fflush(stdout);
-  //   // pp_string_as_HEX( (char*)s);
-  // #endif
+value rukaml_make_string_of_lit(const char *const s) {
+#if (RUKAML_DEBUG == 1)
+  printf("%s, str = '%s'\n", __func__, s);
+  // pp_string_as_HEX((char *)s);
+  fflush(stdout);
+#endif
   const size_t len = strlen(s);
   value block = (value)rukaml_alloc_string(Val_int(len));
+#if (RUKAML_DEBUG == 1)
+  log("len = %u\n", len);
+#endif
 
   for (size_t i = 0; i < len; ++i)
     ((char *)(block))[i] = s[i];
 
-  // #ifdef RUKAML_DEBUG
-  //   // log("block contents = ", (char*)block);
-  //   // pp_string_as_HEX((char*)block);
-  //   // log ("\n");
-  // #endif
+  assert(((char *)(block))[len] == '\0');
+#if (RUKAML_DEBUG == 1)
+  log("block contents = %s", (char *)block);
+  // pp_string_as_HEX((char*)block);
+  log("\n");
+#endif
 
   assert(rukaml_string_length_sysv(block) == Val_int(len));
   // printf("String created at addr = 0x%lX\n", block);
@@ -768,21 +776,21 @@ value rukaml_string_nth_sysv(value str, value n) {
   return Val_int(((char *)str)[Int_val(n)]);
 }
 
-void *rukaml_output_string_sysv(int dest, value str) {
+value rukaml_output_string_sysv(int dest, value str) {
   if (dest != 1) {
     log("dest = %ld\n", (int64_t)dest);
     assert(dest == 1);
   };
-  // printf("str addr = 0x%lX, str = '%s', len=%d\n", str, str, strlen(str));
+  // printf("str addr = 0x%" PRIxVAL "\n", str);
+  // printf("str = '%s', len=%d\n", (char *)str, strlen((char *)str));
   if (TAG(str) != String_tag) {
     printf("str argument = 0x%" PRIx64 ", tag = %ld\n", (long unsigned)str,
            TAG(str));
     mk_err_fatal("tag mismatch");
   }
   printf("%s", (char *)str);
-  // puts(str);
-  fflush(stdout);
-  return 0;
+  // fflush(stdout);
+  return Val_int(0);
 }
 
 // TODO: we are currently printing only to stdout
@@ -846,13 +854,8 @@ void rukaml_fprintf_impl(void *dest, value fmt, va_list args) {
       break;
     }
     case 's': {
-      value str = (value)va_arg(args, void **);
+      value str = va_arg(args, value);
       assert(TAG(str) == String_tag);
-      // printf("String case: 0x%lX\n", (uint64_t)str);
-      // rukaml_fprintf_string(dest, str);
-      // log("%s %d, dest = %d, v=%ld\n", __func__, __LINE__, dest, str);
-      // log("%s, stdout = %lx, STDOUT_FILENO = %lx\n", __func__, stdout,
-      // STDOUT_FILENO);
       rukaml_output_string_sysv(1, str);
       break;
     }
