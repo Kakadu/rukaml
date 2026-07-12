@@ -165,6 +165,7 @@ let standart_globals =
   @ [ "="; "<>"; ">"; ">="; "<"; "<=" ]
   @ [ "print" ]
   @ [ "printf"; "fprintf"; "sprintf" ]
+  @ [ "output_string" ]
   @ [ "stdin"; "stdout"; "open_in"; "open_out"; "close_in"; "close_out"; "end_of_input" ]
   @ [ "exit"; "sys_argv" ]
   @ [ "input_all"; "input_char" ]
