@@ -192,7 +192,15 @@ module Addr_of_local = struct
 
   (* 8 for 64 bit, 4 for 32bit *)
 
-  let pp_to_mach name =
+  let pp_to_mach (name : Ident.t) =
+    let __ _ =
+      log "%s name = %a, o = %d" __FUNCTION__ Ident.pp name (find_exn name);
+      log
+        "store size = %d, keys = [ %a ] "
+        (size ())
+        (pp_space_list (fun ppf (i, n) -> Format.fprintf ppf "%a -> %d;" Ident.pp i n))
+        (Hashtbl.to_seq store |> List.of_seq)
+    in
     let offset =
       let o = find_exn name in
       if o > 0 then !last_pos - o else !last_pos - o
@@ -245,13 +253,31 @@ let mulw k a b c =
   | `RV32 -> Machine.mul k a b c
 ;;
 
+let emit_comment ppf = Format.kasprintf (emit comment) ppf
+
+(** Functions [grow_stack] and [shrink_stack] take words count *)
+let grow_stack k n =
+  log "Grow stack for %d words" n;
+  assert (n > 0);
+  assert (n * wordsize () mod 16 = 0);
+  addi k sp sp (-n * wordsize ())
+;;
+
+let shrink_stack k n =
+  assert (n > 0);
+  log "Shrink stack for %d words" n;
+  addi k sp sp (n * wordsize ())
+;;
+
+(* Calculate required slots count for [argc] arguments. *)
+let calc_sloc argc =
+  let args_bytec = wordsize () * argc in
+  let pad_bytec = if args_bytec mod 16 = 0 then 0 else 16 - (args_bytec mod 16) in
+  assert (pad_bytec mod wordsize () = 0);
+  (args_bytec + pad_bytec) / wordsize ()
+;;
+
 let allocate_locals input_anf : (now:unit -> unit) * _ =
-  let __ _ =
-    log
-      "Allocate locals: last_pos = %d, keys = %s"
-      !Addr_of_local.last_pos
-      (Addr_of_local.keys ())
-  in
   let local_names = ref Ident.Ident_set.empty in
   let rec helper = function
     | ANF.EComplex c -> helper_c c
@@ -276,48 +302,42 @@ let allocate_locals input_anf : (now:unit -> unit) * _ =
   let count = List.length local_names in
   (* If assertion fails it's like a number of locals with the same names *)
   let args_repr = Ident.concat_str local_names in
-  let ra_offset =
-    let sp_offset = if count mod 2 = 0 then count + 2 else count + 1 in
-    emit addi sp sp (-sp_offset * wordsize ());
-    Addr_of_local.last_pos := !Addr_of_local.last_pos + sp_offset - count;
-    ListLabels.iter (List.rev local_names) ~f:(fun name -> Addr_of_local.extend name);
+  let _ =
+    log
+      "Allocate locals: last_pos = %d, keys = %s, count = %d"
+      !Addr_of_local.last_pos
+      (Addr_of_local.keys ())
+      count
+  in
+  let ra_offset, sloc =
+    emit comment (sprintf "%s" __FUNCTION__);
+    emit comment (sprintf "keys = %s" (Addr_of_local.keys ()));
+    emit comment (sprintf "last_pos = %d" !Addr_of_local.last_pos);
+    emit comment (sprintf "count = %d" count);
+    let clotc = calc_sloc (count + 1) in
+    emit grow_stack clotc;
+    Addr_of_local.last_pos := !Addr_of_local.last_pos + clotc - count;
+    ListLabels.iter (List.rev local_names) ~f:Addr_of_local.extend;
     ListLabels.iter local_names ~f:(fun name ->
       let comm = Format.asprintf "loc for %a" Ident.pp name in
       emit sd zero (Addr_of_local.pp_to_mach name) ~comm);
-    emit sd ra (ROffset (SP, count * wordsize ()));
-    if count mod 2 = 0
-    then (
+    emit sd ra (make_sp_offset count);
+    for i = count + 1 to clotc - 1 do
       let comm = "padding" in
-      emit sd zero (ROffset (SP, (1 + count) * wordsize ())) ~comm);
-    wordsize () * count
+      emit sd zero (make_sp_offset i) ~comm
+    done;
+    count, clotc
   in
   let deallocate =
-    if count mod 2 = 0
-    then (
-      fun ~now ->
-        let () = now in
-        emit ld ra (ROffset (SP, ra_offset));
-        emit
-          addi
-          sp
-          sp
-          (wordsize () * (count + 2))
-          ~comm:
-            (sprintf "DEallocate for Pad, RA and %d locals variables %s" count args_repr);
-        List.iter Addr_of_local.remove_local local_names;
-        Addr_of_local.last_pos := !Addr_of_local.last_pos - 2)
-    else
-      fun ~now ->
-        let () = now in
-        emit ld ra (ROffset (SP, ra_offset));
-        emit
-          addi
-          sp
-          sp
-          (wordsize () + (wordsize () * count))
-          ~comm:(sprintf "DEallocate for RA, and %d locals %s" count args_repr);
-        List.iter Addr_of_local.remove_local local_names;
-        Addr_of_local.last_pos := !Addr_of_local.last_pos - 1
+    fun ~now ->
+    let () = now in
+    emit ld ra (make_sp_offset ra_offset);
+    emit
+      shrink_stack
+      sloc
+      ~comm:(sprintf "DEallocate for Pad, RA and %d locals variables %s" count args_repr);
+    List.iter Addr_of_local.remove_local local_names;
+    Addr_of_local.last_pos := !Addr_of_local.last_pos - (sloc - count)
   in
   deallocate, count
 ;;
@@ -335,15 +355,35 @@ let store_ra_temp f =
 ;;
 
 let with_two_slots f =
-  let slot1 = Ident.of_string @@ Printf.sprintf "x%d" (gensym ()) in
-  let slot2 = Ident.of_string @@ Printf.sprintf "x%d" (gensym ()) in
-  Addr_of_local.extend slot1;
-  Addr_of_local.extend slot2;
-  (* TODO: +-16 on SP should go here  *)
-  let rez = f slot1 slot2 in
-  Addr_of_local.remove_local slot2;
-  Addr_of_local.remove_local slot1;
-  rez
+  match !march with
+  | `RV64 ->
+    let slot1 = Ident.of_string @@ Printf.sprintf "x%d" (gensym ()) in
+    let slot2 = Ident.of_string @@ Printf.sprintf "x%d" (gensym ()) in
+    Addr_of_local.extend slot1;
+    Addr_of_local.extend slot2;
+    emit grow_stack 2;
+    let rez = f slot1 slot2 in
+    emit shrink_stack 2;
+    Addr_of_local.remove_local slot2;
+    Addr_of_local.remove_local slot1;
+    rez
+  | `RV32 ->
+    let slot1 = Ident.of_string @@ Printf.sprintf "x%d" (gensym ()) in
+    let slot2 = Ident.of_string @@ Printf.sprintf "x%d" (gensym ()) in
+    let slot3 = Ident.of_string @@ Printf.sprintf "x%d" (gensym ()) in
+    let slot4 = Ident.of_string @@ Printf.sprintf "x%d" (gensym ()) in
+    Addr_of_local.extend slot1;
+    Addr_of_local.extend slot2;
+    Addr_of_local.extend slot3;
+    Addr_of_local.extend slot4;
+    emit grow_stack 4;
+    let rez = f slot3 slot4 in
+    emit shrink_stack 4;
+    Addr_of_local.remove_local slot4;
+    Addr_of_local.remove_local slot3;
+    Addr_of_local.remove_local slot2;
+    Addr_of_local.remove_local slot1;
+    rez
 ;;
 
 let with_ra_saving f =
@@ -388,17 +428,6 @@ let addi1dest k d b n =
   | DStack_var _ -> li k (Temp_reg __LINE__) n
 ;;
 
-(** Functions [grow_stack] and [shrink_stack] take words count *)
-let grow_stack k n =
-  assert (n > 0);
-  addi k sp sp (-n * wordsize ())
-;;
-
-let shrink_stack k n =
-  assert (n > 0);
-  addi k sp sp (n * wordsize ())
-;;
-
 let emit_alloc_closure fname arity =
   emit lla (RU "a0") fname;
   emit li (RU "a1") arity;
@@ -413,9 +442,10 @@ let generate_body is_toplevel body =
   let open Parsetree in
   let dealloc_locals, locals = allocate_locals body in
   let deallocate_args_for_call argc =
-    let padded_argc : int = if argc mod 2 = 0 then argc else argc + 1 in
-    Addr_of_local.(last_pos := !last_pos - padded_argc);
-    emit addi SP SP (wordsize () * padded_argc) ~comm:(sprintf "deallocate %d args" argc)
+    let slotc = calc_sloc argc in
+    Addr_of_local.(last_pos := !last_pos - slotc);
+    let comm = sprintf "deallocate %d args" argc in
+    emit shrink_stack slotc ~comm
   in
   let allocate_args_for_call ?f args =
     (* Allocate args for a function call inside a body *)
@@ -423,11 +453,12 @@ let generate_body is_toplevel body =
     emit
       comment
       (sprintf "Allocate args to call fun %S with args" (Option.get f).Ident.hum_name);
-    let stack_slots = if count mod 2 = 0 then count else 1 + count in
-    Addr_of_local.last_pos := !Addr_of_local.last_pos + stack_slots;
-    emit grow_stack stack_slots ~comm:(sprintf "last_pos = %d" !Addr_of_local.last_pos);
+    (* let stack_slots = if count mod 2 = 0 then count else 1 + count in *)
+    let slotc = calc_sloc count in
+    Addr_of_local.last_pos := !Addr_of_local.last_pos + slotc;
+    emit grow_stack slotc ~comm:(sprintf "last_pos = %d" !Addr_of_local.last_pos);
     (* TODO(Kakadu): check RTL *)
-    (* TODO(Kakadu): Rwrite to emit less code *)
+    (* TODO(Kakadu): Rewrite to emit less code *)
     let pp_access ?(doc = "") v offset =
       emit li t0 v;
       emit sd t0 (ROffset (SP, wordsize () * offset)) ~comm:doc
@@ -448,6 +479,7 @@ let generate_body is_toplevel body =
         when Toplevel.find_opt vname <> None (* Option.is_some (is_toplevel vname)  *) ->
         (match Toplevel.find_exn vname with
          | { kind = Toplevel.Function { argc = arity }; _ } ->
+           emit comment (Format.asprintf "Alloc closure for '%a'" Ident.pp vname);
            emit_alloc_closure vname.hum_name arity;
            emit sd a0 (make_sp_offset i)
          | { kind = Main; _ } -> failwith "Should not happen"
@@ -481,6 +513,7 @@ let generate_body is_toplevel body =
       (* Result is in a0 *)
       | ALam _ -> failwith "Should it be representable in ANF?"
       | APrimitive ("print", (1 as parity)) ->
+        emit comment (Format.asprintf "Alloc closure for 'print'");
         emit_alloc_closure "rukaml_print_int_kaml" parity;
         emit sd a0 (make_sp_offset i)
       | APrimitive ("stdout", 0) -> pp_access 1 i
@@ -572,8 +605,6 @@ let generate_body is_toplevel body =
         , bthen
         , belse ) ->
       helper_a (DReg "t0") lhs;
-      (* emit ld t0 (pp_to_mach vname) ~comm:(Format.asprintf "access %a" Ident.pp vname);
-      emit li t1 n; *)
       helper_a (DReg "t1") rhs;
       let lab_then = Printf.sprintf "lab_then_%d" (gensym ()) in
       let lab_fin = Printf.sprintf "lab_fin_%d" (gensym ()) in
@@ -667,14 +698,12 @@ let generate_body is_toplevel body =
       (match arg1 with
        | AVar v when Addr_of_local.has_key v ->
          with_two_slots (fun ra_name arg_name ->
-           emit grow_stack 2;
            emit sd ra (pp_to_mach ra_name);
            emit ld t0 (pp_to_mach v);
            emit mv (pp_to_mach arg_name) t0;
            emit call "rukaml_array_length";
            emit ld ra (pp_to_mach ra_name);
-           emit sd_dest a0 dest;
-           emit shrink_stack 2)
+           emit sd_dest a0 dest (* emit shrink_stack 2 *))
        | AArray _ | _ -> failwith "Should not happen")
     | CApp (APrimitive ("array_get", 2), arg1, []) ->
       (match arg1 with
@@ -887,7 +916,14 @@ let generate_body is_toplevel body =
       emit call "rukaml_trace_val";
       if dest <> DReg "a0" then emit sd_dest (RU "a0") dest
     | CApp (AVar f, arg1, args) when Toplevel.is_toplevel_function f ->
-      emit comment "HERR: use new Toplevel module";
+      emit
+        comment
+        (Format.asprintf
+           "long application: @[%a %a@]"
+           Ident.pp
+           f
+           (pp_space_list ANF.pp_a)
+           (arg1 :: args));
       (* Calling a rukaml function uses custom calling convention.
            Pascal convention: all arguments on stack, LTR *)
       let expected_arity = Option.get (is_toplevel f) in
@@ -897,6 +933,7 @@ let generate_body is_toplevel body =
            printfn ppf "\t; calling %S" f; *)
       if expected_arity = formal_arity
       then (
+        emit_comment "Full application of arity = %d" expected_arity;
         let _ =
           let to_remove = allocate_args_for_call ~f (arg1 :: args) in
           emit call f.hum_name;
@@ -905,33 +942,35 @@ let generate_body is_toplevel body =
         in
         emit sd_dest (RU "a0") dest)
       else if formal_arity < expected_arity
-      then
-        with_two_slots (fun ra_name func_clo_id ->
-          emit grow_stack 2 ~comm:(sprintf " RA + closure");
-          emit sd ra (Addr_of_local.pp_to_mach ra_name);
-          emit lla a0 f.hum_name;
-          emit li a1 expected_arity;
-          emit call "rukaml_alloc_closure";
-          emit sd a0 (Addr_of_local.pp_to_mach func_clo_id);
-          let _partial_args_count =
-            allocate_args_for_call ~f (arg1 :: args)
-            (* Needed because we allocate temporary space to prepare arguments  *)
-          in
-          let () =
-            emit ld a0 (Addr_of_local.pp_to_mach func_clo_id);
-            emit li a1 formal_arity;
-            assert (formal_arity < 5);
-            (* See calling convention *)
-            List.iteri
-              (fun i rname ->
-                 emit ~comm:(sprintf "arg %d" i) ld (RU rname) (make_sp_offset i))
-              (list_take formal_arity [ (*"a0"; *) "a2"; "a3"; "a4"; "a5" ])
-          in
-          emit call "rukaml_applyN";
-          emit sd_dest (RU "a0") dest;
-          deallocate_args_for_call formal_arity;
-          emit ld ra (Addr_of_local.pp_to_mach ra_name);
-          emit shrink_stack 2 ~comm:"deallocate RA + closure")
+      then (
+        let () =
+          emit_comment "Under-application of %d/%d args" formal_arity expected_arity
+        in
+        let () =
+          with_two_slots (fun _ func_clo_id ->
+            emit lla a0 f.hum_name;
+            emit li a1 expected_arity;
+            emit call "rukaml_alloc_closure";
+            emit sd a0 (Addr_of_local.pp_to_mach func_clo_id);
+            let _partial_args_count =
+              allocate_args_for_call ~f (arg1 :: args)
+              (* Needed because we allocate temporary space to prepare arguments  *)
+            in
+            let () =
+              emit ld a0 (Addr_of_local.pp_to_mach func_clo_id);
+              emit li a1 formal_arity;
+              assert (formal_arity < 5);
+              (* See calling convention *)
+              List.iteri
+                (fun i rname ->
+                   emit ~comm:(sprintf "arg %d" i) ld (RU rname) (make_sp_offset i))
+                (list_take formal_arity [ (*"a0"; *) "a2"; "a3"; "a4"; "a5" ])
+            in
+            emit call "rukaml_applyN";
+            emit sd_dest (RU "a0") dest;
+            deallocate_args_for_call formal_arity)
+        in
+        emit_comment "finish underapplication")
       else failwith "Arity mismatch: over application"
     | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), []) ->
       (* A 1 argument application *)
@@ -1097,7 +1136,7 @@ let generate_body is_toplevel body =
       emit_initialize_block dest ~fields:(x1 :: x2 :: xs) ~tag:0 ~name:"tuple"
     | CConstruct (tag, args) ->
       with_two_slots (fun _ra_name rez_slot ->
-        emit addi SP SP (-2 * wordsize ());
+        (* emit addi SP SP (-2 * wordsize ()); *)
         (* emit sd (RU "ra") (pp_to_mach ra_name); *)
         emit li a0 (List.length args);
         emit li a1 tag;
@@ -1112,8 +1151,7 @@ let generate_body is_toplevel body =
           args;
         (* emit ld ra (pp_to_mach ra_name); *)
         emit ld t0 (pp_to_mach rez_slot);
-        emit sd_dest t0 dest;
-        emit addi SP SP (2 * wordsize ()))
+        emit sd_dest t0 dest (* emit addi SP SP (2 * wordsize ()) *))
     | _rest ->
       Format.eprintf "@[%a@]\n%!" Compile_lib.ANF.pp_c _rest;
       failwiths "Not implemented %s %d" __FILE__ __LINE__
@@ -1141,6 +1179,7 @@ let generate_body is_toplevel body =
        | Some { kind = Function { argc }; _ } ->
          assert (argc > 0);
          (* failwith "TODO: create a closure" *)
+         emit comment (Format.asprintf "Alloc closure for '%a'" Ident.pp vname);
          emit_alloc_closure vname.hum_name argc;
          emit sd_dest (RU "a0") dest
        | Some { kind = Immediate Constant; ident } ->
@@ -1169,7 +1208,6 @@ let generate_body is_toplevel body =
          emit sd_dest (RU "a0") dest) *)
     | AArray r ->
       with_two_slots (fun ra_name arr_slot ->
-        emit grow_stack 2;
         emit sd (RU "ra") (pp_to_mach ra_name);
         emit li a0 (List.length r);
         emit call "rukaml_alloc_array";
@@ -1183,8 +1221,7 @@ let generate_body is_toplevel body =
           r;
         emit ld ra (pp_to_mach ra_name);
         emit ld t0 (pp_to_mach arr_slot);
-        emit sd_dest t0 dest;
-        emit shrink_stack 2)
+        emit sd_dest t0 dest)
     | AConst (PConst_bool true) ->
       emit li t0 1;
       emit sd_dest t0 dest
@@ -1217,41 +1254,28 @@ let generate_body is_toplevel body =
       Format.eprintf "Unsupported atom: @[`%a`@]\n%!" Compile_lib.ANF.pp_a _atom;
       failwiths "not implemented %s %d" __FILE__ __LINE__
   and emit_initialize_block dest ~tag ~fields ~name =
-    emit
-      comment
-      (Format.asprintf
-         "Init tuple with fields: @[[ %a ]@]"
-         (pp_space_list ANF.pp_a)
-         fields);
+    emit_comment "Init tuple with fields: @[[ %a ]@]" (pp_space_list ANF.pp_a) fields;
     emit li a0 (List.length fields) ~comm:(sprintf "%s size" name);
     emit li a1 tag ~comm:(sprintf "%s tag" name);
     emit call "rukaml_alloc_block";
     (* fresh block stored in a0 *)
     with_two_slots (fun _ block_addr ->
-      emit grow_stack 2 ~comm:"block_addr :: i :: ...";
       emit sd a0 (Addr_of_local.pp_to_mach block_addr);
-      List.iteri
-        (fun i -> function
-           | ANF.AConst (PConst_int n) ->
-             emit li t1 n;
-             let comm = sprintf "setting field %d to be const %d" i n in
-             emit sd t1 (ROffset (a0, i * wordsize ())) ~comm
-           | ANF.AVar vname when is_toplevel vname = None ->
-             emit ld t1 (Addr_of_local.pp_to_mach vname);
-             emit sd t1 (ROffset (a0, i * wordsize ()))
-           | x ->
-             helper_a (DReg "t0") x;
-             emit ld a0 (Addr_of_local.pp_to_mach block_addr);
-             emit
-               sd
-               t0
-               (ROffset (a0, i * wordsize ()))
-               ~comm:(sprintf "setting field %d" i);
-             ())
-        fields;
-      emit ld t0 (Addr_of_local.pp_to_mach block_addr);
-      emit sd_dest t0 dest;
-      emit shrink_stack 2)
+      ListLabels.iteri fields ~f:(fun i -> function
+        | ANF.AConst (PConst_int n) ->
+          emit li t1 n;
+          let comm = sprintf "setting field %d to be const %d" i n in
+          emit sd t1 (ROffset (a0, i * wordsize ())) ~comm
+        | ANF.AVar vname when is_toplevel vname = None ->
+          emit ld t1 (Addr_of_local.pp_to_mach vname);
+          emit sd t1 (ROffset (a0, i * wordsize ()))
+        | x ->
+          helper_a (DReg "t0") x;
+          let comm = sprintf "setting field %d" i in
+          emit ld a0 (Addr_of_local.pp_to_mach block_addr);
+          emit sd t0 (ROffset (a0, i * wordsize ())) ~comm;
+          ());
+      emit sd_dest a0 dest)
   in
   helper (DReg "a0") body;
   dealloc_locals ~now:()
@@ -1300,6 +1324,17 @@ iterate:
 
 let use_custom_main = false
 
+(* Prepare location for a value in data section *)
+let pp_zeroed_data ?comm ppf name =
+  let ali, typ =
+    match !march with
+    | `RV32 -> '2', "4byte"
+    | `RV64 -> '3', "quad"
+  in
+  printfn ppf ".align %c" ali;
+  printfn ppf "%s: .%s 0x0%s" name typ (Option.value comm ~default:"")
+;;
+
 let prepare_string_lit_init ppf anf =
   let () =
     let iter =
@@ -1314,7 +1349,7 @@ let prepare_string_lit_init ppf anf =
   in
   let assembly_a_string ppf s =
     if String.for_all (fun c -> Char.code c < 128) s
-    then printfn ppf ".asciz %S" s
+    then Format.fprintf ppf ".asciz %S" s
     else (
       let len = String.length s in
       let classify c = if Char.code c < 128 then `letter else `weird in
@@ -1355,8 +1390,19 @@ let prepare_string_lit_init ppf anf =
     iter_string_lit_hash (fun k v ->
       printfn ppf "STRING_LIT_%d: %a" v assembly_a_string k;
       printfn ppf ".equ STRING_LIT_%d_len, %d" v (1 + String.length k));
-    printfn ppf ".align 3   # Align to 8-byte boundary (2^3)";
-    iter_string_lit_hash (fun k v -> printfn ppf "my_STRING_LIT_%d: .quad 0x0 # '%S'" v k);
+    let () =
+      match !march with
+      | `RV64 ->
+        (* printfn ppf ".align 3   # Align to 8-byte boundary (2^3)"; *)
+        iter_string_lit_hash (fun k v ->
+          pp_zeroed_data ppf (sprintf "my_STRING_LIT_%d" v) ~comm:(sprintf "# '%S'" k)
+          (* printfn ppf "my_STRING_LIT_%d: .quad 0x0 # '%S'" v k *))
+      | `RV32 ->
+        (* printfn ppf ".align 2   # Align to 8-byte boundary (2^3)"; *)
+        iter_string_lit_hash (fun k v ->
+          pp_zeroed_data ppf (sprintf "my_STRING_LIT_%d" v) ~comm:(sprintf "# '%S'" k)
+          (* printfn ppf "my_STRING_LIT_%d: .4byte 0x0 # '%S'" v k *))
+    in
     fun () ->
       iter_string_lit_hash (fun _k v ->
         emit lla a0 (lit_name v);
@@ -1368,8 +1414,9 @@ let prepare_string_lit_init ppf anf =
 let emit_global_constant is_toplevel ppf ident expr =
   printfn ppf "";
   printfn ppf ".data # global %a" Toplevel.pp_label_exn ident;
-  printfn ppf ".align 3";
-  printfn ppf "%a: .quad 0x0" Toplevel.pp_label_exn ident;
+  pp_zeroed_data ppf (Format.asprintf "%a" Toplevel.pp_label_exn ident);
+  (* printfn ppf ".align 3"; *)
+  (* printfn ppf "%a: .quad 0x0" Toplevel.pp_label_exn ident; *)
   printfn ppf ".text";
   printfn ppf ".globl .init_%a" Toplevel.pp_label_exn ident;
   printfn ppf "init_%a:" Toplevel.pp_label_exn ident;
@@ -1395,21 +1442,17 @@ let emit_global_constant is_toplevel ppf ident expr =
   Machine.flush_queue ppf *)
 
 let put_init_global_immediates ppf =
+  log "\nGenerating global immediates";
   printfn ppf "";
   printfn ppf ".text";
   printfn ppf ".globl rukaml_init_global_immediates";
   printfn ppf "rukaml_init_global_immediates:";
-  emit grow_stack 2;
-  emit sd ra (ROffset (SP, 0));
-  (* printfn ppf "  push rbp"; *)
-  (* printfn ppf "  mov rbp, rsp"; *)
-  Toplevel.iter_immediates (fun { ident; _ } ->
-    (* printfn ppf "  call init_%a" Toplevel.pp_label_exn ident *)
-    emit call (Format.asprintf "init_%a" Toplevel.pp_label_exn ident));
-  (* printfn ppf "  pop rbp"; *)
-  (* printfn ppf "  ret ;;; rukaml_init_global_immediates"; *)
-  emit ld ra (ROffset (SP, 0));
-  emit shrink_stack 2;
+  with_two_slots (fun _ ra_name ->
+    emit sd ra (pp_to_mach ra_name);
+    Toplevel.iter_immediates (fun { ident; _ } ->
+      emit call (Format.asprintf "init_%a" Toplevel.pp_label_exn ident));
+    emit ld ra (pp_to_mach ra_name);
+    ());
   emit ret;
   Machine.flush_queue ppf
 ;;
@@ -1468,7 +1511,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
     in
     let do_string_init = prepare_string_lit_init ppf anf in
     (* externs *)
-    let __ () =
+    (* let __ () =
       List.iter
         (printfn ppf "extern %s")
         [ "rukaml_alloc_closure"
@@ -1491,7 +1534,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
         ; "rukaml_gc_print_stats"
         ];
       printfn ppf ""
-    in
+    in *)
     let open Compile_lib in
     let on_vb = function
       | `Function (name, pats, body) ->
@@ -1513,6 +1556,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
           | ANF.Apat_var name -> Addr_of_local.add_arg ~argc i name
           | Apat_unit -> ()
           | _ -> failwith "not implemented");
+        log "\nGenerating function %a" Ident.pp name;
         generate_body is_toplevel body;
         Addr_of_local.remove_args names;
         print_epilogue ppf name.hum_name;
@@ -1531,7 +1575,9 @@ let codegen ?(wrap_main_into_start = true) anf file =
         emit comment "this is main";
         emit li a0 0;
         Toplevel.extend name ~kind:Main;
+        log "\nGenerating function main";
         generate_body is_toplevel expr;
+        emit_comment "Main is generated";
         print_epilogue ppf name.Ident.hum_name;
         Machine.flush_queue ppf
       | `Immediate (name, expr) -> emit_global_constant is_toplevel ppf name expr
