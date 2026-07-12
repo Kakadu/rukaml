@@ -531,7 +531,7 @@ let generate_body is_toplevel body =
     let mangling = String_lit_hash.create 34 in
     String_lit_hash.add mangling "close_out" "rukaml_close_out";
     String_lit_hash.add mangling "rukaml_input_all" "rukaml_input_all";
-    String_lit_hash.add mangling "gc_compact" "rukaml_gc_compact";
+    (* String_lit_hash.add mangling "gc_compact" "rukaml_gc_compact"; *)
     String_lit_hash.add mangling "gc_stats" "rukaml_gc_stats";
     let checker str = String_lit_hash.mem mangling str in
     let codegen helper_a ?(sysv = true) ident arg0 dest =
@@ -1122,6 +1122,10 @@ let generate_body is_toplevel body =
       helper_a (DReg "a1") arg2;
       helper_a (DReg "a2") arg3;
       emit call "rukaml_substring_sysv";
+      emit sd_dest a0 dest
+    | CApp (APrimitive ("gc_compact", 1), _, []) ->
+      emit mv a0 sp;
+      emit call "rukaml_gc_compact_sysv";
       emit sd_dest a0 dest
     | CApp (APrimitive (name, 1), arg1, []) when is_unary_prim name ->
       on_unary_prim helper_a ~sysv:true name arg1 dest

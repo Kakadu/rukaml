@@ -239,9 +239,10 @@ void dfs(size_t *allocated, value root) {
   log("%s root = 0x%" PRIxPTR " finished\n", __func__, root);
 }
 
-void rukaml_gc_compact_sysv(size_t rsp) {
+value rukaml_gc_compact_sysv(size_t rsp) {
   assert(GC.ebp > rsp);
-  log("=== %s. EBP=0x%lX, RSP=0x%lX\n", __func__, GC.ebp, rsp);
+  log("=== %s. EBP=0x%" PRIdVAL ", RSP=0x%" PRIdVAL "\n", __func__, GC.ebp,
+      rsp);
   log("stack width = 0x%lX / 8\n", GC.ebp - rsp);
 
   value *cur = (value *)GC.ebp;
@@ -257,6 +258,7 @@ void rukaml_gc_compact_sysv(size_t rsp) {
     }
   }
   GC.allocated_words = new_size;
+  return Val_unit;
 }
 
 void rukaml_gc_stats_sysv(void) {
@@ -1480,6 +1482,7 @@ void *rukaml_open_in(DECLARE_FAKE_ARGS, value path) {
 value rukaml_open_out(DECLARE_FAKE_ARGS, value path) {
   return rukaml_open_impl(path, "w");
 }
+value rukaml_close_out_sysv(value xxx) { __builtin_unreachable(); }
 
 void rukaml_close_channel(DECLARE_FAKE_ARGS, void *channel) {
   if (channel == NULL) {
