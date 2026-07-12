@@ -150,7 +150,7 @@ main:
   ld t0, 56(sp)
   addi t0, t0, 0
   li t1, 0
-  beq t0, t1, lab_then_48
+  beq t0, t1, lab_then_50
   ld a1, 64(sp) # block_nth: from = 'temp8'
   li a0, 0
   call rukaml_field
@@ -165,22 +165,22 @@ main:
   ld t0, (sp)
   addi t0, t0, 0
   li t1, 1
-  beq t0, t1, lab_then_50
+  beq t0, t1, lab_then_52
   ld a0, 152(sp)
   call rukaml_tag0
   sd a0, 8(sp) # got tag of 'x'
   ld t0, 8(sp)
   addi t0, t0, 0
   li t1, 0
-  beq t0, t1, lab_then_52
+  beq t0, t1, lab_then_54
   addi sp, sp, -16
   sd ra, (sp)
   li a0, 0
   call rukaml_match_failure
   ld ra, (sp)
   addi sp, sp, 16
-  beq zero, zero, lab_fin_53
-lab_then_52:
+  beq zero, zero, lab_fin_55
+lab_then_54:
   ld a1, 152(sp) # block_nth: from = 'x'
   li a0, 0
   call rukaml_field
@@ -191,7 +191,7 @@ lab_then_52:
   ld t0, 48(sp)
   addi t0, t0, 0
   li t1, 0
-  beq t0, t1, lab_then_56
+  beq t0, t1, lab_then_58
   ld a1, 16(sp) # block_nth: from = 'temp26'
   li a0, 0
   call rukaml_field
@@ -206,22 +206,22 @@ lab_then_52:
   ld t0, 24(sp)
   addi t0, t0, 0
   li t1, 1
-  beq t0, t1, lab_then_58
+  beq t0, t1, lab_then_60
   ld a0, 136(sp)
   call rukaml_tag0
   sd a0, 32(sp) # got tag of 'z'
   ld t0, 32(sp)
   addi t0, t0, 0
   li t1, 0
-  beq t0, t1, lab_then_60
+  beq t0, t1, lab_then_62
   addi sp, sp, -16
   sd ra, (sp)
   li a0, 0
   call rukaml_match_failure
   ld ra, (sp)
   addi sp, sp, 16
-  beq zero, zero, lab_fin_61
-lab_then_60:
+  beq zero, zero, lab_fin_63
+lab_then_62:
   ld a1, 136(sp) # block_nth: from = 'z'
   li a0, 0
   call rukaml_field
@@ -229,34 +229,34 @@ lab_then_60:
   li a0, 4
   call rukaml_print_int
   mv a0, zero
-lab_fin_61:
-  beq zero, zero, lab_fin_59
-lab_then_58:
+lab_fin_63:
+  beq zero, zero, lab_fin_61
+lab_then_60:
   li a0, 3
   call rukaml_print_int
   mv a0, zero
-lab_fin_59:
-  beq zero, zero, lab_fin_57
-lab_then_56:
+lab_fin_61:
+  beq zero, zero, lab_fin_59
+lab_then_58:
   li a0, 2
   call rukaml_print_int
   mv a0, zero
-lab_fin_57:
-lab_fin_53:
-  beq zero, zero, lab_fin_51
-lab_then_50:
+lab_fin_59:
+lab_fin_55:
+  beq zero, zero, lab_fin_53
+lab_then_52:
   li a0, 1
   call rukaml_print_int
   mv a0, zero
-lab_fin_51:
-  beq zero, zero, lab_fin_49
-lab_then_48:
+lab_fin_53:
+  beq zero, zero, lab_fin_51
+lab_then_50:
   li a0, 0
   call rukaml_print_int
   mv a0, zero
-lab_fin_49:
+lab_fin_51:
   ld ra, 160(sp)
-  addi sp, sp, 176 # DEallocate for Pad, RA and 20 locals variables temp29, temp27, temp26, temp22, temp20, temp19, temp14, temp10, temp8, temp7, temp6, temp5, temp4, temp3, temp2, temp1, zs, z, xs, x
+  addi sp, sp, 176 # Deallocate for Pad, RA and 20 locals variables temp29, temp27, temp26, temp22, temp20, temp19, temp14, temp10, temp8, temp7, temp6, temp5, temp4, temp3, temp2, temp1, zs, z, xs, x
 #  fin
   addi a0, x0, 0 # Use 0 return code
   addi a7, x0, 93 # Service command code 93 terminates
