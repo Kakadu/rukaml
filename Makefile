@@ -12,6 +12,8 @@ watch:
 promote:
 	dune runtest --auto-promote
 
+.PHONY: celan
+celan: clean
 clean:
 	dune clean
 
