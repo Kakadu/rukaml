@@ -8,7 +8,7 @@
   (promote (until-clean)))
  (action
   (system
-   "%{read:../../cc_rv64} -DRUKAML_DEBUG=1 -march=rv64g -c %{deps} -Wno-pedantic -ffreestanding -nostdlib -std=c99 -ggdb -o %{target}")))
+   "%{read:../../cc_rv64} -DRUKAML_DEBUG=0 -march=rv64g -c %{deps} -Wno-pedantic -ffreestanding -nostdlib -std=c99 -ggdb -o %{target}")))
 
 (rule
  (target demo.s)

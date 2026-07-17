@@ -37,6 +37,10 @@
    (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o demo.o)
    (run riscv64-linux-gnu-gcc-13 -g %{stdlib} demo.o -o %{targets}))))
 
+(cram
+ (applies_to 1)
+ (deps ./compiler.exe compiler.anf.ml program.c))
+
 ; (rule
 ;  (target compiler.amd64.s)
 ;  (deps compiler.ml)
@@ -58,10 +62,6 @@
 ;    (run nasm -f elf64 %{src} -o demo.o)
 ;    (run gcc-13 -g %{stdlib} demo.o -o %{targets}))))
 
-(cram
- (applies_to 1)
- (deps ./compiler.exe compiler.anf.ml program.c))
-
-(cram
- (applies_to amd64)
- (deps ./amd64.exe program.c))
+; (cram
+;  (applies_to amd64)
+;  (deps ./amd64.exe program.c))
