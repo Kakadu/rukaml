@@ -39,7 +39,11 @@
 
 (cram
  (applies_to 1)
- (deps ./compiler.exe compiler.anf.ml program.c))
+ (deps ./compiler.exe compiler.anf.ml program.c ))
+
+(cram
+ (applies_to 0)
+ (deps ./compiler.exe compiler.anf.ml program0.c))
 
 ; (rule
 ;  (target compiler.amd64.s)

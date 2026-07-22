@@ -1,27 +1,24 @@
 
   $ export FLAGS='-L /usr/riscv64-linux-gnu -cpu max'
-$ echo 'int main(){return;} ' > program.c
+
+$ echo 'int main(){return;}' > program.c
   $ qemu-riscv64 $FLAGS ./compiler.exe program.c -o file.out --target parsetree
-  int fact_rec(int n)
-  {
-      if (n < 1)
-      {
-          return 1;
-      }
+  int fact_rec(int n) {
+    if (n < 1) {
+      return 1;
+    }
   
-      return n * fact_rec(n - 1);
+    return n * fact_rec(n - 1);
   }
   
-  int fact_iter(int n)
-  {
-      int acc = 1;
+  int fact_iter(int n) {
+    int acc = 1;
   
-      for (int i = 2; i <= n; i = i + 1)
-      {
-          acc = acc * i;
-      }
+    for (int i = 2; i <= n; i = i + 1) {
+      acc = acc * i;
+    }
   
-      return acc;
+    return acc;
   }
   
   int fact_rec(int n) {
@@ -41,31 +38,34 @@ $ echo 'int main(){return;} ' > program.c
     return acc;
   }
   GC statistics
-  Total allocations: 50678(words)
-  Currently allocated: 50678(words)
+  Total allocations: 50674(words)
+  Currently allocated: 50674(words)
   Current bank: 0
 
+
+
+
+
+
+
+
   $ qemu-riscv64 $FLAGS ./compiler.exe program.c -o file.out --target rv64
-  int fact_rec(int n)
-  {
-      if (n < 1)
-      {
-          return 1;
-      }
+  int fact_rec(int n) {
+    if (n < 1) {
+      return 1;
+    }
   
-      return n * fact_rec(n - 1);
+    return n * fact_rec(n - 1);
   }
   
-  int fact_iter(int n)
-  {
-      int acc = 1;
+  int fact_iter(int n) {
+    int acc = 1;
   
-      for (int i = 2; i <= n; i = i + 1)
-      {
-          acc = acc * i;
-      }
+    for (int i = 2; i <= n; i = i + 1) {
+      acc = acc * i;
+    }
   
-      return acc;
+    return acc;
   }
   
   .global fact_rec
@@ -160,6 +160,11 @@ $ echo 'int main(){return;} ' > program.c
     addi sp, sp, 16
     ret
   GC statistics
-  Total allocations: 50602(words)
-  Currently allocated: 50602(words)
+  Total allocations: 50598(words)
+  Currently allocated: 50598(words)
   Current bank: 0
+
+
+
+
+
