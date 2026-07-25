@@ -1,6 +1,6 @@
 (*
 test
-  (targets amd64 rv32 rv64)
+  (targets (anf promote) amd64 rv32 rv64)
   (run (stdout "rukaml_print_int 0"
                "rukaml_print_int 1"
                "rukaml_print_int 0"
@@ -8,8 +8,8 @@ test
 *)
 
 type 'a option =
-  | Some of 'a
   | None
+  | Some of 'a
 
 let bind opt f =
   match opt with

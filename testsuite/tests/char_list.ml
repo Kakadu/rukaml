@@ -1,6 +1,6 @@
 (*
    test
-  (targets rv32  amd64 rv64)
+  (targets (anf promote) rv32  amd64 rv64)
   (run (stdout "tests passed"))
 *)
 
