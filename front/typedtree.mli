@@ -60,13 +60,20 @@ val in_channel_typ : ty
 val out_channel_typ : ty
 val format3_typ : arg_ty:ty -> dest_ty:ty -> out_ty:ty -> ty
 
+type constructor_info =
+  { constr_ident : Ident.t
+  ; constr_idx : int
+  ; constr_type_ident : Ident.t
+  ; constr_args : ty list
+  }
+
 type pattern =
   | Tpat_unit
   | Tpat_const of Parsetree.const
   | Tpat_var of Ident.t
   | Tpat_tuple of pattern * pattern * pattern list
   | Tpat_any
-  | Tpat_constr of Ident.t * pattern list
+  | Tpat_constr of Ident.t * pattern list * constructor_info Ident.String_map.t
 
 val show_pattern : pattern -> string
 val pp_pattern : Format.formatter -> pattern -> unit
@@ -106,12 +113,6 @@ type value_binding =
   ; tvb_pat : pattern
   ; tvb_body : expr
   ; tvb_typ : scheme
-  }
-
-type constructor_info =
-  { constr_ident : Ident.t
-  ; constr_type_ident : Ident.t
-  ; constr_args : ty list
   }
 
 type type_kind =

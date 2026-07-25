@@ -75,21 +75,21 @@ let rec pp_pattern ppf = function
       (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf " ") pp_pattern)
       rest
   | Tpat_any -> fprintf ppf "_"
-  | Tpat_constr (ident, []) -> fprintf ppf "%s" ident.hum_name
-  | Tpat_constr (ident, [ head; tail ])
+  | Tpat_constr (ident, [], _) -> fprintf ppf "%s" ident.hum_name
+  | Tpat_constr (ident, [ head; tail ], _)
   (* syntactic sugar for lists *)
     when Ident.equal ident cons_ident ->
     let rec aux acc = function
-      | Tpat_constr (ident, [ hd; tl ]) when Ident.equal ident cons_ident ->
+      | Tpat_constr (ident, [ hd; tl ], _) when Ident.equal ident cons_ident ->
         aux (hd :: acc) tl
-      | Tpat_constr (ident, []) when Ident.equal ident nil_ident ->
+      | Tpat_constr (ident, [], _) when Ident.equal ident nil_ident ->
         Pprint.pp_cons_brackets ppf head ~pp_item:pp_pattern (List.rev acc)
       | _ as exp ->
         Pprint.pp_cons_semicolons ppf ~pp_item:pp_pattern head (List.rev (exp :: acc))
     in
     aux [] tail
-  | Tpat_constr (ident, [ arg ]) -> fprintf ppf "%s %a" ident.hum_name pp_pattern arg
-  | Tpat_constr (ident, args) ->
+  | Tpat_constr (ident, [ arg ], _) -> fprintf ppf "%s %a" ident.hum_name pp_pattern arg
+  | Tpat_constr (ident, args, _) ->
     fprintf ppf "@[%s (" ident.hum_name;
     pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp_pattern ppf args;
     fprintf ppf ")@]"

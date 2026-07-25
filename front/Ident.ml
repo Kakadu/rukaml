@@ -36,7 +36,11 @@ module Id_map = Map.Make (struct
     let compare = compare
   end)
 
-module String_map = Map.Make (String)
+module String_map = struct
+  include Map.Make (String)
+
+  let pp _f ppf _ = Format.fprintf ppf "?"
+end
 
 module Ident_map : sig
   type +'a t

@@ -59,13 +59,24 @@ let in_channel_typ = tprim "in_channel"
 let out_channel_typ = tprim "out_channel"
 let format3_typ ~arg_ty ~dest_ty ~out_ty = tconstr [ arg_ty; dest_ty; out_ty ] "format3"
 
+type constructor_info =
+  { constr_ident : Ident.t
+  ; constr_idx : int
+    (* number of constructor in declaration (counting from zero) and it's name *)
+  ; constr_type_ident : Ident.t
+    (* reference to the type in which the variant was declared *)
+  ; constr_args : ty list
+  }
+
+let pp_constructor_info ppf _ = Format.fprintf ppf "?"
+
 type pattern =
   | Tpat_unit
   | Tpat_const of Parsetree.const
   | Tpat_var of Ident.t
   | Tpat_tuple of pattern * pattern * pattern list
   | Tpat_any
-  | Tpat_constr of Ident.t * pattern list
+  | Tpat_constr of Ident.t * pattern list * constructor_info Ident.String_map.t
 [@@deriving show { with_path = false }]
 
 let of_untyped_pattern =
@@ -163,14 +174,6 @@ type value_binding =
   ; tvb_typ : scheme
   }
 
-type constructor_info =
-  { constr_ident : Ident.t
-    (* number of constructor in declaration (counting from zero) and it's name *)
-  ; constr_type_ident : Ident.t
-    (* reference to the type in which the variant was declared *)
-  ; constr_args : ty list
-  }
-
 type type_kind =
   | Ttype_abstract
   | Ttype_variants of constructor_info list
@@ -240,14 +243,16 @@ module TypeEnv = struct
     let type_list_ident = Ident.of_string "list"
 
     let constr_nil : constructor_info =
-      { constr_ident = Ident.ident "[]" 0
+      { constr_ident = Ident.ident "[]" 0 (* TODO: create unique id *)
+      ; constr_idx = 0
       ; constr_args = []
       ; constr_type_ident = type_list_ident
       }
     ;;
 
     let constr_cons : constructor_info =
-      { constr_ident = Ident.ident "::" 1
+      { constr_ident = Ident.ident "::" 1 (* TODO: create unique id *)
+      ; constr_idx = 1
       ; constr_args = [ param_ty; tconstr [ param_ty ] "list" ]
       ; constr_type_ident = type_list_ident
       }
