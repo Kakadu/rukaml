@@ -18,29 +18,25 @@ main:
   call rukaml_init_global_immediates
 # this is main
   li a0, 0
-  addi sp, sp, -176
-  sd zero, (sp) # loc for temp29
-  sd zero, 8(sp) # loc for temp27
-  sd zero, 16(sp) # loc for temp26
-  sd zero, 24(sp) # loc for temp22
-  sd zero, 32(sp) # loc for temp20
-  sd zero, 40(sp) # loc for temp19
-  sd zero, 48(sp) # loc for temp14
-  sd zero, 56(sp) # loc for temp10
-  sd zero, 64(sp) # loc for temp8
-  sd zero, 72(sp) # loc for temp7
-  sd zero, 80(sp) # loc for temp6
-  sd zero, 88(sp) # loc for temp5
-  sd zero, 96(sp) # loc for temp4
-  sd zero, 104(sp) # loc for temp3
-  sd zero, 112(sp) # loc for temp2
-  sd zero, 120(sp) # loc for temp1
-  sd zero, 128(sp) # loc for zs
-  sd zero, 136(sp) # loc for z
-  sd zero, 144(sp) # loc for xs
-  sd zero, 152(sp) # loc for x
-  sd ra, 160(sp)
-  sd zero, 168(sp) # padding
+  addi sp, sp, -144
+  sd zero, (sp) # loc for temp24
+  sd zero, 8(sp) # loc for temp23
+  sd zero, 16(sp) # loc for temp18
+  sd zero, 24(sp) # loc for temp17
+  sd zero, 32(sp) # loc for temp8
+  sd zero, 40(sp) # loc for temp7
+  sd zero, 48(sp) # loc for temp6
+  sd zero, 56(sp) # loc for temp5
+  sd zero, 64(sp) # loc for temp4
+  sd zero, 72(sp) # loc for temp3
+  sd zero, 80(sp) # loc for temp2
+  sd zero, 88(sp) # loc for temp1
+  sd zero, 96(sp) # loc for zs
+  sd zero, 104(sp) # loc for z
+  sd zero, 112(sp) # loc for xs
+  sd zero, 120(sp) # loc for x
+  sd ra, 128(sp)
+  sd zero, 136(sp) # padding
   addi sp, sp, -16
   li a0, 1
   li a1, 0
@@ -51,80 +47,29 @@ main:
   ld t1, (sp)
   sd t0, (t1)
   ld t0, (sp)
-  sd t0, 136(sp)
+  sd t0, 104(sp)
   addi sp, sp, 16
-  addi sp, sp, -16
-  li a0, 0
-  li a1, 1
-  call rukaml_alloc_block # argsc = 0
-  sd a0, (sp)
-  ld t0, (sp)
-  sd t0, 128(sp)
-  addi sp, sp, 16
-  addi sp, sp, -16
-  li a0, 0
-  li a1, 0
-  call rukaml_alloc_block # argsc = 0
-  sd a0, (sp)
-  ld t0, (sp)
-  sd t0, 120(sp)
-  addi sp, sp, 16
+  li t0, 1
+  sd t0, 80(sp)
+  li t0, 0
+  sd t0, 72(sp)
   addi sp, sp, -16
   li a0, 2
   li a1, 1
   call rukaml_alloc_block # argsc = 2
   sd a0, (sp)
-  ld t0, 136(sp)
+  ld t0, 104(sp)
   addi t0, t0, 0
 # temp1
   ld t1, (sp)
   sd t0, (t1)
-  ld t0, 120(sp)
+  ld t0, 88(sp)
   addi t0, t0, 0
 # temp3
   ld t1, (sp)
   sd t0, 8(t1)
   ld t0, (sp)
-  sd t0, 112(sp)
-  addi sp, sp, 16
-  addi sp, sp, -16
-  li a0, 2
-  li a1, 1
-  call rukaml_alloc_block # argsc = 2
-  sd a0, (sp)
-  ld t0, 128(sp)
-  addi t0, t0, 0
-# temp2
-  ld t1, (sp)
-  sd t0, (t1)
-  ld t0, 112(sp)
-  addi t0, t0, 0
-# temp4
-  ld t1, (sp)
-  sd t0, 8(t1)
-  ld t0, (sp)
-  sd t0, 104(sp)
-  addi sp, sp, 16
-  addi sp, sp, -16
-  li a0, 1
-  li a1, 0
-  call rukaml_alloc_block # argsc = 1
-  sd a0, (sp)
-  ld t0, 104(sp)
-  addi t0, t0, 0
-# temp5
-  ld t1, (sp)
-  sd t0, (t1)
-  ld t0, (sp)
-  sd t0, 96(sp)
-  addi sp, sp, 16
-  addi sp, sp, -16
-  li a0, 0
-  li a1, 0
-  call rukaml_alloc_block # argsc = 0
-  sd a0, (sp)
-  ld t0, (sp)
-  sd t0, 88(sp)
+  sd t0, 80(sp)
   addi sp, sp, 16
   addi sp, sp, -16
   li a0, 2
@@ -133,142 +78,163 @@ main:
   sd a0, (sp)
   ld t0, 96(sp)
   addi t0, t0, 0
+# temp2
+  ld t1, (sp)
+  sd t0, (t1)
+  ld t0, 80(sp)
+  addi t0, t0, 0
+# temp4
+  ld t1, (sp)
+  sd t0, 8(t1)
+  ld t0, (sp)
+  sd t0, 72(sp)
+  addi sp, sp, 16
+  addi sp, sp, -16
+  li a0, 1
+  li a1, 0
+  call rukaml_alloc_block # argsc = 1
+  sd a0, (sp)
+  ld t0, 72(sp)
+  addi t0, t0, 0
+# temp5
+  ld t1, (sp)
+  sd t0, (t1)
+  ld t0, (sp)
+  sd t0, 64(sp)
+  addi sp, sp, 16
+  li t0, 0
+  sd t0, 40(sp)
+  addi sp, sp, -16
+  li a0, 2
+  li a1, 1
+  call rukaml_alloc_block # argsc = 2
+  sd a0, (sp)
+  ld t0, 64(sp)
+  addi t0, t0, 0
 # temp6
   ld t1, (sp)
   sd t0, (t1)
-  ld t0, 88(sp)
+  ld t0, 56(sp)
   addi t0, t0, 0
 # temp7
   ld t1, (sp)
   sd t0, 8(t1)
   ld t0, (sp)
-  sd t0, 80(sp)
+  sd t0, 48(sp)
   addi sp, sp, 16
-  ld a0, 64(sp)
-  call rukaml_tag0
-  sd a0, 56(sp) # got tag of 'temp8'
-  ld t0, 56(sp)
+  ld t0, 32(sp)
   addi t0, t0, 0
   li t1, 0
-  beq t0, t1, lab_then_50
-  ld t0, 64(sp)
+  beq t0, t1, lab_then_40
+  ld t0, 32(sp)
   addi a1, t0, 0
 # block_nth: from = 'temp8'
   li a0, 0
   call rukaml_field
-  sd a0, 152(sp)
-  ld t0, 64(sp)
+  sd a0, 120(sp)
+  ld t0, 32(sp)
   addi a1, t0, 0
 # block_nth: from = 'temp8'
   li a0, 1
   call rukaml_field
-  sd a0, 144(sp)
-  ld a0, 152(sp)
+  sd a0, 112(sp)
+  ld t0, 120(sp)
+  addi t0, t0, 0
+  li t1, 1
+  beq t0, t1, lab_then_42
+  ld a0, 120(sp)
   call rukaml_tag0
   sd a0, (sp) # got tag of 'x'
   ld t0, (sp)
   addi t0, t0, 0
-  li t1, 1
-  beq t0, t1, lab_then_52
-  ld a0, 152(sp)
-  call rukaml_tag0
-  sd a0, 8(sp) # got tag of 'x'
-  ld t0, 8(sp)
-  addi t0, t0, 0
   li t1, 0
-  beq t0, t1, lab_then_54
+  beq t0, t1, lab_then_44
   addi sp, sp, -16
   sd ra, (sp)
   li a0, 0
   call rukaml_match_failure
   ld ra, (sp)
   addi sp, sp, 16
-  beq zero, zero, lab_fin_55
-lab_then_54:
-  ld t0, 152(sp)
+  beq zero, zero, lab_fin_45
+lab_then_44:
+  ld t0, 120(sp)
   addi a1, t0, 0
 # block_nth: from = 'x'
   li a0, 0
   call rukaml_field
-  sd a0, 16(sp)
-  ld a0, 16(sp)
-  call rukaml_tag0
-  sd a0, 48(sp) # got tag of 'temp26'
-  ld t0, 48(sp)
+  sd a0, 8(sp)
+  ld t0, 8(sp)
   addi t0, t0, 0
   li t1, 0
-  beq t0, t1, lab_then_58
-  ld t0, 16(sp)
+  beq t0, t1, lab_then_48
+  ld t0, 8(sp)
   addi a1, t0, 0
-# block_nth: from = 'temp26'
+# block_nth: from = 'temp23'
   li a0, 0
   call rukaml_field
-  sd a0, 136(sp)
-  ld t0, 16(sp)
+  sd a0, 104(sp)
+  ld t0, 8(sp)
   addi a1, t0, 0
-# block_nth: from = 'temp26'
+# block_nth: from = 'temp23'
   li a0, 1
   call rukaml_field
-  sd a0, 128(sp)
-  ld a0, 136(sp)
-  call rukaml_tag0
-  sd a0, 24(sp) # got tag of 'z'
-  ld t0, 24(sp)
+  sd a0, 96(sp)
+  ld t0, 104(sp)
   addi t0, t0, 0
   li t1, 1
-  beq t0, t1, lab_then_60
-  ld a0, 136(sp)
+  beq t0, t1, lab_then_50
+  ld a0, 104(sp)
   call rukaml_tag0
-  sd a0, 32(sp) # got tag of 'z'
-  ld t0, 32(sp)
+  sd a0, 16(sp) # got tag of 'z'
+  ld t0, 16(sp)
   addi t0, t0, 0
   li t1, 0
-  beq t0, t1, lab_then_62
+  beq t0, t1, lab_then_52
   addi sp, sp, -16
   sd ra, (sp)
   li a0, 0
   call rukaml_match_failure
   ld ra, (sp)
   addi sp, sp, 16
-  beq zero, zero, lab_fin_63
-lab_then_62:
-  ld t0, 136(sp)
+  beq zero, zero, lab_fin_53
+lab_then_52:
+  ld t0, 104(sp)
   addi a1, t0, 0
 # block_nth: from = 'z'
   li a0, 0
   call rukaml_field
-  sd a0, 40(sp)
+  sd a0, 24(sp)
   li a0, 4
-  call rukaml_print_int
-  mv a0, zero
-lab_fin_63:
-  beq zero, zero, lab_fin_61
-lab_then_60:
-  li a0, 3
-  call rukaml_print_int
-  mv a0, zero
-lab_fin_61:
-  beq zero, zero, lab_fin_59
-lab_then_58:
-  li a0, 2
-  call rukaml_print_int
-  mv a0, zero
-lab_fin_59:
-lab_fin_55:
-  beq zero, zero, lab_fin_53
-lab_then_52:
-  li a0, 1
   call rukaml_print_int
   mv a0, zero
 lab_fin_53:
   beq zero, zero, lab_fin_51
 lab_then_50:
-  li a0, 0
+  li a0, 3
   call rukaml_print_int
   mv a0, zero
 lab_fin_51:
-  ld ra, 160(sp)
-  addi sp, sp, 176 # Deallocate for Pad, RA and 20 locals variables temp29, temp27, temp26, temp22, temp20, temp19, temp14, temp10, temp8, temp7, temp6, temp5, temp4, temp3, temp2, temp1, zs, z, xs, x
+  beq zero, zero, lab_fin_49
+lab_then_48:
+  li a0, 2
+  call rukaml_print_int
+  mv a0, zero
+lab_fin_49:
+lab_fin_45:
+  beq zero, zero, lab_fin_43
+lab_then_42:
+  li a0, 1
+  call rukaml_print_int
+  mv a0, zero
+lab_fin_43:
+  beq zero, zero, lab_fin_41
+lab_then_40:
+  li a0, 0
+  call rukaml_print_int
+  mv a0, zero
+lab_fin_41:
+  ld ra, 128(sp)
+  addi sp, sp, 144 # Deallocate for Pad, RA and 16 locals variables temp24, temp23, temp18, temp17, temp8, temp7, temp6, temp5, temp4, temp3, temp2, temp1, zs, z, xs, x
 #  fin
   addi a0, x0, 0 # Use 0 return code
   addi a7, x0, 93 # Service command code 93 terminates

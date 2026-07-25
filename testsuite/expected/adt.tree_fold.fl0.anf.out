@@ -1,6 +1,5 @@
 let rec fold_infix f acc tree =
-  let temp17 = block_tag tree  in
-  (if (temp17 = 0)
+  (if (tree = 0)
   then acc
   else let temp15 = block_tag tree  in
        (if (temp15 = 1)
@@ -14,68 +13,67 @@ let rec fold_infix f acc tree =
             fold_infix f temp7 temp14
        else match_failure 666 ))
 let __lifted_let_1_max_int a b =
-  let temp19 = (a < b) in
-  (if temp19
+  let temp18 = (a < b) in
+  (if temp18
   then b
   else a)
 let tree_max_int tree =
-  let temp34 = block_tag tree  in
-  (if (temp34 = 0)
+  (if (tree = 0)
   then Constr_1
-  else let temp32 = block_tag tree  in
-       (if (temp32 = 1)
-       then let temp28 = block_nth tree 0 in
-            let temp29 = block_nth temp28 0 in
-            let temp30 = block_nth temp28 1 in
-            let temp31 = block_nth temp28 2 in
-            let temp25 = fold_infix __lifted_let_1_max_int temp29 tree in
-            (Constr_0 temp25)
+  else let temp31 = block_tag tree  in
+       (if (temp31 = 1)
+       then let temp27 = block_nth tree 0 in
+            let temp28 = block_nth temp27 0 in
+            let temp29 = block_nth temp27 1 in
+            let temp30 = block_nth temp27 2 in
+            let temp24 = fold_infix __lifted_let_1_max_int temp28 tree in
+            (Constr_0 temp24)
        else match_failure 666 ))
 let main =
+  let temp34 = Constr_0 in
+  let temp35 = Constr_0 in
   let temp36 = Constr_0 in
-  let temp37 = Constr_0 in
-  let temp38 = Constr_0 in
-  let temp39 = (6, temp37, temp38) in
-    let temp40 = (Constr_1 temp39) in
-    let temp41 = (5, temp36, temp40) in
-      let temp42 = (Constr_1 temp41) in
-      let temp43 = Constr_0 in
-      let temp44 = (4, temp42, temp43) in
-        let temp45 = (Constr_1 temp44) in
-        let temp46 = Constr_0 in
-        let temp47 = (3, temp45, temp46) in
-          let temp48 = (Constr_1 temp47) in
+  let temp37 = (6, temp35, temp36) in
+    let temp38 = (Constr_1 temp37) in
+    let temp39 = (5, temp34, temp38) in
+      let temp40 = (Constr_1 temp39) in
+      let temp41 = Constr_0 in
+      let temp42 = (4, temp40, temp41) in
+        let temp43 = (Constr_1 temp42) in
+        let temp44 = Constr_0 in
+        let temp45 = (3, temp43, temp44) in
+          let temp46 = (Constr_1 temp45) in
+          let temp47 = Constr_0 in
+          let temp48 = Constr_0 in
           let temp49 = Constr_0 in
-          let temp50 = Constr_0 in
-          let temp51 = Constr_0 in
-          let temp52 = (8, temp50, temp51) in
-            let temp53 = (Constr_1 temp52) in
-            let temp54 = (7, temp49, temp53) in
-              let temp55 = (Constr_1 temp54) in
-              let temp56 = (2, temp48, temp55) in
-                let temp57 = (Constr_1 temp56) in
+          let temp50 = (8, temp48, temp49) in
+            let temp51 = (Constr_1 temp50) in
+            let temp52 = (7, temp47, temp51) in
+              let temp53 = (Constr_1 temp52) in
+              let temp54 = (2, temp46, temp53) in
+                let temp55 = (Constr_1 temp54) in
+                let temp56 = Constr_0 in
+                let temp57 = Constr_0 in
                 let temp58 = Constr_0 in
-                let temp59 = Constr_0 in
-                let temp60 = Constr_0 in
-                let temp61 = (12, temp59, temp60) in
-                  let temp62 = (Constr_1 temp61) in
-                  let temp63 = Constr_0 in
-                  let temp64 = (11, temp62, temp63) in
-                    let temp65 = (Constr_1 temp64) in
-                    let temp66 = (10, temp58, temp65) in
-                      let temp67 = (Constr_1 temp66) in
-                      let temp68 = Constr_0 in
-                      let temp69 = (9, temp67, temp68) in
-                        let temp70 = (Constr_1 temp69) in
-                        let temp71 = (1, temp57, temp70) in
-                          let temp72 = (Constr_1 temp71) in
-                          let temp73 = tree_max_int temp72  in
-                          let temp82 = block_tag temp73  in
-                          (if (temp82 = 0)
-                          then let temp80 = block_nth temp73 0 in
-                               (if (temp80 = 12)
+                let temp59 = (12, temp57, temp58) in
+                  let temp60 = (Constr_1 temp59) in
+                  let temp61 = Constr_0 in
+                  let temp62 = (11, temp60, temp61) in
+                    let temp63 = (Constr_1 temp62) in
+                    let temp64 = (10, temp56, temp63) in
+                      let temp65 = (Constr_1 temp64) in
+                      let temp66 = Constr_0 in
+                      let temp67 = (9, temp65, temp66) in
+                        let temp68 = (Constr_1 temp67) in
+                        let temp69 = (1, temp55, temp68) in
+                          let temp70 = (Constr_1 temp69) in
+                          let temp71 = tree_max_int temp70  in
+                          let temp80 = block_tag temp71  in
+                          (if (temp80 = 0)
+                          then let temp78 = block_nth temp71 0 in
+                               (if (temp78 = 12)
                                then printf "test passed" 
-                               else let temp76 = printf "test failed"  in
+                               else let temp74 = printf "test failed"  in
                                     exit 1 )
-                          else let temp76 = printf "test failed"  in
+                          else let temp74 = printf "test failed"  in
                                exit 1 )

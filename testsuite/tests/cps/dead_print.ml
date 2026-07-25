@@ -7,7 +7,7 @@ test
       "rukaml_print_int 1"
       "rukaml_print_int 1"))
 *)
-
+(* 123 *)
 let f x =
   let y = print x in
   fun x -> x + 0
