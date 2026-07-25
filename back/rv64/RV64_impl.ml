@@ -1131,6 +1131,9 @@ let generate_body is_toplevel body =
       failwiths "Not implemented %d" __LINE__
     | CTuple (x1, x2, xs) ->
       emit_initialize_block dest ~fields:(x1 :: x2 :: xs) ~tag:0 ~name:"tuple"
+    | CConstruct (tag, []) ->
+      emit li t0 tag;
+      emit sd_dest t0 dest
     | CConstruct (tag, args) ->
       with_two_slots (fun _ra_name rez_slot ->
         (* emit addi SP SP (-2 * wordsize ()); *)

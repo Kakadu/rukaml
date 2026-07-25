@@ -620,7 +620,7 @@ let anf_pat pat ?(kbefore = fun _ -> Fun.id) k =
       elet Parsetree.NonRecursive (Apat_const const) (cvar ident_name) @@ k ()
     | Typedtree.Tpat_var s -> make_let_nonrec s (cvar ident_name) @@ k ()
     | Tpat_tuple (p1, p2, ps) -> access_fields (p1 :: p2 :: ps) ident_name k
-    | Tpat_constr (name, ps) ->
+    | Tpat_constr (name, ps, _) ->
       compare_tag ~scrut:ident_name ~expected:name.id (access_fields ps ident_name k)
   in
   match pat with
@@ -700,8 +700,10 @@ let anf =
       | Tpat_var var -> make_let_nonrec var (CAtom scrut_var) success
       | Tpat_const c -> compare_with_constant (AConst c)
       | Tpat_unit -> compare_with_constant (AConst (PConst_int 0))
-      | Tpat_constr (ident, []) -> compare_tag ident success (* TODO? : delete it *)
-      | Tpat_constr (ident, args) -> compare_tag ident @@ match_many args
+      | Tpat_constr (ident, [], env) ->
+        let cinfo = Ident.String_map.find ident.Ident.hum_name env in
+        compare_with_constant (AConst (PConst_int cinfo.constr_idx))
+      | Tpat_constr (ident, args, _) -> compare_tag ident @@ match_many args
       | Tpat_tuple (p1, p2, ps) -> match_many (p1 :: p2 :: ps)
     in
     let k scrut =
@@ -811,14 +813,26 @@ let anf =
     | TMatch (scrutinee, (case1, [ (p2, rhs2) ]), _) when has_list_typ scrutinee ->
       (* log "p2 = %a" Typedtree.pp_pattern p2; *)
       (match fst case1, p2 with
-       | Tpat_constr (pi1, []), Tpat_constr (pi2, [ Tpat_var pih; Tpat_var pitl ])
+       | Tpat_constr (pi1, [], _), Tpat_constr (pi2, [ Tpat_var pih; Tpat_var pitl ], _)
          when pi1.Ident.hum_name = "[]" && pi2.Ident.hum_name = "::" ->
          helper scrutinee (fun scrut ->
            let fresh = gensym_id () in
            make_let_nonrec fresh (CAtom scrut)
-           @@
+           @@ EComplex
+                (CIte
+                   ( CApp
+                       ( APrimitive ("=", 2)
+                       , AVar fresh
+                       , [ AConst (Parsetree.PConst_int 0) ] )
+                   , helper (snd case1) k
+                   , make_let_nonrec pih (access scrut 0)
+                     @@ make_let_nonrec pitl (access scrut 1)
+                     @@ helper rhs2 k ))
+           (*
+              let fresh = gensym_id () in
            let fresh_tag = gensym_id () in
-           make_let_nonrec fresh_tag (get_tag (AVar fresh))
+           make_let_nonrec fresh (CAtom scrut)
+           @@ make_let_nonrec fresh_tag (get_tag (AVar fresh))
            @@ EComplex
                 (CIte
                    ( CApp
@@ -828,7 +842,8 @@ let anf =
                    , helper (snd case1) k
                    , make_let_nonrec pih (access scrut 0)
                      @@ make_let_nonrec pitl (access scrut 1)
-                     @@ helper rhs2 k )))
+                     @@ helper rhs2 k ))
+           *))
        | _ -> on_matching helper scrutinee [ case1; p2, rhs2 ] k)
     (* converts TMatch into if-then-else *)
     | TMatch (scrutinee, (case1, cases), _) ->
@@ -861,7 +876,7 @@ let anf_stru_item (vb : Typedtree.value_binding) : stru_item list =
       let fresh = gensym_id ~prefix:"tuple" () in
       let k = access_fields (p1 :: p2 :: ps) fresh k in
       anf_vb_k (Apat_var fresh) rhs k
-    | Tpat_constr (variant, ps) ->
+    | Tpat_constr (variant, ps, _) ->
       let fresh = gensym_id ~prefix:"adt" () in
       let k = compare_tag ~scrut:fresh ~tag:variant.id (access_fields ps fresh k) in
       anf_vb_k (Apat_var fresh) rhs k

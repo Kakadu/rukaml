@@ -516,7 +516,11 @@ let rec check_pat ~level env table = function
     let rec aux env args expected_tys acc_patts =
       match args, expected_tys with
       | [], [] ->
-        return (env, Tpat_constr (constr_info.constr_ident, List.rev acc_patts), ty)
+        return
+          ( env
+          , Tpat_constr
+              (constr_info.constr_ident, List.rev acc_patts, env.TypeEnv.env_constructors)
+          , ty )
       | arg :: args, expected_ty :: expected_tys ->
         let* env, patt, arg_ty = check_pat ~level env table arg in
         let* () = unify table (Subst.apply sub expected_ty) (Subst.apply sub arg_ty) in
@@ -1189,7 +1193,13 @@ let td ?(env = start_env) { Parsetree.pty_name; pty_params; pty_kind; pty_manife
         let* env, variants, id_cnt = acc in
         let* constr_args = fold_infer_core_type env params_map args in
         let constr_ident = Ident.ident name id_cnt in
-        let constr_info = { constr_ident; constr_type_ident = tty_ident; constr_args } in
+        let constr_info =
+          { constr_ident
+          ; constr_idx = id_cnt
+          ; constr_type_ident = tty_ident
+          ; constr_args
+          }
+        in
         let env = Type_env.extend_constructors constr_info env in
         return (env, constr_info :: variants, id_cnt + 1)
       in

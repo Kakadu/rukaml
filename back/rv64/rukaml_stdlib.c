@@ -346,26 +346,6 @@ void *rukaml_apply0(fun0 f) {
   return f();
 }
 
-value rukaml_alloc_pair(value l, value r) {
-  if (GC.allocated_words + 3 > HEAP_SIZE) {
-    fprintf(stderr, "Not enough memory\n");
-    exit(1);
-  }
-  value rez = (value)((rukaml_int_t)GC.main_bank +
-                      GC.allocated_words * rukaml_word_size);
-  GC.allocated_words += 3;
-  GC.stats.gs_allocated_words += 3;
-  Set_field(rez, 0, (value)HEADER(2, Tuple_tag));
-  assert(TAG(rez + rukaml_word_size) == Tuple_tag);
-
-  Set_field(rez, 1, l);
-  Set_field(rez, 2, r);
-
-  log("A pair %" PRIxVAL " created. Allocated words = %lu\n",
-      (value)(rez + rukaml_word_size), GC.allocated_words);
-  return rez + 1;
-}
-
 value rukaml_alloc_block(size_t size, uint8_t tag) {
   // printf("\n%s, size = %lu, tag = %u\n", __func__, size,
   //        ((unsigned)tag % 0xFF));
@@ -396,6 +376,14 @@ value rukaml_alloc_block(size_t size, uint8_t tag) {
   // rukaml_trace_val(ans, 3);
   // fflush(stdout);
   return ans;
+}
+
+value rukaml_alloc_pair(value l, value r) {
+  value rez = rukaml_alloc_block(2, 0);
+
+  Set_field(rez, 1, l);
+  Set_field(rez, 2, r);
+  return rez;
 }
 
 void *rukaml_alloc_closure(void *func, int32_t argsc) {
@@ -1298,16 +1286,20 @@ value rukaml_sys_exit_sysv(value n) {
 
 value rukaml_list_length(DECLARE_FAKE_ARGS, value ls) {
   for (size_t size = 0;; ++size) {
-    assert(IS_BLOCK(ls));
-    switch (TAG(ls)) {
-    case 1: // cons
-      assert(2 == SIZE(ls));
-      ls = Field(ls, 1);
-      break;
-    case 0:
+    if (IS_BLOCK(ls)) {
+      switch (TAG(ls)) {
+      case 1: // cons
+        assert(2 == SIZE(ls));
+        ls = Field(ls, 1);
+        break;
+      // case 0:
+      //   return Val_int(size);
+      default:
+        mk_err_fatal("tag mismatch");
+      }
+    } else {
+      assert(ls == Val_int(0));
       return Val_int(size);
-    default:
-      mk_err_fatal("tag mismatch");
     }
   }
 }
