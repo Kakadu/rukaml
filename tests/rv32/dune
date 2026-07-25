@@ -8,7 +8,7 @@
   (promote (until-clean)))
  (action
   (run
-   /mnt/work2/asp/sc-dt/riscv-gcc/bin/riscv64-unknown-linux-gnu-gcc
+   /home/kakadu/asp/sc-dt/riscv-gcc/bin/riscv64-unknown-linux-gnu-gcc
    -march=rv32imac
    -mabi=ilp32
    -DRUKAML_DEBUG=0
@@ -48,7 +48,8 @@
  (action
   (progn
    (run
-    /mnt/work2/asp/sc-dt/riscv-gcc/bin/riscv64-unknown-linux-gnu-gcc
+    %{read:../../ld_rv32}
+    ;/home/kakadu/asp/sc-dt/riscv-gcc/bin/riscv64-unknown-linux-gnu-gcc
     -march=rv32imac
     -mabi=ilp32
     -g
@@ -57,7 +58,7 @@
     -o
     demo.o)
    (run
-    /mnt/work2/asp/sc-dt/riscv-gcc/bin/riscv64-unknown-linux-gnu-gcc
+    %{read:../../ld_rv32}
     -march=rv32imac
     -mabi=ilp32
     -g
