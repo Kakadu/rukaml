@@ -129,7 +129,7 @@ module Addr_of_local = struct
 
   let extend name =
     incr last_pos;
-    (* log "extend %s with shift = %d" name !last_pos; *)
+    (* log "extend %a with shift = %d" Ident.pp name !last_pos; *)
     Hashtbl.add store name !last_pos
   ;;
 
@@ -166,7 +166,7 @@ module Addr_of_local = struct
     assert (i < argc);
     let loc = 1 - argc + i in
     assert (loc <= 0);
-    log "Location argument \"%a\" in [rbp+%d]" Ident.pp name (-loc);
+    (* log "Location argument \"%a\" in [rbp+%d]" Ident.pp name (-loc); *)
     Hashtbl.add store name loc
   ;;
 
@@ -257,7 +257,7 @@ let emit_comment ppf = Format.kasprintf (emit comment) ppf
 
 (** Functions [grow_stack] and [shrink_stack] take words count *)
 let grow_stack k n =
-  log "Grow stack for %d words" n;
+  (* log "Grow stack for %d words" n; *)
   assert (n > 0);
   assert (n * wordsize () mod 16 = 0);
   addi k sp sp (-n * wordsize ())
@@ -265,7 +265,7 @@ let grow_stack k n =
 
 let shrink_stack k n =
   assert (n > 0);
-  log "Shrink stack for %d words" n;
+  (* log "Shrink stack for %d words" n; *)
   addi k sp sp (n * wordsize ())
 ;;
 
@@ -715,6 +715,11 @@ let generate_body is_toplevel body =
            emit call "rukaml_applyN";
            emit sd_dest a0 dest)
        | _ -> failwiths "Should not happen %s %d" __FILE__ __LINE__)
+    | CApp (APrimitive ("array_make", 2), arg1, [ arg2 ]) ->
+      helper_a (DReg "a0") arg1;
+      helper_a (DReg "a1") arg2;
+      emit call "rukaml_array_make_sysv";
+      emit sd_dest a0 dest
     | CApp (APrimitive ("array_get", 2), arg1, [ arg2 ]) ->
       helper_a (DReg "a0") arg1;
       helper_a (DReg "a1") arg2;
@@ -854,8 +859,18 @@ let generate_body is_toplevel body =
            t1;
          emit sd_dest t2 dest
        | Some _ ->
-         (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
-         failwiths "not implemented %d" __LINE__)
+         emit li t0 n;
+         emit lla t1 (Format.asprintf "%a" Toplevel.pp_label_exn vname);
+         emit ld t1 (ROffset (t1, 0));
+         emit
+           (match prim with
+            | "+" -> add
+            | "*" -> mulw
+            | op -> failwiths "not implemented '%s' on %d" op __LINE__)
+           t2
+           t0
+           t1;
+         emit sd_dest t2 dest)
     | CApp (APrimitive (">=", info), vl, [ vr ]) ->
       (* This could be buggy *)
       helper_c dest (ANF.CApp (ANF.APrimitive ("<=", info), vr, [ vl ]))
@@ -895,11 +910,9 @@ let generate_body is_toplevel body =
       emit slti t5 a0 0;
       emit sd_dest t5 dest
     | CApp (APrimitive ((("+" | "*" | "-" | "||") as prim), _), AVar vl, [ AVar vr ]) ->
-      emit comment (sprintf "%s is stored in %d" vl.hum_name (Addr_of_local.find_exn vl));
-      emit comment (sprintf "%s is stored in %d" vr.hum_name (Addr_of_local.find_exn vr));
       emit comment (sprintf "last_pos = %d" !Addr_of_local.last_pos);
-      emit ld t3 (Addr_of_local.pp_to_mach vl);
-      emit ld t4 (Addr_of_local.pp_to_mach vr);
+      helper_a (DReg "t3") (AVar vl);
+      helper_a (DReg "t4") (AVar vr);
       (match prim with
        | "+" -> emit add
        | "*" -> emit mulw
@@ -1497,7 +1510,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
               else if argc = 0
               then (
                 let () = Toplevel.extend name ~kind:Toplevel.(Immediate Constant) in
-                (* Format.eprintf "Toplvel: add immediate '%a'\n%!" Ident.pp name; *)
+                Hashtbl.add hash name argc;
                 `Immediate (name, body))
               else (
                 let () = assert (argc >= 1 || name.Ident.hum_name = "main") in

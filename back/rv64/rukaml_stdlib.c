@@ -493,6 +493,14 @@ value rukaml_array_read_in(DECLARE_FAKE_ARGS, void **str) {
   return arr;
 }
 
+value rukaml_array_make_sysv(value size, value el) {
+  value arr = rukaml_alloc_array(size);
+  for (size_t i = 0; i < Int_val(size); ++i) {
+    Set_field(arr, i, el);
+  }
+  return arr;
+}
+
 void *rukaml_array_get_sysv(value arr, value n) {
   assert(TAG(arr) == Array_tag);
   if (Int_val(n) >= SIZE(arr)) {
