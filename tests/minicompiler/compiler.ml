@@ -9,9 +9,12 @@ let string_equal = String.equal
 let substring s from len = String.sub s from len
 let char_code = Char.code
 let printf, fprintf, sprintf = Stdlib.Printf.(printf, fprintf, sprintf)
+
 let array_get = Array.get
 let array_set = Array.set
 let array_len = Array.length
+let array_make = Array.make
+
 let list_length = List.length
 let sys_argv = Sys.argv
 let rukaml_input_all ch = In_channel.input_all ch
@@ -924,11 +927,99 @@ let pp_parsing_error oc err =
 
 (* codegen *)
 
+let wordsize = 4
+
 let sizeof_ctype ptype =
   match ptype with
-  | Ptype_int -> 8
+  | Ptype_int -> wordsize
   | Ptype_void -> 0
 ;;
+
+(* Machine *)
+
+
+type reg = A0 | SP | RA | FP | T0
+
+let pp_reg oc r =
+  match r with
+  | A0 ->  output_string oc "a0"
+  | SP -> output_string oc "sp"
+  | RA ->  output_string oc "ra"
+  | FP ->  output_string oc "fp"
+  | T0 ->  output_string oc "t0"
+
+type instr =
+  | Ret
+  | Call of string
+  | Addi of reg * reg * int
+  | Li of reg * int
+  | Ld of reg * int * reg
+  | Sd of reg * int * reg
+  | Mul of reg * reg * reg
+  | Sub of reg * reg * reg
+  | Add of reg * reg * reg
+  | Slt of reg * reg * reg
+  | Label of string
+  | J of string
+  | Beqz of reg * string
+
+let pp_inst oc i =
+  match i with
+  | Ret -> output_string oc "  ret"
+  | Call s -> fprintf oc "  call %s" s
+  | Addi (r1,r2, n) -> fprintf oc "  addi %a, %a, %d" pp_reg r1 pp_reg r2 n
+  | Li (r1, n) -> fprintf oc "  li %a, %d" pp_reg r1 n
+  | Ld (r1, n, r2) -> fprintf oc "  ld %a, %d(%a)" pp_reg r1 n pp_reg r2
+  | Sd (r1, n, r2) -> fprintf oc "  sd %a, %d(%a)" pp_reg r1 n pp_reg r2
+  | Mul (r1, r2, r3) -> fprintf oc "  mul %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Sub (r1, r2, r3) -> fprintf oc "  sub %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Add (r1, r2, r3) -> fprintf oc "  add %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Slt (r1, r2, r3) -> fprintf oc "  slt %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Label s -> fprintf oc "%s:" s
+  | J s -> fprintf oc "  j %s" s
+  | Beqz (r,l) -> fprintf oc "  beqz %a, %s" pp_reg r l
+
+let ret k = k Ret
+let call k s = k (Call s)
+let addi k a b c = k (Addi (a,b,c))
+let li k a b = k (Li (a,b))
+let ld k a b c = k (Ld (a,b,c))
+let sd k a b c = k (Sd (a,b,c))
+let mul k a b c = k (Mul (a,b,c))
+let sub k a b c = k (Sub (a,b,c))
+let add k a b c = k (Add (a,b,c))
+let slt k a b c = k (Slt (a,b,c))
+let label k s = k (Label s)
+let j k s = k (J s)
+let beqz k a b = k (Beqz (a,b))
+
+let store_info = [| 0; 50 |]
+let store = array_make 50 Ret
+
+let pp_store oc () =
+  let () = fprintf oc "#store has %d instrs\n"
+    (array_get store_info 0) in
+  let rec loop oc i last =
+    if i >= last then ()
+    else
+      let () = pp_inst oc (array_get store i) in
+      let () = output_string oc "\n" in
+      loop oc (1+i) last
+  in
+  loop oc 0 (array_get store_info 0 )
+
+let queue_add i =
+  let cur = array_get store_info 0 in
+  if 1 + cur < array_get store_info 1
+  then
+    let () = array_set store cur i in
+    let () = array_set store_info 0 (cur+1) in
+    ()
+  else
+    let () = printf "Store too short\n" in
+    exit 1
+
+let emit instr = instr queue_add
 
 (* C0 like implementation (every var gets it's own place in vars pool) *)
 let eval_locals_pool_size stms =
@@ -972,12 +1063,14 @@ let pop_pool size =
 
 let emit_init_locals_pool oc pool_size =
   let () = push_pool pool_size in
-  fprintf oc "addi sp, sp, %d\n" (pool_size * (0 - 1))
+  let () = fprintf oc "addi sp, sp, %d\n" (pool_size * (0 - 1)) in
+  emit addi SP SP (pool_size * (0 - 1))
 ;;
 
 let emit_destroy_locals_pool oc pool_size =
   let () = pop_pool pool_size in
-  fprintf oc "addi sp, sp, %d\n" pool_size
+  let () = fprintf oc "addi sp, sp, %d\n" pool_size in
+  emit addi SP SP pool_size
 ;;
 
 (* negative offsets over fp (use it for local vars, not for function parameters) *)
@@ -1008,7 +1101,7 @@ let exit_scope () =
   | _ :: old_scopes -> array_set scopes 0 old_scopes
 ;;
 
-let add_to_scope (name, offset) =
+let add_to_scope name offset =
   match array_get scopes 0 with
   | [] -> failwith "something bad: can not add var (no scopes)"
   | current_scope :: old_scopes ->
@@ -1020,8 +1113,8 @@ let add_func_params_to_scope params =
     match params with
     | [] -> ()
     | (ty, name) :: xs ->
-      let offset = 16 + (i * 8) in
-      let () = add_to_scope (name, offset) in
+      let offset = 8 + (i * 4) in
+      let () = add_to_scope name offset in
       aux xs (i + 1)
   in
   aux params 0
@@ -1056,34 +1149,54 @@ let fresh_label prefix =
 
 let rec codegen_expr oc expr =
   match expr with
-  | Pexpr_var name -> fprintf oc "  ld a0, %a\n" pp_local_var name
-  | Pexpr_int n -> fprintf oc "  li a0, %d\n" n
+  | Pexpr_var name ->
+    let () = fprintf oc "  ld a0, %a\n" pp_local_var name in
+    emit ld A0 (find_var_offset name) FP
+  | Pexpr_int n ->
+      let () = fprintf oc "  li a0, %d\n" n in
+      emit li A0 n
   | Pexpr_tern (cond, t, e) ->
     let else_label = fresh_label ".Lelse" in
     let end_label = fresh_label ".Lend" in
     let () = codegen_expr oc cond in
     let () = fprintf oc "  beqz a0, %s\n" else_label in
+    let () = emit beqz A0 else_label in
     let () = codegen_expr oc t in
     let () = fprintf oc "  j %s\n" end_label in
+    let () = emit j end_label in
     let () = fprintf oc "%s:\n" else_label in
+    let () = emit label else_label in
     let () = codegen_expr oc e in
     let () = fprintf oc "%s:\n" end_label in
+    let () = emit label end_label in
     ()
   | Pexpr_binop (op, e1, e2) ->
     let () = codegen_expr oc e1 in
     let () = fprintf oc "  addi sp, sp, -8\n" in
+    let () = emit addi SP SP (0-4) in
     let () = fprintf oc "  sd a0, 0(sp)\n" in
+    let () = emit sd A0 0 SP in
     let () = codegen_expr oc e2 in
     let () = fprintf oc "  ld t0, 0(sp)\n" in
-    let () = fprintf oc "  addi sp, sp, 8\n" in
+    let () = emit ld T0 0 SP in
+    let () = fprintf oc "  addi sp, sp, %d # 1 \n" wordsize in
+    let () = emit addi SP SP 4 in
     (match op with
-     | Pbinop_add -> fprintf oc "  add a0, t0, a0\n"
-     | Pbinop_sub -> fprintf oc "  sub a0, t0, a0\n"
-     | Pbinop_mul -> fprintf oc "  mul a0, t0, a0\n"
+     | Pbinop_add ->
+        let () = fprintf oc "  add a0, t0, a0\n" in
+        emit add A0 T0 A0
+     | Pbinop_sub ->
+        emit sub A0 T0 A0
+
+     | Pbinop_mul ->
+        (* fprintf oc "  mul a0, t0, a0\n" *)
+        emit mul A0 T0 A0
      | Pbinop_div -> fprintf oc "  div a0, t0, a0\n"
      | Pbinop_eq -> fprintf oc "  sub a0, t0, a0\n  seqz a0, a0\n"
      | Pbinop_ne -> fprintf oc "  sub a0, t0, a0\n  snez a0, a0\n"
-     | Pbinop_lt -> fprintf oc "  slt a0, t0, a0\n"
+     | Pbinop_lt ->
+        let () = fprintf oc "  slt a0, t0, a0\n" in
+        emit slt A0 T0 A0
      | Pbinop_gt -> fprintf oc "  slt a0, a0, t0\n"
      | Pbinop_le -> fprintf oc "  slt a0, a0, t0\n  xori a0, a0, 1\n"
      | Pbinop_ge -> fprintf oc "  slt a0, t0, a0\n  xori a0, a0, 1\n"
@@ -1096,13 +1209,25 @@ let rec codegen_expr oc expr =
       | [] -> ()
       | x :: xs ->
         let () = codegen_expr oc x in
-        let () = fprintf oc "  sd a0, %d(sp)\n" (8 * (argc - i - 1)) in
+        let () = fprintf oc "  sd a0, %d(sp)\n" (wordsize * (argc - i - 1)) in
+        let () = emit sd A0 (wordsize * (argc - i - 1)) SP in
         alloc_args xs (i + 1)
     in
-    let () = if argc > 0 then fprintf oc "  addi sp, sp, -%d\n" (8 * argc) else () in
+    let () =
+      if argc > 0
+      then
+        let () = fprintf oc "  addi sp, sp, -%d\n" (wordsize * argc) in
+        emit addi SP SP (0 - wordsize * argc)
+      else () in
     let () = alloc_args args 0 in
     let () = fprintf oc "  call %s\n" fname in
-    let () = if argc > 0 then fprintf oc "  addi sp, sp, %d\n" (8 * argc) else () in
+    let () = emit call fname in
+    let () =
+      if argc > 0
+      then
+        let () = fprintf oc "  addi sp, sp, %d\n" (wordsize * argc)  in
+        emit addi SP SP (wordsize * argc)
+      else () in
     ()
   | Pexpr_assign (var, expr) ->
     let () = codegen_expr oc expr in
@@ -1118,11 +1243,12 @@ let codegen_decl oc decl =
       | [] -> ()
       | (name, rhs_opt) :: vbs ->
         let offset = get_offset_for_new_var tysize in
-        let () = add_to_scope (name, offset) in
+        let () = add_to_scope name offset in
         (match rhs_opt with
          | Some expr ->
            let () = codegen_expr oc expr in
-           fprintf oc "  sd a0, %a\n" pp_local_var name
+           let () = fprintf oc "  sd a0, %a\n" pp_local_var name in
+           emit sd A0  (find_var_offset name) FP
          | None -> ())
     in
     aux vbs
@@ -1130,33 +1256,42 @@ let codegen_decl oc decl =
 
 let rec codegen_statement oc epilogue stmt =
   match stmt with
-  | Pstmt_return None -> fprintf oc "  j %s\n" epilogue
+  | Pstmt_return None ->
+      let () = fprintf oc "  j %s\n" epilogue in
+      emit j epilogue
   | Pstmt_return (Some e) ->
     let () = codegen_expr oc e in
     let () = fprintf oc "  j %s\n" epilogue in
-    ()
+    emit j epilogue
   | Pstmt_expr e -> codegen_expr oc e
   | Pstmt_block stmts -> list_iter (codegen_statement oc epilogue) stmts
   | Pstmt_ite (c, t, None) ->
     let () = codegen_expr oc c in
     let end_if_label = fresh_label "End_if" in
     let () = fprintf oc "  beqz a0, %s\n" end_if_label in
+    let () = emit beqz A0 end_if_label in
     let () = codegen_statement oc epilogue t in
     let () = fprintf oc "%s: \n" end_if_label in
-    ()
+    emit label end_if_label
+
   | Pstmt_ite (c, t, Some e) ->
     let () = codegen_expr oc c in
     let else_label = fresh_label "Else" in
     let end_if_label = fresh_label "End_if" in
     let () = fprintf oc "  beqz a0, %s\n" else_label in
+    let () = emit beqz A0 else_label in
     let () = codegen_statement oc epilogue t in
     let () = fprintf oc "  j %s\n" end_if_label in
+    let () = emit j end_if_label in
     let () = fprintf oc "%s:\n" else_label in
+    let () = emit label else_label in
     let () = codegen_statement oc epilogue e in
     let () = fprintf oc "%s:\n" end_if_label in
-    ()
+    emit label end_if_label
+
   | Pstmt_for (decl, cond_opt, iter_opt, body_opt) ->
-    let call_option f x_opt =
+    exit 1
+    (* let call_option f x_opt =
       match x_opt with
       | None -> ()
       | Some x -> f x
@@ -1171,29 +1306,42 @@ let rec codegen_statement oc epilogue stmt =
     let () = call_option (codegen_expr oc) iter_opt in
     let () = fprintf oc "  j %s\n" loop_label in
     let () = fprintf oc "%s:\n" end_label in
-    ()
+    () *)
   | Pstmt_decl decl -> codegen_decl oc decl
 ;;
 
 let pp_prologue oc fname pool_size =
   let () = fprintf oc ".global %s\n" fname in
   let () = fprintf oc ".text\n" in
+
   let () = fprintf oc "%s:\n" fname in
-  let () = fprintf oc "  addi sp, sp, -16\n" in
-  let () = fprintf oc "  sd fp, 8(sp)\n" in
+  let () = fprintf oc "  addi sp, sp, -%d\n" (2*wordsize) in
+  let () = fprintf oc "  sd fp, %d(sp)\n" wordsize in
   let () = fprintf oc "  sd ra, 0(sp)\n" in
   let () = fprintf oc "  mv fp, sp\n" in
+
+  let () = emit label fname in
+  let () = emit addi SP SP ( (0-2) * sizeof_ctype Ptype_int) in
+  let () = emit sd FP 4 SP in
+  let () = emit sd RA 0 SP in
+  let () = emit addi FP SP 0 in
   let () = emit_init_locals_pool oc pool_size in
   ()
 ;;
 
+
 let pp_epilogue oc epilogue_label pool_size =
-  let () = fprintf oc "%s:\n" epilogue_label in
+  (* let () = fprintf oc "%s:\n" epilogue_label in *)
+  let () = emit label epilogue_label in
   let () = emit_destroy_locals_pool oc pool_size in
-  let () = fprintf oc "  ld ra, 0(sp)\n" in
-  let () = fprintf oc "  ld fp, 8(sp)\n" in
-  let () = fprintf oc "  addi sp, sp, 16\n" in
-  let () = fprintf oc "  ret\n" in
+  (* let () = fprintf oc "  ld ra, 0(sp)\n" in *)
+  let () = emit ld RA 0 SP in
+  (* let () = fprintf oc "  ld fp, 8(sp)\n" in *)
+  let () = emit ld FP wordsize SP in
+  (* let () = fprintf oc "  addi sp, sp, 16\n" in *)
+  let () = emit addi SP SP (2*wordsize) in
+  (* let () = fprintf oc "  ret\n" in *)
+  let () = emit ret  in
   ()
 ;;
 
@@ -1208,6 +1356,7 @@ let codegen_function oc func =
     let () = list_iter (codegen_statement oc epilogue_label) stms in
     let () = pp_epilogue oc epilogue_label pool_size in
     let () = exit_scope () in
+    let () = pp_store oc () in
     ()
 ;;
 
@@ -1249,6 +1398,7 @@ let run_single oc target input =
   match parse_program 0 with
   | Prez_error err -> printf "parsing failed: %a" pp_parsing_error err
   | Prez_success (ast, pos) ->
+    let () = gc_stats () in
     if pos = string_len input
     then (
       match target with
@@ -1330,7 +1480,8 @@ let parse_args argv =
       else (
         match input_opt with
         | None -> loop (i + 1) (Some arg) output_opt target_opt
-        | Some _ -> usage ()))
+        | Some _ ->
+          usage ()))
   in
   let input_opt, output_opt, target_opt = loop 1 None None None in
   let input_path =
@@ -1362,7 +1513,7 @@ let main =
   let () = test5 () in *)
 
   let input_path, output_path, target = parse_args sys_argv in
-  let ch = open_in "program.c" in
+  let ch = open_in input_path in
   let the_string = rukaml_input_all ch in
   let () = printf "%s\n" the_string in
   (* let () = trace_rukaml_val the_string in *)
