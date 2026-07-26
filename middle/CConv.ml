@@ -171,7 +171,7 @@ let standart_globals =
   @ [ "input_all"; "input_char" ]
   @ [ "field"; "block_nth"; "block_tag"; "block_size" ]
   @ [ "substring"; "string_nth"; "string_len"; "string_equal"; "string_of_char_list" ]
-  @ [ "array_get"; "array_set"; "array_len" ]
+  @ [ "array_get"; "array_set"; "array_len"; "array_make" ]
   @ [ "char_code" ]
   @ [ "gc_compact"; "gc_stats" ]
   @ [ "closure_count" ]
