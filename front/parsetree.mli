@@ -96,6 +96,7 @@ val eapp1 : expr -> expr -> expr
 val elet : ?isrec:rec_flag -> pattern -> expr -> expr -> expr
 val eite : expr -> expr -> expr -> expr
 val emul : expr -> expr -> expr
+val ediv : expr -> expr -> expr
 val eadd : expr -> expr -> expr
 val esub : expr -> expr -> expr
 val eeq : expr -> expr -> expr

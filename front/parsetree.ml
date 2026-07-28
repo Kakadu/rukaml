@@ -65,6 +65,7 @@ let econs hd tl = EConstruct ("::", [ hd; tl ])
 let elet ?(isrec = NonRecursive) p b wher = ELet (isrec, p, b, wher)
 let eite c t e = EIf (c, t, e)
 let emul a b = eapp (evar "*") [ a; b ]
+let ediv a b = eapp (evar "/") [ a; b ]
 let eadd a b = eapp (evar "+") [ a; b ]
 let esub a b = eapp (evar "-") [ a; b ]
 let eeq a b = eapp (evar "=") [ a; b ]

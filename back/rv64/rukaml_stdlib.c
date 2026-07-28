@@ -501,10 +501,13 @@ value rukaml_array_make_sysv(value size, value el) {
   return arr;
 }
 
-void *rukaml_array_get_sysv(value arr, value n) {
+value rukaml_array_get_sysv(value arr, value _n) {
   assert(TAG(arr) == Array_tag);
-  if (Int_val(n) >= SIZE(arr)) {
-    fprintf(stderr, "Index out of bounds");
+  rukaml_int_t n = Int_val(_n);
+  rukaml_int_t size = SIZE(arr);
+  if (n >= size) {
+    fprintf(stderr, "Index out of bounds: %" PRIdVAL ">=%" PRIdVAL "\n", n,
+            size);
     exit(1);
   }
   return (value)(arr[Int_val(n)]);
@@ -514,17 +517,19 @@ value rukaml_array_get(DECLARE_FAKE_ARGS, value arr, value n) {
   return rukaml_array_get_sysv(arr, n);
 }
 
-void rukaml_array_set_sysv(value arr, value n, value a) {
+value rukaml_array_set_sysv(value arr, value _n, value a) {
   assert(TAG(arr) == Array_tag);
-  if (Int_val(n) >= SIZE(arr)) {
-    fprintf(stderr, "Index out of bounds");
+  rukaml_int_t n = Int_val(_n);
+  rukaml_int_t size = SIZE(arr);
+  if (n >= size) {
+    fprintf(stderr, "Index out of bounds: %" PRIdVAL ">=%" PRIdVAL "\n", n,
+            size);
     exit(1);
   }
   Set_field(arr, Int_val(n), a);
-  // ((value *)arr)[n] = a; // TODO: set_field
-  return;
+  return Val_unit;
 }
-void rukaml_array_set(DECLARE_FAKE_ARGS, value arr, value n, value a) {
+value rukaml_array_set(DECLARE_FAKE_ARGS, value arr, value n, value a) {
   return rukaml_array_set_sysv(arr, n, a);
 }
 
@@ -782,6 +787,11 @@ void rukaml_fprintf_impl(void *dest, value fmt, va_list args) {
       value v = va_arg(args, value);
       // TODO: fix hardcoded stdout
       fprintf(stdout, "%c", (char)Int_val(v));
+      break;
+    }
+    case 'x': {
+      value v = va_arg(args, value);
+      fprintf(stdout, "%04x", Int_val(v));
       break;
     }
     case 'd': {

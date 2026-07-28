@@ -841,6 +841,11 @@ let generate_body is_toplevel body =
        | Some _ ->
          (* TODO: This will be fixed when we will allow toplevel non-functional constants *)
          failwiths "not implemented %d" __LINE__) *)
+    | CApp (APrimitive ("/", 2), l, [ r ]) ->
+      helper_a (DReg "t5") l;
+      helper_a (DReg "t6") r;
+      emit div t5 t5 t6;
+      emit sd_dest t5 dest
     | CApp (APrimitive ((("+" | "*") as prim), _), AVar vname, [ AConst (PConst_int n) ])
     | CApp (APrimitive ((("+" | "*") as prim), _), AConst (PConst_int n), [ AVar vname ])
       ->
