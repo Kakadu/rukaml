@@ -18,6 +18,7 @@ let array_make = Array.make
 let list_length = List.length
 let sys_argv = Sys.argv
 let rukaml_input_all ch = In_channel.input_all ch
+let trace_rukaml_val x = ()
 let gc_stats () = ()
 
 let end_of_input ic =
@@ -949,8 +950,8 @@ let pp_reg oc r =
   | T0 ->  output_string oc "t0"
 
 type instr =
-  | Ret
-  | Call of string
+  | Ret of int
+  | Call of string (* TODO: use jal ra, target_func *)
   | Addi of reg * reg * int
   | Li of reg * int
   | Ld of reg * int * reg
@@ -965,12 +966,16 @@ type instr =
 
 let pp_inst oc i =
   match i with
-  | Ret -> output_string oc "  ret"
+  | Ret _ -> output_string oc "  ret"
   | Call s -> fprintf oc "  call %s" s
   | Addi (r1,r2, n) -> fprintf oc "  addi %a, %a, %d" pp_reg r1 pp_reg r2 n
   | Li (r1, n) -> fprintf oc "  li %a, %d" pp_reg r1 n
-  | Ld (r1, n, r2) -> fprintf oc "  ld %a, %d(%a)" pp_reg r1 n pp_reg r2
-  | Sd (r1, n, r2) -> fprintf oc "  sd %a, %d(%a)" pp_reg r1 n pp_reg r2
+  | Ld (r1, n, r2) ->
+      let mne = if wordsize = 4 then "lw" else "ld" in
+      fprintf oc "  %s %a, %d(%a)" mne pp_reg r1 n pp_reg r2
+  | Sd (r1, n, r2) ->
+      let mne = if wordsize = 4 then "sw" else "sd" in
+      fprintf oc "  %s %a, %d(%a)" mne pp_reg r1 n pp_reg r2
   | Mul (r1, r2, r3) -> fprintf oc "  mul %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
   | Sub (r1, r2, r3) -> fprintf oc "  sub %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
   | Add (r1, r2, r3) -> fprintf oc "  add %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
@@ -979,7 +984,7 @@ let pp_inst oc i =
   | J s -> fprintf oc "  j %s" s
   | Beqz (r,l) -> fprintf oc "  beqz %a, %s" pp_reg r l
 
-let ret k = k Ret
+let ret k = k (Ret 0)
 let call k s = k (Call s)
 let addi k a b c = k (Addi (a,b,c))
 let li k a b = k (Li (a,b))
@@ -993,8 +998,9 @@ let label k s = k (Label s)
 let j k s = k (J s)
 let beqz k a b = k (Beqz (a,b))
 
-let store_info = [| 0; 50 |]
-let store = array_make 50 Ret
+let store_info = [| 0; 50 |] (* count and max_count *)
+let store = array_make 50 (Ret 0)
+let store_len () = array_get store_info 0
 
 let pp_store oc () =
   let () = fprintf oc "#store has %d instrs\n"
@@ -1003,17 +1009,18 @@ let pp_store oc () =
     if i >= last then ()
     else
       let () = pp_inst oc (array_get store i) in
-      let () = output_string oc "\n" in
+      let () = fprintf oc "# %d\n" i in
       loop oc (1+i) last
   in
   loop oc 0 (array_get store_info 0 )
 
 let queue_add i =
   let cur = array_get store_info 0 in
-  if 1 + cur < array_get store_info 1
+  if cur < array_get store_info 1
   then
     let () = array_set store cur i in
     let () = array_set store_info 0 (cur+1) in
+    (* let () = printf "There are %d instruction generated\n" (cur+1) in *)
     ()
   else
     let () = printf "Store too short\n" in
@@ -1362,6 +1369,178 @@ let codegen_function oc func =
 
 let codegen_program oc prog = list_iter (codegen_function oc) prog
 
+(* *)
+let mnemonics_info = [| 0; 100 |]
+let mnemonics = array_make 100 0
+let for_loop start len f arr =
+  let rec loop start len f arr =
+    if start < len then
+      let () = f (array_get arr start) in
+      loop (start+1) len f arr
+    else
+      ()
+  in
+  loop start len f arr
+
+let rec collect_labels acc icount pos =
+  (* let () = printf "collect labels at  pos %d\n" pos in *)
+  if pos >= store_len ()
+  then (* let () = output_string oc "exit loop\n" in *) acc
+  else
+    let r = array_get store pos in
+    match r with
+    | Label s -> collect_labels ((s,icount)::acc) icount (pos+1)
+    | _ -> collect_labels acc (icount+1) (pos+1)
+
+let rec assoc_exn k xs =
+  match xs with
+  | [] -> exit 30
+  | h::tl ->
+    let (a,v) =  h in
+    if string_equal k a then v
+    else assoc_exn k tl
+
+let set_mnem oc pos hi lo i =
+  let () = array_set mnemonics (2*pos) hi in
+  let () = array_set mnemonics (1+2*pos) lo in (*
+  let () = fprintf oc "# 0x%x %x\n" hi lo  in
+  let () = fprintf oc "        %a\n" pp_inst i in *)
+  ()
+
+let assembly oc () =
+  let count = store_len () in
+  let () = printf "count = %d\n" count in
+
+  let label_idxs = collect_labels [] 0 0 in
+
+  let rec loop store icount =
+    if icount >= store_len () then ()
+    else
+      (* let () = fprintf stdout "loop: icount = %d\n" icount in *)
+      let next = icount + 1 in
+      let i = array_get store icount in
+      match i with
+      | Label _ -> loop store next
+      | Ret _ ->
+          let () = set_mnem oc icount 0x0000 0x8067 i in
+          loop store (1+icount)
+      | Li (r,n) ->
+          let () =
+            if r=A0 && n=5 then
+              set_mnem oc icount 0x0050 0x0513 i
+            else
+            if r=A0 && n=1 then
+              set_mnem oc icount 0x0010   0x0513 i
+            else
+              exit 1
+          in
+          loop store next
+      | Addi (r1,r2,n) ->
+        let () =
+          if r1=SP && r2=SP && n= (0-8) then
+            set_mnem  oc icount 0xff81 0x0113 i
+          else if r1=SP && r2=SP && n= 8 then
+            set_mnem  oc icount 0x0081 0x0113 i
+          else if r1=SP && r2=SP && n= (0-4) then
+            set_mnem  oc icount 0xffc1 0x0113 i
+          else  if r1=SP && r2=SP && n= 4 then
+            set_mnem  oc icount 0x0041 0x0113 i
+          else if r1=SP && r2=SP && n= 0 then
+            (* mv sp, sp *)
+            set_mnem  oc icount 0x1 0x0113 i
+          else if r1=FP && r2=SP && n= 0 then
+            (* mv fp, sp *)
+            set_mnem  oc icount 0x1 0x0413 i
+          else
+              let () = fprintf oc "== %a\n" pp_inst i in
+              exit 2
+        in
+        loop store next
+      | Sub (r1,r2,r3) ->
+          if r1=A0 && r2=T0 && r3=A0 then
+            let () = set_mnem  oc icount 0x40a2 0x8533 i in
+            loop store next
+          else
+            exit 3
+      | Mul (r1,r2,r3) ->
+          if r1=A0 && r2=T0 && r3=A0 then
+            let () = set_mnem  oc icount 0x02a2 0x8533 i in
+            loop store next
+          else
+            exit 4
+      | Slt (r1,r2,r3) ->
+          if r1=A0 && r2=T0 && r3=A0 then
+            let () = set_mnem  oc icount 0x00a2 0xa533 i in
+            loop store next
+          else
+            exit 4
+      | Sd (r1,n,r2) ->
+          let () =
+            if r1=RA && n=0 && r2=SP then
+              set_mnem  oc icount 0x0011 0x2023 i
+            else if r1=A0 && n=0 && r2=SP then
+              set_mnem  oc icount 0x00a1 0x2023 i
+            else if r1=FP && n=4 && r2=SP then
+              set_mnem  oc icount 0x0081 0x2223 i
+            else
+              exit 5
+          in
+          loop store next
+      | Ld (r1,n,r2) ->
+          let () =
+            if r1=A0 && n=8 && r2=FP then (* assuming FP is S0 *)
+              set_mnem  oc icount 0x0084 0x2503 i
+            else if r1=T0 && n=0 && r2=SP then
+              set_mnem  oc icount 0x0001 0x2283 i
+            else if r1=FP && n=4 && r2=SP then
+              set_mnem  oc icount 0x0041 0x2403 i
+            else if r1=RA && n=0 && r2=SP then
+              set_mnem  oc icount 0x0001 0x2083 i
+            else
+              let () = fprintf oc "== %a\n" pp_inst i in
+              exit 6
+          in
+          loop store next
+      | Beqz (_,_) ->
+          let () = set_mnem  oc icount 0xffff 0xffff i in
+          loop store next
+      | J lab ->
+          let label_instr = assoc_exn lab label_idxs in
+          let offset = (label_instr - icount) in
+          let () = fprintf oc "jump offset = %d\n" offset in
+          let () =
+            if offset = 0-1
+            then set_mnem  oc icount 0x0040 0x006f i
+            else set_mnem  oc icount 0xffff 0xffff i
+          in
+          loop store next
+      | Call _ ->
+          let () = set_mnem  oc icount 0xffff 0xffff i in
+          loop store next
+      | _ ->
+        let () = fprintf oc "== %a\n" pp_inst i in
+        exit 22
+  in
+  let () = loop store 0  in
+  let rec printer ipos    =
+    if ipos >= store_len ()  then ()
+    else
+      let i = array_get store ipos in
+      match i with
+        | Label _ ->
+            let () = fprintf oc "%a\n" pp_inst i in
+            printer (ipos+1)
+        | _ ->
+          let hi = array_get mnemonics (2*ipos) in
+          let lo = array_get mnemonics (2*ipos + 1) in
+          let () = fprintf oc "# 0x%x %x\n" hi lo in
+          let () = fprintf oc "        %a\n" pp_inst i in
+          printer (ipos+1)
+  in
+  let () = printer 0 in
+  ()
+
+
 (* driver *)
 
 type target =
@@ -1392,6 +1571,11 @@ let current_line state =
   loop pos 1
 ;;
 
+let flags = [| false |]
+(* [| dumpC; |] *)
+let set_dump_c flg = array_set flags 0 flg
+
+
 let run_single oc target input =
   let () = printf "\n" in
   let () = array_set sarr 0 input in
@@ -1403,7 +1587,12 @@ let run_single oc target input =
     then (
       match target with
       | Parsetree -> pp_pprogram oc ast
-      | RiscV64 -> codegen_program oc ast)
+      | RiscV64 ->
+        let () = codegen_program oc ast in
+        if flags.(0)
+        then assembly oc ()
+        else ()
+        )
     else
       printf
         "parsing failed: can not parse many program items (failed at ~%d line)\n"
@@ -1446,6 +1635,7 @@ let test5 () =
       let name = string_of_char_list chs in
       printf "Success '%s' on pos %d\n" name pos
 
+
 let parse_args argv =
   let argc = array_len argv in
   let rec loop i input_opt output_opt target_opt =
@@ -1455,7 +1645,11 @@ let parse_args argv =
       (* TODO: rewrite using match with *)
       let arg = array_get argv i in
 
-      if string_equal arg "-o"
+      if string_equal arg "-dc"
+      then
+        let () = set_dump_c true in
+        loop (1+i) input_opt output_opt target_opt
+      else if string_equal arg "-o"
       then
         if i + 1 >= argc
         then usage ()
