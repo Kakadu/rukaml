@@ -628,7 +628,7 @@ let infer_format3_of_string ~level s =
   let rec helper chs acc_ty =
     match chs with
     | [] -> return acc_ty
-    | 'd' :: '%' :: tl -> helper tl (tarrow int_typ acc_ty)
+    | 'd' :: '%' :: tl | 'x' :: '%' :: tl -> helper tl (tarrow int_typ acc_ty)
     | 'b' :: '%' :: tl -> helper tl (tarrow bool_typ acc_ty)
     | 'c' :: '%' :: tl -> helper tl (tarrow char_typ acc_ty)
     | 's' :: '%' :: tl -> helper tl (tarrow string_typ acc_ty)

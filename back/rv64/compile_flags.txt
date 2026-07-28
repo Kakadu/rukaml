@@ -1,0 +1,3 @@
+-target riscv64
+-D__riscv
+-D__riscv_xlen=64

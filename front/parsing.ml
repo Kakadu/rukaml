@@ -64,6 +64,11 @@ let is_digit = function
   | _ -> false
 ;;
 
+let is_hex_digit = function
+  | 'A' .. 'F' | 'a' .. 'f' | '0' .. '9' -> true
+  | _ -> false
+;;
+
 let to_digit c = Char.code c - Char.code '0'
 
 let digit =
@@ -175,6 +180,8 @@ let escape_seq =
 
 let constant =
   ws *> fail ""
+  <|> (string "0x" *> take_while1 is_hex_digit
+       >>| fun chs -> const_int (int_of_string (Printf.sprintf "0x%s" chs)))
   <|> (take_while1 is_digit >>| fun chs -> const_int (int_of_string chs))
   <|> (apostrophes escape_seq >>| const_char)
   <|> (apostrophes (any_char_except [ '\''; '\\' ]) >>| fun ch -> const_char ch)
@@ -324,7 +331,7 @@ let pack : dispatch =
            ]
          ; [ ws *> string "::", econs ]
          ; [ ws *> string "+", eadd; ws *> string "-", esub ]
-         ; [ ws *> string "*", emul ]
+         ; [ ws *> string "*", emul; ws *> string "/", ediv ]
         |])
   in
   let expr_basic d =
