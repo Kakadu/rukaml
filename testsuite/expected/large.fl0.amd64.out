@@ -57,9 +57,9 @@ section .bss
               mov rax, 60     ; exit syscall
               syscall
 section .text
-GLOBAL large_id73
+GLOBAL large_id74
 
-large_id73:
+large_id74:
   push rbp
   mov  rbp, rsp
   mov qword rdx, [rbp+2*8]
@@ -75,7 +75,7 @@ lab_then_9:
   mov qword rax, 0
 lab_endif_10:
   pop rbp
-  ret  ;;;; large_id73
+  ret  ;;;; large_id74
 section .text
 rukaml_init_global_immediates:
   push rbp
@@ -122,7 +122,7 @@ lab_endif_14:
   sub rsp, 8*1 ; fun arguments
   mov qword r8, [rbp-4*8]  ; arg "temp6"
   mov qword [rsp+0*8], r8
-  call large_id73
+  call large_id74
   add rsp, 8*2 ; dealloc args
   mov rax, rax
   add rsp, 8*4 ; deallocate local variables temp6, temp5, temp8, temp4
