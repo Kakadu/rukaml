@@ -939,11 +939,12 @@ let sizeof_ctype ptype =
 (* Machine *)
 
 
-type reg = A0 | SP | RA | FP | T0
+type reg = RZ | A0 | SP | RA | FP | T0
 
 let pp_reg oc r =
   match r with
-  | A0 ->  output_string oc "a0"
+  | RZ -> output_string oc "zero"
+  | A0 -> output_string oc "a0"
   | SP -> output_string oc "sp"
   | RA ->  output_string oc "ra"
   | FP ->  output_string oc "fp"
@@ -962,7 +963,7 @@ type instr =
   | Slt of reg * reg * reg
   | Label of string
   | J of string
-  | Beqz of reg * string
+  | Beq of reg * reg * string
 
 let pp_inst oc i =
   match i with
@@ -982,7 +983,7 @@ let pp_inst oc i =
   | Slt (r1, r2, r3) -> fprintf oc "  slt %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
   | Label s -> fprintf oc "%s:" s
   | J s -> fprintf oc "  j %s" s
-  | Beqz (r,l) -> fprintf oc "  beqz %a, %s" pp_reg r l
+  | Beq (r, r2, l) -> fprintf oc "  beq %a, %a, %s" pp_reg r  pp_reg r2 l
 
 let ret k = k (Ret 0)
 let call k s = k (Call s)
@@ -996,7 +997,8 @@ let add k a b c = k (Add (a,b,c))
 let slt k a b c = k (Slt (a,b,c))
 let label k s = k (Label s)
 let j k s = k (J s)
-let beqz k a b = k (Beqz (a,b))
+let beq k a b c = k (Beq (a,b,c))
+let beqz k a b = k (Beq (a,RZ,b))
 
 let store_info = [| 0; 50 |] (* count and max_count *)
 let store = array_make 50 (Ret 0)
@@ -1409,32 +1411,42 @@ let set_mnem oc pos hi lo i =
 
 let assembly oc () =
   let count = store_len () in
-  let () = printf "count = %d\n" count in
+  (* let () = printf "count = %d\n" count in *)
 
   let label_idxs = collect_labels [] 0 0 in
+  let () =
+    list_iter (fun x ->
+      let (k,v) = x in
+      fprintf oc " %s -> %d\n" k v
+      ) label_idxs
+  in
 
-  let rec loop store icount =
+  let rec loop store curi icount =
     if icount >= store_len () then ()
     else
       (* let () = fprintf stdout "loop: icount = %d\n" icount in *)
       let next = icount + 1 in
+      let curi2 = 1 + curi in
       let i = array_get store icount in
       match i with
-      | Label _ -> loop store next
+      | Label _ -> loop store curi next
       | Ret _ ->
           let () = set_mnem oc icount 0x0000 0x8067 i in
-          loop store (1+icount)
+          loop store curi2 (1+icount)
       | Li (r,n) ->
           let () =
             if r=A0 && n=5 then
               set_mnem oc icount 0x0050 0x0513 i
             else
             if r=A0 && n=1 then
-              set_mnem oc icount 0x0010   0x0513 i
+              set_mnem oc icount 0x0010 0x0513 i
+            else
+            if r=A0 && n=2 then
+              set_mnem oc icount 0x0020 0x0513 i
             else
               exit 1
           in
-          loop store next
+          loop store curi2 next
       | Addi (r1,r2,n) ->
         let () =
           if r1=SP && r2=SP && n= (0-8) then
@@ -1455,23 +1467,23 @@ let assembly oc () =
               let () = fprintf oc "== %a\n" pp_inst i in
               exit 2
         in
-        loop store next
+        loop store curi2 next
       | Sub (r1,r2,r3) ->
           if r1=A0 && r2=T0 && r3=A0 then
             let () = set_mnem  oc icount 0x40a2 0x8533 i in
-            loop store next
+            loop store curi2 next
           else
             exit 3
       | Mul (r1,r2,r3) ->
           if r1=A0 && r2=T0 && r3=A0 then
             let () = set_mnem  oc icount 0x02a2 0x8533 i in
-            loop store next
+            loop store curi2 next
           else
             exit 4
       | Slt (r1,r2,r3) ->
           if r1=A0 && r2=T0 && r3=A0 then
             let () = set_mnem  oc icount 0x00a2 0xa533 i in
-            loop store next
+            loop store curi2 next
           else
             exit 4
       | Sd (r1,n,r2) ->
@@ -1485,7 +1497,7 @@ let assembly oc () =
             else
               exit 5
           in
-          loop store next
+          loop store curi2 next
       | Ld (r1,n,r2) ->
           let () =
             if r1=A0 && n=8 && r2=FP then (* assuming FP is S0 *)
@@ -1500,45 +1512,63 @@ let assembly oc () =
               let () = fprintf oc "== %a\n" pp_inst i in
               exit 6
           in
-          loop store next
-      | Beqz (_,_) ->
-          let () = set_mnem  oc icount 0xffff 0xffff i in
-          loop store next
+          loop store curi2 next
+      | Beq (r1,r2,lab) ->
+          let label_instr = assoc_exn lab label_idxs in
+          let offset = label_instr - curi in
+
+          (* let () = fprintf oc "Beq offset = %d\n" offset in *)
+          let () =
+            if r1=A0 && r2=RZ && offset=3
+            then set_mnem  oc icount 0x0005 0x0663 i
+            else set_mnem  oc icount 0xffff 0xffff i
+          in
+          loop store curi2 next
       | J lab ->
           let label_instr = assoc_exn lab label_idxs in
-          let offset = (label_instr - icount) in
+          let offset = label_instr - icount in
           let () = fprintf oc "jump offset = %d\n" offset in
           let () =
             if offset = 0-1
-            then set_mnem  oc icount 0x0040 0x006f i
-            else set_mnem  oc icount 0xffff 0xffff i
+            then set_mnem oc icount 0x0040 0x006f i
+            else if offset = 18
+            then set_mnem oc icount 0x04c0 0x006f i
+            else set_mnem oc icount 0xffff 0xffff i
           in
-          loop store next
-      | Call _ ->
-          let () = set_mnem  oc icount 0xffff 0xffff i in
-          loop store next
+          loop store curi2 next
+      | Call lab ->
+          let label_instr = assoc_exn lab label_idxs in
+          let offset = label_instr - curi in
+          (* let () = fprintf oc "call offset = %d\n" offset in *)
+
+          let () =
+            if offset = 0-27
+            then set_mnem oc icount 0xf95f 0xf0ef i
+            else set_mnem oc icount 0xffff 0xffff i
+          in
+          loop store curi2 next
       | _ ->
-        let () = fprintf oc "== %a\n" pp_inst i in
         exit 22
   in
-  let () = loop store 0  in
-  let rec printer ipos    =
+  let () = loop store 0 0  in
+  let rec printer icount ipos =
     if ipos >= store_len ()  then ()
     else
       let i = array_get store ipos in
+      let ipos1 = ipos+1 in
+      let icount1 = icount+1 in
       match i with
         | Label _ ->
-            let () = fprintf oc "%a\n" pp_inst i in
-            printer (ipos+1)
+            let () = fprintf oc "/* %a */\n" pp_inst i in
+            printer icount ipos1
         | _ ->
           let hi = array_get mnemonics (2*ipos) in
           let lo = array_get mnemonics (2*ipos + 1) in
-          let () = fprintf oc "# 0x%x %x\n" hi lo in
-          let () = fprintf oc "        %a\n" pp_inst i in
-          printer (ipos+1)
+          let () = fprintf oc "m[%d] = (0x%xu << 16) + 0x%xu;" icount hi lo in
+          let () = fprintf oc "  /* %d: %a */\n" icount1 pp_inst i in
+          printer icount1 ipos1
   in
-  let () = printer 0 in
-  ()
+  printer 0 0
 
 
 (* driver *)
