@@ -22,8 +22,8 @@ $ qemu-riscv64 $FLAGS ./compiler.exe program.c -o file.out --target parsetree
   
   
   GC statistics
-  Total allocations: 13170(words)
-  Currently allocated: 13170(words)
+  Total allocations: 13176(words)
+  Currently allocated: 13176(words)
   Current bank: 0
   .global fact_rec
   .text
@@ -75,7 +75,7 @@ $ qemu-riscv64 $FLAGS ./compiler.exe program.c -o file.out --target parsetree
     lw t0, 0(sp)# 10
     addi sp, sp, 4# 11
     slt a0, t0, a0# 12
-    beqz a0, End_if_1# 13
+    beq a0, zero, End_if_1# 13
     li a0, 1# 14
     j fact_rec_epilogue_0# 15
   End_if_1:# 16
@@ -103,89 +103,53 @@ $ qemu-riscv64 $FLAGS ./compiler.exe program.c -o file.out --target parsetree
     lw fp, 4(sp)# 38
     addi sp, sp, 8# 39
     ret# 40
-  count = 41
+   fact_rec_epilogue_0 -> 33
+   End_if_1 -> 15
+   fact_rec -> 0
   jump offset = 18
   jump offset = -1
-  fact_rec:
-  # 0xff81 0113
-            addi sp, sp, -8
-  # 0x0081 2223
-            sw fp, 4(sp)
-  # 0x0011 2023
-            sw ra, 0(sp)
-  # 0x0001 0413
-            addi fp, sp, 0
-  # 0x0001 0113
-            addi sp, sp, 0
-  # 0x0084 2503
-            lw a0, 8(fp)
-  # 0xffc1 0113
-            addi sp, sp, -4
-  # 0x00a1 2023
-            sw a0, 0(sp)
-  # 0x0010 0513
-            li a0, 1
-  # 0x0001 2283
-            lw t0, 0(sp)
-  # 0x0041 0113
-            addi sp, sp, 4
-  # 0x00a2 a533
-            slt a0, t0, a0
-  # 0xffff ffff
-            beqz a0, End_if_1
-  # 0x0010 0513
-            li a0, 1
-  # 0xffff ffff
-            j fact_rec_epilogue_0
-  End_if_1:
-  # 0x0084 2503
-            lw a0, 8(fp)
-  # 0xffc1 0113
-            addi sp, sp, -4
-  # 0x00a1 2023
-            sw a0, 0(sp)
-  # 0xffc1 0113
-            addi sp, sp, -4
-  # 0x0084 2503
-            lw a0, 8(fp)
-  # 0xffc1 0113
-            addi sp, sp, -4
-  # 0x00a1 2023
-            sw a0, 0(sp)
-  # 0x0010 0513
-            li a0, 1
-  # 0x0001 2283
-            lw t0, 0(sp)
-  # 0x0041 0113
-            addi sp, sp, 4
-  # 0x40a2 8533
-            sub a0, t0, a0
-  # 0x00a1 2023
-            sw a0, 0(sp)
-  # 0xffff ffff
-            call fact_rec
-  # 0x0041 0113
-            addi sp, sp, 4
-  # 0x0001 2283
-            lw t0, 0(sp)
-  # 0x0041 0113
-            addi sp, sp, 4
-  # 0x02a2 8533
-            mul a0, t0, a0
-  # 0x0040 006f
-            j fact_rec_epilogue_0
-  fact_rec_epilogue_0:
-  # 0x0001 0113
-            addi sp, sp, 0
-  # 0x0001 2083
-            lw ra, 0(sp)
-  # 0x0041 2403
-            lw fp, 4(sp)
-  # 0x0081 0113
-            addi sp, sp, 8
-  # 0x0000 8067
-            ret
+  /* fact_rec: */
+  m[0] = (0xff81u << 16) + 0x0113u;  /* 1:   addi sp, sp, -8 */
+  m[1] = (0x0081u << 16) + 0x2223u;  /* 2:   sw fp, 4(sp) */
+  m[2] = (0x0011u << 16) + 0x2023u;  /* 3:   sw ra, 0(sp) */
+  m[3] = (0x0001u << 16) + 0x0413u;  /* 4:   addi fp, sp, 0 */
+  m[4] = (0x0001u << 16) + 0x0113u;  /* 5:   addi sp, sp, 0 */
+  m[5] = (0x0084u << 16) + 0x2503u;  /* 6:   lw a0, 8(fp) */
+  m[6] = (0xffc1u << 16) + 0x0113u;  /* 7:   addi sp, sp, -4 */
+  m[7] = (0x00a1u << 16) + 0x2023u;  /* 8:   sw a0, 0(sp) */
+  m[8] = (0x0010u << 16) + 0x0513u;  /* 9:   li a0, 1 */
+  m[9] = (0x0001u << 16) + 0x2283u;  /* 10:   lw t0, 0(sp) */
+  m[10] = (0x0041u << 16) + 0x0113u;  /* 11:   addi sp, sp, 4 */
+  m[11] = (0x00a2u << 16) + 0xa533u;  /* 12:   slt a0, t0, a0 */
+  m[12] = (0x0005u << 16) + 0x0663u;  /* 13:   beq a0, zero, End_if_1 */
+  m[13] = (0x0010u << 16) + 0x0513u;  /* 14:   li a0, 1 */
+  m[14] = (0x04c0u << 16) + 0x006fu;  /* 15:   j fact_rec_epilogue_0 */
+  /* End_if_1: */
+  m[15] = (0x0084u << 16) + 0x2503u;  /* 16:   lw a0, 8(fp) */
+  m[16] = (0xffc1u << 16) + 0x0113u;  /* 17:   addi sp, sp, -4 */
+  m[17] = (0x00a1u << 16) + 0x2023u;  /* 18:   sw a0, 0(sp) */
+  m[18] = (0xffc1u << 16) + 0x0113u;  /* 19:   addi sp, sp, -4 */
+  m[19] = (0x0084u << 16) + 0x2503u;  /* 20:   lw a0, 8(fp) */
+  m[20] = (0xffc1u << 16) + 0x0113u;  /* 21:   addi sp, sp, -4 */
+  m[21] = (0x00a1u << 16) + 0x2023u;  /* 22:   sw a0, 0(sp) */
+  m[22] = (0x0010u << 16) + 0x0513u;  /* 23:   li a0, 1 */
+  m[23] = (0x0001u << 16) + 0x2283u;  /* 24:   lw t0, 0(sp) */
+  m[24] = (0x0041u << 16) + 0x0113u;  /* 25:   addi sp, sp, 4 */
+  m[25] = (0x40a2u << 16) + 0x8533u;  /* 26:   sub a0, t0, a0 */
+  m[26] = (0x00a1u << 16) + 0x2023u;  /* 27:   sw a0, 0(sp) */
+  m[27] = (0xf95fu << 16) + 0xf0efu;  /* 28:   call fact_rec */
+  m[28] = (0x0041u << 16) + 0x0113u;  /* 29:   addi sp, sp, 4 */
+  m[29] = (0x0001u << 16) + 0x2283u;  /* 30:   lw t0, 0(sp) */
+  m[30] = (0x0041u << 16) + 0x0113u;  /* 31:   addi sp, sp, 4 */
+  m[31] = (0x02a2u << 16) + 0x8533u;  /* 32:   mul a0, t0, a0 */
+  m[32] = (0x0040u << 16) + 0x006fu;  /* 33:   j fact_rec_epilogue_0 */
+  /* fact_rec_epilogue_0: */
+  m[33] = (0x0001u << 16) + 0x0113u;  /* 34:   addi sp, sp, 0 */
+  m[34] = (0x0001u << 16) + 0x2083u;  /* 35:   lw ra, 0(sp) */
+  m[35] = (0x0041u << 16) + 0x2403u;  /* 36:   lw fp, 4(sp) */
+  m[36] = (0x0081u << 16) + 0x0113u;  /* 37:   addi sp, sp, 8 */
+  m[37] = (0x0000u << 16) + 0x8067u;  /* 38:   ret */
   GC statistics
-  Total allocations: 23963(words)
-  Currently allocated: 23963(words)
+  Total allocations: 25024(words)
+  Currently allocated: 25024(words)
   Current bank: 0
