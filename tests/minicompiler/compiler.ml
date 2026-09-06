@@ -777,14 +777,18 @@ let parse_decl =
       choice2
         (drop_left
            (skip_ws (char '='))
-           (map parse_expression (fun expr -> name, Some expr)))
+           (map parse_expression (fun expr ->
+            (* let () = output_string stdout "rhs parsed\n" in *)
+            (name, Some expr))))
         (return (name, None)))
       pos
   in
   fun pos ->
   let pos = ws_exn pos in
   bind parse_type (fun t ->
+    (* let () = output_string stdout "typ parsed\n" in *)
     bind parse_single_var (fun v1 ->
+      (* let () = output_string stdout "single_var parsed\n" in *)
       map
         (many (drop_left (skip_ws (char ',')) parse_single_var))
         (fun vs -> Pdecl_var (t, v1 :: vs))))
@@ -864,7 +868,7 @@ let rec parse_statement state =
      ; parse_stmt_decl
      ; parse_stmt_block parse_statement
      ; parse_stmt_ite parse_statement
-     (* ; parse_stmt_for parse_statement *)
+     ; parse_stmt_for parse_statement
      ; parse_stmt_expr
      ])
     state
@@ -917,7 +921,7 @@ let parse_function pos =
 ;;
 
 let parse_program eta =
-  many1 (skip_ws parse_function) eta
+  many (skip_ws parse_function) eta
 
 let pp_parsing_error oc err =
   match err with
@@ -927,7 +931,7 @@ let pp_parsing_error oc err =
 ;;
 
 (* codegen *)
-
+(*
 let wordsize = 4
 
 let sizeof_ctype ptype =
@@ -1569,7 +1573,7 @@ let assembly oc () =
           printer icount1 ipos1
   in
   printer 0 0
-
+*)
 
 (* driver *)
 
@@ -1610,7 +1614,7 @@ let run_single oc target input =
   let () = printf "\n" in
   let () = array_set sarr 0 input in
   match parse_program 0 with
-  | Prez_error err -> printf "parsing failed: %a" pp_parsing_error err
+  | Prez_error err -> printf "parsing failed: %a\n" pp_parsing_error err
   | Prez_success (ast, pos) ->
     let () = gc_stats () in
     if pos = string_len input
@@ -1618,10 +1622,11 @@ let run_single oc target input =
       match target with
       | Parsetree -> pp_pprogram oc ast
       | RiscV64 ->
-        let () = codegen_program oc ast in
+        ()
+       (* let () = codegen_program oc ast in
         if flags.(0)
         then assembly oc ()
-        else ()
+        else () *)
         )
     else
       printf
@@ -1734,8 +1739,8 @@ let main =
   let () = test2 () in
   let () = test3 () in
   let () = test4 () in
-  let () = test5 () in *)
-
+  let () = test5 () in
+*)
   let input_path, output_path, target = parse_args sys_argv in
   let ch = open_in input_path in
   let the_string = rukaml_input_all ch in
