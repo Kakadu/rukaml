@@ -47,25 +47,10 @@
   (promote (until-clean)))
  (action
   (progn
-   (run
-    %{read:../../ld_rv32}
-    ;/home/kakadu/asp/sc-dt/riscv-gcc/bin/riscv64-unknown-linux-gnu-gcc
-    -march=rv32imac
-    -mabi=ilp32
-    -g
-    -c
-    %{src}
-    -o
-    demo.o)
-   (run
-    %{read:../../ld_rv32}
-    -march=rv32imac
-    -mabi=ilp32
-    -g
-    %{stdlib}
-    demo.o
-    -o
-    %{targets}))))
+   (system "%{read-lines:../../ld_rv32} -g -c %{src} -o demo.o")
+   (system "%{read-lines:../../ld_rv32} -g %{stdlib} demo.o -o %{targets}")
+   ;
+   )))
 
 (cram
  (applies_to demo)
