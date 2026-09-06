@@ -132,6 +132,6 @@ CPS
   >  if n<1 then k 1 else fibk (n-1) (fun p -> fibk (n-2) (fun q -> k (p + q)))
   > EOF
   Parsed: let rec fibk n k = if n < 1 then k 1 else fibk (n - 1) (fun p ->
-                                                                  fibk (n - 2) 
+                                                                  fibk (n - 2)
                                                                  (fun q ->
                                                                   k (p + q)))
