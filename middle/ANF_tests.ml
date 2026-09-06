@@ -273,8 +273,7 @@ let%expect_test "... simplify match list " =
   [%expect
     {|
     let f xs =
-      let temp2 = block_tag xs  in
-      (if (temp2 = 0)
+      (if (xs = 0)
       then let w = 1 in
            1
       else let h = block_nth xs 0 in
@@ -306,8 +305,7 @@ let%expect_test "...  " =
       let temp4 = (Constr_1 (temp2, temp3)) in
       let temp5 = Constr_0 in
       let temp6 = (Constr_1 (temp4, temp5)) in
-      let temp8 = block_tag temp6  in
-      (if (temp8 = 0)
+      (if (temp6 = 0)
       then temp6
       else let x = block_nth temp6 0 in
            let xs = block_nth temp6 1 in
