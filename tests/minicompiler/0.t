@@ -11,14 +11,4 @@ $ qemu-riscv64 $FLAGS ./compiler.exe program.c -o file.out --target parsetree
 
 
 
-  $ qemu-riscv64 $FLAGS ./compiler.exe -dc program0.c -o file.out --target rv64
-  
-  
-  GC statistics
-  Total allocations: 527(words)
-  Currently allocated: 527(words)
-  Current bank: 0
-  GC statistics
-  Total allocations: 527(words)
-  Currently allocated: 527(words)
-  Current bank: 0
+$ qemu-riscv64 $FLAGS ./compiler.exe -dc program0.c -o file.out --target rv64
