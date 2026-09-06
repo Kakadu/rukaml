@@ -14,11 +14,13 @@ depends: [
   "stdio"
   "ppx_deriving"
   "ppx_sexp_conv"
-  "bisect_ppx"
+  "bisect_ppx_ng"
   "parsexp"
   "angstrom" {= "0.16.0"}
   "llvm" {>= "16.0.0"}
   "ocamlgraph" {>= "2.1.0"}
+  "qcheck"
+  "ppx_deriving_qcheck"
   "odoc" {with-doc}
   "ocamlformat" {= "0.27.0" & with-dev-setup}
   "ocaml-lsp-server" {with-dev-setup}
