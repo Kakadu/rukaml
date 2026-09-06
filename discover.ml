@@ -108,7 +108,7 @@ let () =
   print_toolchain toolchain_amd64;
   let gcc_rv64 = "riscv64-linux-gnu-gcc-13" in
   let defaults_rv64 =
-    { cc = { path = gcc_rv64; flags = "-g -fPIC -Wall -Wpedantic" }
+    { cc = { path = gcc_rv64; flags = "-g -fPIC -Wall -Wundef -Wpedantic -pipe" }
     ; as_ = { path = gcc_rv64; flags = "-x assembler -c -march=rv64gc" }
     ; ld = { path = gcc_rv64; flags = "" }
     ; run = { path = "qemu-riscv64"; flags = "-L /usr/riscv64-linux-gnu" }
