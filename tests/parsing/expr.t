@@ -203,7 +203,6 @@ value binding
   > EOF
   Parsed: if (match x with
                 | _ -> ()) then 1 else 2
-  Parsed: (if 1 then 2 else x * (fac (y - 1)))
 
 # TODO: negative numbers are complicated
   $ echo '-1234' | ./run.exe -e -
@@ -213,4 +212,9 @@ value binding
   $ cat << EOF | ./run.exe -e -
   > (fun Dep -> let Mab = true arw in 3234964472276681775 ())
   > EOF
-  Parsed: (fun Dep -> let Mab = true arw in 3234964472276681775 ())
+  Parsed: fun Dep -> (let Mab = true arw in 3234964472276681775 ())
+
+  $ cat <<EOF | ./run.exe -e -
+  > let rec _ = x in 5
+  > EOF
+  Parsed: let rec _ = x in 5
