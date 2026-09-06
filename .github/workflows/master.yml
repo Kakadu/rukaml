@@ -5,12 +5,10 @@ on:
     branches:
       - 'master'
       - 'dev'
-      - 'dev+ADT-RV64'
   push:
     branches:
       - 'master'
       - 'dev'
-      - 'dev+ADT-RV64'
 
 env:
   OPAMROOT: /home/opam/.opam
@@ -22,7 +20,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: kakadu18/ocaml:llvm16
+      image: kakadu18/ocaml:rukaml4.14
 
     # The below probably could be used instead of styfle/cancel-workflow-action
     concurrency:
