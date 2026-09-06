@@ -40,6 +40,8 @@ jobs:
         with:
           fetch-depth: 1
 
+      - run: opam update
+
       - name: Install dependencies via Makefile
         run: make deps
 
