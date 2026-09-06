@@ -382,8 +382,7 @@
     let temp1 = Constr_0 in
     let temp2 = (Constr_1 (2, temp1)) in
     let temp3 = (Constr_1 (1, temp2)) in
-    let temp10 = block_tag temp3  in
-    (if (temp10 = 0)
+    (if (temp3 = 0)
     then 0
     else let temp8 = block_tag temp3  in
          (if (temp8 = 1)
@@ -517,8 +516,7 @@
     let temp1 = Constr_0 in
     let temp2 = (Constr_1 (false, temp1)) in
     let temp3 = (Constr_1 (true, temp2)) in
-    let temp6 = block_tag temp3  in
-    (if (temp6 = 0)
+    (if (temp3 = 0)
     then 0
     else 1)
 
@@ -534,15 +532,13 @@
     let temp1 = Constr_0 in
     let temp2 = (Constr_1 (false, temp1)) in
     let temp3 = (Constr_1 (true, temp2)) in
-    let temp12 = block_tag temp3  in
-    (if (temp12 = 0)
+    (if (temp3 = 0)
     then 0
-    else let temp10 = block_tag temp3  in
-         (if (temp10 = 1)
+    else let temp9 = block_tag temp3  in
+         (if (temp9 = 1)
          then let temp6 = block_nth temp3 0 in
               let temp7 = block_nth temp3 1 in
-              let temp8 = block_tag temp7  in
-              (if (temp8 = 0)
+              (if (temp7 = 0)
               then 1
               else 2)
          else 2))
@@ -558,8 +554,7 @@
   let is_empty =
     let temp1 = Constr_0 in
     let temp2 = (Constr_1 (1, temp1)) in
-    let temp5 = block_tag temp2  in
-    (if (temp5 = 0)
+    (if (temp2 = 0)
     then 1
     else 0)
 
