@@ -15,6 +15,7 @@ env:
   OPAMYES: true
   OPAMCONFIRMLEVEL: unsafe-yes
   DUNE_PROFILE: release
+  RUKAML_OMIT_RV32: 1
 
 jobs:
   build:

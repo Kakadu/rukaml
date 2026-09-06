@@ -22,6 +22,7 @@ type toolchain =
   }
 [@@deriving sexp_of]
 
+let empty_toolchain = { compile = None; assemble = None; link = None; run = None }
 let spf = Printf.sprintf
 let log fmt = Printf.ksprintf (fun msg -> printf "discover: %s\n" msg) fmt
 
@@ -129,7 +130,11 @@ let () =
       ; run = { path = "qemu-riscv32"; flags = "-L /usr/riscv32-linux-gnu" }
       }
     in
-    let toolchain_rv32 = discover_toolchain cfg defaults_rv32 ~suffix:"rv32" in
+    let toolchain_rv32 =
+      match Sys.getenv "RUKAML_OMIT_RV32" with
+      | Some _ -> empty_toolchain
+      | None -> discover_toolchain cfg defaults_rv32 ~suffix:"rv32"
+    in
     export_toolchain toolchain_rv32 ~suffix:"rv32";
     print_toolchain toolchain_rv32
   in
