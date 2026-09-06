@@ -931,7 +931,7 @@ let pp_parsing_error oc err =
 ;;
 
 (* codegen *)
-(*
+
 let wordsize = 4
 
 let sizeof_ctype ptype =
@@ -1573,7 +1573,7 @@ let assembly oc () =
           printer icount1 ipos1
   in
   printer 0 0
-*)
+
 
 (* driver *)
 
@@ -1622,11 +1622,11 @@ let run_single oc target input =
       match target with
       | Parsetree -> pp_pprogram oc ast
       | RiscV64 ->
-        ()
-       (* let () = codegen_program oc ast in
+
+        let () = codegen_program oc ast in
         if flags.(0)
         then assembly oc ()
-        else () *)
+        else ()
         )
     else
       printf

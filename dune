@@ -38,3 +38,7 @@
   (alias_rec middle/all)
   (alias_rec back/all)
   (alias_rec driver/all)))
+
+(cram
+ (applies_to xxx)
+ (deps driver/driver.exe tests/minicompiler/compiler.ml))
