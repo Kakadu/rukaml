@@ -29,7 +29,7 @@
   base
   stdio
   ppx_deriving
-  ppx_sexp_conv
+  (ppx_sexp_conv :build)
   bisect_ppx_ng
   parsexp
   (angstrom

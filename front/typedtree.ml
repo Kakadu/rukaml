@@ -29,7 +29,7 @@ and type_desc =
   | TConstr of ty list * string
 [@@deriving show { with_path = false }]
 
-module IntMap = Map.Make (Int) [@@deriving show { with_path = false }]
+module IntMap = Map.Make (Int)
 
 type weak_table =
   { mutable map : ty Map.Make(Int).t
