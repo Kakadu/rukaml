@@ -20,7 +20,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: kakadu18/ocaml:llvm16
+      image: kakadu18/ocaml:rukaml5.5
 
     # The below probably could be used instead of styfle/cancel-workflow-action
     concurrency:
@@ -36,7 +36,7 @@ jobs:
 
       # checking out the code seems to be important because local switch is used
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
