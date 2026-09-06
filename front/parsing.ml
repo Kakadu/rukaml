@@ -335,71 +335,134 @@ let pack : dispatch =
         |])
   in
   let expr_basic d =
+    let parse_list_sugar =
+      char '['
+      *> ws
+      *>
+      let* first = d.expr_tuple d in
+      (let* rest = many (ws *> char ';' *> d.expr_tuple d) in
+       return (econs first (List.fold_right econs rest enil)))
+      <|> return (econs first enil)
+      <* ws
+      <* char ']'
+    in
+    let parse_empty_list = char '[' *> ws *> char ']' *> return enil in
+    let parse_array_sugar =
+      brackets
+        (return (fun h tl -> earray (h :: tl))
+         <*> (d.expr_tuple d <* ws)
+         <*> many (string ";" *> d.expr_tuple d <* ws)
+         <|> return @@ earray [])
+    in
+    let fun_sugar =
+      keyword "fun" *> many1 pattern
+      >>= fun ps ->
+      ws *> string "->" *> ws *> d.expr d
+      >>= fun b -> return (List.fold_right (fun patt acc -> elam patt acc) ps b)
+    in
+    let letdef_sugar =
+      letdef (d.expr_tuple d)
+      >>= fun (isrec, ident, rhs) ->
+      ws *> keyword "in" *> d.expr d >>= fun in_ -> return (elet ~isrec ident rhs in_)
+    in
+    let ite_sugar =
+      keyword "if" *> d.expr_tuple d
+      >>= fun cond ->
+      keyword "then" *> d.expr_tuple d
+      >>= fun th ->
+      keyword "else" *> d.expr_tuple d >>= fun el -> return (eite cond th el)
+    in
+    let array_or_var_sugar =
+      let* v = var_name in
+      choice
+        [ (let* i = char '.' *> char '(' *> number <* char ')' in
+           choice
+             [ (let* e = string " <- " *> d.expr d in
+                return @@ eapp (evar "array_set") [ evar v; econst (const_int i); e ])
+             ; return @@ eapp (evar "array_get") [ evar v; econst (const_int i) ]
+             ])
+        ; (var_name
+           >>= function
+           | "true" -> return (EConst (const_bool true))
+           | "false" -> return (EConst (const_bool false))
+           | v -> return (evar v))
+        ]
+    in
+    let match_case_sugar =
+      let parse_case =
+        let* () = ws <* char '|' in
+        let* p = pattern in
+        let* () = ws <* string "->" in
+        let* e = d.expr_tuple d in
+        return (p, e)
+      in
+      let first =
+        parse_case
+        <|>
+        let* p = pattern in
+        let* () = ws *> string "->" *> ws in
+        let* e = d.expr_tuple d in
+        return (p, e)
+      in
+      let* subject = keyword "match" *> ws *> d.expr_tuple d <* ws <* keyword "with" in
+      let* case = first in
+      let* cases = many parse_case in
+      return (ematch subject case cases)
+    in
     let* () = ws *> trace_pos "expr_basic" in
     fix (fun _self ->
-      fail ""
-      <|> (constant >>| fun x -> EConst x)
-      <|> char '(' *> char ')' *> return EUnit
-      <|> char '[' *> ws *> char ']' *> return enil
-      <|> (constructor_name >>| fun name -> EConstruct (name, []))
-      <|> (char '['
-           *> ws
-           *>
-           let* first = d.expr_tuple d in
-           (let* rest = many (ws *> char ';' *> d.expr_tuple d) in
-            return (econs first (List.fold_right econs rest enil)))
-           <|> return (econs first enil)
-           <* ws
-           <* char ']')
-      <|> brackets
-            (return (fun h tl -> earray (h :: tl))
-             <*> (d.expr_tuple d <* ws)
-             <*> many (string ";" *> d.expr_tuple d <* ws)
-             <|> return @@ earray [])
-      <|> (var_name
-           >>= fun v ->
-           char '.' *> char '(' *> number
-           <* char ')'
-           >>= (fun i ->
-           string " <- " *> d.expr d
-           >>= (fun e ->
-           return @@ eapp (evar "array_set") [ evar v; econst (const_int i); e ])
-           <|> return @@ eapp (evar "array_get") [ evar v; econst (const_int i) ])
-           <|> return (evar v))
-      <|> (let parse_case =
-             let* () = ws <* char '|' in
-             let* p = pattern in
-             let* () = ws <* string "->" in
-             let* e = d.expr_tuple d in
-             return (p, e)
-           in
-           let first =
-             parse_case
-             <|>
-             let* p = pattern in
-             let* () = ws *> string "->" *> ws in
-             let* e = d.expr_tuple d in
-             return (p, e)
-           in
-           let* subject =
-             keyword "match" *> ws *> d.expr_tuple d <* ws <* keyword "with"
-           in
-           let* case = first in
-           let* cases = many parse_case in
-           return (ematch subject case cases))
-      <|> (keyword "fun" *> many1 pattern
-           >>= fun ps ->
-           ws *> string "->" *> ws *> d.expr d
-           >>= fun b -> return (List.fold_right (fun patt acc -> elam patt acc) ps b))
-      <|> (keyword "if" *> d.expr_tuple d
-           >>= fun cond ->
-           keyword "then" *> d.expr_tuple d
-           >>= fun th ->
-           keyword "else" *> d.expr_tuple d >>= fun el -> return (eite cond th el))
-      <|> (letdef (d.expr_tuple d)
-           >>= fun (isrec, ident, rhs) ->
-           ws *> keyword "in" *> d.expr d
-           >>= fun in_ -> return (elet ~isrec ident rhs in_)))
+      let* () = ws in
+      let* c = peek_char_fail in
+      if c = '['
+      then
+        parse_empty_list <|> parse_list_sugar <|> parse_array_sugar
+        (* else if Char.lowercase_ascii c = c
+      then
+        fail ""
+        <|> (constant >>| fun x -> EConst x)
+        <|> array_or_var_sugar
+        <|> match_case_sugar
+        <|> fun_sugar
+        <|> ite_sugar
+        <|> letdef_sugar *)
+      else if c = '('
+      then char '(' *> char ')' *> return EUnit
+      else if is_digit c || c = '\'' || c = '"'
+      then constant >>| fun x -> EConst x
+      else
+        fail ""
+        <|> (constant >>| fun x -> EConst x)
+        <|> char '(' *> char ')' *> return EUnit
+        <|> char '[' *> ws *> char ']' *> return enil
+        <|> (constructor_name >>| fun name -> EConstruct (name, []))
+        <|> (char '['
+             *> ws
+             *>
+             let* first = d.expr_tuple d in
+             (let* rest = many (ws *> char ';' *> d.expr_tuple d) in
+              return (econs first (List.fold_right econs rest enil)))
+             <|> return (econs first enil)
+             <* ws
+             <* char ']')
+        <|> brackets
+              (return (fun h tl -> earray (h :: tl))
+               <*> (d.expr_tuple d <* ws)
+               <*> many (string ";" *> d.expr_tuple d <* ws)
+               <|> return @@ earray [])
+        <|> (var_name
+             >>= fun v ->
+             char '.' *> char '(' *> number
+             <* char ')'
+             >>= (fun i ->
+             string " <- " *> d.expr d
+             >>= (fun e ->
+             return @@ eapp (evar "array_set") [ evar v; econst (const_int i); e ])
+             <|> return @@ eapp (evar "array_get") [ evar v; econst (const_int i) ])
+             <|> return (evar v))
+        <|> match_case_sugar
+        <|> fun_sugar
+        <|> ite_sugar
+        <|> letdef_sugar)
   in
   let expr_long d =
     let* () = ws *> trace_pos "expr_long" in
