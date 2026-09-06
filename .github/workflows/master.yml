@@ -20,7 +20,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: kakadu18/ocaml:rukaml4.14
+      image: kakadu18/ocaml:rukaml5.5
 
     # The below probably could be used instead of styfle/cancel-workflow-action
     concurrency:
