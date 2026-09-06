@@ -22,7 +22,9 @@ void __mk_err_warning(const char *file, int line, const char *msg) {
 #define mk_err_fatal(msg) __mk_err_fatal(__FILE__, __LINE__, msg)
 #define mk_err_warning(msg) __mk_err_warning(__FILE__, __LINE__, msg)
 
-// #undef RUKAML_DEBUG
+#undef RUKAML_DEBUG
+#define RUKAML_DEBUG 0
+
 
 // clang-format off
 #if RUKAML_DEBUG == 1
@@ -83,6 +85,7 @@ typedef uint32_t rukaml_uint_t;
 const size_t rukaml_word_size = 4;
 #define PRIxVAL "x"
 #define PRIdVAL "d"
+#define PRIuint PRIu32
 #endif
 
 #define Set_field(dest, idx, newval) *((value *)dest + idx) = newval
@@ -100,6 +103,7 @@ const size_t rukaml_word_size = 4;
 #define Set_clo_arg(ans, i, v) Set_field(ans, 3 + i, v)
 
 int HEAP_SIZE = 4 * 8 * 4 * 4 * 1024; // in words
+
 const uint8_t Tuple_tag = 0;
 const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
@@ -111,7 +115,7 @@ struct gc_stats {
   size_t gs_current_bank;    // 0 = first bank, 1 = second
 };
 struct gc_data {
-  uint64_t ebp;
+  rukaml_uint_t ebp;
   uintptr_t main_bank;
   uintptr_t main_bank_fin;
   uintptr_t backup_bank;
@@ -168,25 +172,34 @@ void rukaml_initialize(size_t ebp, size_t argc, char **argv) {
     }
   }
   GC.ebp = ebp;
-  // log("%s. EBP=0x%lX\n", __func__, GC.ebp);
+  log("%s. EBP=0x%"PRIdVAL"\n", __func__, GC.ebp);
   const uint32_t size = rukaml_word_size * HEAP_SIZE;
-  GC.main_bank = (uintptr_t)malloc(size);
-  memset((void *)GC.main_bank, 0x80, size);
-  log("initial bank starts at 0x%" PRIxVAL "\n", GC.main_bank);
   const rukaml_uint_t right_alignment = 0x10;
+  const uint32_t alloc_size = size + right_alignment;
+  log("%s %d, size = %u alloc_size = %u\n", __func__, __LINE__, size, alloc_size);
+  GC.main_bank = (uintptr_t)malloc(alloc_size);
+  log("%s %d. Allocated!\n", __func__, __LINE__);
+  memset((void *)GC.main_bank, 0x80, alloc_size);
+  log("initial bank starts at 0x%" PRIxVAL "\n", GC.main_bank);
   rukaml_uint_t delta = (rukaml_uint_t)(GC.main_bank) % right_alignment;
   // log("delta = 0x%" PRIxPTR "\n", delta);
   assert(delta < right_alignment);
   if (delta != 0) {
     GC.main_bank += (right_alignment - delta);
   }
-  GC.main_bank_fin = GC.main_bank + HEAP_SIZE;
-  GC.backup_bank = (uintptr_t)malloc(size);
-  GC.backup_bank_fin = GC.backup_bank + HEAP_SIZE;
+  GC.main_bank_fin = GC.main_bank + size;
   GC.allocated_words = 0;
   GC.stats.gs_current_bank = 0;
   log("main   bank: 0x%" PRIxVAL "..0x%" PRIxVAL "\n", GC.main_bank,
       GC.main_bank_fin);
+  // printf("RUKAML main bank: 0x%lx..0x%lx (size=%u)\n", (unsigned long)GC.main_bank, (unsigned long)GC.main_bank_fin, size);
+  #if 1
+  GC.backup_bank = (uintptr_t)malloc(alloc_size);
+  GC.backup_bank_fin = GC.backup_bank + size;
+  // printf("RUKAML backup bank: 0x%lx..0x%lx\n", (unsigned long)GC.backup_bank, (unsigned long)GC.backup_bank + size);
+  #else
+  GC.backup_bank = GC.backup_bank_fin = 0;
+  #endif
   // log("backup bank: 0x%lX..0x%lX\n", (uint64_t)GC.backup_bank,
   // (uint64_t)GC.backup_bank_fin);
 
@@ -203,12 +216,15 @@ void rukaml_initialize(size_t ebp, size_t argc, char **argv) {
   }
 }
 
+
 static bool is_old_bank(value ptr) {
-  return GC.main_bank <= ptr && ptr < GC.main_bank_fin;
+  uintptr_t p = (uintptr_t)ptr;
+  return GC.main_bank <= p && p < GC.main_bank_fin;
 }
 
 static bool is_backup_bank(value ptr) {
-  return GC.backup_bank <= ptr && ptr < GC.backup_bank_fin;
+  uintptr_t p = (uintptr_t)ptr;
+  return GC.backup_bank <= p && p < GC.backup_bank_fin;
 }
 
 void dfs(size_t *allocated, value root) {
@@ -218,42 +234,43 @@ void dfs(size_t *allocated, value root) {
     return;
 
   uint8_t tag = TAG(root);
-  log("%s root = 0x%lX, tag = %u\n", __func__, (uint64_t)root, tag);
+  log("%s root = 0x%" PRIxVAL", tag = %u\n", __func__, (uintptr_t)root, tag);
   if (tag == Forward_tag)
     return;
+
   size_t size = SIZE(root);
   assert(size >= 1);
   value new_loc = (value)GC.backup_bank + *allocated * rukaml_word_size;
-  log("new_loc = 0x%lX\n", (uint64_t)new_loc);
+  log("new_loc = 0x%"PRIxVAL"\n", (uintptr_t)new_loc);
   *new_loc = HEADER(size, tag);
   *allocated += size + 1;
 
-  uint64_t first_child_ptr = *root;
+  // rukaml_uint_t first_child_ptr = *root;
 
-  log("Copying %lX to %lX\n", (uint64_t)root, (uint64_t)new_loc);
+  log("Copying %"PRIxVAL" to %"PRIxVAL"\n", (uintptr_t)root, (uintptr_t)new_loc);
   Set_field(root, -1, (value)HEADER(1, Forward_tag));
   Set_field(root, 0, new_loc);
 
   for (size_t i = 0; i < size; ++i)
     dfs(allocated, Field(root, i));
-  log("%s root = 0x%" PRIxPTR " finished\n", __func__, root);
+  log("%s root = 0x%" PRIxPTR " finished\n", __func__, (rukaml_uint_t)root);
 }
 
 value rukaml_gc_compact_sysv(size_t rsp) {
   assert(GC.ebp > rsp);
-  log("=== %s. EBP=0x%" PRIdVAL ", RSP=0x%" PRIdVAL "\n", __func__, GC.ebp,
+  log("=== %s. EBP=0x%" PRIxVAL ", RSP=0x%" PRIdVAL "\n", __func__, GC.ebp,
       rsp);
-  log("stack width = 0x%lX / 8\n", GC.ebp - rsp);
+  log("stack width = 0x%"PRIxPTR" / 8\n", GC.ebp - rsp);
 
   value *cur = (value *)GC.ebp;
   size_t new_size = 0;
-  while (cur > rsp) {
+  while ((rukaml_uint_t)cur > rsp) {
     // looking for pointers, that are in the current bank
     value obj = *cur;
     cur -= 1;
 
     if (is_old_bank(obj)) {
-      log("\t0x%lX a candidate?\n", obj);
+      log("\t0x%"PRIxPTR" a candidate?\n", (rukaml_uint_t)obj);
       dfs(&new_size, obj);
     }
   }
@@ -263,9 +280,9 @@ value rukaml_gc_compact_sysv(size_t rsp) {
 
 void rukaml_gc_stats_sysv(void) {
   printf("GC statistics\n");
-  printf("Total allocations: %ld(words)\n", GC.stats.gs_allocated_words);
-  printf("Currently allocated: %ld(words)\n", GC.allocated_words);
-  printf("Current bank: %ld\n", GC.stats.gs_current_bank);
+  printf("Total allocations: %zu(words)\n", GC.stats.gs_allocated_words);
+  printf("Currently allocated: %zu(words)\n", GC.allocated_words);
+  printf("Current bank: %d\n", GC.stats.gs_current_bank);
   fflush(stdout);
 }
 
@@ -282,26 +299,26 @@ void rukaml_trace_val(value arg, unsigned int level) {
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
 
   if (!IS_ON_HEAP(arg)) {
-    printf("Out of heap value: 0x%" PRIxVAL "\n", arg);
+    printf("Out of heap value: 0x%" PRIxVAL "\n", (uintptr_t)arg);
     return;
   }
   PAD(level);
-  printf("BLOCK:  0x%" PRIxVAL ", he=0x%" PRIxVAL ", tag = %hhu, size=%u"
-         "\n",
-         arg, Field(arg, -1), TAG(arg), SIZE(arg));
-  fflush(stdout);
+  // printf("BLOCK:  0x%" PRIxVAL ", he=0x%" PRIxVAL ", tag = %hhu, size=%u"
+  //        "\n",
+  //        (uintptr_t)arg, (uintptr_t)(Field(arg, -1)), TAG(arg), SIZE(arg));
+  // fflush(stdout);
   if (TAG(arg) == String_tag) {
     PAD(level + 1);
-    printf("\"%s\"\n", (char *)arg);
-    fflush(stdout);
+    // printf("\"%s\"\n", (char *)arg);
+    // fflush(stdout);
     return;
   }
   if (TAG(arg) == Closure_tag) {
     PAD(level + 1);
-    printf("closure, code = 0x%" PRIxVAL ", argc = %" PRIdVAL
-           ", arg_got = %" PRIdVAL "\n",
-           Clo_code(arg), Clo_arity(arg), Clo_received(arg));
-    for (size_t i = 0; i < Clo_received((arg)); i++) {
+    // printf("closure, code = 0x%" PRIxVAL ", argc = %" PRIdVAL
+    //        ", arg_got = %" PRIdVAL "\n",
+    //        (uintptr_t)(Clo_code(arg)), (int)(Clo_arity(arg)), (int)(Clo_received(arg)));
+    for (size_t i = 0; i < (int)(Clo_received(arg)); i++) {
       PAD(level + 5);
       printf("%u: ", i);
       rukaml_trace_val(Clo_arg(arg, i), level + 6);
@@ -316,7 +333,7 @@ void rukaml_trace_val(value arg, unsigned int level) {
     value field = Field(arg, i);
     if ((unsigned)(field) < 100) {
       PAD(level + 1);
-      printf("%lu -> Int %" PRIdVAL "\n", i, Int_val(field));
+      printf("%zu -> Int %" PRIdVAL "\n", i, Int_val(field));
     } else {
       PAD(level + 1);
       printf("%" PRIdVAL " -> ", i);
@@ -333,7 +350,7 @@ void rukaml_trace_val(value arg, unsigned int level) {
 // Rukaml calling convention to default one
 void rukaml_print_int(value x) {
   // printf("%s %" PRIdVAL " 0x%" PRIxVAL "\n", __func__, x, x);
-  printf("%s %" PRIdVAL "\n", __func__, x);
+  printf("%s %" PRIdVAL "\n", __func__, Int_val(x) );
   fflush(stdout);
 }
 
@@ -347,15 +364,12 @@ void *rukaml_apply0(fun0 f) {
 }
 
 value rukaml_alloc_block(size_t size, uint8_t tag) {
-  // printf("\n%s, size = %lu, tag = %u\n", __func__, size,
-  //        ((unsigned)tag % 0xFF));
   if (GC.allocated_words + size + 1 > HEAP_SIZE) {
     fprintf(stderr, "Not enough memory\n");
     exit(1);
   }
   value rez = (value)((rukaml_uint_t)GC.main_bank +
                       rukaml_word_size * GC.allocated_words);
-  // printf("rez = 0x%" PRIxVAL "\n", rez);
   GC.allocated_words += (size + 1);
   GC.stats.gs_allocated_words += size + 1;
   Set_field(rez, 0, (value)HEADER(size, tag));
@@ -366,8 +380,8 @@ value rukaml_alloc_block(size_t size, uint8_t tag) {
   // printf("TAG(ans) = 0x%" PRIxVAL "\n", TAG(ans));
   assert(TAG(ans) == tag);
   assert(SIZE(ans) == size);
-  log("A block 0x%" PRIxVAL " is created of size %ld. Allocated words = %lu\n",
-      (value)(rez + 1), size, GC.allocated_words);
+  log("A block 0x%" PRIxVAL " is created of size %zu. Allocated words = %"PRIuint"\n",
+      (uintptr_t)(value)(rez + 1), size, GC.allocated_words);
 
   for (size_t i = 0; i < size; ++i) {
     Set_field(ans, i, Val_int(0));
@@ -407,7 +421,7 @@ void *rukaml_alloc_closure(void *func, int32_t argsc) {
   memset(ans + 3, 0, argsc * sizeof(void *));
 #if RUKAML_DEBUG == 1
   printf("%s argc = %" PRIdVAL ", ans = 0x%" PRIxPTR "\n\n", __func__,
-         Clo_arity(ans), ans);
+         (int)Clo_arity(ans), (uintptr_t)ans);
   fflush(stdout);
 #endif
   assert(Clo_arity(ans) == Val_int(argsc));
@@ -436,7 +450,7 @@ value rukaml_alloc_array(value size) {
 // Standart CC
 value rukaml_tag0(value obj) {
   assert(obj != NULL);
-  return Val_int(TAG(obj));
+  return Val_int((rukaml_int_t)TAG(obj));
 }
 
 value rukaml_tag(DECLARE_FAKE_ARGS, value obj) { return rukaml_tag0(obj); }
@@ -457,7 +471,7 @@ value rukaml_array_stdin(void) {
   value arr = rukaml_alloc_array(Val_int(size));
 
   for (int i = 0; i < size; i++) {
-    Set_field(arr, i, Val_int(buf[i]));
+    Set_field(arr, i, Val_int((rukaml_int_t)buf[i]));
   }
   return arr;
 }
@@ -470,7 +484,7 @@ value rukaml_array_read_in(DECLARE_FAKE_ARGS, void **str) {
     ;
   char path[len];
   for (int i = 0; i < len; i++) {
-    path[i] = (char)((uint64_t)(str[i]));
+    path[i] = (char)((rukaml_int_t)(str[i]));
   }
 
   FILE *fp = fopen(path, "r");
@@ -485,7 +499,7 @@ value rukaml_array_read_in(DECLARE_FAKE_ARGS, void **str) {
   value arr = rukaml_alloc_array(Val_int(size));
 
   for (int i = 0; i < size; i++) {
-    value c = Val_int((uint64_t)fgetc(fp));
+    value c = Val_int((rukaml_int_t)fgetc(fp));
     Set_field(arr, i, c);
   }
   fread(arr, sizeof(void *), size, fp);
@@ -538,7 +552,7 @@ value rukaml_field(size_t n, value r) {
   assert(n < SIZE(r));
   value ans = Field(r, n);
   if (0) {
-    printf("%s: field %" PRIx64 "d = 0x%" PRIxPTR "\n", __func__, n, ans);
+    printf("%s: field %zu = 0x%" PRIxPTR "\n", __func__, n, (uintptr_t)ans);
     rukaml_trace_val(ans, 3);
   }
   return ans;
@@ -546,7 +560,7 @@ value rukaml_field(size_t n, value r) {
 
 value rukaml_applyN(value f, rukaml_int_t argc, ...) {
   if (!IS_ON_HEAP(f)) {
-    printf("%s, 0x%" PRIxVAL "\n", __func__, f);
+    printf("%s, 0x%" PRIxVAL "\n", __func__,  (uintptr_t)f);
     printf("main bank:     0x%" PRIxPTR "...0x%" PRIxPTR "\n", GC.main_bank,
            GC.main_bank_fin);
     mk_err_fatal("closure is not on heap");
@@ -558,10 +572,10 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
   va_start(argp, argc);
 #if (RUKAML_DEBUG == 1)
   rukaml_trace_val(f, 2);
-  log("%s argc = %" PRIx32 ", clo_val = 0x%" PRIxVAL "\n\n", __func__, argc, f);
+  log("%s argc = %" PRIx32 ", clo_val = 0x%" PRIxVAL "\n\n", __func__, argc,  (uintptr_t)f);
   fflush(stdout);
 
-  log("%s Clo_code = 0x%" PRIXPTR "\n", __func__, (void *)(Clo_code(f)));
+  log("%s Clo_code = 0x%" PRIxVAL "\n", __func__, (uintptr_t)(Clo_code(f)));
   log("%s Clo_arity = %" PRIdVAL ", Clo_received = %" PRIdVAL "\n\n", __func__,
       Int_val(Clo_arity(f)), Int_val(Clo_received(f)));
 
@@ -570,7 +584,7 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
     if (IS_ON_HEAP(arg)) {
       rukaml_trace_val(arg, 7);
     } else
-      log("    Arg %d is not on heap: 0x%" PRIX64 "\n", i, arg);
+      log("    Arg %zu is not on heap: 0x%" PRIxVAL "\n", i,  (uintptr_t)arg);
   }
   fflush(stdout);
 #endif
@@ -583,8 +597,6 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
     // log("Full application\n");
     size_t i = 0, j;
     fun0 callable;
-    // log("argsc = %d, args_received=%d, new_args=%d\n",
-    //     f_closure->argsc, f_closure->args_received, argc);
     void **stack_args = alloca(Int_val(Clo_arity(f)) * sizeof(void *));
     for (i = 0; i < Int_val(Clo_received(f)); ++i) {
       stack_args[i] = Clo_arg(f, i);
@@ -640,7 +652,7 @@ void *rukaml_match_failure() {
 
 value rukaml_alloc_string(value len) {
   size_t payload_words_n = (Int_val(len) + rukaml_word_size) / rukaml_word_size;
-  assert(payload_words_n * rukaml_word_size > len);
+  assert(payload_words_n * rukaml_word_size > Int_val(len) );
   void *block = rukaml_alloc_block(payload_words_n, String_tag);
   assert(TAG(block) == String_tag);
   assert(SIZE(block) == payload_words_n);
@@ -659,13 +671,13 @@ value rukaml_string_length_sysv(value str) {
   assert(IS_ON_HEAP(str));
   if (TAG(str) != String_tag) {
     // mk_err_fatal("tag mismatch");
-    fprintf(stderr, "[warning] file=%s line=%d msg=tag mismatch, got %lu\n",
+    fprintf(stderr, "[warning] file=%s line=%d msg=tag mismatch, got %"PRIu8"\n",
             __FILE__, __LINE__, TAG(str));
     fflush(stderr);
     exit(1);
   }
 
-  int64_t ans = strlen((char *)str);
+  rukaml_int_t ans = strlen((char *)str);
   // printf("Len of rukaml string at addr = 0x%LX is %d\n", str, ans);
   // fflush(stdout);
   return Val_int(ans);
@@ -716,20 +728,20 @@ value rukaml_string_nth_sysv(value str, value n) {
   if (Val_int(n) >= str_len) {
     mk_err_fatal("index out of bounds");
   }
-
-  return Val_int(((char *)str)[Int_val(n)]);
+  char c = ((char *)str)[Int_val(n)];
+  return Val_int((rukaml_int_t)c);
 }
 
 value rukaml_output_string_sysv(int dest, value str) {
   if (dest != 1) {
-    log("dest = %ld\n", (int64_t)dest);
+    log("dest = %d\n", dest);
     assert(dest == 1);
   };
   // printf("str addr = 0x%" PRIxVAL "\n", str);
   // printf("str = '%s', len=%d\n", (char *)str, strlen((char *)str));
   if (TAG(str) != String_tag) {
-    printf("str argument = 0x%" PRIx64 ", tag = %ld\n", (long unsigned)str,
-           TAG(str));
+    printf("str argument = 0x%" PRIxVAL ", tag = %"PRIu8"\n", (uintptr_t)str,
+           (uint8_t)TAG(str));
     mk_err_fatal("tag mismatch");
   }
   printf("%s", (char *)str);
@@ -1022,11 +1034,11 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
       break;
     }
     case 'b': {
-      int64_t v = va_arg(args, int64_t);
+      uintptr_t v = va_arg(args, uintptr_t);
       if (v == 0)
-        output_len += 5;
+        output_len += 5; // "false"
       else
-        output_len += 4;
+        output_len += 4; // "true"
       argslen++;
       sprintf_insert_arg(&__args_start, &__args_fin, (void *)v);
       break;
@@ -1035,7 +1047,7 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
       char c = (char)va_arg(args, int64_t);
       output_len++;
       argslen++;
-      sprintf_insert_arg(&__args_start, &__args_fin, Val_int(c));
+      sprintf_insert_arg(&__args_start, &__args_fin, Val_int((rukaml_int_t)c));
       break;
     }
     case 'd': {
@@ -1440,7 +1452,7 @@ value rukaml_input_all_sysv(value _file) {
     printf("Can't read from stdin\n");
     exit(1);
   }
-  if (_file == 1) {
+  if (_file == (value)1) {
     printf("Can't read from stdout\n");
     exit(1);
   }
