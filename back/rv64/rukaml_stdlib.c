@@ -208,7 +208,7 @@ void rukaml_initialize(size_t ebp, size_t argc, char **argv) {
   assert(SIZE(_argv) == argc);
   for (size_t i = 0; i < argc; i++) {
     char *s = argv[i];
-    int len = strlen(s);
+    size_t len = strlen(s);
     value _str = rukaml_alloc_string(Val_int(len));
     assert(TAG(_str) == String_tag);
     strcpy((char *)_str, s);
@@ -282,7 +282,7 @@ void rukaml_gc_stats_sysv(void) {
   printf("GC statistics\n");
   printf("Total allocations: %zu(words)\n", GC.stats.gs_allocated_words);
   printf("Currently allocated: %zu(words)\n", GC.allocated_words);
-  printf("Current bank: %d\n", GC.stats.gs_current_bank);
+  printf("Current bank: %zu\n", GC.stats.gs_current_bank);
   fflush(stdout);
 }
 
@@ -320,7 +320,7 @@ void rukaml_trace_val(value arg, unsigned int level) {
     //        (uintptr_t)(Clo_code(arg)), (int)(Clo_arity(arg)), (int)(Clo_received(arg)));
     for (size_t i = 0; i < (int)(Clo_received(arg)); i++) {
       PAD(level + 5);
-      printf("%u: ", i);
+      printf("%" PRIdVAL ": ", i);
       rukaml_trace_val(Clo_arg(arg, i), level + 6);
       printf("\n");
     }
@@ -413,7 +413,7 @@ void *rukaml_alloc_closure(void *func, int32_t argsc) {
   // fflush(stdout);
 
   Set_clo_code(ans, func);
-  Set_clo_arity(ans, Val_int(argsc));
+  Set_clo_arity(ans, Val_int((rukaml_int_t)argsc));
   Set_clo_received(ans, Val_int(0));
 #if RUKAML_DEBUG == 1
   // printf("\nstore code ptr = 0x%" PRIxPTR "\n", (Clo_code(ans)));
@@ -424,7 +424,7 @@ void *rukaml_alloc_closure(void *func, int32_t argsc) {
          (int)Clo_arity(ans), (uintptr_t)ans);
   fflush(stdout);
 #endif
-  assert(Clo_arity(ans) == Val_int(argsc));
+  assert(Clo_arity(ans) == Val_int((rukaml_int_t)argsc));
   assert(Clo_received(ans) == Val_int(0));
   return ans;
 }
@@ -615,7 +615,7 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
       // stack_args[j]);
     }
     va_end(argp);
-    callable = (fun0)(Clo_code(f));
+    callable = (fun0)(uintptr_t)(Clo_code(f));
     return callable();
   } else {
     // There we have under application
@@ -672,7 +672,7 @@ value rukaml_string_length_sysv(value str) {
   if (TAG(str) != String_tag) {
     // mk_err_fatal("tag mismatch");
     fprintf(stderr, "[warning] file=%s line=%d msg=tag mismatch, got %"PRIu8"\n",
-            __FILE__, __LINE__, TAG(str));
+            __FILE__, __LINE__, (uint8_t)TAG(str));
     fflush(stderr);
     exit(1);
   }
@@ -803,7 +803,7 @@ void rukaml_fprintf_impl(void *dest, value fmt, va_list args) {
     }
     case 'x': {
       value v = va_arg(args, value);
-      fprintf(stdout, "%04x", Int_val(v));
+      fprintf(stdout, "%"PRIxVAL, Int_val(v));
       break;
     }
     case 'd': {
@@ -923,7 +923,7 @@ value rukaml_alloc_fprintf_closure_sysv(void *out_channel, value fmt) {
     return rukaml_fprintf_wrap(FAKE_ARGS, out_channel, fmt);
   }
 
-  value closure = rukaml_alloc_closure((void *)rukaml_fprintf_wrap, 2 + arity);
+  value closure = rukaml_alloc_closure((void *)(uintptr_t)rukaml_fprintf_wrap, 2 + arity);
   assert(TAG(closure) == Closure_tag);
 
   return rukaml_applyN(closure, 2, out_channel, fmt);
@@ -1209,7 +1209,7 @@ void *rukaml_alloc_sprintf_closure(DECLARE_FAKE_ARGS, value fmt) {
     return rukaml_sprintf_wrap(FAKE_ARGS, fmt);
   }
 
-  void *closure = rukaml_alloc_closure(rukaml_sprintf_wrap, 1 + arity);
+  void *closure = rukaml_alloc_closure((void*)(uintptr_t)rukaml_sprintf_wrap, 1 + arity);
 
   return rukaml_applyN(closure, 1, fmt);
 }
