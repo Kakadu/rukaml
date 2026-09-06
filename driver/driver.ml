@@ -248,6 +248,7 @@ let () =
     ; "--cps", Set cps, " enable cps conversion"
     ; "--caa", Set caa, " enable call arity analysis"
     ; "--no-ppx", Set ppx, " disable preprocessing"
+    ; "--rename-main", Bool (fun b -> RV64_impl.rename_main := b), " "
     ]
   in
   parse args (fun s -> inp_path := Some s) "rukaml";

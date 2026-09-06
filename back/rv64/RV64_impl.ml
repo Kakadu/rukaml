@@ -1460,31 +1460,35 @@ let emit_global_constant is_toplevel ppf ident expr =
 
 let put_init_global_immediates ppf =
   log "\nGenerating global immediates";
+  let fname = "rukaml_init_global_immediates" in
   printfn ppf "";
   printfn ppf ".text";
-  printfn ppf ".globl rukaml_init_global_immediates";
-  printfn ppf "rukaml_init_global_immediates:";
+  printfn ppf ".globl %s" fname;
+  printfn ppf "%s:" fname;
   with_two_slots (fun _ ra_name ->
     emit sd ra (pp_to_mach ra_name);
     Toplevel.iter_immediates (fun { ident; _ } ->
       emit call (Format.asprintf "init_%a" Toplevel.pp_label_exn ident));
     emit ld ra (pp_to_mach ra_name);
     ());
-  emit ret;
+  emit ret ~comm:(sprintf "fin %s" fname);
   Machine.flush_queue ppf
 ;;
 
 let emit_global_eval ppf is_toplevel ident expr =
+  let fname = Format.asprintf "init_%a" Toplevel.pp_label_exn ident in
   printfn ppf "\n.text";
-  printfn ppf "init_%a:" Toplevel.pp_label_exn ident;
+  printfn ppf "%s:" fname;
   (* emit addi sp sp (-16); *)
   (* emit sd ra (ROffset (SP, 0)); *)
   generate_body is_toplevel expr;
   (* emit ld ra (ROffset (SP, 0)); *)
   (* emit shrink_stack 2 *)
-  emit ret;
+  emit ret ~comm:(sprintf "end %s" fname);
   Machine.flush_queue ppf
 ;;
+
+let rename_main = ref false
 
 let codegen ?(wrap_main_into_start = true) anf file =
   let _ = wrap_main_into_start in
@@ -1581,13 +1585,25 @@ let codegen ?(wrap_main_into_start = true) anf file =
       | `Main (name, expr) ->
         put_init_global_immediates ppf;
         printfn ppf "\n.text";
-        printfn ppf ".globl main";
-        printfn ppf "main:";
+        printfn ppf ".globl rukaml_initilize_string_constants";
+        printfn ppf "rukaml_initilize_string_constants:";
+        emit grow_stack 4;
+        emit sd ra (make_sp_offset 0);
+        do_string_init ();
+        emit ld ra (make_sp_offset 0);
+        emit shrink_stack 4;
+        emit ret;
+        Machine.flush_queue ppf;
+        (* *)
+        let main_name = if !rename_main then "mymain" else "main" in
+        printfn ppf "\n.text";
+        printfn ppf ".globl %s" main_name;
+        printfn ppf "%s:" main_name;
         emit mv a2 a1 ~comm:"argv";
         emit mv a1 a0 ~comm:"argc";
         emit mv a0 sp ~comm:"Stack pointer is first";
         emit call "rukaml_initialize";
-        do_string_init ();
+        emit call "rukaml_initilize_string_constants";
         emit call "rukaml_init_global_immediates";
         emit comment "this is main";
         emit li a0 0;
