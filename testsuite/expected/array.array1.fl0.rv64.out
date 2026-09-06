@@ -6,6 +6,15 @@ rukaml_init_global_immediates:
   sd ra, (sp)
   ld ra, (sp)
   addi sp, sp, 16
+  ret # fin rukaml_init_global_immediates
+
+.text
+.globl rukaml_initilize_string_constants
+rukaml_initilize_string_constants:
+  addi sp, sp, -32
+  sd ra, (sp)
+  ld ra, (sp)
+  addi sp, sp, 32
   ret
 
 .text
@@ -15,6 +24,7 @@ main:
   mv a1, a0 # argc
   mv a0, sp # Stack pointer is first
   call rukaml_initialize
+  call rukaml_initilize_string_constants
   call rukaml_init_global_immediates
 # this is main
   li a0, 0
