@@ -6,7 +6,7 @@
  (flags
   (:standard -linkall))
  (preprocess
-  (pps ppx_inline_test))
+  (pps ppx_inline_test_nobase))
  (instrumentation
   (backend bisect_ppx)))
 
@@ -28,7 +28,7 @@
  (flags
   (:standard -linkall))
  (preprocess
-  (pps ppx_inline_test))
+  (pps ppx_inline_test_nobase))
  (instrumentation
   (backend bisect_ppx)))
 

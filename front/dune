@@ -14,7 +14,7 @@
  ;(inline_tests)
  (libraries ppx_deriving.runtime angstrom base str)
  (preprocess
-  (pps ppx_deriving.show ppx_expect))
+  (pps ppx_deriving.show ppx_expect_nobase))
  (instrumentation
   (backend bisect_ppx)))
 
@@ -24,4 +24,4 @@
  (inline_tests)
  (modules test_stuff test_parsing)
  (preprocess
-  (pps ppx_deriving.show ppx_expect)))
+  (pps ppx_deriving.show ppx_expect_nobase)))

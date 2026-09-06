@@ -29,7 +29,6 @@
   base
   stdio
   ppx_deriving
-  (ppx_sexp_conv :build)
   bisect_ppx_ng
   parsexp
   (angstrom
@@ -40,6 +39,8 @@
    (>= 2.1.0))
   qcheck
   ppx_deriving_qcheck
+  ppx_inline_test_nobase
+  (ppx_sexp_conv :build)
   ;
   (odoc :with-doc)
   (ocamlformat
