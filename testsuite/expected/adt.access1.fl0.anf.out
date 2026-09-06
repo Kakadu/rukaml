@@ -1,0 +1,53 @@
+let pp_int oc n =
+  let temp2 = fprintf oc "%d" in
+  temp2 n 
+let rec pp_my_list1 oc pp_item ls =
+  (if (ls = 0)
+  then 0
+  else let temp14 = block_tag ls  in
+       (if (temp14 = 1)
+       then let temp12 = block_nth ls 0 in
+            let temp13 = block_nth ls 1 in
+            let temp5 = pp_item oc  in
+            let temp6 = temp5 temp12  in
+            pp_my_list1 oc pp_item temp13
+       else match_failure 666 ))
+let () =
+  let temp17 = pp_my_list1 stdout  in
+  let temp18 = temp17 pp_int  in
+  let temp19 = Constr_0 in
+  let temp20 = (Constr_1 (5, temp19)) in
+  let temp21 = (Constr_1 (4, temp20)) in
+  let temp22 = (Constr_1 (3, temp21)) in
+  let temp23 = (Constr_1 (2, temp22)) in
+  let temp24 = (Constr_1 (1, temp23)) in
+  let temp25 = temp18 temp24  in
+  temp25
+let rec pp_my_list2 oc pp_item ls =
+  (if (ls = 0)
+  then 0
+  else let temp37 = block_tag ls  in
+       (if (temp37 = 1)
+       then let temp34 = block_nth ls 0 in
+            let temp35 = block_nth temp34 0 in
+            let temp36 = block_nth temp34 1 in
+            let temp27 = pp_item oc  in
+            let temp28 = temp27 temp35  in
+            pp_my_list2 oc pp_item temp36
+       else match_failure 666 ))
+let () =
+  let temp40 = pp_my_list2 stdout  in
+  let temp41 = temp40 pp_int  in
+  let temp42 = Constr_0 in
+  let temp43 = (1, temp42) in
+    let temp44 = (Constr_1 temp43) in
+    let temp45 = (2, temp44) in
+      let temp46 = (Constr_1 temp45) in
+      let temp47 = (3, temp46) in
+        let temp48 = (Constr_1 temp47) in
+        let temp49 = (4, temp48) in
+          let temp50 = (Constr_1 temp49) in
+          let temp51 = temp41 temp50  in
+          temp51
+let main =
+  0

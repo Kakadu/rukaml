@@ -1,0 +1,9 @@
+/*.anf.ml
+/compiler.exe
+/compiler.rv32.exe
+/amd64.exe
+/compiler.rv32.s
+/compiler.embox.s
+/compiler.amd64.s
+/compiler.s
+/perf.data*

@@ -1,0 +1,83 @@
+open Frontend
+
+(* TODO: constructors should not be atomic/immediate *)
+type imm_expr =
+  | AUnit
+  | AConst of Frontend.Parsetree.const
+  | AVar of Frontend.Ident.t
+  | APrimitive of string * int
+  (* | AConstruct of int * imm_expr list *)
+  | AArray of imm_expr list
+  | ALam of apat * expr
+
+and c_expr =
+  | CApp of imm_expr * imm_expr * imm_expr list
+  | CIte of c_expr * expr * expr
+  | CConstruct of int * imm_expr list
+  | CTuple of imm_expr * imm_expr * imm_expr list
+  | CAtom of imm_expr
+
+and expr =
+  | ELet of Parsetree.rec_flag * apat * c_expr * expr
+  | EComplex of c_expr
+
+and apat =
+  | Apat_any
+  | Apat_unit
+  | Apat_var of Ident.t
+  | Apat_const of Parsetree.const
+
+and vb = Parsetree.rec_flag * apat * expr
+
+type stru_item = ANF_vb of vb
+type stru = stru_item list
+
+val show_c_expr : c_expr -> string
+val pp_a : Format.formatter -> imm_expr -> unit
+val pp_c : Format.formatter -> c_expr -> unit
+val pp : Format.formatter -> expr -> unit
+val pp_apat : Format.formatter -> apat -> unit
+val pp_stru : Format.formatter -> stru -> unit
+val is_infix_binop : string -> bool
+val group_abstractions : expr -> apat list * expr
+val simplify_stru : stru -> stru
+val anf : Typedtree.expr -> expr
+val anf_stru : Typedtree.structure_item list -> stru
+
+(** Gensym stuff *)
+val anf_pat
+  :  Typedtree.pattern
+  -> ?kbefore:(Ident.t -> expr -> expr)
+  -> (Ident.t -> expr)
+  -> expr
+
+val reset_gensym : unit -> unit
+val gensym : unit -> int
+val gensym_s : ?prefix:string -> unit -> string
+val gensym_id : ?prefix:string -> unit -> Frontend.Ident.t
+
+(** Config stuff *)
+
+val disable_arity_inline : unit -> unit
+val disable_cmp_into_if_inline : unit -> unit
+val set_logging : bool -> unit
+
+type iterator =
+  { aconst : iterator -> Parsetree.const -> unit
+  ; avar : iterator -> Ident.t -> unit
+  ; aprimitive : iterator -> string -> int -> unit
+  ; ctuple : iterator -> imm_expr -> imm_expr -> imm_expr list -> unit
+  ; cconstruct : iterator -> int -> imm_expr list -> unit
+  ; aarray : iterator -> imm_expr list -> unit
+  ; alam : iterator -> apat -> expr -> unit
+  ; catom : iterator -> imm_expr -> unit
+  ; cite : iterator -> c_expr -> expr -> expr -> unit
+  ; capp : iterator -> imm_expr -> imm_expr -> imm_expr list -> unit
+  ; elet : iterator -> Parsetree.rec_flag -> apat -> c_expr -> expr -> unit
+  ; cconst_string : iterator -> string -> unit
+  ; on_expr : iterator -> expr -> unit
+  ; on_cexpr : iterator -> c_expr -> unit
+  ; on_imm : iterator -> imm_expr -> unit
+  }
+
+val default_iterator : iterator

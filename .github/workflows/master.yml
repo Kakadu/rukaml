@@ -15,6 +15,7 @@ env:
   OPAMYES: true
   OPAMCONFIRMLEVEL: unsafe-yes
   DUNE_PROFILE: release
+  RUKAML_OMIT_RV32: 1
 
 jobs:
   build:
@@ -39,6 +40,8 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 1
+
+      - run: opam update
 
       - name: Install dependencies via Makefile
         run: make deps

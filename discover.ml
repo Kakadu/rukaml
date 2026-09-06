@@ -1,6 +1,5 @@
 open! Base
 open Stdio
-
 module C = Configurator.V1
 
 type cmd =
@@ -23,8 +22,8 @@ type toolchain =
   }
 [@@deriving sexp_of]
 
+let empty_toolchain = { compile = None; assemble = None; link = None; run = None }
 let spf = Printf.sprintf
-
 let log fmt = Printf.ksprintf (fun msg -> printf "discover: %s\n" msg) fmt
 
 let discover_bin cfg path : string option =
@@ -43,11 +42,9 @@ let discover_toolchain cfg defaults ~suffix =
       let flags = Option.value (Sys.getenv env.flags) ~default:default.flags in
       String.concat ~sep:" " [ bin; flags ])
   in
-
   (* bind is used to make every next step run
      only if the previous one is successful *)
   let ( >>= ) = Option.( >>= ) in
-
   let suffix = String.uppercase suffix in
   let compile =
     log "discovering %s compiler" suffix;
@@ -55,7 +52,6 @@ let discover_toolchain cfg defaults ~suffix =
       ~env:{ path = spf "CC_%s" suffix; flags = spf "CFLAGS_%s" suffix }
       ~default:defaults.cc
   in
-
   let assemble =
     compile
     >>= fun _ ->
@@ -64,7 +60,6 @@ let discover_toolchain cfg defaults ~suffix =
       ~env:{ path = spf "AS_%s" suffix; flags = spf "AS_FLAGS_%s" suffix }
       ~default:defaults.as_
   in
-
   let link =
     assemble
     >>= fun _ ->
@@ -73,7 +68,6 @@ let discover_toolchain cfg defaults ~suffix =
       ~env:{ path = spf "LD_%s" suffix; flags = spf "LD_FLAGS_%s" suffix }
       ~default:defaults.ld
   in
-
   let run =
     link
     >>= fun _ ->
@@ -82,22 +76,17 @@ let discover_toolchain cfg defaults ~suffix =
       ~env:{ path = spf "RUN_%s" suffix; flags = spf "RUN_FLAGS_%s" suffix }
       ~default:defaults.run
   in
-
   { compile; assemble; link; run }
 ;;
 
 let export_toolchain toolchain ~suffix =
   let default = "none" in
-
   let compile = Option.value toolchain.compile ~default in
   Out_channel.write_all (spf "cc_%s" suffix) ~data:compile;
-
   let assemble = Option.value toolchain.assemble ~default in
   Out_channel.write_all (spf "as_%s" suffix) ~data:assemble;
-
   let link = Option.value toolchain.link ~default in
   Out_channel.write_all (spf "ld_%s" suffix) ~data:link;
-
   let run = Option.value toolchain.run ~default in
   Out_channel.write_all (spf "run_%s" suffix) ~data:run
 ;;
@@ -107,7 +96,6 @@ let () =
   let print_toolchain toolchain =
     sexp_of_toolchain toolchain |> Sexp.to_string_hum ~indent:10 |> log "%s\n"
   in
-
   let gcc_amd64 = "gcc-13" in
   let defaults_amd64 =
     { cc = { path = gcc_amd64; flags = "-g -fPIC -Wall -Wpedantic" }
@@ -119,19 +107,37 @@ let () =
   let toolchain_amd64 = discover_toolchain cfg defaults_amd64 ~suffix:"amd64" in
   export_toolchain toolchain_amd64 ~suffix:"amd64";
   print_toolchain toolchain_amd64;
-
   let gcc_rv64 = "riscv64-linux-gnu-gcc-13" in
   let defaults_rv64 =
-    { cc = { defaults_amd64.cc with path = gcc_rv64 }
-    ; as_ = { path = gcc_rv64; flags = "-x assembler -c" }
+    { cc = { path = gcc_rv64; flags = "-g -fPIC -Wall -Wundef -Wpedantic -pipe" }
+    ; as_ = { path = gcc_rv64; flags = "-x assembler -c -march=rv64gc" }
     ; ld = { path = gcc_rv64; flags = "" }
-    ; run = { path = "qemu-riscv64-static"; flags = "-L /usr/riscv64-linux-gnu" }
+    ; run = { path = "qemu-riscv64"; flags = "-L /usr/riscv64-linux-gnu" }
     }
   in
   let toolchain_rv64 = discover_toolchain cfg defaults_rv64 ~suffix:"rv64" in
   export_toolchain toolchain_rv64 ~suffix:"rv64";
   print_toolchain toolchain_rv64;
-
+  let () =
+    let gcc_rv32 = "riscv64-linux-gnu-gcc-13" in
+    let defaults_rv32 =
+      { cc =
+          { path = gcc_rv32
+          ; flags = "-g -fPIC -Wall -Wpedantic -march=rv32imac -mabi=ilp32 "
+          }
+      ; as_ = { path = gcc_rv32; flags = "-x assembler -c -march=rv32imac -mabi=ilp32" }
+      ; ld = { path = gcc_rv32; flags = "" }
+      ; run = { path = "qemu-riscv32"; flags = "-L /usr/riscv32-linux-gnu" }
+      }
+    in
+    let toolchain_rv32 =
+      match Sys.getenv "RUKAML_OMIT_RV32" with
+      | Some _ -> empty_toolchain
+      | None -> discover_toolchain cfg defaults_rv32 ~suffix:"rv32"
+    in
+    export_toolchain toolchain_rv32 ~suffix:"rv32";
+    print_toolchain toolchain_rv32
+  in
   let clang = "clang-16" in
   let defaults_llvm =
     { cc = { defaults_amd64.cc with path = clang }

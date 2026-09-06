@@ -6,5 +6,7 @@ test
   (run
     (stdout
       "rukaml_print_int 8"
-      "Total closure allocations: 24"))
+      "Total closure allocations: 25"))
 *)
+
+let main = 0

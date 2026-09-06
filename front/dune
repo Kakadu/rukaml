@@ -1,9 +1,20 @@
 (library
  (name Frontend)
- (modules Ident inferencer parsetree parsing Pprinttyped Pprint typedtree)
- (libraries ppx_deriving.runtime angstrom base)
+ (public_name rukaml.frontend)
+ (modules
+  Ident
+  inferencer
+  parsetree
+  parsing
+  Pprinttyped
+  Pprint
+  typedtree
+  ;
+  )
+ ;(inline_tests)
+ (libraries ppx_deriving.runtime angstrom base str)
  (preprocess
-  (pps ppx_deriving.show ppx_expect))
+  (pps ppx_deriving.show ppx_expect_nobase))
  (instrumentation
   (backend bisect_ppx)))
 
@@ -13,4 +24,4 @@
  (inline_tests)
  (modules test_stuff test_parsing)
  (preprocess
-  (pps ppx_deriving.show ppx_expect)))
+  (pps ppx_deriving.show ppx_expect_nobase)))

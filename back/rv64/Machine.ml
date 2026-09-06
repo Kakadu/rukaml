@@ -20,13 +20,23 @@ type instr =
   | Addi of reg * reg * int
   | Add of reg * reg * reg
   | Sub of reg * reg * reg
+  | Mul of reg * reg * reg
+  | Div of reg * reg * reg
   | Mulw of reg * reg * reg (** RV64M *)
+  | And_ of reg * reg * reg (** AND. and rd, rs1, rs2. ▸rd = rs1 & rs2 *)
+  | Or_ of reg * reg * reg
+  | Slt of reg * reg * reg (** Set Less Than.  slt rd, rs1, rs2.  rd = (rs1 < rs2) *)
+  | Slti of reg * reg * int
+  | Sltiu of reg * reg * int
+  (** Set Less Than Immediate Unsigned.  sltiu rd,rs1,imm.  x[rd] = x[rs1] <u sext(immediate) *)
   | Li of reg * int
   | Ecall
   | Call of string
   | Ret
   | Lla of reg * string
+  | Lw of reg * reg
   | Ld of reg * reg (** [ld ra, (sp)] *)
+  | Sw of reg * reg
   | Sd of reg * reg
   | Mv of reg * reg
   | Beq of reg * reg * string
@@ -41,16 +51,25 @@ let pp_instr ppf =
   | Addi (r1, r2, n) -> fprintf ppf "addi %a, %a, %d" pp_reg r1 pp_reg r2 n
   | Add (r1, r2, r3) -> fprintf ppf "add  %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
   | Sub (r1, r2, r3) -> fprintf ppf "sub %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Mul (r1, r2, r3) -> fprintf ppf "mul %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Div (r1, r2, r3) -> fprintf ppf "div %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
   | Mulw (r1, r2, r3) -> fprintf ppf "mulw %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | And_ (r1, r2, r3) -> fprintf ppf "and %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Or_ (r1, r2, r3) -> fprintf ppf "or %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Slt (r1, r2, r3) -> fprintf ppf "slt %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Slti (r1, r2, n) -> fprintf ppf "slti %a, %a, %d" pp_reg r1 pp_reg r2 n
+  | Sltiu (r1, r2, n) -> fprintf ppf "sltiu %a, %a, %d" pp_reg r1 pp_reg r2 n
   | Li (r, n) -> fprintf ppf "li %a, %d" pp_reg r n
   | Ecall -> fprintf ppf "ecall"
   | Call f -> fprintf ppf "call %s" f
   | Ret -> fprintf ppf "ret"
   | Lla (r1, s) -> fprintf ppf "lla %a, %s" pp_reg r1 s
+  | Lw (r1, r2) -> fprintf ppf "lw %a, %a" pp_reg r1 pp_reg r2
   | Ld (r1, r2) -> fprintf ppf "ld %a, %a" pp_reg r1 pp_reg r2
   (* | Mv (rd, rs) -> fprintf ppf "addi %a, %a, %d" pp_reg rd pp_reg rs 0 *)
   | Mv (ROffset (SP, 0), rs) -> fprintf ppf "sd %a, (sp)" pp_reg rs
   | Mv (rd, rs) -> fprintf ppf "mv %a, %a" pp_reg rd pp_reg rs
+  | Sw (r1, r2) -> fprintf ppf "sw %a, %a" pp_reg r1 pp_reg r2
   | Sd (r1, r2) -> fprintf ppf "sd %a, %a" pp_reg r1 pp_reg r2
   | Beq (r1, r2, offset) -> fprintf ppf "beq %a, %a, %s" pp_reg r1 pp_reg r2 offset
   | Blt (r1, r2, offset) -> fprintf ppf "blt %a, %a, %s" pp_reg r1 pp_reg r2 offset
@@ -64,13 +83,22 @@ let pp_instr ppf =
 let addi k r1 r2 n = k @@ Addi (r1, r2, n)
 let add k r1 r2 r3 = k @@ Add (r1, r2, r3)
 let sub k r1 r2 r3 = k @@ Sub (r1, r2, r3)
+let mul k r1 r2 r3 = k @@ Mul (r1, r2, r3)
 let mulw k r1 r2 r3 = k @@ Mulw (r1, r2, r3)
+let div k r1 r2 r3 = k @@ Div (r1, r2, r3)
+let and_ k r1 r2 r3 = k (And_ (r1, r2, r3))
+let or_ k r1 r2 r3 = k (Or_ (r1, r2, r3))
+let slt k r1 r2 r3 = k (Slt (r1, r2, r3))
+let sltiu k r1 r2 n = k (Sltiu (r1, r2, n))
+let slti k r1 r2 n = k (Slti (r1, r2, n))
 let li k r n = k (Li (r, n))
 let ecall k = k Ecall
 let call k name = k (Call name)
 let ret k = k Ret
 let lla k r name = k (Lla (r, name))
+let lw k a b = k (Lw (a, b))
 let ld k a b = k (Ld (a, b))
+let sw k a b = k (Sw (a, b))
 let sd k a b = k (Sd (a, b))
 let mv k a b = k (Mv (a, b))
 let beq k r1 r2 r3 = k @@ Beq (r1, r2, r3)
@@ -96,9 +124,12 @@ let a7 = RU "a7"
 let t0 = Temp_reg 0
 let t1 = Temp_reg 1
 let t2 = Temp_reg 2
+
+(* t3-t6 are aliases for x28-x31 *)
 let t3 = Temp_reg 3
 let t4 = Temp_reg 4
 let t5 = Temp_reg 5
+let t6 = Temp_reg 6
 
 (** Emission and storage *)
 let code : (instr * string) Queue.t = Queue.create ()

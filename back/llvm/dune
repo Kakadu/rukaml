@@ -6,7 +6,7 @@
  (flags
   (:standard -linkall))
  (preprocess
-  (pps ppx_inline_test))
+  (pps ppx_inline_test_nobase))
  (instrumentation
   (backend bisect_ppx)))
 
@@ -22,12 +22,13 @@
   llvm.all_backends
   LL
   compile_lib
-  cconv)
+  cconv
+  zlib)
  (inline_tests)
  (flags
   (:standard -linkall))
  (preprocess
-  (pps ppx_inline_test))
+  (pps ppx_inline_test_nobase))
  (instrumentation
   (backend bisect_ppx)))
 

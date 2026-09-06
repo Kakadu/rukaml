@@ -5,7 +5,7 @@ test
   (run
     (stdout
       "rukaml_print_int 2"
-      "Total closure allocations: 23"))
+      "Total closure allocations: 21"))
 *)
 
 let rec fack n =

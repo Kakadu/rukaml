@@ -25,6 +25,7 @@ module Lang (Args : sig
 struct
   type var = ident
   type 'a tuple = 'a * 'a * 'a list
+  type 'a array = 'a list
   type 'a safe_binop = var * 'a * 'a (* invarint:  division by zero isn't possible *)
 
   type pat =
@@ -54,6 +55,8 @@ struct
     | TTuple of triv tuple
     | TUnit
 
+  let to_cons = Args.to_cons
+
   type cps_vb = rec_flag * pat * p
 
   let cps_vb_to_parsetree_vb (rec_flag, pat, p) =
@@ -65,7 +68,6 @@ struct
         tuple_fold_map_k helper_pat pat1 pat2 pats k
     in
     let rec helper_triv t k' =
-      let open Args in
       match t with
       | TUnit -> k' EUnit
       | TTuple (t1, t2, tt) ->
@@ -88,7 +90,6 @@ struct
       | CVar v -> k' (EVar v.hum_name)
       | HALT -> k' (ELam (PVar "x", EVar "x"))
     and helper_p p k =
-      let open Args in
       match p with
       | Call (t1, tt, c) ->
         let t2, tt = to_cons tt in
@@ -256,7 +257,6 @@ struct
     else fprintf ppf "%a %a %a" maybe_pars l Frontend.Ident.pp op maybe_pars r
 
   and pp_vb ppf (rec_flag, pat, p) =
-    let open Args in
     let () =
       (match rec_flag with
        | Recursive -> fprintf ppf "@[<v 2>@[let rec %a "
@@ -275,10 +275,10 @@ struct
       fprintf ppf "@[%a@]@]" pp_p p
 
   and pp_pats ppf = pp_list pp_pat ppf
-
   and no_pars ppf = pp_triv ~ps:false ppf
-
   and maybe_pars ppf = pp_triv ~ps:true ppf
+
+  let pp_stru ppf xs = fprintf ppf "@[<v>%a@]" (pp_print_list pp_vb) xs
 end
 
 (* single-arg CPS language *)
