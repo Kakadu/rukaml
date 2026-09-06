@@ -36,7 +36,7 @@ jobs:
 
       # checking out the code seems to be important because local switch is used
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
