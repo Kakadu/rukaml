@@ -1605,9 +1605,27 @@ let current_line state =
   loop pos 1
 ;;
 
+
 let flags = [| false |]
 (* [| dumpC; |] *)
 let set_dump_c flg = array_set flags 0 flg
+
+let test_a_function input target =
+  let () = array_set sarr 0 input in
+  match parse_program 0 with
+  | Prez_error err -> printf "parsing failed: %a\n" pp_parsing_error err
+  | Prez_success (ast, pos) ->
+    let () = printf "parsed\n" in
+    match target with
+      | Parsetree ->
+          let () = printf "Pprint\n" in
+          pp_pprogram stdout ast
+      | RiscV64 ->
+        let () = printf "Codegen\n" in
+        let () = codegen_program stdout ast in
+        if flags.(0)
+        then assembly stdout ()
+        else ()
 
 
 let run_single oc target input =
