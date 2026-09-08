@@ -131,19 +131,19 @@
 ;    (run nasm -f elf64 %{src} -o demo.o)
 ;    (run gcc-13 -g %{stdlib} demo.o -o %{targets}))))
 
-; (rule
-;  (target compiler.embox.s)
-;  (deps compiler.ml)
-;  (mode
-;   (promote (until-clean)))
-;  (action
-;   (progn
-;    (run
-;     %{project_root}/driver/driver.exe
-;     %{deps}
-;     --rename-main
-;     true
-;     --target
-;     rv32
-;     -o
-;     %{target}))))
+ (rule
+  (target compiler.embox.s)
+  (deps compiler.ml)
+  (mode
+   (promote (until-clean)))
+  (action
+   (progn
+    (run
+     %{project_root}/driver/driver.exe
+     %{deps}
+     --rename-main
+     true
+     --target
+     rv32
+     -o
+     %{target}))))
