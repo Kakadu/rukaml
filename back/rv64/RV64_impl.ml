@@ -121,7 +121,7 @@ module Addr_of_local = struct
   let store : (Ident.t, _) Hashtbl.t = Hashtbl.create 13
   let last_pos = ref 0
   let get_locals_count () = !last_pos
-
+  let function_args = ref 0
   let clear () =
     Hashtbl.clear store;
     last_pos := 0
@@ -328,15 +328,22 @@ let allocate_locals input_anf : (now:unit -> unit) * _ =
     done;
     count, clotc
   in
+  let deallocate_is_used = ref false in
   let deallocate ~now =
-    let () = now in
-    emit ld ra (make_sp_offset ra_offset);
-    let comm =
-      sprintf "Deallocate for Pad, RA and %d locals variables %s" count args_repr
-    in
-    emit shrink_stack sloc ~comm;
-    List.iter Addr_of_local.remove_local local_names;
-    Addr_of_local.last_pos := !Addr_of_local.last_pos - (sloc - count)
+    if !deallocate_is_used 
+    then ()
+    else (
+      deallocate_is_used := true;
+      let () = now in
+      emit ld ra (make_sp_offset ra_offset);
+      let comm =
+        sprintf "Deallocate for Pad, RA and %d locals variables %s" count args_repr
+      in
+      emit shrink_stack sloc ~comm;
+      List.iter Addr_of_local.remove_local local_names;
+      Addr_of_local.last_pos := !Addr_of_local.last_pos - (sloc - count)
+    )
+    
   in
   deallocate, count
 ;;
@@ -953,14 +960,37 @@ let generate_body is_toplevel body =
            printfn ppf "\t; calling %S" f; *)
       if expected_arity = formal_arity
       then (
+        let is_tailcall = 
+            match dest with
+            | DReg "a0" -> true
+            | _ -> false
+        in
         (* emit_comment "Full application of arity = %d" expected_arity; *)
         let _ =
           let to_remove = allocate_args_for_call ~f (arg1 :: args) in
-          emit call f.hum_name;
-          deallocate_args_for_call to_remove;
+          
+          if is_tailcall && formal_arity <= !Addr_of_local.function_args
+          then(
+            emit_comment "Init tail call with %d args" formal_arity;
+            let move_offset =  !Addr_of_local.last_pos in
+            
+            for offset = (formal_arity - 1) downto 0 do
+              emit ld t0 (ROffset (SP, wordsize () * offset));
+              emit sd t0 (ROffset (SP, wordsize () * (offset + move_offset)));
+            done;
+            deallocate_args_for_call to_remove;
+            dealloc_locals ~now:();
+            emit tail f.hum_name;
+            )
+          else(
+            emit call f.hum_name;
+            deallocate_args_for_call to_remove
+          );
+          
           to_remove
         in
-        emit sd_dest (RU "a0") dest)
+        if not is_tailcall 
+        then emit sd_dest (RU "a0") dest)
       else if formal_arity < expected_arity
       then (
         let __ () =
@@ -1578,7 +1608,9 @@ let codegen ?(wrap_main_into_start = true) anf file =
           | Apat_unit -> ()
           | _ -> failwith "not implemented");
         log "\nGenerating function %a" Ident.pp name;
+        Addr_of_local.function_args := argc;
         generate_body is_toplevel body;
+        Addr_of_local.function_args := 0;
         Addr_of_local.remove_args names;
         print_epilogue ppf name.hum_name;
         Machine.flush_queue ppf
