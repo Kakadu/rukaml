@@ -968,6 +968,7 @@ type instr =
   | Label of string
   | J of string
   | Beq of reg * reg * string
+  | Div of reg * reg * reg
 
 let pp_inst oc i =
   match i with
@@ -982,6 +983,7 @@ let pp_inst oc i =
       let mne = if wordsize = 4 then "sw" else "sd" in
       fprintf oc "  %s %a, %d(%a)" mne pp_reg r1 n pp_reg r2
   | Mul (r1, r2, r3) -> fprintf oc "  mul %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
+  | Div (r1, r2, r3) -> fprintf oc "  div %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
   | Sub (r1, r2, r3) -> fprintf oc "  sub %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
   | Add (r1, r2, r3) -> fprintf oc "  add %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
   | Slt (r1, r2, r3) -> fprintf oc "  slt %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
@@ -991,11 +993,14 @@ let pp_inst oc i =
 
 let ret k = k (Ret 0)
 let call k s = k (Call s)
-let addi k a b c = k (Addi (a,b,c))
+let addi k a b c =
+  if c = 0 then () else
+  k (Addi (a,b,c))
 let li k a b = k (Li (a,b))
 let ld k a b c = k (Ld (a,b,c))
 let sd k a b c = k (Sd (a,b,c))
 let mul k a b c = k (Mul (a,b,c))
+let div k a b c = k (Div (a,b,c))
 let sub k a b c = k (Sub (a,b,c))
 let add k a b c = k (Add (a,b,c))
 let slt k a b c = k (Slt (a,b,c))
@@ -1076,13 +1081,13 @@ let pop_pool size =
 
 let emit_init_locals_pool oc pool_size =
   let () = push_pool pool_size in
-  let () = fprintf oc "addi sp, sp, %d\n" (pool_size * (0 - 1)) in
+  (* let () = fprintf oc "addi sp, sp, %d\n" (pool_size * (0 - 1)) in *)
   emit addi SP SP (pool_size * (0 - 1))
 ;;
 
 let emit_destroy_locals_pool oc pool_size =
   let () = pop_pool pool_size in
-  let () = fprintf oc "addi sp, sp, %d\n" pool_size in
+  (* let () = fprintf oc "addi sp, sp, %d\n" pool_size in *)
   emit addi SP SP pool_size
 ;;
 
@@ -1163,52 +1168,53 @@ let fresh_label prefix =
 let rec codegen_expr oc expr =
   match expr with
   | Pexpr_var name ->
-    let () = fprintf oc "  ld a0, %a\n" pp_local_var name in
+    (* let () = fprintf oc "  ld a0, %a\n" pp_local_var name in *)
     emit ld A0 (find_var_offset name) FP
   | Pexpr_int n ->
-      let () = fprintf oc "  li a0, %d\n" n in
+      (* let () = fprintf oc "  li a0, %d\n" n in *)
       emit li A0 n
   | Pexpr_tern (cond, t, e) ->
     let else_label = fresh_label ".Lelse" in
     let end_label = fresh_label ".Lend" in
     let () = codegen_expr oc cond in
-    let () = fprintf oc "  beqz a0, %s\n" else_label in
+    (* let () = fprintf oc "  beqz a0, %s\n" else_label in *)
     let () = emit beqz A0 else_label in
     let () = codegen_expr oc t in
-    let () = fprintf oc "  j %s\n" end_label in
+    (* let () = fprintf oc "  j %s\n" end_label in *)
     let () = emit j end_label in
-    let () = fprintf oc "%s:\n" else_label in
+    (* let () = fprintf oc "%s:\n" else_label in *)
     let () = emit label else_label in
     let () = codegen_expr oc e in
-    let () = fprintf oc "%s:\n" end_label in
+    (* let () = fprintf oc "%s:\n" end_label in *)
     let () = emit label end_label in
     ()
   | Pexpr_binop (op, e1, e2) ->
     let () = codegen_expr oc e1 in
-    let () = fprintf oc "  addi sp, sp, -8\n" in
+    (* let () = fprintf oc "  addi sp, sp, -8\n" in *)
     let () = emit addi SP SP (0-4) in
-    let () = fprintf oc "  sd a0, 0(sp)\n" in
+    (* let () = fprintf oc "  sd a0, 0(sp)\n" in *)
     let () = emit sd A0 0 SP in
     let () = codegen_expr oc e2 in
-    let () = fprintf oc "  ld t0, 0(sp)\n" in
+    (* let () = fprintf oc "  ld t0, 0(sp)\n" in *)
     let () = emit ld T0 0 SP in
-    let () = fprintf oc "  addi sp, sp, %d # 1 \n" wordsize in
-    let () = emit addi SP SP 4 in
+    (* let () = fprintf oc "  addi sp, sp, %d # 1 \n" wordsize in *)
+    let () = emit addi SP SP wordsize in
     (match op with
      | Pbinop_add ->
-        let () = fprintf oc "  add a0, t0, a0\n" in
+        (* let () = fprintf oc "  add a0, t0, a0\n" in *)
         emit add A0 T0 A0
      | Pbinop_sub ->
         emit sub A0 T0 A0
-
      | Pbinop_mul ->
         (* fprintf oc "  mul a0, t0, a0\n" *)
         emit mul A0 T0 A0
-     | Pbinop_div -> fprintf oc "  div a0, t0, a0\n"
+     | Pbinop_div ->
+      emit div A0 T0 A0
+      (* fprintf oc "  div a0, t0, a0\n" *)
      | Pbinop_eq -> fprintf oc "  sub a0, t0, a0\n  seqz a0, a0\n"
      | Pbinop_ne -> fprintf oc "  sub a0, t0, a0\n  snez a0, a0\n"
      | Pbinop_lt ->
-        let () = fprintf oc "  slt a0, t0, a0\n" in
+        (* let () = fprintf oc "  slt a0, t0, a0\n" in *)
         emit slt A0 T0 A0
      | Pbinop_gt -> fprintf oc "  slt a0, a0, t0\n"
      | Pbinop_le -> fprintf oc "  slt a0, a0, t0\n  xori a0, a0, 1\n"
@@ -1222,29 +1228,30 @@ let rec codegen_expr oc expr =
       | [] -> ()
       | x :: xs ->
         let () = codegen_expr oc x in
-        let () = fprintf oc "  sd a0, %d(sp)\n" (wordsize * (argc - i - 1)) in
+        (* let () = fprintf oc "  sd a0, %d(sp)\n" (wordsize * (argc - i - 1)) in *)
         let () = emit sd A0 (wordsize * (argc - i - 1)) SP in
         alloc_args xs (i + 1)
     in
     let () =
       if argc > 0
       then
-        let () = fprintf oc "  addi sp, sp, -%d\n" (wordsize * argc) in
+        (* let () = fprintf oc "  addi sp, sp, -%d\n" (wordsize * argc) in *)
         emit addi SP SP (0 - wordsize * argc)
       else () in
     let () = alloc_args args 0 in
-    let () = fprintf oc "  call %s\n" fname in
+    (* let () = fprintf oc "  call %s\n" fname in *)
     let () = emit call fname in
     let () =
       if argc > 0
       then
-        let () = fprintf oc "  addi sp, sp, %d\n" (wordsize * argc)  in
+        (* let () = fprintf oc "  addi sp, sp, %d\n" (wordsize * argc)  in *)
         emit addi SP SP (wordsize * argc)
       else () in
     ()
   | Pexpr_assign (var, expr) ->
     let () = codegen_expr oc expr in
-    fprintf oc "  sd a0, %a\n" pp_local_var var
+    emit sd A0 (find_var_offset var) FP
+    (* fprintf oc "  sd a0, %a\n" pp_local_var var *)
 ;;
 
 let codegen_decl oc decl =
@@ -1260,7 +1267,7 @@ let codegen_decl oc decl =
         (match rhs_opt with
          | Some expr ->
            let () = codegen_expr oc expr in
-           let () = fprintf oc "  sd a0, %a\n" pp_local_var name in
+           (* let () = fprintf oc "  sd a0, %a\n" pp_local_var name in *)
            emit sd A0  (find_var_offset name) FP
          | None -> ())
     in
@@ -1270,36 +1277,36 @@ let codegen_decl oc decl =
 let rec codegen_statement oc epilogue stmt =
   match stmt with
   | Pstmt_return None ->
-      let () = fprintf oc "  j %s\n" epilogue in
+      (* let () = fprintf oc "  j %s\n" epilogue in *)
       emit j epilogue
   | Pstmt_return (Some e) ->
     let () = codegen_expr oc e in
-    let () = fprintf oc "  j %s\n" epilogue in
+    (* let () = fprintf oc "  j %s\n" epilogue in *)
     emit j epilogue
   | Pstmt_expr e -> codegen_expr oc e
   | Pstmt_block stmts -> list_iter (codegen_statement oc epilogue) stmts
   | Pstmt_ite (c, t, None) ->
     let () = codegen_expr oc c in
     let end_if_label = fresh_label "End_if" in
-    let () = fprintf oc "  beqz a0, %s\n" end_if_label in
+    (* let () = fprintf oc "  beqz a0, %s\n" end_if_label in *)
     let () = emit beqz A0 end_if_label in
     let () = codegen_statement oc epilogue t in
-    let () = fprintf oc "%s: \n" end_if_label in
+    (* let () = fprintf oc "%s: \n" end_if_label in *)
     emit label end_if_label
 
   | Pstmt_ite (c, t, Some e) ->
     let () = codegen_expr oc c in
     let else_label = fresh_label "Else" in
     let end_if_label = fresh_label "End_if" in
-    let () = fprintf oc "  beqz a0, %s\n" else_label in
+    (* let () = fprintf oc "  beqz a0, %s\n" else_label in *)
     let () = emit beqz A0 else_label in
     let () = codegen_statement oc epilogue t in
-    let () = fprintf oc "  j %s\n" end_if_label in
+    (* let () = fprintf oc "  j %s\n" end_if_label in *)
     let () = emit j end_if_label in
-    let () = fprintf oc "%s:\n" else_label in
+    (* let () = fprintf oc "%s:\n" else_label in *)
     let () = emit label else_label in
     let () = codegen_statement oc epilogue e in
-    let () = fprintf oc "%s:\n" end_if_label in
+    (* let () = fprintf oc "%s:\n" end_if_label in *)
     emit label end_if_label
 
   | Pstmt_for (decl, cond_opt, iter_opt, body_opt) ->
@@ -1344,17 +1351,12 @@ let pp_prologue oc fname pool_size =
 
 
 let pp_epilogue oc epilogue_label pool_size =
-  (* let () = fprintf oc "%s:\n" epilogue_label in *)
   let () = emit label epilogue_label in
   let () = emit_destroy_locals_pool oc pool_size in
-  (* let () = fprintf oc "  ld ra, 0(sp)\n" in *)
   let () = emit ld RA 0 SP in
-  (* let () = fprintf oc "  ld fp, 8(sp)\n" in *)
   let () = emit ld FP wordsize SP in
-  (* let () = fprintf oc "  addi sp, sp, 16\n" in *)
   let () = emit addi SP SP (2*wordsize) in
-  (* let () = fprintf oc "  ret\n" in *)
-  let () = emit ret  in
+  let () = emit ret in
   ()
 ;;
 
@@ -1375,7 +1377,7 @@ let codegen_function oc func =
 
 let codegen_program oc prog = list_iter (codegen_function oc) prog
 
-(* *)
+
 let mnemonics_info = [| 0; 100 |]
 let mnemonics = array_make 100 0
 let for_loop start len f arr =
@@ -1414,7 +1416,7 @@ let set_mnem oc pos hi lo i =
   ()
 
 let assembly oc () =
-  let count = store_len () in
+  (* let count = store_len () in *)
   (* let () = printf "count = %d\n" count in *)
 
   let label_idxs = collect_labels [] 0 0 in
@@ -1531,7 +1533,7 @@ let assembly oc () =
       | J lab ->
           let label_instr = assoc_exn lab label_idxs in
           let offset = label_instr - icount in
-          let () = fprintf oc "jump offset = %d\n" offset in
+          (* let () = fprintf oc "jump offset = %d\n" offset in *)
           let () =
             if offset = 0-1
             then set_mnem oc icount 0x0040 0x006f i
