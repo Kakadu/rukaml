@@ -45,15 +45,16 @@
 (rule
  (targets compiler.exe)
  (deps
-  %{project_root}/driver/driver.exe
+  ;%{project_root}/driver/driver.exe
   (:src compiler.s)
   (:stdlib ./rukaml_stdlib.o))
  (mode
   (promote (until-clean)))
  (action
   (progn
-   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o demo.o)
-   (run riscv64-linux-gnu-gcc-13 -g %{stdlib} demo.o -o %{targets}))))
+   (system "%{read:../../cc_rv64} -g -c %{src} -o compiler.rv64.o")
+   (system
+    "%{read:../../cc_rv64} -g %{stdlib} compiler.rv64.o -o %{targets}"))))
 
 (rule
  (targets compiler.rv32.exe)
@@ -71,10 +72,12 @@
     (= none %{read:../../run_rv32}))))
  (action
   (progn
-   (system "%{read:../../cc_rv32} -g -c %{src} -o demo.o")
-   (system "%{read:../../cc_rv32} -g %{stdlib} demo.o -o %{targets}"))))
+   (system "%{read:../../cc_rv32} -g -c %{src} -o compiler.rv32.o")
+   (system
+    "%{read:../../cc_rv32} -g %{stdlib} compiler.rv32.o -o %{targets}"))))
 
 (cram
+ ; TODO: Wrong. Is not needed for RV32
  (applies_to *)
  (deps ./compiler.exe))
 
@@ -131,19 +134,19 @@
 ;    (run nasm -f elf64 %{src} -o demo.o)
 ;    (run gcc-13 -g %{stdlib} demo.o -o %{targets}))))
 
- (rule
-  (target compiler.embox.s)
-  (deps compiler.ml)
-  (mode
-   (promote (until-clean)))
-  (action
-   (progn
-    (run
-     %{project_root}/driver/driver.exe
-     %{deps}
-     --rename-main
-     true
-     --target
-     rv32
-     -o
-     %{target}))))
+(rule
+ (target compiler.embox.s)
+ (deps compiler.ml)
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run
+    %{project_root}/driver/driver.exe
+    %{deps}
+    --rename-main
+    true
+    --target
+    rv32
+    -o
+    %{target}))))
