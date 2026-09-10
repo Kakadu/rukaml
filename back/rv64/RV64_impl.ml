@@ -277,7 +277,7 @@ let calc_sloc argc =
   (args_bytec + pad_bytec) / wordsize ()
 ;;
 
-let allocate_locals input_anf : (now:unit -> unit) * _ =
+let allocate_locals input_anf : (now:unit -> unit) * _ * _ =
   let local_names = ref Ident.Ident_set.empty in
   let rec helper = function
     | ANF.EComplex c -> helper_c c
@@ -328,24 +328,18 @@ let allocate_locals input_anf : (now:unit -> unit) * _ =
     done;
     count, clotc
   in
-  let deallocate_is_used = ref false in
   let deallocate ~now =
-    if !deallocate_is_used 
-    then ()
-    else (
-      deallocate_is_used := true;
-      let () = now in
-      emit ld ra (make_sp_offset ra_offset);
-      let comm =
-        sprintf "Deallocate for Pad, RA and %d locals variables %s" count args_repr
-      in
-      emit shrink_stack sloc ~comm;
-      List.iter Addr_of_local.remove_local local_names;
-      Addr_of_local.last_pos := !Addr_of_local.last_pos - (sloc - count)
-    )
+    let () = now in
+    emit ld ra (make_sp_offset ra_offset);
+    let comm =
+      sprintf "Deallocate for Pad, RA and %d locals variables %s" count args_repr
+    in
+    emit shrink_stack sloc ~comm;
+    List.iter Addr_of_local.remove_local local_names;
+    Addr_of_local.last_pos := !Addr_of_local.last_pos - (sloc - count)
     
   in
-  deallocate, count
+  deallocate, count, ra_offset
 ;;
 
 (* TODO(Kakadu): remove? *)
@@ -446,7 +440,7 @@ let pp_to_mach = Addr_of_local.pp_to_mach
     Argument [is_toplevel] returns None or Some arity. *)
 let generate_body is_toplevel body =
   let open Parsetree in
-  let dealloc_locals, locals = allocate_locals body in
+  let dealloc_locals, locals, ra_offset = allocate_locals body in
   let deallocate_args_for_call argc =
     let slotc = calc_sloc argc in
     Addr_of_local.(last_pos := !last_pos - slotc);
@@ -975,11 +969,14 @@ let generate_body is_toplevel body =
             let move_offset =  !Addr_of_local.last_pos in
             
             for offset = (formal_arity - 1) downto 0 do
-              emit ld t0 (ROffset (SP, wordsize () * offset));
-              emit sd t0 (ROffset (SP, wordsize () * (offset + move_offset)));
+              emit ld t0 @@ make_sp_offset offset;
+              emit sd t0 @@ make_sp_offset (offset + move_offset);
             done;
             deallocate_args_for_call to_remove;
-            dealloc_locals ~now:();
+
+            emit ld ra (make_sp_offset ra_offset);
+            let comm = sprintf "Deallocate function frame for tail call" in
+            emit shrink_stack (!Addr_of_local.last_pos) ~comm;
             emit tail f.hum_name;
             )
           else(
