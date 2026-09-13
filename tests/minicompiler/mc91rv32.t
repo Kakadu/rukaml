@@ -14,8 +14,8 @@ $ chmod +w program.c
   
   
   GC statistics
-  Total allocations: 16253(words)
-  Currently allocated: 16253(words)
+  Total allocations: 16362(words)
+  Currently allocated: 16362(words)
   Current bank: 0
   int m91(int n) {
     if ((100 < n)) {
@@ -25,8 +25,8 @@ $ chmod +w program.c
     return m91(m91((n + 11)));
   }
   GC statistics
-  Total allocations: 16987(words)
-  Currently allocated: 16987(words)
+  Total allocations: 17096(words)
+  Currently allocated: 17096(words)
   Current bank: 0
 
 
@@ -48,8 +48,8 @@ $ chmod +w program.c
   
   
   GC statistics
-  Total allocations: 16252(words)
-  Currently allocated: 16252(words)
+  Total allocations: 16361(words)
+  Currently allocated: 16361(words)
   Current bank: 0
   .global m91
   .text
@@ -61,7 +61,7 @@ $ chmod +w program.c
     addi fp, sp, 0# 4
     lw a0, 8(fp)# 5
     li t0, 100# 6
-    bge t0, a0, End_if_lt_1# 7
+    bge t0, a0, .End_if_lt_1# 7
     lw a0, 8(fp)# 8
     addi sp, sp, -4# 9
     sw a0, 0(sp)# 10
@@ -70,7 +70,7 @@ $ chmod +w program.c
     addi sp, sp, 4# 13
     sub a0, t0, a0# 14
     j m91_epilogue_0# 15
-  End_if_lt_1:# 16
+  .End_if_lt_1:# 16
     addi sp, sp, -4# 17
     addi sp, sp, -4# 18
     lw a0, 8(fp)# 19
@@ -93,7 +93,7 @@ $ chmod +w program.c
     addi sp, sp, 8# 36
     ret# 37
   # m91_epilogue_0 -> 31
-  # End_if_lt_1 -> 15
+  # .End_if_lt_1 -> 15
   # m91 -> 0
   /* m91: */
   m[0] = (0x81u << 16) + 0x2223u;  /* 1:   addi sp, sp, -8 */
@@ -102,7 +102,7 @@ $ chmod +w program.c
   m[3] = (0x84u << 16) + 0x2503u;  /* 4:   addi fp, sp, 0 */
   m[4] = (0x640u << 16) + 0x293u;  /* 5:   lw a0, 8(fp) */
   m[5] = (0x2a2u << 16) + 0xd263u;  /* 6:   li t0, 100 */
-  m[6] = (0x84u << 16) + 0x2503u;  /* 7:   bge t0, a0, End_if_lt_1 */
+  m[6] = (0x84u << 16) + 0x2503u;  /* 7:   bge t0, a0, .End_if_lt_1 */
   m[7] = (0xffc1u << 16) + 0x113u;  /* 8:   lw a0, 8(fp) */
   m[8] = (0xa1u << 16) + 0x2023u;  /* 9:   addi sp, sp, -4 */
   m[9] = (0xa0u << 16) + 0x513u;  /* 10:   sw a0, 0(sp) */
@@ -111,7 +111,7 @@ $ chmod +w program.c
   m[12] = (0x40a2u << 16) + 0x8533u;  /* 13:   addi sp, sp, 4 */
   m[13] = (0x440u << 16) + 0x6fu;  /* 14:   sub a0, t0, a0 */
   m[14] = (0xffc1u << 16) + 0x113u;  /* 15:   j m91_epilogue_0 */
-  /* End_if_lt_1: */
+  /* .End_if_lt_1: */
   m[15] = (0x84u << 16) + 0x2503u;  /* 16:   addi sp, sp, -4 */
   m[16] = (0xffc1u << 16) + 0x113u;  /* 17:   addi sp, sp, -4 */
   m[17] = (0xa1u << 16) + 0x2023u;  /* 18:   lw a0, 8(fp) */
@@ -134,7 +134,7 @@ $ chmod +w program.c
   m[33] = (0x0u << 16) + 0x0u;  /* 34:   addi sp, sp, 8 */
   m[34] = (0x0u << 16) + 0x0u;  /* 35:   ret */
   GC statistics
-  Total allocations: 26674(words)
-  Currently allocated: 26674(words)
+  Total allocations: 26783(words)
+  Currently allocated: 26783(words)
   Current bank: 0
 
