@@ -12,11 +12,11 @@ $ cat ../../run_rv32
   
   
   GC statistics
-  Total allocations: 809(words)
-  Currently allocated: 809(words)
+  Total allocations: 1309(words)
+  Currently allocated: 1309(words)
   Current bank: 0
   parsing failed: can not parse many program items (failed at ~3 line)
   GC statistics
-  Total allocations: 826(words)
-  Currently allocated: 826(words)
+  Total allocations: 1326(words)
+  Currently allocated: 1326(words)
   Current bank: 0

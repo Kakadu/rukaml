@@ -78,12 +78,16 @@
 
 (cram
  ; TODO: Wrong. Is not needed for RV32
- (applies_to *)
+ (applies_to 0 1)
  (deps ./compiler.exe))
 
 (cram
  (applies_to emptymain)
- (deps compiler.anf.ml program.c))
+ (deps ./compiler.exe))
+
+(cram
+ (applies_to justmain)
+ (deps ./compiler.exe))
 
 (cram
  (applies_to 1)
@@ -102,6 +106,16 @@
    (not
     (= none %{read:../../run_rv32}))))
  (deps ./compiler.rv32.exe program0.c ../../run_rv32))
+
+(cram
+ (applies_to mc91rv32)
+ (enabled_if
+  (and
+   (not
+    (= none %{read:../../cc_rv32}))
+   (not
+    (= none %{read:../../run_rv32}))))
+ (deps ./compiler.rv32.exe mc91.c ../../run_rv32))
 
 (cram
  (applies_to 1rv32)

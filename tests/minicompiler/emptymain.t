@@ -6,10 +6,10 @@
   
   
   GC statistics
-  Total allocations: 527(words)
-  Currently allocated: 527(words)
+  Total allocations: 909(words)
+  Currently allocated: 909(words)
   Current bank: 0
   GC statistics
-  Total allocations: 527(words)
-  Currently allocated: 527(words)
+  Total allocations: 933(words)
+  Currently allocated: 933(words)
   Current bank: 0
