@@ -524,15 +524,12 @@ let skip_ws p state =
   match ws state with
   | Prez_success (_, st0) -> p st0
   | Prez_error _ -> exit 2
-  (* let (_,pos) = state in
-  let () = printf "calling skip_ws on pos %d\n" pos in *)
-  (* drop_left ws p state *)
-
+;;
 let ws_exn st =
   match ws st with
   | Prez_success (_, st0) -> st0
   | _ -> exit 4
-
+;;
 let trim p st =
   let st = ws_exn st in
   let ans = p st in
@@ -1013,11 +1010,11 @@ let j k s = k (J s)
 let bge k a b c = k (Bge (a,b,c))
 let beq k a b c = k (Beq (a,b,c))
 let beqz k a b = k (Beq (a,RZ,b))
-
+;;
 let store_info = [| 0; 50 |] (* count and max_count *)
 let store = array_make 50 (Ret 0)
 let store_len () = array_get store_info 0
-
+;;
 let pp_store oc () =
   let () = fprintf oc "#store has %d instrs\n"
     (array_get store_info 0) in
@@ -1029,7 +1026,7 @@ let pp_store oc () =
       loop oc (1+i) last
   in
   loop oc 0 (array_get store_info 0 )
-
+;;
 let queue_add i =
   let cur = array_get store_info 0 in
   if cur < array_get store_info 1
@@ -1043,7 +1040,7 @@ let queue_add i =
     exit 1
 
 let emit instr = instr queue_add
-
+;;
 (* C0 like implementation (every var gets it's own place in vars pool) *)
 let eval_locals_pool_size stms =
   let eval_opt eval opt =
@@ -1069,7 +1066,7 @@ let eval_locals_pool_size stms =
 ;;
 
 let locals_pools = [| [] |]
-
+;;
 let push_pool size =
   let old_pools = array_get locals_pools 0 in
   array_set locals_pools 0 ((0, size) :: old_pools)
@@ -1112,7 +1109,7 @@ let get_offset_for_new_var nbytes =
 (* scopes *)
 
 let scopes = [| [] |]
-
+;;
 let enter_scope () =
   let old_scopes = array_get scopes 0 in
   array_set scopes 0 ([] :: old_scopes)
@@ -1161,7 +1158,7 @@ let pp_local_var oc name =
 (* unique labels *)
 
 let label_counter = [| 0 |] (* TODO: replace with ref *)
-
+;;
 let fresh_label prefix =
   let n = array_get label_counter 0 in
   let () = array_set label_counter 0 (n + 1) in
@@ -1349,9 +1346,9 @@ let rec codegen_statement oc epilogue stmt =
   | Pstmt_decl decl -> codegen_decl oc decl
 ;;
 
-let flags = [| false |]
+let flags = [| true |];;
 (* [| dumpC; |] *)
-let set_dump_c flg = array_set flags 0 flg
+let set_dump_c flg = array_set flags 0 flg;;
 
 
 let pp_prologue oc fname pool_size =
@@ -1408,12 +1405,13 @@ let codegen_function oc func =
 ;;
 
 let codegen_program oc prog = list_iter (codegen_function oc) prog
+;;
 
-
-let mnemonics_info = [| 0; 100 |]
-let mnemonics = array_make 100 0
-let mnemonics_max_len () = array_get mnemonics_info 1
+let mnemonics_info = [| 0; 100 |];;
+let mnemonics = array_make 100 0;;
+let mnemonics_max_len () = array_get mnemonics_info 1;;
 let get_mnemonics () = mnemonics
+;;
 
 let for_loop start len f arr =
   let rec loop start len f arr =
@@ -1424,7 +1422,7 @@ let for_loop start len f arr =
       ()
   in
   loop start len f arr
-
+;;
 let rec collect_labels acc icount pos =
   (* let () = printf "collect labels at  pos %d\n" pos in *)
   if pos >= store_len ()
@@ -1434,7 +1432,7 @@ let rec collect_labels acc icount pos =
     match r with
     | Label s -> collect_labels ((s,icount)::acc) icount (pos+1)
     | _ -> collect_labels acc (icount+1) (pos+1)
-
+;;
 let rec assoc_exn k xs =
   match xs with
   | [] -> exit 30
@@ -1442,6 +1440,7 @@ let rec assoc_exn k xs =
     let (a,v) =  h in
     if string_equal k a then v
     else assoc_exn k tl
+;;
 
 let set_mnem oc pos hi lo i =
   let pos = array_get mnemonics_info 0 in
@@ -1454,9 +1453,37 @@ let set_mnem oc pos hi lo i =
   let () = fprintf oc "        %a, pos = %d\n" pp_inst i pos in
   *)
   ()
+;;
 
 let trace_instr i offset =
   printf "== %a, offset = %d\n" pp_inst i  offset
+;;
+
+let assembly_li r n i oc icount =
+  if r=A0 && n=1 then
+    set_mnem oc icount 0x0010 0x0513 i
+  else
+  if r=A0 && n=2 then
+    set_mnem oc icount 0x0020 0x0513 i
+  else
+  if r=A0 && n=5 then
+    set_mnem oc icount 0x0050 0x0513 i
+  else
+  if r=A0 && n=10 then
+    set_mnem oc icount 0x00A0 0x0513 i
+  else
+  if r=A0 && n=11 then
+    set_mnem oc icount 0x00b0 0x0513 i
+  else
+  if r=A0 && n=100 then
+    set_mnem oc icount 0x0640 0x0513 i
+  else
+  if r=T0 && n=100 then
+    set_mnem oc icount 0x0640 0x0293 i
+  else
+    let () = trace_instr i n  in
+    failwith "Not implemented in Li"
+;;
 
 let assembly oc () =
   (* let count = store_len () in *)
@@ -1464,10 +1491,13 @@ let assembly oc () =
 
   let label_idxs = collect_labels [] 0 0 in
   let () =
-    list_iter (fun x ->
-      let (k,v) = x in
-      fprintf oc "# %s -> %d\n" k v
-      ) label_idxs
+    if array_get flags 0
+    then
+      list_iter (fun x ->
+        let (k,v) = x in
+        fprintf oc "# %s -> %d\n" k v
+        ) label_idxs
+    else ()
   in
 
   let rec loop store curi icount =
@@ -1484,29 +1514,7 @@ let assembly oc () =
           loop store curi2 (1+icount)
       | Li (r,n) ->
           let () =
-            if r=A0 && n=1 then
-              set_mnem oc icount 0x0010 0x0513 i
-            else
-            if r=A0 && n=2 then
-              set_mnem oc icount 0x0020 0x0513 i
-            else
-            if r=A0 && n=5 then
-              set_mnem oc icount 0x0050 0x0513 i
-            else
-            if r=A0 && n=10 then
-              set_mnem oc icount 0x00A0 0x0513 i
-            else
-            if r=A0 && n=11 then
-              set_mnem oc icount 0x00b0 0x0513 i
-            else
-            if r=A0 && n=100 then
-              set_mnem oc icount 0x0640 0x0513 i
-            else
-            if r=T0 && n=100 then
-              set_mnem oc icount 0x0640 0x0293 i
-            else
-              let () = trace_instr i n  in
-              failwith "Not implemented in Li"
+            assembly_li r n i oc icount
           in
           loop store curi2 next
       | Addi (r1,r2,n) ->
@@ -1654,8 +1662,9 @@ let assembly oc () =
         exit 22
   in
   loop store 0 0
+;;
 
-let print_asm_as_c ()
+let print_asm_as_c oc =
   let rec printer icount ipos =
     if ipos >= store_len ()  then ()
     else
@@ -1674,7 +1683,7 @@ let print_asm_as_c ()
           printer icount1 ipos1
   in
   printer 0 0
-
+;;
 
 (* driver *)
 
@@ -1723,9 +1732,9 @@ let test_a_function input target =
         let () = codegen_program stdout ast in
         let () = assembly stdout () in
         if array_get flags 0
-        then print_asm_as_c ()
+        then print_asm_as_c stdout
         else ()
-
+;;
 
 let run_single oc target input =
   let () = printf "\n" in
@@ -1733,7 +1742,11 @@ let run_single oc target input =
   match parse_program 0 with
   | Prez_error err -> printf "parsing failed: %a\n" pp_parsing_error err
   | Prez_success (ast, pos) ->
-    let () = gc_stats () in
+    let () =
+      if array_get flags 0
+      then gc_stats ()
+      else ()
+    in
     if pos = string_len input
     then (
       match target with
@@ -1742,7 +1755,7 @@ let run_single oc target input =
         let () = codegen_program oc ast in
         let () = assembly oc () in
         if array_get flags 0
-        then print_asm_as_c ()
+        then print_asm_as_c oc
         else ()
         )
     else
@@ -1756,18 +1769,18 @@ let test ok_msg input f =
   match f 0 with
   | Prez_error _ -> printf "Failed '%s'\n" ok_msg
   | Prez_success (_,pos) -> printf "Success '%s' on pos %d\n" ok_msg pos
-
+;;
 let test1 () = test "demo1" "{return 1;}" (parse_stmt_block parse_statement)
-
+;;
 let test2 () = test "demo2" "int main() {return 1;}" parse_function
-
+;;
 let test3 () =
   let input = "factrec1(){}" in
   let () = array_set sarr 0 input in
   match parse_identifier 0 with
   | Prez_error _ -> printf "Failed\n"
   | Prez_success (name,pos) -> printf "Success '%s' on pos %d\n" name pos
-
+;;
 let test4 () =
   let input = "void f(){ return 5; }" in
   let () = array_set sarr 0 input in
@@ -1776,7 +1789,7 @@ let test4 () =
   | Prez_success (f, pos) ->
     let () = pp_pprogram stdout [f] in
     printf "Success 'test4' on pos %d\n" pos
-
+;;
 let test5 () =
   let input = "factrec1(){}" in
   let () = array_set sarr 0 input in
@@ -1786,7 +1799,7 @@ let test5 () =
       (* let l = list_length chs in *)
       let name = string_of_char_list chs in
       printf "Success '%s' on pos %d\n" name pos
-
+;;
 
 let parse_args argv =
   let argc = array_len argv in
@@ -1864,8 +1877,9 @@ let main =
   let () = printf "%s\n" the_string in
   (* let () = trace_rukaml_val the_string in *)
   let () = run_single stdout target the_string in
-  let () = gc_stats() in
-
-
+  let () =
+    if array_get flags 0
+    then gc_stats ()
+    else ()
+  in
   0
-;;

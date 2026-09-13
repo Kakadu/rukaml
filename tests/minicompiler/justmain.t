@@ -6,13 +6,13 @@
   void main(){}
   
   GC statistics
-  Total allocations: 710(words)
-  Currently allocated: 710(words)
+  Total allocations: 1092(words)
+  Currently allocated: 1092(words)
   Current bank: 0
   parsing failed: can not parse many program items (failed at ~2 line)
   GC statistics
-  Total allocations: 727(words)
-  Currently allocated: 727(words)
+  Total allocations: 1109(words)
+  Currently allocated: 1109(words)
   Current bank: 0
 
 
