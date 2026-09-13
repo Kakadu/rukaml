@@ -967,6 +967,7 @@ type instr =
   | Slt of reg * reg * reg
   | Label of string
   | J of string
+  | Bge of reg * reg * string
   | Beq of reg * reg * string
   | Div of reg * reg * reg
 
@@ -989,13 +990,16 @@ let pp_inst oc i =
   | Slt (r1, r2, r3) -> fprintf oc "  slt %a, %a, %a" pp_reg r1 pp_reg r2 pp_reg r3
   | Label s -> fprintf oc "%s:" s
   | J s -> fprintf oc "  j %s" s
+  | Bge (r, r2, l) -> fprintf oc "  bge %a, %a, %s" pp_reg r  pp_reg r2 l
   | Beq (r, r2, l) -> fprintf oc "  beq %a, %a, %s" pp_reg r  pp_reg r2 l
 
 let ret k = k (Ret 0)
 let call k s = k (Call s)
 let addi k a b c =
-  if c = 0 then () else
-  k (Addi (a,b,c))
+  if c = 0
+  then (if a = b then ()
+                 else k (Addi (a,b,c)))
+  else k (Addi (a,b,c))
 let li k a b = k (Li (a,b))
 let ld k a b c = k (Ld (a,b,c))
 let sd k a b c = k (Sd (a,b,c))
@@ -1006,6 +1010,7 @@ let add k a b c = k (Add (a,b,c))
 let slt k a b c = k (Slt (a,b,c))
 let label k s = k (Label s)
 let j k s = k (J s)
+let bge k a b c = k (Bge (a,b,c))
 let beq k a b c = k (Beq (a,b,c))
 let beqz k a b = k (Beq (a,RZ,b))
 
@@ -1286,13 +1291,27 @@ let rec codegen_statement oc epilogue stmt =
   | Pstmt_expr e -> codegen_expr oc e
   | Pstmt_block stmts -> list_iter (codegen_statement oc epilogue) stmts
   | Pstmt_ite (c, t, None) ->
-    let () = codegen_expr oc c in
-    let end_if_label = fresh_label "End_if" in
-    (* let () = fprintf oc "  beqz a0, %s\n" end_if_label in *)
-    let () = emit beqz A0 end_if_label in
-    let () = codegen_statement oc epilogue t in
-    (* let () = fprintf oc "%s: \n" end_if_label in *)
-    emit label end_if_label
+    let fallback c t =
+      let () = codegen_expr oc c in
+      let end_if_label = fresh_label "End_if" in
+      (* let () = fprintf oc "  beqz a0, %s\n" end_if_label in *)
+      let () = emit beqz A0 end_if_label in
+      let () = codegen_statement oc epilogue t in
+      (* let () = fprintf oc "%s: \n" end_if_label in *)
+      emit label end_if_label
+    in
+
+    (match c with
+    | Pexpr_binop (Pbinop_lt, Pexpr_int n, e1) ->
+        let () = codegen_expr oc e1 in
+        let end_if_label = fresh_label "End_if_lt" in
+        let () = emit li T0 n in
+        let () = emit bge T0 A0 end_if_label in
+        let () = codegen_statement oc epilogue t in
+        emit label end_if_label
+    | _ -> fallback c t)
+
+
 
   | Pstmt_ite (c, t, Some e) ->
     let () = codegen_expr oc c in
@@ -1330,16 +1349,27 @@ let rec codegen_statement oc epilogue stmt =
   | Pstmt_decl decl -> codegen_decl oc decl
 ;;
 
-let pp_prologue oc fname pool_size =
-  let () = fprintf oc ".global %s\n" fname in
-  let () = fprintf oc ".text\n" in
+let flags = [| false |]
+(* [| dumpC; |] *)
+let set_dump_c flg = array_set flags 0 flg
 
+
+let pp_prologue oc fname pool_size =
+  let () =
+    if array_get flags 0
+    then
+      let () = fprintf oc ".global %s\n" fname in
+      fprintf oc ".text\n"
+    else ()
+  in
+(*
   let () = fprintf oc "%s:\n" fname in
   let () = fprintf oc "  addi sp, sp, -%d\n" (2*wordsize) in
-  let () = fprintf oc "  sd fp, %d(sp)\n" wordsize in
-  let () = fprintf oc "  sd ra, 0(sp)\n" in
+  let store = if wordsize=4 then "sw" else "sd" in
+  let () = fprintf oc "  %s fp, %d(sp)\n" store wordsize in
+  let () = fprintf oc "  %s ra, 0(sp)\n" store in
   let () = fprintf oc "  mv fp, sp\n" in
-
+*)
   let () = emit label fname in
   let () = emit addi SP SP ( (0-2) * sizeof_ctype Ptype_int) in
   let () = emit sd FP 4 SP in
@@ -1371,8 +1401,10 @@ let codegen_function oc func =
     let () = list_iter (codegen_statement oc epilogue_label) stms in
     let () = pp_epilogue oc epilogue_label pool_size in
     let () = exit_scope () in
-    let () = pp_store oc () in
-    ()
+    if array_get flags 0
+    then pp_store oc ()
+    else ()
+
 ;;
 
 let codegen_program oc prog = list_iter (codegen_function oc) prog
@@ -1380,6 +1412,9 @@ let codegen_program oc prog = list_iter (codegen_function oc) prog
 
 let mnemonics_info = [| 0; 100 |]
 let mnemonics = array_make 100 0
+let mnemonics_max_len () = array_get mnemonics_info 1
+let get_mnemonics () = mnemonics
+
 let for_loop start len f arr =
   let rec loop start len f arr =
     if start < len then
@@ -1409,11 +1444,19 @@ let rec assoc_exn k xs =
     else assoc_exn k tl
 
 let set_mnem oc pos hi lo i =
+  let pos = array_get mnemonics_info 0 in
   let () = array_set mnemonics (2*pos) hi in
-  let () = array_set mnemonics (1+2*pos) lo in (*
+  let () = array_set mnemonics (1+2*pos) lo in
+  let pos = pos+1 in
+  let () = array_set mnemonics_info 0 pos in
+  (*
   let () = fprintf oc "# 0x%x %x\n" hi lo  in
-  let () = fprintf oc "        %a\n" pp_inst i in *)
+  let () = fprintf oc "        %a, pos = %d\n" pp_inst i pos in
+  *)
   ()
+
+let trace_instr i offset =
+  printf "== %a, offset = %d\n" pp_inst i  offset
 
 let assembly oc () =
   (* let count = store_len () in *)
@@ -1423,7 +1466,7 @@ let assembly oc () =
   let () =
     list_iter (fun x ->
       let (k,v) = x in
-      fprintf oc " %s -> %d\n" k v
+      fprintf oc "# %s -> %d\n" k v
       ) label_idxs
   in
 
@@ -1441,16 +1484,29 @@ let assembly oc () =
           loop store curi2 (1+icount)
       | Li (r,n) ->
           let () =
-            if r=A0 && n=5 then
-              set_mnem oc icount 0x0050 0x0513 i
-            else
             if r=A0 && n=1 then
               set_mnem oc icount 0x0010 0x0513 i
             else
             if r=A0 && n=2 then
               set_mnem oc icount 0x0020 0x0513 i
             else
-              exit 1
+            if r=A0 && n=5 then
+              set_mnem oc icount 0x0050 0x0513 i
+            else
+            if r=A0 && n=10 then
+              set_mnem oc icount 0x00A0 0x0513 i
+            else
+            if r=A0 && n=11 then
+              set_mnem oc icount 0x00b0 0x0513 i
+            else
+            if r=A0 && n=100 then
+              set_mnem oc icount 0x0640 0x0513 i
+            else
+            if r=T0 && n=100 then
+              set_mnem oc icount 0x0640 0x0293 i
+            else
+              let () = trace_instr i n  in
+              failwith "Not implemented in Li"
           in
           loop store curi2 next
       | Addi (r1,r2,n) ->
@@ -1477,6 +1533,12 @@ let assembly oc () =
       | Sub (r1,r2,r3) ->
           if r1=A0 && r2=T0 && r3=A0 then
             let () = set_mnem  oc icount 0x40a2 0x8533 i in
+            loop store curi2 next
+          else
+            exit 3
+      | Add (r1,r2,r3) ->
+          if r1=A0 && r2=T0 && r3=A0 then
+            let () = set_mnem  oc icount 0x00a2 0x8533 i in
             loop store curi2 next
           else
             exit 3
@@ -1515,7 +1577,7 @@ let assembly oc () =
             else if r1=RA && n=0 && r2=SP then
               set_mnem  oc icount 0x0001 0x2083 i
             else
-              let () = fprintf oc "== %a\n" pp_inst i in
+              let () = trace_instr i n in
               exit 6
           in
           loop store curi2 next
@@ -1527,7 +1589,23 @@ let assembly oc () =
           let () =
             if r1=A0 && r2=RZ && offset=3
             then set_mnem  oc icount 0x0005 0x0663 i
-            else set_mnem  oc icount 0xffff 0xffff i
+            else if r1=A0 && r2=RZ && offset=9
+            then set_mnem  oc icount 0x0205 0x0263 i
+            else
+              let () = trace_instr i offset in
+              set_mnem  oc icount 0xffff 0xffff i
+          in
+          loop store curi2 next
+      | Bge (r1,r2,lab) ->
+          let label_instr = assoc_exn lab label_idxs in
+          let offset = label_instr - curi in
+
+          let () =
+            if r1=T0 && r2=A0 && offset=9
+            then set_mnem  oc icount 0x02a2 0xd263 i
+            else
+              let () = trace_instr i offset in
+              set_mnem  oc icount 0xffff 0xffff i
           in
           loop store curi2 next
       | J lab ->
@@ -1537,9 +1615,13 @@ let assembly oc () =
           let () =
             if offset = 0-1
             then set_mnem oc icount 0x0040 0x006f i
+            else if offset = 16
+            then set_mnem oc icount 0x0440 0x006f i
             else if offset = 18
             then set_mnem oc icount 0x04c0 0x006f i
-            else set_mnem oc icount 0xffff 0xffff i
+            else
+              let () = trace_instr i offset in
+              set_mnem oc icount 0xffff 0xffff i
           in
           loop store curi2 next
       | Call lab ->
@@ -1548,15 +1630,32 @@ let assembly oc () =
           (* let () = fprintf oc "call offset = %d\n" offset in *)
 
           let () =
-            if offset = 0-27
+            if offset = 0-32
+            then set_mnem oc icount 0xf81f 0xf0ef i
+            else if offset = 0-29
+            then set_mnem oc icount 0xf8df 0xf0ef i
+            else if offset = 0-28
+            then set_mnem oc icount 0xf91f 0xf0ef i
+            else if offset = 0-27
             then set_mnem oc icount 0xf95f 0xf0ef i
-            else set_mnem oc icount 0xffff 0xffff i
+            else if offset = 0-26
+            then set_mnem oc icount 0xf99f 0xf0ef i
+            else if offset = 0-25
+            then set_mnem oc icount 0xf9df 0xf0ef i
+            else if offset = 16
+            then set_mnem oc icount 0x0440 0x006f i
+            else
+              let () = trace_instr i offset in
+              set_mnem oc icount 0xffff 0xffff i
           in
           loop store curi2 next
       | _ ->
+        let () = trace_instr i 0 in
         exit 22
   in
-  let () = loop store 0 0  in
+  loop store 0 0
+
+let print_asm_as_c ()
   let rec printer icount ipos =
     if ipos >= store_len ()  then ()
     else
@@ -1608,9 +1707,6 @@ let current_line state =
 ;;
 
 
-let flags = [| false |]
-(* [| dumpC; |] *)
-let set_dump_c flg = array_set flags 0 flg
 
 let test_a_function input target =
   let () = array_set sarr 0 input in
@@ -1625,8 +1721,9 @@ let test_a_function input target =
       | RiscV64 ->
         let () = printf "Codegen\n" in
         let () = codegen_program stdout ast in
-        if flags.(0)
-        then assembly stdout ()
+        let () = assembly stdout () in
+        if array_get flags 0
+        then print_asm_as_c ()
         else ()
 
 
@@ -1642,10 +1739,10 @@ let run_single oc target input =
       match target with
       | Parsetree -> pp_pprogram oc ast
       | RiscV64 ->
-
         let () = codegen_program oc ast in
-        if flags.(0)
-        then assembly oc ()
+        let () = assembly oc () in
+        if array_get flags 0
+        then print_asm_as_c ()
         else ()
         )
     else
