@@ -118,6 +118,16 @@
  (deps ./compiler.rv32.exe mc91.c ../../run_rv32))
 
 (cram
+ (applies_to GCDrv32)
+ (enabled_if
+  (and
+   (not
+    (= none %{read:../../cc_rv32}))
+   (not
+    (= none %{read:../../run_rv32}))))
+ (deps ./compiler.rv32.exe gcd.c ../../run_rv32))
+
+(cram
  (applies_to 1rv32)
  (enabled_if
   (and
