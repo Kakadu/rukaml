@@ -944,10 +944,27 @@ let rec generate_body ppf body =
       (* printfn ppf "@[; calling @[%a@]@]" ANF.pp_c cexpr; *)
       if expected_arity = formal_arity
       then (
+        let is_tailcall = 
+            match dest with
+            | DReg "rax" -> true
+            | _ -> false
+        in
         let to_remove = allocate_args (arg1 :: args) in
-        printfn ppf "  call %a" Toplevel.pp_label_exn f;
-        printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
-        printfn ppf "  mov %a, rax" pp_dest dest)
+        if is_tailcall
+        then (
+          for offset = (formal_arity - 1) downto 0 do
+            printfn ppf "  mov r10, [rsp+8*%d]" offset;
+            printfn ppf "  mov [rbp+8*%d], r10" (offset + 2);
+          done;
+          printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
+          printfn ppf "  add rsp, 8*%d ; deallocate local variables" (Addr_of_local.get_locals_count());
+          printfn ppf "  pop rbp";
+          printfn ppf "  jmp %a ; making tail call" Toplevel.pp_label_exn f;
+          )
+        else(
+          printfn ppf "  call %a" Toplevel.pp_label_exn f;
+          printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
+          printfn ppf "  mov %a, rax" pp_dest dest))
       else if formal_arity < expected_arity
       then (
         let partial_args_count = allocate_args (arg1 :: args) in
