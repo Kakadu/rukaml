@@ -1023,8 +1023,11 @@ let sneqz k a b = k (Sneqz (a,b))
 
 let store_info = [| 0; 110 |] (* count and max_count *)
 let store = array_make 110 (Ret 0)
+;;
+(* return instruction and labels count together *)
 let store_len () = array_get store_info 0
 ;;
+
 let pp_store oc () =
   let () = fprintf oc "#store has %d instrs\n"
     (array_get store_info 0) in
@@ -1455,16 +1458,19 @@ let for_loop start len f arr =
   in
   loop start len f arr
 ;;
+
 let rec collect_labels acc icount pos =
   (* let () = printf "collect labels at  pos %d\n" pos in *)
   if pos >= store_len ()
   then (* let () = output_string oc "exit loop\n" in *) acc
   else
     let r = array_get store pos in
+    let pos1 = pos + 1 in
     match r with
-    | Label s -> collect_labels ((s,icount)::acc) icount (pos+1)
-    | _ -> collect_labels acc (icount+1) (pos+1)
+    | Label s -> collect_labels ((s,icount)::acc) icount pos1
+    | _ -> collect_labels acc (icount+1) pos1
 ;;
+
 let rec assoc_exn k xs =
   match xs with
   | [] -> exit 30
@@ -1474,17 +1480,16 @@ let rec assoc_exn k xs =
     else assoc_exn k tl
 ;;
 
-let set_mnem oc pos hi lo i =
-  (* TODO: get rid of 'pos' *)
+(* increments mnemonic count and writes the last one *)
+let set_mnem hi lo i =
   let pos = array_get mnemonics_info 0 in
+  (*let () = printf "# 0x%x %x\n" hi lo  in
+  let () = printf "        %a, pos = %d\n" pp_inst i pos in *)
+
   let () = array_set mnemonics (2*pos) hi in
   let () = array_set mnemonics (1+2*pos) lo in
-  let pos = pos+1 in
-  let () = array_set mnemonics_info 0 pos in
-  (*
-  let () = fprintf oc "# 0x%x %x\n" hi lo  in
-  let () = fprintf oc "        %a, pos = %d\n" pp_inst i pos in
-  *)
+  let () = array_set mnemonics_info 0 (pos+1) in
+
   ()
 ;;
 
@@ -1494,27 +1499,27 @@ let trace_instr i offset =
 
 let assembly_li r n i oc icount =
   if r=A0 && n=0 then
-    set_mnem oc icount 0x0000 0x0513 i
+    set_mnem 0x0000 0x0513 i
   else if r=A0 && n=1 then
-    set_mnem oc icount 0x0010 0x0513 i
+    set_mnem  0x0010 0x0513 i
   else
   if r=A0 && n=2 then
-    set_mnem oc icount 0x0020 0x0513 i
+    set_mnem  0x0020 0x0513 i
   else
   if r=A0 && n=5 then
-    set_mnem oc icount 0x0050 0x0513 i
+    set_mnem  0x0050 0x0513 i
   else
   if r=A0 && n=10 then
-    set_mnem oc icount 0x00A0 0x0513 i
+    set_mnem 0x00A0 0x0513 i
   else
   if r=A0 && n=11 then
-    set_mnem oc icount 0x00b0 0x0513 i
+    set_mnem 0x00b0 0x0513 i
   else
   if r=A0 && n=100 then
-    set_mnem oc icount 0x0640 0x0513 i
+    set_mnem 0x0640 0x0513 i
   else
   if r=T0 && n=100 then
-    set_mnem oc icount 0x0640 0x0293 i
+    set_mnem 0x0640 0x0293 i
   else
     let () = trace_instr i n  in
     failwith "Not implemented in Li"
@@ -1522,66 +1527,95 @@ let assembly_li r n i oc icount =
 
 let assembly_add r1 r2 r3 i oc icount =
   if r1=A0 && r2=T0 && r3=A0 then
-    set_mnem  oc icount 0x00a2 0x8533 i
+    set_mnem 0x00a2 0x8533 i
   else if r1=A0 && r2=T0 && r3=A0 then
-    set_mnem  oc icount 0x00a2 0x8533 i
+    set_mnem 0x00a2 0x8533 i
   else if r1=T0 && r2=A0 && r3=RZ then
-    set_mnem  oc icount 0x0005 0x02b3 i
+    set_mnem 0x0005 0x02b3 i
   else
     let () = fprintf oc "== %a\n" pp_inst i in
     exit 3
 ;;
 
 let assembly_j offset i oc icount =
-  if offset = 0-3
-  then set_mnem oc icount 0x00c0 0x006f i
-  else if offset = 0-1
-  then set_mnem oc icount 0x0040 0x006f i
-  else if offset = 12
-  then set_mnem oc icount 0x00c0 0x006f i
-  else if offset = 16
-  then set_mnem oc icount 0x0440 0x006f i
-  else if offset = 18
-  then set_mnem oc icount 0x04c0 0x006f i
-  else if offset = 31
-  then set_mnem oc icount 0x01e0 0x006f i
-  else if offset = 35
-  then set_mnem oc icount 0x03c0 0x006f i
-  else if offset = 36
-  then set_mnem oc icount 0x0240 0x006f i
-  else if offset = 47
-  then set_mnem oc icount 0x0940 0x006f i
-  else
-    let () = trace_instr i offset in
-    set_mnem oc icount 0xffff 0xffff i
-
-(* assembly_j and assembly_call are the same? *)
-let assembly_call offset i oc icount =
-  if offset = 0-41
-  then set_mnem oc icount 0xfd9f 0xf0ef i
+  if offset = 0-47
+  then set_mnem 0xf47f 0xf0ef i
+  else if offset = 0-41
+  then set_mnem 0xf5df 0xf0ef i
+  else if offset = 0-36
+  then set_mnem 0xf73f 0xf0ef i
+  else if offset = 0-36
+  then set_mnem 0xf77f 0xf0ef i
   else if offset = 0-32
-  then set_mnem oc icount 0xf81f 0xf0ef i
-  else if offset = 0-29
-  then set_mnem oc icount 0xf8df 0xf0ef i
+  then set_mnem 0xf81f 0xf0ef i
+  else if offset = 0-31
+  then set_mnem 0xf87f 0xf0ef i
+  (* else if offset = 0-29
+  then set_mnem 0xf8df 0xf0ef i*)
   else if offset = 0-28
-  then set_mnem oc icount 0xf91f 0xf0ef i
+  then set_mnem 0xf91f 0xf0ef i
   else if offset = 0-27
-  then set_mnem oc icount 0xf95f 0xf0ef i
+  then set_mnem 0xf95f 0xf0ef i
   else if offset = 0-26
-  then set_mnem oc icount 0xf99f 0xf0ef i
+  then set_mnem 0xf99f 0xf0ef i
   else if offset = 0-25
-  then set_mnem oc icount 0xf9df 0xf0ef i
+  then set_mnem 0xf9df 0xf0ef i
+  else if offset = 0-22
+  then set_mnem 0xfa9f 0xf0ef i
   else if offset = 0-3
-  then set_mnem oc icount 0xfffd 0xf0ef i
-  else if offset = 12
-  then set_mnem oc icount 0x00c0 0x006f i
-  else if offset = 16
-  then set_mnem oc icount 0x0440 0x006f i
-  else if offset = 31
-  then set_mnem oc icount 0x01e0 0x006f i
+  then set_mnem 0xfffd 0xf0ef i
+  else if offset = 0-36
+  then set_mnem 0x0240 0x006f i
+  else if offset = 0-35
+  then set_mnem 0x03c0 0x006f i
+  else if offset = 0-31
+  then set_mnem 0x01e0 0x006f i
+  else if offset = 0-18
+  then set_mnem 0x04c0 0x006f i
+  else if offset = 0-16
+  then set_mnem 0x0440 0x006f i
+  else if offset = 0-12
+  then set_mnem 0x00c0 0x006f i
+  else if offset = 1
+  then set_mnem 0x0040 0x006f i
+  else if offset = 3
+  then set_mnem 0x0060 0x006f i
+  else if offset = 5
+  then set_mnem 0x00a0 0x006f i
+  else if offset = 15
+  then set_mnem 0x03c0 0x006f i
+  else if offset = 17
+  then set_mnem 0x0440 0x006f i
+  else if offset = 19
+  then set_mnem 0x04c0 0x006f i
+  else if offset = 33
+  then set_mnem 0x0840 0x006f i
+  else if offset = 37
+  then set_mnem 0x0940 0x006f i
   else
     let () = trace_instr i offset in
-    set_mnem oc icount 0xffff 0xffff i
+    set_mnem 0xffff 0xffff i
+;;
+
+let assembly_addi r1 r2 n i =
+  if r1=SP && r2=SP && n = (0-8) then
+    set_mnem 0xff81 0x0113 i
+  else if r1=SP && r2=SP && n= 8 then
+    set_mnem 0x0081 0x0113 i
+  else if r1=SP && r2=SP && n= (0-4) then
+    set_mnem 0xffc1 0x0113 i
+  else  if r1=SP && r2=SP && n= 4 then
+    set_mnem 0x0041 0x0113 i
+  else if r1=SP && r2=SP && n= 0 then
+    (* mv sp, sp *)
+    set_mnem 0x1 0x0113 i
+  else if r1=FP && r2=SP && n= 0 then
+    (* mv fp, sp *)
+    set_mnem 0x1 0x0413 i
+  else
+      let () = printf "== %a\n" pp_inst i in
+      exit 2
+;;
 
 let assembly oc () =
   (* let count = store_len () in *)
@@ -1608,70 +1642,52 @@ let assembly oc () =
       match i with
       | Label _ -> loop store curi next
       | Ret _ ->
-          let () = set_mnem oc icount 0x0000 0x8067 i in
+          let () = set_mnem 0x0000 0x8067 i in
           loop store curi2 (1+icount)
       | Li (r,n) ->
           let () = assembly_li r n i oc icount in
           loop store curi2 next
       | Addi (r1,r2,n) ->
-        let () =
-          if r1=SP && r2=SP && n= (0-8) then
-            set_mnem  oc icount 0xff81 0x0113 i
-          else if r1=SP && r2=SP && n= 8 then
-            set_mnem  oc icount 0x0081 0x0113 i
-          else if r1=SP && r2=SP && n= (0-4) then
-            set_mnem  oc icount 0xffc1 0x0113 i
-          else  if r1=SP && r2=SP && n= 4 then
-            set_mnem  oc icount 0x0041 0x0113 i
-          else if r1=SP && r2=SP && n= 0 then
-            (* mv sp, sp *)
-            set_mnem  oc icount 0x1 0x0113 i
-          else if r1=FP && r2=SP && n= 0 then
-            (* mv fp, sp *)
-            set_mnem  oc icount 0x1 0x0413 i
-          else
-              let () = fprintf oc "== %a\n" pp_inst i in
-              exit 2
-        in
-        loop store curi2 next
+          let () = assembly_addi r1 r2 n i in
+          loop store curi2 next
       | Sub (r1,r2,r3) ->
           if r1=A0 && r2=T0 && r3=A0 then
-            let () = set_mnem  oc icount 0x40a2 0x8533 i in
+            let () = set_mnem 0x40a2 0x8533 i in
             loop store curi2 next
           else
-            let () = fprintf oc "== %a\n" pp_inst i in
+            let () = printf "== %a\n" pp_inst i in
             exit 3
       | Add (r1,r2,r3) ->
           let () = assembly_add r1 r2 r3 i oc icount in
           loop store curi2 next
       | Mul (r1,r2,r3) ->
           if r1=A0 && r2=T0 && r3=A0 then
-            let () = set_mnem  oc icount 0x02a2 0x8533 i in
+            let () = set_mnem 0x02a2 0x8533 i in
             loop store curi2 next
           else
-            let () = fprintf oc "== %a\n" pp_inst i in
+            let () = printf "== %a\n" pp_inst i in
             exit 4
       | Slt (r1,r2,r3) ->
         let () =
           if r1=A0 && r2=T0 && r3=A0 then
-            set_mnem  oc icount 0x00a2 0xa533 i
+            set_mnem 0x00a2 0xa533 i
           else if r1=A0 && r2=A0 && r3=T0 then
-            set_mnem  oc icount 0x0055 0x2533 i
+            set_mnem 0x0055 0x2533 i
           else
-            let () = fprintf oc "== %a\n" pp_inst i in
+            let () = printf "== %a\n" pp_inst i in
             exit 4
         in
         loop store curi2 next
       | Sd (r1,n,r2) ->
           let () =
             if r1=RA && n=0 && r2=SP then
-              set_mnem  oc icount 0x0011 0x2023 i
+              set_mnem 0x0011 0x2023 i
             else if r1=A0 && n=0 && r2=SP then
-              set_mnem  oc icount 0x00a1 0x2023 i
+              set_mnem 0x00a1 0x2023 i
             else  if r1=A0 && n=4 && r2=SP then
-              set_mnem  oc icount 0x00a1 0x2223 i
+              set_mnem 0x00a1 0x2223 i
             else if r1=FP && n=4 && r2=SP then
-              set_mnem  oc icount 0x0081 0x2223 i
+              set_mnem 0x0081 0x2223 i
             else
               let () = trace_instr i n in
               exit 5
@@ -1680,15 +1696,15 @@ let assembly oc () =
       | Ld (r1,n,r2) ->
           let () =
             if r1=A0 && n=8 && r2=FP then (* assuming FP is S0 *)
-              set_mnem  oc icount 0x0084 0x2503 i
+              set_mnem 0x0084 0x2503 i
             else if r1=A0 && n=12 && r2=FP then
-              set_mnem  oc icount 0x00c4 0x2503 i
+              set_mnem 0x00c4 0x2503 i
             else if r1=T0 && n=0 && r2=SP then
-              set_mnem  oc icount 0x0001 0x2283 i
+              set_mnem 0x0001 0x2283 i
             else if r1=FP && n=4 && r2=SP then
-              set_mnem  oc icount 0x0041 0x2403 i
+              set_mnem 0x0041 0x2403 i
             else if r1=RA && n=0 && r2=SP then
-              set_mnem  oc icount 0x0001 0x2083 i
+              set_mnem 0x0001 0x2083 i
             else
               let () = trace_instr i n in
               exit 6
@@ -1701,14 +1717,14 @@ let assembly oc () =
           (* let () = fprintf oc "Beq offset = %d\n" offset in *)
           let () =
             if r1=A0 && r2=RZ && offset=3
-            then set_mnem  oc icount 0x0005 0x0663 i
+            then set_mnem 0x0005 0x0663 i
             else if r1=A0 && r2=RZ && offset=9
-            then set_mnem  oc icount 0x0205 0x0263 i
+            then set_mnem 0x0205 0x0263 i
             else if r1=A0 && r2=RZ && offset=15
-            then set_mnem  oc icount 0x0005 0x0f63 i
+            then set_mnem 0x0005 0x0f63 i
             else
               let () = trace_instr i offset in
-              set_mnem  oc icount 0xffff 0xffff i
+              set_mnem 0xffff 0xffff i
           in
           loop store curi2 next
 
@@ -1717,10 +1733,10 @@ let assembly oc () =
           let offset = label_instr - curi in
           let () =
             if r1=A0 && r2=RZ && offset=3
-            then set_mnem  oc icount 0x0005 0x1663 i
+            then set_mnem 0x0005 0x1663 i
             else
               let () = trace_instr i offset in
-              set_mnem  oc icount 0xffff 0xffff i
+              set_mnem 0xffff 0xffff i
           in
           loop store curi2 next
       | Bge (r1,r2,lab) ->
@@ -1728,27 +1744,30 @@ let assembly oc () =
           let offset = label_instr - curi in
 
           let () =
-            if r1=T0 && r2=A0 && offset=9
-            then set_mnem  oc icount 0x02a2 0xd263 i
+            if r1=T0 && r2=A0 && offset=3
+            then set_mnem 0x00a2 0xd663 i
+            else  if r1=T0 && r2=A0 && offset=9
+            then set_mnem 0x02a2 0xd263 i
             else if r1=T0 && r2=A0 && offset=15
-            then set_mnem  oc icount 0x02a2 0xde63 i
+            then set_mnem 0x02a2 0xde63 i
             else
               let () = trace_instr i offset in
-              set_mnem  oc icount 0xffff 0xffff i
+              set_mnem 0xffff 0xffff i
           in
           loop store curi2 next
       | Seqz (r1,r2) ->
           let () =
             if r1=A0 && r2=A0
-            then set_mnem  oc icount 0x0015 0x3513 i
+            then set_mnem 0x0015 0x3513 i
             else
               let () = trace_instr i 0 in
-              set_mnem  oc icount 0xffff 0xffff i
+              set_mnem 0xffff 0xffff i
           in
           loop store curi2 next
       | J lab ->
           let label_instr = assoc_exn lab label_idxs in
-          let offset = label_instr - icount in
+
+          let offset = label_instr - curi in
           (* let () = fprintf oc "jump offset = %d\n" offset in *)
           let () =
             assembly_j offset i oc icount
@@ -1759,7 +1778,7 @@ let assembly oc () =
           let offset = label_instr - curi in
           (* let () = fprintf oc "call offset = %d\n" offset in *)
 
-          let () = assembly_call offset i oc icount in
+          let () = assembly_j offset i oc icount in
           loop store curi2 next
       | _ ->
         let () = trace_instr i 0 in
@@ -1769,24 +1788,42 @@ let assembly oc () =
 ;;
 
 let print_asm_as_c oc =
-  let rec printer icount ipos =
-    if ipos >= store_len ()  then ()
+  let rec printer label_idxs icount ipos =
+    if icount >= store_len ()
+    then () (* printf "exit: icount = %d \n" icount *)
     else
-      let i = array_get store ipos in
+      (* let () = printf "icount = %d, ipos = %d\n" icount ipos in *)
+      let i = array_get store icount in
       let ipos1 = ipos+1 in
       let icount1 = icount+1 in
       match i with
         | Label _ ->
             let () = fprintf oc "/* %a */\n" pp_inst i in
-            printer icount ipos1
+            printer label_idxs icount1 ipos
         | _ ->
           let hi = array_get mnemonics (2*ipos) in
           let lo = array_get mnemonics (2*ipos + 1) in
-          let () = fprintf oc "m[%d] = (0x%xu << 16) + 0x%xu;" icount hi lo in
-          let () = fprintf oc "  /* %d: %a */\n" icount1 pp_inst i in
-          printer icount1 ipos1
+          let () = fprintf oc "m[%d] = (0x%xu << 16) + 0x%xu;" ipos hi lo in
+
+          let () =
+            match i with
+            | Call lab ->
+              let label_instr = assoc_exn lab label_idxs in
+              let offset = label_instr - ipos in
+              fprintf oc "  /* %d: %a, offset = %d */\n" icount1 pp_inst i offset
+            | J lab ->
+              let label_instr = assoc_exn lab label_idxs in
+              let offset = label_instr - ipos in
+              fprintf oc "  /* %d: %a, offset = %d */\n" icount1 pp_inst i offset
+            | _ ->
+              fprintf oc "  /* %d: %a */\n" icount1 pp_inst i
+          in
+          printer label_idxs icount1 ipos1
   in
-  printer 0 0
+
+  let label_idxs = collect_labels [] 0 0 in
+  (* let () = printf "store_len  =  %d\n" (store_len()) in *)
+  printer label_idxs 0 0
 ;;
 
 (* driver *)

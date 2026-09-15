@@ -12,8 +12,8 @@
   
   
   GC statistics
-  Total allocations: 14565(words)
-  Currently allocated: 14565(words)
+  Total allocations: 14574(words)
+  Currently allocated: 14574(words)
   Current bank: 0
   int fact_rec(int n) {
     if ((n < 1)) {
@@ -23,9 +23,12 @@
     return (n * fact_rec((n - 1)));
   }
   GC statistics
-  Total allocations: 15273(words)
-  Currently allocated: 15273(words)
+  Total allocations: 15282(words)
+  Currently allocated: 15282(words)
   Current bank: 0
+
+
+
 
 
 
@@ -45,8 +48,8 @@
   
   
   GC statistics
-  Total allocations: 14564(words)
-  Currently allocated: 14564(words)
+  Total allocations: 14573(words)
+  Currently allocated: 14573(words)
   Current bank: 0
   .global fact_rec
   .text
@@ -89,46 +92,45 @@
   # fact_rec_epilogue_0 -> 28
   # .End_if_lt_1 -> 10
   # fact_rec -> 0
-  ==   bge t0, a0, .End_if_lt_1, offset = 3
-  ==   call fact_rec, offset = -22
   /* fact_rec: */
-  m[0] = (0x81u << 16) + 0x2223u;  /* 1:   addi sp, sp, -8 */
-  m[1] = (0x11u << 16) + 0x2023u;  /* 2:   sw fp, 4(sp) */
-  m[2] = (0x1u << 16) + 0x413u;  /* 3:   sw ra, 0(sp) */
-  m[3] = (0x84u << 16) + 0x2503u;  /* 4:   addi fp, sp, 0 */
-  m[4] = (0x5u << 16) + 0x2b3u;  /* 5:   lw a0, 8(fp) */
-  m[5] = (0x10u << 16) + 0x513u;  /* 6:   add t0, a0, zero */
-  m[6] = (0xffffu << 16) + 0xffffu;  /* 7:   li a0, 1 */
-  m[7] = (0x10u << 16) + 0x513u;  /* 8:   bge t0, a0, .End_if_lt_1 */
-  m[8] = (0x4c0u << 16) + 0x6fu;  /* 9:   li a0, 1 */
-  m[9] = (0x84u << 16) + 0x2503u;  /* 10:   j fact_rec_epilogue_0 */
+  m[0] = (0xff81u << 16) + 0x113u;  /* 2:   addi sp, sp, -8 */
+  m[1] = (0x81u << 16) + 0x2223u;  /* 3:   sw fp, 4(sp) */
+  m[2] = (0x11u << 16) + 0x2023u;  /* 4:   sw ra, 0(sp) */
+  m[3] = (0x1u << 16) + 0x413u;  /* 5:   addi fp, sp, 0 */
+  m[4] = (0x84u << 16) + 0x2503u;  /* 6:   lw a0, 8(fp) */
+  m[5] = (0x5u << 16) + 0x2b3u;  /* 7:   add t0, a0, zero */
+  m[6] = (0x10u << 16) + 0x513u;  /* 8:   li a0, 1 */
+  m[7] = (0xa2u << 16) + 0xd663u;  /* 9:   bge t0, a0, .End_if_lt_1 */
+  m[8] = (0x10u << 16) + 0x513u;  /* 10:   li a0, 1 */
+  m[9] = (0x4c0u << 16) + 0x6fu;  /* 11:   j fact_rec_epilogue_0, offset = 19 */
   /* .End_if_lt_1: */
-  m[10] = (0xa1u << 16) + 0x2023u;  /* 11:   lw a0, 8(fp) */
-  m[11] = (0xffc1u << 16) + 0x113u;  /* 12:   addi sp, sp, -4 */
-  m[12] = (0x84u << 16) + 0x2503u;  /* 13:   sw a0, 0(sp) */
-  m[13] = (0xffc1u << 16) + 0x113u;  /* 14:   addi sp, sp, -4 */
-  m[14] = (0xa1u << 16) + 0x2023u;  /* 15:   lw a0, 8(fp) */
-  m[15] = (0x10u << 16) + 0x513u;  /* 16:   addi sp, sp, -4 */
-  m[16] = (0x1u << 16) + 0x2283u;  /* 17:   sw a0, 0(sp) */
-  m[17] = (0x41u << 16) + 0x113u;  /* 18:   li a0, 1 */
-  m[18] = (0x40a2u << 16) + 0x8533u;  /* 19:   lw t0, 0(sp) */
-  m[19] = (0xa1u << 16) + 0x2023u;  /* 20:   addi sp, sp, 4 */
-  m[20] = (0xffffu << 16) + 0xffffu;  /* 21:   sub a0, t0, a0 */
-  m[21] = (0x41u << 16) + 0x113u;  /* 22:   sw a0, 0(sp) */
-  m[22] = (0x1u << 16) + 0x2283u;  /* 23:   call fact_rec */
-  m[23] = (0x41u << 16) + 0x113u;  /* 24:   addi sp, sp, 4 */
-  m[24] = (0x2a2u << 16) + 0x8533u;  /* 25:   lw t0, 0(sp) */
-  m[25] = (0x40u << 16) + 0x6fu;  /* 26:   addi sp, sp, 4 */
-  m[26] = (0x1u << 16) + 0x2083u;  /* 27:   mul a0, t0, a0 */
-  m[27] = (0x41u << 16) + 0x2403u;  /* 28:   j fact_rec_epilogue_0 */
+  m[10] = (0x84u << 16) + 0x2503u;  /* 13:   lw a0, 8(fp) */
+  m[11] = (0xffc1u << 16) + 0x113u;  /* 14:   addi sp, sp, -4 */
+  m[12] = (0xa1u << 16) + 0x2023u;  /* 15:   sw a0, 0(sp) */
+  m[13] = (0xffc1u << 16) + 0x113u;  /* 16:   addi sp, sp, -4 */
+  m[14] = (0x84u << 16) + 0x2503u;  /* 17:   lw a0, 8(fp) */
+  m[15] = (0xffc1u << 16) + 0x113u;  /* 18:   addi sp, sp, -4 */
+  m[16] = (0xa1u << 16) + 0x2023u;  /* 19:   sw a0, 0(sp) */
+  m[17] = (0x10u << 16) + 0x513u;  /* 20:   li a0, 1 */
+  m[18] = (0x1u << 16) + 0x2283u;  /* 21:   lw t0, 0(sp) */
+  m[19] = (0x41u << 16) + 0x113u;  /* 22:   addi sp, sp, 4 */
+  m[20] = (0x40a2u << 16) + 0x8533u;  /* 23:   sub a0, t0, a0 */
+  m[21] = (0xa1u << 16) + 0x2023u;  /* 24:   sw a0, 0(sp) */
+  m[22] = (0xfa9fu << 16) + 0xf0efu;  /* 25:   call fact_rec, offset = -22 */
+  m[23] = (0x41u << 16) + 0x113u;  /* 26:   addi sp, sp, 4 */
+  m[24] = (0x1u << 16) + 0x2283u;  /* 27:   lw t0, 0(sp) */
+  m[25] = (0x41u << 16) + 0x113u;  /* 28:   addi sp, sp, 4 */
+  m[26] = (0x2a2u << 16) + 0x8533u;  /* 29:   mul a0, t0, a0 */
+  m[27] = (0x40u << 16) + 0x6fu;  /* 30:   j fact_rec_epilogue_0, offset = 1 */
   /* fact_rec_epilogue_0: */
-  m[28] = (0x0u << 16) + 0x8067u;  /* 29:   lw ra, 0(sp) */
-  m[29] = (0x0u << 16) + 0x0u;  /* 30:   lw fp, 4(sp) */
-  m[30] = (0x0u << 16) + 0x0u;  /* 31:   addi sp, sp, 8 */
-  m[31] = (0x0u << 16) + 0x0u;  /* 32:   ret */
+  m[28] = (0x1u << 16) + 0x2083u;  /* 32:   lw ra, 0(sp) */
+  m[29] = (0x41u << 16) + 0x2403u;  /* 33:   lw fp, 4(sp) */
+  m[30] = (0x81u << 16) + 0x113u;  /* 34:   addi sp, sp, 8 */
+  m[31] = (0x0u << 16) + 0x8067u;  /* 35:   ret */
   GC statistics
-  Total allocations: 24448(words)
-  Currently allocated: 24448(words)
+  Total allocations: 24341(words)
+  Currently allocated: 24341(words)
   Current bank: 0
+
 
 
