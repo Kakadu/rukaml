@@ -290,7 +290,10 @@ module Toplevel = struct
       Format.eprintf "Can't find toplevel %a\n" Ident.pp ident;
       raise Not_found
   ;;
-
+  type optimizations = {
+    mutable tailcall : bool;
+  }
+  let allowed_optimizations = { tailcall = true }
   (* __immediates is used to make toplevel evaluation in the order of declaration *)
   let __immediates : toplevel Queue.t = Queue.create ()
   let iter_immediates f = Queue.iter f __immediates
@@ -950,7 +953,7 @@ let rec generate_body ppf body =
             | _ -> false
         in
         let to_remove = allocate_args (arg1 :: args) in
-        if is_tailcall
+        if is_tailcall && Toplevel.allowed_optimizations.tailcall
         then (
           for offset = (formal_arity - 1) downto 0 do
             printfn ppf "  mov r10, [rsp+8*%d]" offset;
@@ -1486,7 +1489,9 @@ section .text
         (match List.length pats with
          | 0 ->
            Toplevel.extend name ~kind:(Immediate Constant);
-           emit_global_constant ppf name body
+           Toplevel.allowed_optimizations.tailcall <- false;
+           emit_global_constant ppf name body;
+           Toplevel.allowed_optimizations.tailcall <- true
          | argc ->
            Toplevel.extend name ~kind:(Function { argc });
            emit_global_function ppf name body)
