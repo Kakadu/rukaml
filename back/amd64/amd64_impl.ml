@@ -953,6 +953,14 @@ let rec generate_body ppf body =
             | _ -> false
         in
         let to_remove = allocate_args (arg1 :: args) in
+        
+        (* Why is the condition (formal_arity <= !Addr_of_local.function_args) not added? (which exists in RV64 backend)
+        Explanation:
+        Case when (formal_arity > !Addr_of_local.function_args) is impossible, because
+          If (!Addr_of_local.function_args = 0)
+          then: current function is constant, but a constant cannot make tail call.
+          else: closure will be created and control will pass to (formal_arity < expected_arity)'s branch.
+        *)
         if is_tailcall && Toplevel.allowed_optimizations.tailcall
         then (
           for offset = (formal_arity - 1) downto 0 do
