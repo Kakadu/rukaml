@@ -31,7 +31,10 @@ type instr =
   (** Set Less Than Immediate Unsigned.  sltiu rd,rs1,imm.  x[rd] = x[rs1] <u sext(immediate) *)
   | Li of reg * int
   | Ecall
-  | Call of string
+  | J of string (* A near non-returnable jump *)
+  | Jal of string (* A near returnable jump *)
+  | Tail of string (* A far non-returnable jump *)
+  | Call of string (* A far returnable jump *)
   | Ret
   | Lla of reg * string
   | Lw of reg * reg
@@ -42,7 +45,6 @@ type instr =
   | Beq of reg * reg * string
   | Blt of reg * reg * string
   | Ble of reg * reg * string
-  | Tail of string
   | Label of string
   | Comment of string
 
@@ -62,6 +64,9 @@ let pp_instr ppf =
   | Sltiu (r1, r2, n) -> fprintf ppf "sltiu %a, %a, %d" pp_reg r1 pp_reg r2 n
   | Li (r, n) -> fprintf ppf "li %a, %d" pp_reg r n
   | Ecall -> fprintf ppf "ecall"
+  | J f -> fprintf ppf "j %s" f
+  | Jal f -> fprintf ppf "jal %s" f
+  | Tail f -> fprintf ppf "tail %s" f
   | Call f -> fprintf ppf "call %s" f
   | Ret -> fprintf ppf "ret"
   | Lla (r1, s) -> fprintf ppf "lla %a, %s" pp_reg r1 s
@@ -75,7 +80,6 @@ let pp_instr ppf =
   | Beq (r1, r2, offset) -> fprintf ppf "beq %a, %a, %s" pp_reg r1 pp_reg r2 offset
   | Blt (r1, r2, offset) -> fprintf ppf "blt %a, %a, %s" pp_reg r1 pp_reg r2 offset
   | Ble (r1, r2, offset) -> fprintf ppf "ble %a, %a, %s" pp_reg r1 pp_reg r2 offset
-  | Tail (offset) -> fprintf ppf "tail %s" offset
   | Label s -> fprintf ppf "%s:" s
   | Comment s -> fprintf ppf "# %s" s
 ;;
