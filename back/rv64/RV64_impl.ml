@@ -399,7 +399,10 @@ let with_ra_saving f =
   Addr_of_local.remove_local slot2;
   Addr_of_local.remove_local slot1
 ;;
-
+let is_tailcall = function 
+  | DReg "a0" -> true
+  | _ -> false
+;;
 let print_epilogue ppf fname =
   if fname <> "main"
   then emit ret ~comm:fname
@@ -954,40 +957,32 @@ let generate_body is_toplevel body =
            printfn ppf "\t; calling %S" f; *)
       if expected_arity = formal_arity
       then (
-        let is_tailcall = 
-            match dest with
-            | DReg "a0" -> true
-            | _ -> false
-        in
         (* emit_comment "Full application of arity = %d" expected_arity; *)
-        let _ =
-          let to_remove = allocate_args_for_call ~f (arg1 :: args) in
+        let to_remove = allocate_args_for_call ~f (arg1 :: args) in
+        
+        if Toplevel.allowed_optimizations.tailcall && is_tailcall dest  
+           && formal_arity <= !Addr_of_local.function_args
+        then(
+          emit_comment "Init tail call with %d args" formal_arity;
+          let move_offset =  !Addr_of_local.last_pos in
           
-          if is_tailcall && formal_arity <= !Addr_of_local.function_args
-          then(
-            emit_comment "Init tail call with %d args" formal_arity;
-            let move_offset =  !Addr_of_local.last_pos in
-            
-            for offset = (formal_arity - 1) downto 0 do
-              emit ld t0 @@ make_sp_offset offset;
-              emit sd t0 @@ make_sp_offset (offset + move_offset);
-            done;
-            deallocate_args_for_call to_remove;
+          for offset = (formal_arity - 1) downto 0 do
+            emit ld t0 @@ make_sp_offset offset;
+            emit sd t0 @@ make_sp_offset (offset + move_offset);
+          done;
+          deallocate_args_for_call to_remove;
 
-            emit ld ra (make_sp_offset ra_offset);
-            let comm = sprintf "Deallocate function frame for tail call" in
-            emit shrink_stack (!Addr_of_local.last_pos) ~comm;
-            emit tail f.hum_name;
-            )
-          else(
-            emit call f.hum_name;
-            deallocate_args_for_call to_remove
-          );
-          
-          to_remove
-        in
-        if not is_tailcall 
-        then emit sd_dest (RU "a0") dest)
+          emit ld ra (make_sp_offset ra_offset);
+          let comm = sprintf "Deallocate function frame for tail call" in
+          emit shrink_stack (!Addr_of_local.last_pos) ~comm;
+          emit tail f.hum_name;
+          )
+        else(
+          emit call f.hum_name;
+          deallocate_args_for_call to_remove;
+          emit sd_dest (RU "a0") dest
+        ) 
+      )
       else if formal_arity < expected_arity
       then (
         let __ () =
@@ -1025,8 +1020,16 @@ let generate_body is_toplevel body =
       helper_a (DReg "a2") arg;
       emit ld (RU "a0") (Addr_of_local.pp_to_mach f);
       emit li (RU "a1") 1;
-      emit call "rukaml_applyN";
-      if dest <> DReg "a0" then emit sd_dest (RU "a0") dest
+
+      if Toplevel.allowed_optimizations.tailcall && is_tailcall dest
+      then (
+        emit ld ra (make_sp_offset ra_offset);
+        emit shrink_stack (!Addr_of_local.last_pos);
+        emit tail "rukaml_applyN")
+      else (
+        emit call "rukaml_applyN";
+        emit sd_dest (RU "a0") dest
+      )
     | CApp (APrimitive ("field", _), AConst (PConst_int _n), [ AVar _ ]) ->
       failwiths "Not implemented"
       (* helper_a (DReg "rsi") cont;
@@ -1638,7 +1641,9 @@ let codegen ?(wrap_main_into_start = true) anf file =
         emit li a0 0;
         Toplevel.extend name ~kind:Main;
         log "\nGenerating function main";
+        Toplevel.allowed_optimizations.tailcall <- false;
         generate_body is_toplevel expr;
+        Toplevel.allowed_optimizations.tailcall <- true;
         print_epilogue ppf name.Ident.hum_name;
         Machine.flush_queue ppf
       | `Immediate (name, expr) -> emit_global_constant is_toplevel ppf name expr
