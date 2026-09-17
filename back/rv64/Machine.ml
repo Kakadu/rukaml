@@ -31,10 +31,10 @@ type instr =
   (** Set Less Than Immediate Unsigned.  sltiu rd,rs1,imm.  x[rd] = x[rs1] <u sext(immediate) *)
   | Li of reg * int
   | Ecall
-  | J of string (* A near non-returnable jump *)
-  | Jal of string (* A near returnable jump *)
-  | Tail of string (* A far non-returnable jump *)
-  | Call of string (* A far returnable jump *)
+  | J of string (** A near non-returnable jump *)
+  | Jal of string (** A near returnable jump *)
+  | Tail of string (** A far non-returnable jump *)
+  | Call of string (** A far returnable jump *)
   | Ret
   | Lla of reg * string
   | Lw of reg * reg
