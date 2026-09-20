@@ -100,6 +100,9 @@ type dest =
   | DStack_var of Frontend.Ident.t
     (* DStatic_var's are allocated in .bss and access to them is performed via labels *)
   | DStatic_var of Frontend.Ident.t
+let is_tailcall = function 
+| DReg "rax" -> true
+| _ -> false
 
 module Addr_of_local = struct
   let store : (Frontend.Ident.t, _) Hashtbl.t = Hashtbl.create 13
@@ -899,11 +902,20 @@ let rec generate_body ppf body =
       printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn f;
       printfn ppf "  mov rsi, 1";
       printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arg1;
-      printfn ppf "  call rukaml_applyN";
+      
+      if Toplevel.allowed_optimizations.tailcall && is_tailcall dest
+      then (
+        printfn ppf "  add rsp, 8*%d ; deallocate local variables" (Addr_of_local.get_locals_count());
+        printfn ppf "  pop rbp";
+        printfn ppf "  jmp rukaml_applyN ; making tail call";
+      )
+      else (
+        printfn ppf "  call rukaml_applyN";
+        printfn ppf "  add rsp, 8*2 ; free space for args of function \"%a\"" Ident.pp f;
+        printfn ppf "  mov %a, rax" pp_dest dest
+      );
       Addr_of_local.remove_local arg1;
       Addr_of_local.remove_local temp_padding;
-      printfn ppf "  add rsp, 8*2 ; free space for args of function \"%a\"" Ident.pp f;
-      printfn ppf "  mov %a, rax" pp_dest dest
     | CApp (APrimitive ("print", 1), AConst (PConst_int n), []) ->
       printfn ppf "  mov rdi, %d" n;
       printfn ppf "  call rukaml_print_int";
@@ -947,11 +959,6 @@ let rec generate_body ppf body =
       (* printfn ppf "@[; calling @[%a@]@]" ANF.pp_c cexpr; *)
       if expected_arity = formal_arity
       then (
-        let is_tailcall = 
-            match dest with
-            | DReg "rax" -> true
-            | _ -> false
-        in
         let to_remove = allocate_args (arg1 :: args) in
         
         (* Why is the condition (formal_arity <= !Addr_of_local.function_args) not added? (which exists in RV64 backend)
@@ -961,7 +968,7 @@ let rec generate_body ppf body =
           then: current function is constant, but a constant cannot make tail call.
           else: closure will be created and control will pass to (formal_arity < expected_arity)'s branch.
         *)
-        if is_tailcall && Toplevel.allowed_optimizations.tailcall
+        if is_tailcall dest && Toplevel.allowed_optimizations.tailcall
         then (
           for offset = (formal_arity - 1) downto 0 do
             printfn ppf "  mov r10, [rsp+8*%d]" offset;
@@ -1491,7 +1498,9 @@ section .text
       | ANF.ANF_vb (_flg, Apat_var { hum_name = "main"; _ }, body) ->
         let name = Ident.ident "main" 0 in
         Toplevel.extend name ~kind:Main;
-        emit_global_function ppf name body
+        Toplevel.allowed_optimizations.tailcall <- false;
+        emit_global_function ppf name body;
+        Toplevel.allowed_optimizations.tailcall <- true
       | ANF.ANF_vb (_flg, Apat_var name, body) ->
         let pats, _ = Compile_lib.ANF.group_abstractions body in
         (match List.length pats with
