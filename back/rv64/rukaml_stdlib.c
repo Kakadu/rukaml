@@ -557,7 +557,18 @@ value rukaml_field(size_t n, value r) {
   }
   return ans;
 }
-
+void rukaml_applyN_args(value closure, rukaml_int_t argc, ...){
+  va_list argp;
+  va_start(argp, argc);
+  for (size_t i = 0; i < argc; i++) {
+    value arg = (value)va_arg(argp, void *);
+    size_t received = Int_val(Clo_received(closure));
+    Set_clo_arg(closure, received, arg);    
+    received++;
+    Set_clo_received(closure, Val_int(received));
+  }
+  va_end(argp);
+}
 value rukaml_applyN(value f, rukaml_int_t argc, ...) {
   if (!IS_ON_HEAP(f)) {
     printf("%s, 0x%" PRIxVAL "\n", __func__,  (uintptr_t)f);
