@@ -557,18 +557,7 @@ value rukaml_field(size_t n, value r) {
   }
   return ans;
 }
-void rukaml_applyN_args(value closure, rukaml_int_t argc, ...){
-  va_list argp;
-  va_start(argp, argc);
-  for (size_t i = 0; i < argc; i++) {
-    value arg = (value)va_arg(argp, void *);
-    size_t received = Int_val(Clo_received(closure));
-    Set_clo_arg(closure, received, arg);    
-    received++;
-    Set_clo_received(closure, Val_int(received));
-  }
-  va_end(argp);
-}
+
 value rukaml_applyN(value f, rukaml_int_t argc, ...) {
   if (!IS_ON_HEAP(f)) {
     printf("%s, 0x%" PRIxVAL "\n", __func__,  (uintptr_t)f);
@@ -654,7 +643,23 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
   }
   __builtin_unreachable();
 }
+value rukaml_applyN_tailed(value f, value arg, void** stack, size_t stack_space){
+  if (stack_space < Int_val(Clo_arity(f)) || Int_val(Clo_received(f)) + 1 != Int_val(Clo_arity(f))){
+    return rukaml_applyN(f, 1, arg);
+  }
+  size_t received = Int_val(Clo_received(f));
+  Set_clo_arg(f, received, arg);
+  received++;
+  Set_clo_received(f, Val_int(received));
+  assert(Int_val(Clo_received(f)) == Int_val(Clo_arity(f)));
 
+  for (size_t i = 0; i < Int_val(Clo_arity(f)); ++i){
+    stack[i] = Clo_arg(f, i);
+  }
+  fun0 callable;
+  callable = (fun0)(uintptr_t)(Clo_code(f));
+  return callable();
+}
 void *rukaml_match_failure() {
   puts("Match failure");
   fflush(stdout);
