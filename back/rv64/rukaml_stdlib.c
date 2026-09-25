@@ -643,22 +643,18 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
   }
   __builtin_unreachable();
 }
-value rukaml_applyN_tailed(value f, value arg, void** stack, size_t stack_space){
-  if (stack_space < Int_val(Clo_arity(f)) || Int_val(Clo_received(f)) + 1 != Int_val(Clo_arity(f))){
-    return rukaml_applyN(f, 1, arg);
-  }
+bool rukaml_applyN_is_tailable(value f, size_t stack_space){
+  size_t arity = Int_val(Clo_arity(f));
   size_t received = Int_val(Clo_received(f));
-  Set_clo_arg(f, received, arg);
-  received++;
-  Set_clo_received(f, Val_int(received));
-  assert(Int_val(Clo_received(f)) == Int_val(Clo_arity(f)));
-
-  for (size_t i = 0; i < Int_val(Clo_arity(f)); ++i){
+  return (stack_space >= arity && received + 1 == arity);
+}
+void* rukaml_applyN_tail_prepare_args(value f, value arg, void** stack){
+  size_t received = Int_val(Clo_received(f));
+  for (size_t i = 0; i < received; ++i) {
     stack[i] = Clo_arg(f, i);
   }
-  fun0 callable;
-  callable = (fun0)(uintptr_t)(Clo_code(f));
-  return callable();
+  stack[received] = arg;  
+  return Clo_code(f);
 }
 void *rukaml_match_failure() {
   puts("Match failure");

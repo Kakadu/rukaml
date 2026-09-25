@@ -1015,20 +1015,41 @@ let generate_body is_toplevel body =
     | CApp (AVar f, (AConst _ as arg), []) | CApp (AVar f, (AVar _ as arg), []) ->
       (* A 1 argument application *)
       assert (Option.is_none (is_toplevel f));
-      helper_a (DReg "a2") arg;
-      emit ld a0 (Addr_of_local.pp_to_mach f);
+      let app_name = Addr_of_local.pp_to_mach f in 
+      helper_a (DReg "a3") arg;
 
       if Toplevel.allowed_optimizations.tailcall && is_tailcall dest
-      then (        
-        emit ld ra (make_sp_offset ra_offset);
-        emit shrink_stack (!Addr_of_local.last_pos);
+      then (
+        let dealloc_stack () = (
+          emit ld ra (make_sp_offset ra_offset);
+          emit shrink_stack (!Addr_of_local.last_pos))
+        in
 
-        emit mv a1 a2;
-        emit mv a2 sp;
-        emit li a3 !Addr_of_local.function_args;
-        emit tail "rukaml_applyN_tailed")
-      else (
+        let tailed_version = sprintf "rukaml_applyN_tailed_%d" (gensym ()) in
+        emit ld a0 app_name;
+        emit li a1 (!Addr_of_local.function_args);
+        emit call "rukaml_applyN_is_tailable";
+        
+        emit bne a0 zero tailed_version;
+
+        emit ld a0 app_name;
         emit li a1 1;
+        emit mv a2 a3;
+        dealloc_stack();
+        emit tail "rukaml_applyN";
+
+        emit label tailed_version;
+        emit ld a0 app_name;
+        emit mv a1 a3;
+        emit addi a2 sp (!Addr_of_local.last_pos * wordsize());
+        emit call "rukaml_applyN_tail_prepare_args";
+        dealloc_stack();
+        emit jalr zero a0;
+        )
+      else (
+        emit mv a2 a3;
+        emit li a1 1;
+        emit ld a0 app_name;
         emit call "rukaml_applyN";
         emit sd_dest a0 dest
       )
