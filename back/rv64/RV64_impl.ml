@@ -1016,53 +1016,21 @@ let generate_body is_toplevel body =
       (* A 1 argument application *)
       assert (Option.is_none (is_toplevel f));
       helper_a (DReg "a2") arg;
-      emit ld (RU "a0") (Addr_of_local.pp_to_mach f);
-      emit li (RU "a1") 1;
+      emit ld a0 (Addr_of_local.pp_to_mach f);
 
       if Toplevel.allowed_optimizations.tailcall && is_tailcall dest
-      then (
-        let just_tail_name = sprintf "applyN_just_tail_%d" (gensym ()) in
-        
-        emit li t0 !Addr_of_local.function_args;
-        emit ld t1 (ROffset(a0, 8)); (* closure arity *)
-        emit blt t0 t1 just_tail_name ~comm:"if func arity < func closure";
-
-        (* Tail call with inlined rukaml_applyN *)
-        let loop_name = sprintf "applyN_move_args_%d" (gensym ()) in
-        let loop_fin_name = loop_name ^ "_fin" in
-        emit call "rukaml_applyN_args";
+      then (        
         emit ld ra (make_sp_offset ra_offset);
         emit shrink_stack (!Addr_of_local.last_pos);
-        
-        emit li t0 0;
-        emit ld t1 (ROffset(a0, 8));
-        emit label loop_name;
-        emit ble t1 t0 loop_fin_name; (* while t0 < arity *)
 
-        emit addi t2 t0 3; (* 3 + i *)
-        emit li t3 8;
-        emit mulw t4 t2 t3;
-
-        emit add t5 a0 t4;
-        emit ld t6 (ROffset(t5, 0));
-        emit mulw t4 t0 t3;
-        emit add t4 t4 sp;
-        emit sd t6 (ROffset(t4, 0));
-        emit addi t0 t0 1;
-        emit j loop_name;
-        
-        emit label loop_fin_name;
-        emit ld t0 (ROffset(a0, 0));
-        emit jalr zero t0;
-
-        (* Tail call without inlined rukaml_applyN *)
-        emit label just_tail_name;
-        emit ld ra (make_sp_offset ra_offset);
-        emit shrink_stack (!Addr_of_local.last_pos);
-        emit tail "rukaml_applyN")
+        emit mv a1 a2;
+        emit mv a2 sp;
+        emit li a3 !Addr_of_local.function_args;
+        emit tail "rukaml_applyN_tailed")
       else (
+        emit li a1 1;
         emit call "rukaml_applyN";
-        emit sd_dest (RU "a0") dest
+        emit sd_dest a0 dest
       )
     | CApp (APrimitive ("field", _), AConst (PConst_int _n), [ AVar _ ]) ->
       failwiths "Not implemented"
