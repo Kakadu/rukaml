@@ -15,4 +15,4 @@
  (action
   (system
    ;  -Werror -Wfatal-errors
-   "%{read:../../cc_rv64} -c %{deps} -O1 -foptimize-sibling-calls -std=c99 -ggdb -o %{target}")))
+   "%{read:../../cc_rv64} -c %{deps} -std=c99 -ggdb -o %{target}")))

@@ -44,6 +44,7 @@ type instr =
   | Sd of reg * reg
   | Mv of reg * reg
   | Beq of reg * reg * string
+  | Bne of reg * reg * string
   | Blt of reg * reg * string
   | Ble of reg * reg * string
   | Label of string
@@ -80,6 +81,7 @@ let pp_instr ppf =
   | Sw (r1, r2) -> fprintf ppf "sw %a, %a" pp_reg r1 pp_reg r2
   | Sd (r1, r2) -> fprintf ppf "sd %a, %a" pp_reg r1 pp_reg r2
   | Beq (r1, r2, offset) -> fprintf ppf "beq %a, %a, %s" pp_reg r1 pp_reg r2 offset
+  | Bne (r1, r2, offset) -> fprintf ppf "bne %a, %a, %s" pp_reg r1 pp_reg r2 offset
   | Blt (r1, r2, offset) -> fprintf ppf "blt %a, %a, %s" pp_reg r1 pp_reg r2 offset
   | Ble (r1, r2, offset) -> fprintf ppf "ble %a, %a, %s" pp_reg r1 pp_reg r2 offset
   | Label s -> fprintf ppf "%s:" s
@@ -114,6 +116,7 @@ let sw k a b = k (Sw (a, b))
 let sd k a b = k (Sd (a, b))
 let mv k a b = k (Mv (a, b))
 let beq k r1 r2 r3 = k @@ Beq (r1, r2, r3)
+let bne k r1 r2 r3 = k @@ Bne (r1, r2, r3)
 let blt k r1 r2 r3 = k @@ Blt (r1, r2, r3)
 let ble k r1 r2 r3 = k @@ Ble (r1, r2, r3)
 let label k s = k (Label s)
