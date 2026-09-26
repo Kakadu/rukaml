@@ -108,6 +108,7 @@ module Addr_of_local = struct
   let store : (Frontend.Ident.t, _) Hashtbl.t = Hashtbl.create 13
   let last_pos = ref 0
   let get_locals_count () = !last_pos
+  let function_args = ref 0
 
   let clear () =
     Hashtbl.clear store;
@@ -180,6 +181,8 @@ let stdlib_externs =
   ; 1, "rukaml_print_int"
   ; 7, "rukaml_print_int_kaml"
   ; 2, "rukaml_applyN"
+  ; 2, "rukaml_applyN_is_tailable"
+  ; 3, "rukaml_applyN_tail_prepare_args"
   ; 2, "rukaml_field"
   ; 1, "rukaml_tag"
   ; 1, "rukaml_size"
@@ -905,9 +908,29 @@ let rec generate_body ppf body =
       
       if Toplevel.allowed_optimizations.tailcall && is_tailcall dest
       then (
+        let tailed_version = Printf.sprintf "rukaml_applyN_tailed_%d" (gensym ()) in
+
+        printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn f;
+        printfn ppf "  mov rsi, %d" !Addr_of_local.function_args;
+        printfn ppf "  call rukaml_applyN_is_tailable";
+        printfn ppf "  cmp rax, 1";
+        printfn ppf "  je %s" tailed_version;
+
+        printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn f;
+        printfn ppf "  mov rsi, 1";
+        printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arg1;
         printfn ppf "  add rsp, 8*%d ; deallocate local variables" (Addr_of_local.get_locals_count());
         printfn ppf "  pop rbp";
         printfn ppf "  jmp rukaml_applyN ; making tail call";
+        
+        printfn ppf "%s:" tailed_version;
+        printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn f;
+        printfn ppf "  mov rsi, %a" Addr_of_local.pp_local_exn arg1;
+        printfn ppf "  lea rdx, [rbp + 16]";
+        printfn ppf "  call rukaml_applyN_tail_prepare_args";
+        printfn ppf "  add rsp, 8*%d ; deallocate local variables" (Addr_of_local.get_locals_count());
+        printfn ppf "  pop rbp";
+        printfn ppf "  jmp rax";
       )
       else (
         printfn ppf "  call rukaml_applyN";
@@ -1410,6 +1433,7 @@ let emit_global_function ppf name body =
     printfn ppf "@[<h>%a:@]" Toplevel.pp_label_exn name;
     let pats, body = ANF.group_abstractions body in
     let argc = List.length pats in
+    Addr_of_local.function_args := argc;
     let names =
       List.filter_map
         (function
@@ -1435,6 +1459,7 @@ let emit_global_function ppf name body =
       printfn ppf "  pop rdi           ; pass argc to main" (* <<< *));
     generate_body ppf body;
     Addr_of_local.remove_args names;
+    Addr_of_local.function_args := 0;
     print_epilogue ppf (Format.asprintf "%a" Toplevel.pp_label_exn name))
   else assert false
 ;;

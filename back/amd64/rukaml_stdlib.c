@@ -621,7 +621,24 @@ void *rukaml_applyN(void *f, int64_t argc, ...) {
   }
   return f_closure;
 }
+bool rukaml_applyN_is_tailable(void *f, uint64_t stack_space){
+  rukaml_closure *f_closure = copy_closure((rukaml_closure *)f);
+  size_t arity = f_closure->argsc;
+  size_t received = f_closure->args_received;
+  return (stack_space >= arity && received + 1 == arity);
+}
+void *rukaml_applyN_tail_prepare_args(void *f, void *arg, void** stack){
+  rukaml_closure *f_closure = copy_closure((rukaml_closure *)f);
+  assert(f_closure->args_received + 1 == f_closure->argsc);
 
+  size_t received = f_closure->args_received;
+  for (size_t i = 0; i < received; ++i) {
+    stack[i] = f_closure->args[i];
+  }
+  stack[received] = arg;
+  f_closure->args_received = f_closure->argsc;
+  return f_closure->code;
+}
 uint64_t rukaml_string_len_imm(value str) {
   if (str == NULL) {
     mk_err_fatal("unexpected null ptr");

@@ -1,7 +1,7 @@
 (*
 test
-  (targets rv64)
-  (run (stdout "true"))
+  (targets rv64 amd64)
+  (run (stdout "true" "false"))
 *)
 
 let even a k =
@@ -17,4 +17,5 @@ let odd a k =
 let rec even1 a = even a (fun n -> odd n even1)
 let main =
   let() = printf "%b\n" (even1 100) in
+  let() = printf "%b\n" (even1 101) in
   0
