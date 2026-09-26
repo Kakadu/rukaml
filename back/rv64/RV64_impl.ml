@@ -121,7 +121,7 @@ module Addr_of_local = struct
   let store : (Ident.t, _) Hashtbl.t = Hashtbl.create 13
   let last_pos = ref 0
   let get_locals_count () = !last_pos
-  let function_args = ref 0
+  let current : (Ident.t option) ref = ref None
   let clear () =
     Hashtbl.clear store;
     last_pos := 0
@@ -258,13 +258,13 @@ let emit_comment ppf = Format.kasprintf (emit comment) ppf
 (** Functions [grow_stack] and [shrink_stack] take words count *)
 let grow_stack k n =
   (* log "Grow stack for %d words" n; *)
-  assert (n > 0);
+  assert (n >= 0);
   assert (n * wordsize () mod 16 = 0);
   addi k sp sp (-n * wordsize ())
 ;;
 
 let shrink_stack k n =
-  assert (n > 0);
+  assert (n >= 0);
   (* log "Shrink stack for %d words" n; *)
   addi k sp sp (n * wordsize ())
 ;;
@@ -403,6 +403,18 @@ let is_tailcall = function
   | DReg "a0" -> true
   | _ -> false
 ;;
+let allocate_free_space callee busy_space = 
+  let open Compile_lib in
+  let free_space = calc_sloc (Opts.get_free_space (Some callee) busy_space) in
+  Addr_of_local.last_pos := !Addr_of_local.last_pos + free_space;
+  emit grow_stack free_space ~comm:"allocate free space";
+  free_space;;
+
+let deallocate_free_space space = 
+  emit shrink_stack space ~comm:"deallocate free space"; 
+  Addr_of_local.last_pos := !Addr_of_local.last_pos - space;
+;;
+
 let print_epilogue ppf fname =
   if fname <> "main"
   then emit ret ~comm:fname
@@ -443,6 +455,7 @@ let pp_to_mach = Addr_of_local.pp_to_mach
     Argument [is_toplevel] returns None or Some arity. *)
 let generate_body is_toplevel body =
   let open Parsetree in
+  let open Compile_lib in
   let dealloc_locals, locals, ra_offset = allocate_locals body in
   let deallocate_args_for_call argc =
     let slotc = calc_sloc argc in
@@ -958,10 +971,11 @@ let generate_body is_toplevel body =
       if expected_arity = formal_arity
       then (
         (* emit_comment "Full application of arity = %d" expected_arity; *)
+        let free_space = allocate_free_space f formal_arity in
         let to_remove = allocate_args_for_call ~f (arg1 :: args) in
-        
+
         if Toplevel.allowed_optimizations.tailcall && is_tailcall dest  
-           && formal_arity <= !Addr_of_local.function_args
+           && formal_arity <= Opts.get_stack_space (!Addr_of_local.current)
         then(
           emit_comment "Init tail call with %d args" formal_arity;
           let move_offset =  !Addr_of_local.last_pos in
@@ -971,6 +985,7 @@ let generate_body is_toplevel body =
             emit sd t0 @@ make_sp_offset (offset + move_offset);
           done;
           deallocate_args_for_call to_remove;
+          deallocate_free_space free_space;
 
           emit ld ra (make_sp_offset ra_offset);
           let comm = sprintf "Deallocate function frame for tail call" in
@@ -980,6 +995,7 @@ let generate_body is_toplevel body =
         else(
           emit call f.hum_name;
           deallocate_args_for_call to_remove;
+          deallocate_free_space free_space;
           emit sd_dest (RU "a0") dest
         ) 
       )
@@ -1027,7 +1043,7 @@ let generate_body is_toplevel body =
 
         let tailed_version = sprintf "rukaml_applyN_tailed_%d" (gensym ()) in
         emit ld a0 app_name;
-        emit li a1 (!Addr_of_local.function_args);
+        emit li a1 (Opts.get_stack_space (!Addr_of_local.current));
         emit call "rukaml_applyN_is_tailable";
         
         emit bne a0 zero tailed_version;
@@ -1492,7 +1508,9 @@ let emit_global_constant is_toplevel ppf ident expr =
   printfn ppf "init_%a:" Toplevel.pp_label_exn ident;
   (* printfn ppf "  push rbp"; *)
   (* printfn ppf "  mov rbp, rsp"; *)
+  Toplevel.allowed_optimizations.tailcall <- false;
   generate_body is_toplevel expr;
+  Toplevel.allowed_optimizations.tailcall <- true;
   emit lla t1 (Format.asprintf "%a" Toplevel.pp_label_exn ident);
   emit sd a0 (ROffset (Temp_reg 1, 0));
   (* emit addi sp sp (-16); *)
@@ -1534,7 +1552,9 @@ let emit_global_eval ppf is_toplevel ident expr =
   printfn ppf "%s:" fname;
   (* emit addi sp sp (-16); *)
   (* emit sd ra (ROffset (SP, 0)); *)
+  Toplevel.allowed_optimizations.tailcall <- false;
   generate_body is_toplevel expr;
+  Toplevel.allowed_optimizations.tailcall <- true;
   (* emit ld ra (ROffset (SP, 0)); *)
   (* emit shrink_stack 2 *)
   emit ret ~comm:(sprintf "end %s" fname);
@@ -1631,9 +1651,9 @@ let codegen ?(wrap_main_into_start = true) anf file =
           | Apat_unit -> ()
           | _ -> failwith "not implemented");
         log "\nGenerating function %a" Ident.pp name;
-        Addr_of_local.function_args := argc;
+        Addr_of_local.current := Some name;
         generate_body is_toplevel body;
-        Addr_of_local.function_args := 0;
+        Addr_of_local.current := None;
         Addr_of_local.remove_args names;
         print_epilogue ppf name.hum_name;
         Machine.flush_queue ppf
@@ -1674,6 +1694,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
       (* | { kind = Alias _ } -> failwith "TODO alias" *)
       (* | _ -> failwith "TODO" *)
     in
+    Opts.init_ss_table vbs;
     List.iter on_vb vbs;
     Format.pp_print_flush ppf ());
   Result.Ok ()
