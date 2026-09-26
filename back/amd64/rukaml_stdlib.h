@@ -76,6 +76,10 @@ void *rukaml_alloc_closure(void *func, int32_t argsc);
 
 void *rukaml_applyN(void *f, int64_t argc, ...);
 
+bool rukaml_applyN_is_tailable(void *f, uint64_t stack_space);
+
+void *rukaml_applyN_tail_prepare_args(void *f, void *arg, void** stack);
+
 void *rukaml_argv(void);
 
 #endif // RUKAML_STDLIB_H
