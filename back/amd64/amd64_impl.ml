@@ -993,30 +993,22 @@ let rec generate_body ppf body =
       (* printfn ppf "@[; calling @[%a@]@]" ANF.pp_c cexpr; *)
       if expected_arity = formal_arity
       then (
-        let free_space = allocate_free_space ppf f (formal_arity + formal_arity mod 2) in
-        let to_remove = allocate_args (arg1 :: args) in
-        
-        (* Why is the condition (formal_arity <= !Addr_of_local.function_args) not added? (which exists in RV64 backend)
-        Explanation:
-        Case when (formal_arity > !Addr_of_local.function_args) is impossible, because
-          If (!Addr_of_local.function_args = 0)
-          then: current function is constant, but a constant cannot make tail call.
-          else: closure will be created and control will pass to (formal_arity < expected_arity)'s branch.
-        *)
         if Opts.is_permitted TailCall && is_tailcall dest 
           && formal_arity <= Opts.TailCall.get_stack_space (!Addr_of_local.current)
         then (
+          let to_remove = allocate_args (arg1 :: args) in
           for offset = (formal_arity - 1) downto 0 do
             printfn ppf "  mov r10, [rsp+8*%d]" offset;
             printfn ppf "  mov [rbp+8*%d], r10" (offset + 2);
           done;
           printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
-          deallocate_free_space ppf free_space;
           printfn ppf "  add rsp, 8*%d ; deallocate local variables" (Addr_of_local.get_locals_count());
           printfn ppf "  pop rbp";
           printfn ppf "  jmp %a ; making tail call" Toplevel.pp_label_exn f;
           )
         else(
+          let free_space = allocate_free_space ppf f (formal_arity + formal_arity mod 2) in
+          let to_remove = allocate_args (arg1 :: args) in
           printfn ppf "  call %a" Toplevel.pp_label_exn f;
           printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
           deallocate_free_space ppf free_space;

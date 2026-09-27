@@ -58,12 +58,21 @@ module TailCall = struct
       Hashtbl.add funcs_stack_space name (List.length pats)
     ) funcs;
   ;;
+  let rec calculate_stack_space func = 
+    let maybe_curr_space = Hashtbl.find_opt funcs_stack_space func in
+    let curr_space = Option.value maybe_curr_space ~default:0 in
+    if Hashtbl.mem tailcalls func
+    then max curr_space (calculate_stack_space @@ Hashtbl.find tailcalls func)
+    else curr_space
+  ;;
   let init_ss_table vbs = 
     build_tailcalls_table vbs;
-    let (keys, values) = (Hashtbl.to_seq_keys funcs_stack_space, Hashtbl.to_seq_values funcs_stack_space) in 
-    let max_space = Seq.fold_left max 0 values in
-    let max_space_rounded = max_space + (max_space mod 2) in
-    Seq.iter (fun key -> Hashtbl.replace funcs_stack_space key max_space_rounded) keys;  
+    let keys = Hashtbl.to_seq_keys funcs_stack_space in 
+    Seq.iter (fun key -> 
+      let space = calculate_stack_space key in
+      let space_rounded = space + (space mod 2) in
+      Hashtbl.replace funcs_stack_space key space_rounded
+    ) keys;
   ;;
 
   let get_stack_space name = Hashtbl.find funcs_stack_space (Option.get name)
@@ -73,6 +82,7 @@ module TailCall = struct
     all_space - busy
   ;;
 
+  (* For compability with AMD64 *)
   let vb_to_function = function 
   | ANF_vb (_, Apat_var name, body) ->
     let pats, _ = ANF.group_abstractions body in
