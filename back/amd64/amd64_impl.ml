@@ -295,10 +295,6 @@ module Toplevel = struct
       Format.eprintf "Can't find toplevel %a\n" Ident.pp ident;
       raise Not_found
   ;;
-  type optimizations = {
-    mutable tailcall : bool;
-  }
-  let allowed_optimizations = { tailcall = true }
   (* __immediates is used to make toplevel evaluation in the order of declaration *)
   let __immediates : toplevel Queue.t = Queue.create ()
   let iter_immediates f = Queue.iter f __immediates
@@ -390,8 +386,8 @@ let is_tailcall = function
 | _ -> false
 
 let allocate_free_space ppf callee busy_space = 
-  let open Compile_lib in
-  let free_space = Opts.get_free_space (Some callee) busy_space in
+  let open Compile_lib.Opts in
+  let free_space = TailCall.get_free_space (Some callee) busy_space in
   Addr_of_local.last_pos := !Addr_of_local.last_pos + free_space;
   printfn ppf "  sub rsp, 8*%d ; allocate free space" free_space;
   free_space;;
@@ -921,12 +917,12 @@ let rec generate_body ppf body =
       printfn ppf "  mov rsi, 1";
       printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arg1;
       
-      if Toplevel.allowed_optimizations.tailcall && is_tailcall dest
+      if Opts.is_permitted TailCall && is_tailcall dest
       then (
         let tailed_version = Printf.sprintf "rukaml_applyN_tailed_%d" (gensym ()) in
 
         printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn f;
-        printfn ppf "  mov rsi, %d" (Opts.get_stack_space (!Addr_of_local.current));
+        printfn ppf "  mov rsi, %d" (Opts.TailCall.get_stack_space (!Addr_of_local.current));
         printfn ppf "  call rukaml_applyN_is_tailable";
         printfn ppf "  cmp rax, 1";
         printfn ppf "  je %s" tailed_version;
@@ -1007,8 +1003,8 @@ let rec generate_body ppf body =
           then: current function is constant, but a constant cannot make tail call.
           else: closure will be created and control will pass to (formal_arity < expected_arity)'s branch.
         *)
-        if Toplevel.allowed_optimizations.tailcall && is_tailcall dest 
-          && formal_arity <= Opts.get_stack_space (!Addr_of_local.current)
+        if Opts.is_permitted TailCall && is_tailcall dest 
+          && formal_arity <= Opts.TailCall.get_stack_space (!Addr_of_local.current)
         then (
           for offset = (formal_arity - 1) downto 0 do
             printfn ppf "  mov r10, [rsp+8*%d]" offset;
@@ -1537,23 +1533,19 @@ section .text
               mov rax, 60     ; exit syscall
               syscall|};
     let open Compile_lib in
-    Opts.init_ss_table (List.filter_map Opts.vb_to_function anf);
+    Opts.TailCall.init_ss_table (List.filter_map Opts.TailCall.vb_to_function anf);
     anf
     |> List.iter (function
       | ANF.ANF_vb (_flg, Apat_var { hum_name = "main"; _ }, body) ->
         let name = Ident.ident "main" 0 in
         Toplevel.extend name ~kind:Main;
-        Toplevel.allowed_optimizations.tailcall <- false;
-        emit_global_function ppf name body;
-        Toplevel.allowed_optimizations.tailcall <- true
+        Opts.disable_locally TailCall (fun () -> emit_global_function ppf name body);
       | ANF.ANF_vb (_flg, Apat_var name, body) ->
         let pats, _ = Compile_lib.ANF.group_abstractions body in
         (match List.length pats with
          | 0 ->
            Toplevel.extend name ~kind:(Immediate Constant);
-           Toplevel.allowed_optimizations.tailcall <- false;
-           emit_global_constant ppf name body;
-           Toplevel.allowed_optimizations.tailcall <- true
+           Opts.disable_locally TailCall (fun () -> emit_global_constant ppf name body);           
          | argc ->
            Toplevel.extend name ~kind:(Function { argc });
            emit_global_function ppf name body)
