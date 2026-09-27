@@ -1,8 +1,6 @@
 
   $ export FLAGS='-L /usr/riscv64-linux-gnu -cpu max'
   $ ls
-  compiler.exe
-  program0.c
 $ chmod +w program.c
 $ echo 'int main(){return;}' > program.c
 $ cp program0.c program.c

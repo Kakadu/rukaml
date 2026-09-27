@@ -26,13 +26,13 @@
   (system
    "%{read:../../cc_rv32} -DRUKAML_DEBUG=0 -march=rv32g -c %{deps} -Wno-pedantic -ffreestanding -nostdlib -std=c99 -ggdb -o %{target}")))
 
-(rule
- (target compiler.s)
- (deps compiler.ml)
- (mode
-  (promote (until-clean)))
- (action
-  (run %{project_root}/driver/driver.exe %{deps} --target rv64 -o %{target})))
+; (rule
+;  (target compiler.s)
+;  (deps compiler.ml)
+;  (mode
+;   (promote (until-clean)))
+;  (action
+;   (run %{project_root}/driver/driver.exe %{deps} --target rv64 -o %{target})))
 
 (rule
  (target compiler.rv32.s)
@@ -42,19 +42,19 @@
  (action
   (run %{project_root}/driver/driver.exe %{deps} --target rv32 -o %{target})))
 
-(rule
- (targets compiler.exe)
- (deps
-  ;%{project_root}/driver/driver.exe
-  (:src compiler.s)
-  (:stdlib ./rukaml_stdlib.o))
- (mode
-  (promote (until-clean)))
- (action
-  (progn
-   (system "%{read:../../cc_rv64} -g -c %{src} -o compiler.rv64.o")
-   (system
-    "%{read:../../cc_rv64} -g %{stdlib} compiler.rv64.o -o %{targets}"))))
+; (rule
+;  (targets compiler.exe)
+;  (deps
+;   ;%{project_root}/driver/driver.exe
+;   (:src compiler.s)
+;   (:stdlib ./rukaml_stdlib.o))
+;  (mode
+;   (promote (until-clean)))
+;  (action
+;   (progn
+;    (system "%{read:../../cc_rv64} -g -c %{src} -o compiler.rv64.o")
+;    (system
+;     "%{read:../../cc_rv64} -g %{stdlib} compiler.rv64.o -o %{targets}"))))
 
 (rule
  (targets compiler.rv32.exe)
@@ -76,26 +76,26 @@
    (system
     "%{read:../../cc_rv32} -g %{stdlib} compiler.rv32.o -o %{targets}"))))
 
-(cram
- ; TODO: Wrong. Is not needed for RV32
- (applies_to 0 1)
- (deps ./compiler.exe))
+; (cram
+;  ; TODO: Wrong. Is not needed for RV32
+;  (applies_to 0 1)
+;  (deps ./compiler.exe))
 
-(cram
- (applies_to emptymain)
- (deps ./compiler.exe))
+; (cram
+;  (applies_to emptymain)
+;  (deps ./compiler.exe))
 
-(cram
- (applies_to justmain)
- (deps ./compiler.exe))
+; (cram
+;  (applies_to justmain)
+;  (deps ./compiler.exe))
 
-(cram
- (applies_to 1)
- (deps ./compiler.exe compiler.anf.ml program.c))
+; (cram
+;  (applies_to 1)
+;  (deps ./compiler.exe compiler.anf.ml program.c))
 
-(cram
- (applies_to 0)
- (deps ./compiler.exe program0.c))
+; (cram
+;  (applies_to 0)
+;  (deps ./compiler.exe program0.c))
 
 (cram
  (applies_to 0rv32)
