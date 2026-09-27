@@ -404,8 +404,8 @@ let is_tailcall = function
   | _ -> false
 ;;
 let allocate_free_space callee busy_space = 
-  let open Compile_lib in
-  let free_space = calc_sloc (Opts.get_free_space (Some callee) busy_space) in
+  let open Compile_lib.Opts in
+  let free_space = calc_sloc (TailCall.get_free_space (Some callee) busy_space) in
   Addr_of_local.last_pos := !Addr_of_local.last_pos + free_space;
   emit grow_stack free_space ~comm:"allocate free space";
   free_space;;
@@ -974,8 +974,8 @@ let generate_body is_toplevel body =
         let free_space = allocate_free_space f formal_arity in
         let to_remove = allocate_args_for_call ~f (arg1 :: args) in
 
-        if Toplevel.allowed_optimizations.tailcall && is_tailcall dest  
-           && formal_arity <= Opts.get_stack_space (!Addr_of_local.current)
+        if Opts.is_permitted TailCall && is_tailcall dest  
+           && formal_arity <= Opts.TailCall.get_stack_space (!Addr_of_local.current)
         then(
           emit_comment "Init tail call with %d args" formal_arity;
           let move_offset =  !Addr_of_local.last_pos in
@@ -1034,7 +1034,7 @@ let generate_body is_toplevel body =
       let app_name = Addr_of_local.pp_to_mach f in 
       helper_a (DReg "a3") arg;
 
-      if Toplevel.allowed_optimizations.tailcall && is_tailcall dest
+      if Opts.is_permitted TailCall && is_tailcall dest
       then (
         let dealloc_stack () = (
           emit ld ra (make_sp_offset ra_offset);
@@ -1043,7 +1043,7 @@ let generate_body is_toplevel body =
 
         let tailed_version = sprintf "rukaml_applyN_tailed_%d" (gensym ()) in
         emit ld a0 app_name;
-        emit li a1 (Opts.get_stack_space (!Addr_of_local.current));
+        emit li a1 (Opts.TailCall.get_stack_space (!Addr_of_local.current));
         emit call "rukaml_applyN_is_tailable";
         
         emit bne a0 zero tailed_version;
@@ -1508,9 +1508,7 @@ let emit_global_constant is_toplevel ppf ident expr =
   printfn ppf "init_%a:" Toplevel.pp_label_exn ident;
   (* printfn ppf "  push rbp"; *)
   (* printfn ppf "  mov rbp, rsp"; *)
-  Toplevel.allowed_optimizations.tailcall <- false;
-  generate_body is_toplevel expr;
-  Toplevel.allowed_optimizations.tailcall <- true;
+  Compile_lib.Opts.disable_locally TailCall (fun () -> generate_body is_toplevel expr);
   emit lla t1 (Format.asprintf "%a" Toplevel.pp_label_exn ident);
   emit sd a0 (ROffset (Temp_reg 1, 0));
   (* emit addi sp sp (-16); *)
@@ -1552,9 +1550,7 @@ let emit_global_eval ppf is_toplevel ident expr =
   printfn ppf "%s:" fname;
   (* emit addi sp sp (-16); *)
   (* emit sd ra (ROffset (SP, 0)); *)
-  Toplevel.allowed_optimizations.tailcall <- false;
-  generate_body is_toplevel expr;
-  Toplevel.allowed_optimizations.tailcall <- true;
+  Compile_lib.Opts.disable_locally TailCall (fun () -> generate_body is_toplevel expr);
   (* emit ld ra (ROffset (SP, 0)); *)
   (* emit shrink_stack 2 *)
   emit ret ~comm:(sprintf "end %s" fname);
@@ -1684,9 +1680,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
         emit li a0 0;
         Toplevel.extend name ~kind:Main;
         log "\nGenerating function main";
-        Toplevel.allowed_optimizations.tailcall <- false;
-        generate_body is_toplevel expr;
-        Toplevel.allowed_optimizations.tailcall <- true;
+        Opts.disable_locally TailCall (fun () -> generate_body is_toplevel expr);
         print_epilogue ppf name.Ident.hum_name;
         Machine.flush_queue ppf
       | `Immediate (name, expr) -> emit_global_constant is_toplevel ppf name expr
@@ -1694,7 +1688,7 @@ let codegen ?(wrap_main_into_start = true) anf file =
       (* | { kind = Alias _ } -> failwith "TODO alias" *)
       (* | _ -> failwith "TODO" *)
     in
-    Opts.init_ss_table vbs;
+    Opts.TailCall.init_ss_table vbs;
     List.iter on_vb vbs;
     Format.pp_print_flush ppf ());
   Result.Ok ()

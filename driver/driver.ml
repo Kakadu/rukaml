@@ -111,6 +111,7 @@ module Compiler = struct
 
   (** Generate code for RV64 *)
   let rv64 (ANF stru) =
+    Opts.init_opts ();
     let vbs =
       List.map
         (function
@@ -132,6 +133,7 @@ module Compiler = struct
 
   (** Generate code for AMD64 *)
   let amd64 (ANF stru) =
+    Opts.init_opts();
     let f ~path =
       Amd64_impl.codegen ~wrap_main_into_start:true stru path
       |> Base.Result.ok_or_failwith
