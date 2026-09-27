@@ -100,15 +100,14 @@ type dest =
   | DStack_var of Frontend.Ident.t
     (* DStatic_var's are allocated in .bss and access to them is performed via labels *)
   | DStatic_var of Frontend.Ident.t
-let is_tailcall = function 
-| DReg "rax" -> true
-| _ -> false
+
+
 
 module Addr_of_local = struct
   let store : (Frontend.Ident.t, _) Hashtbl.t = Hashtbl.create 13
   let last_pos = ref 0
   let get_locals_count () = !last_pos
-  let function_args = ref 0
+  let current : (Ident.t option) ref = ref None
 
   let clear () =
     Hashtbl.clear store;
@@ -386,6 +385,21 @@ let pp_dest ppf = function
   | DStack_var name -> Addr_of_local.pp_local_exn ppf name
   | DStatic_var name -> fprintf ppf "[rel %a]" Toplevel.pp_label_exn name
 ;;
+let is_tailcall = function 
+| DReg "rax" -> true
+| _ -> false
+
+let allocate_free_space ppf callee busy_space = 
+  let open Compile_lib in
+  let free_space = Opts.get_free_space (Some callee) busy_space in
+  Addr_of_local.last_pos := !Addr_of_local.last_pos + free_space;
+  printfn ppf "  sub rsp, 8*%d ; allocate free space" free_space;
+  free_space;;
+
+let deallocate_free_space ppf space = 
+  printfn ppf "  add rsp, 8*%d ; deallocate free space" space;
+  Addr_of_local.last_pos := !Addr_of_local.last_pos - space;
+;;
 
 let emit_alloc_closure ppf ~fname ~argc =
   printfn ppf "  mov rdi, %a" Toplevel.pp_label_exn fname;
@@ -450,6 +464,7 @@ let list_iter_revindex ~f xs =
 let rec generate_body ppf body =
   let is_toplevel = Toplevel.is_toplevel in
   let open Frontend.Parsetree in
+  let open Compile_lib in
   let allocate_args args =
     (* log "XXX %s: [ %a ]" __FUNCTION__
        (Format.pp_print_list
@@ -911,7 +926,7 @@ let rec generate_body ppf body =
         let tailed_version = Printf.sprintf "rukaml_applyN_tailed_%d" (gensym ()) in
 
         printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn f;
-        printfn ppf "  mov rsi, %d" !Addr_of_local.function_args;
+        printfn ppf "  mov rsi, %d" (Opts.get_stack_space (!Addr_of_local.current));
         printfn ppf "  call rukaml_applyN_is_tailable";
         printfn ppf "  cmp rax, 1";
         printfn ppf "  je %s" tailed_version;
@@ -982,6 +997,7 @@ let rec generate_body ppf body =
       (* printfn ppf "@[; calling @[%a@]@]" ANF.pp_c cexpr; *)
       if expected_arity = formal_arity
       then (
+        let free_space = allocate_free_space ppf f (formal_arity + formal_arity mod 2) in
         let to_remove = allocate_args (arg1 :: args) in
         
         (* Why is the condition (formal_arity <= !Addr_of_local.function_args) not added? (which exists in RV64 backend)
@@ -991,13 +1007,15 @@ let rec generate_body ppf body =
           then: current function is constant, but a constant cannot make tail call.
           else: closure will be created and control will pass to (formal_arity < expected_arity)'s branch.
         *)
-        if is_tailcall dest && Toplevel.allowed_optimizations.tailcall
+        if Toplevel.allowed_optimizations.tailcall && is_tailcall dest 
+          && formal_arity <= Opts.get_stack_space (!Addr_of_local.current)
         then (
           for offset = (formal_arity - 1) downto 0 do
             printfn ppf "  mov r10, [rsp+8*%d]" offset;
             printfn ppf "  mov [rbp+8*%d], r10" (offset + 2);
           done;
           printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
+          deallocate_free_space ppf free_space;
           printfn ppf "  add rsp, 8*%d ; deallocate local variables" (Addr_of_local.get_locals_count());
           printfn ppf "  pop rbp";
           printfn ppf "  jmp %a ; making tail call" Toplevel.pp_label_exn f;
@@ -1005,6 +1023,7 @@ let rec generate_body ppf body =
         else(
           printfn ppf "  call %a" Toplevel.pp_label_exn f;
           printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
+          deallocate_free_space ppf free_space;
           printfn ppf "  mov %a, rax" pp_dest dest))
       else if formal_arity < expected_arity
       then (
@@ -1433,7 +1452,7 @@ let emit_global_function ppf name body =
     printfn ppf "@[<h>%a:@]" Toplevel.pp_label_exn name;
     let pats, body = ANF.group_abstractions body in
     let argc = List.length pats in
-    Addr_of_local.function_args := argc;
+    Addr_of_local.current := Some name;
     let names =
       List.filter_map
         (function
@@ -1459,7 +1478,7 @@ let emit_global_function ppf name body =
       printfn ppf "  pop rdi           ; pass argc to main" (* <<< *));
     generate_body ppf body;
     Addr_of_local.remove_args names;
-    Addr_of_local.function_args := 0;
+    Addr_of_local.current := None;
     print_epilogue ppf (Format.asprintf "%a" Toplevel.pp_label_exn name))
   else assert false
 ;;
@@ -1518,6 +1537,7 @@ section .text
               mov rax, 60     ; exit syscall
               syscall|};
     let open Compile_lib in
+    Opts.init_ss_table (List.filter_map Opts.vb_to_function anf);
     anf
     |> List.iter (function
       | ANF.ANF_vb (_flg, Apat_var { hum_name = "main"; _ }, body) ->

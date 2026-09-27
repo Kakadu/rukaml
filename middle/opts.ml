@@ -39,3 +39,11 @@ let get_free_space name busy =
   assert(all_space >= busy);
   all_space - busy
 ;;
+
+let vb_to_function = function 
+| ANF_vb (_, Apat_var name, body) ->
+  let pats, _ = ANF.group_abstractions body in
+  if List.length pats > 0
+  then Some (`Function(name, pats, body) )
+  else None
+| _ -> None
