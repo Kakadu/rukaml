@@ -971,12 +971,10 @@ let generate_body is_toplevel body =
       if expected_arity = formal_arity
       then (
         (* emit_comment "Full application of arity = %d" expected_arity; *)
-        let free_space = allocate_free_space f formal_arity in
-        let to_remove = allocate_args_for_call ~f (arg1 :: args) in
-
         if Opts.is_permitted TailCall && is_tailcall dest  
            && formal_arity <= Opts.TailCall.get_stack_space (!Addr_of_local.current)
         then(
+          let to_remove = allocate_args_for_call ~f (arg1 :: args) in
           emit_comment "Init tail call with %d args" formal_arity;
           let move_offset =  !Addr_of_local.last_pos in
           
@@ -985,7 +983,6 @@ let generate_body is_toplevel body =
             emit sd t0 @@ make_sp_offset (offset + move_offset);
           done;
           deallocate_args_for_call to_remove;
-          deallocate_free_space free_space;
 
           emit ld ra (make_sp_offset ra_offset);
           let comm = sprintf "Deallocate function frame for tail call" in
@@ -993,6 +990,8 @@ let generate_body is_toplevel body =
           emit tail f.hum_name;
           )
         else(
+          let free_space = allocate_free_space f formal_arity in
+          let to_remove = allocate_args_for_call ~f (arg1 :: args) in
           emit call f.hum_name;
           deallocate_args_for_call to_remove;
           deallocate_free_space free_space;
