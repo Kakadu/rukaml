@@ -13,18 +13,18 @@
   CPSConv_tests
   mangling)
  (preprocess
-  (pps ppx_deriving.show ppx_expect_nobase))
+  (pps ppx_deriving.show ppx_windtrap))
  (instrumentation
-  (backend bisect_ppx))
+  (backend ppx_windtrap.coverage))
  (inline_tests))
 
 (library
  (name cconv)
- (libraries Frontend)
+ (libraries Frontend windtrap)
  (modules CConv monads)
  (wrapped false)
  (preprocess
-  (pps ppx_expect_nobase))
+  (pps ppx_windtrap))
  (instrumentation
-  (backend bisect_ppx))
+  (backend ppx_windtrap.coverage))
  (inline_tests))
