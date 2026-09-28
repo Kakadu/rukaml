@@ -13,7 +13,7 @@ let iter n =
   loop 0|}
 ;;
 
-let%expect_test " " =
+let%expect_test "free vars in 'iter'" =
   let _, _, expr = Parsing.parse_vb_exn iter in
   Format.printf "%a\n" String_set.pp (free_vars_of_expr expr);
   [%expect {|{set| +, =, |set} |}]
