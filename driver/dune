@@ -9,4 +9,5 @@
   rv64_impl
   amd64_impl
   llvm_impl
-  zlib))
+  zlib
+  IR))
