@@ -1,0 +1,15 @@
+(library
+ (name JIT_orc_lib)
+ (foreign_stubs
+  (language cxx)
+  (names rukaml_orc_jit rukaml_orc_jit_bindings)
+  (extra_deps rukaml_orc_jit.hpp)
+  (flags
+   :standard
+   -std=c++17
+   -fno-rtti
+   -D__STDC_CONSTANT_MACROS
+   -D__STDC_FORMAT_MACROS
+   -D__STDC_LIMIT_MACROS))
+ (c_library_flags -lstdc++ -lLLVM-23)
+ )
