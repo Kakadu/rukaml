@@ -11,17 +11,18 @@ RukamlJIT::RukamlJIT(std::unique_ptr<ExecutionSession> exec_session,
                      JITTargetMachineBuilder jtmb, DataLayout data_layout)
     : _exec_session(std::move(exec_session)),
       _object_layer(*_exec_session,
-                    [](const MemoryBuffer &) {
-                      return std::make_unique<SectionMemoryManager>();
-                    }),
+                    []() { return std::make_unique<SectionMemoryManager>(); }),
       _compile_layer(*_exec_session, _object_layer,
                      std::make_unique<ConcurrentIRCompiler>(std::move(jtmb))),
       _data_layout(std::move(data_layout)),
       _mangle(*_exec_session, _data_layout),
+      _ctx(std::make_unique<LLVMContext>()),
       _main_jd(_exec_session->createBareJITDylib("<main>")) {
-  _main_jd.addGenerator(
-      cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(
-          _data_layout.getGlobalPrefix())));
+  // No DynamicLibrarySearchGenerator for the current process — on purpose:
+  // the only host code JIT'd code may reference is the rukaml runtime, and it
+  // is registered explicitly via define_abs_symbols (see the hpp). A generator
+  // would additionally expose the host `main`; for a program without an entry
+  // point lookup("main") would silently find and call it.
 }
 
 Expected<std::unique_ptr<RukamlJIT>> RukamlJIT::create() {
@@ -54,6 +55,15 @@ Expected<ExecutorSymbolDef> RukamlJIT::lookup(StringRef name) {
   return _exec_session->lookup({&_main_jd}, _mangle(name.str()));
 }
 
+Error RukamlJIT::define_abs_symbols(
+    const std::vector<std::pair<std::string, uint64_t>> &syms) {
+  SymbolMap map;
+  for (const auto &s : syms)
+    map[_mangle(s.first)] =
+        ExecutorSymbolDef(ExecutorAddr(s.second), JITSymbolFlags::Exported);
+  return _main_jd.define(absoluteSymbols(std::move(map)));
+}
+
 RukamlJIT::~RukamlJIT() {
   if (auto err = _exec_session->endSession())
     _exec_session->reportError(std::move(err));
@@ -62,16 +72,18 @@ RukamlJIT::~RukamlJIT() {
 Error RukamlJIT::add_ir(StringRef ir, ResourceTrackerSP rt) {
   SMDiagnostic diag;
   std::unique_ptr<Module> module;
-  // ThreadSafeContext::getContext() was removed in LLVM 23: access the
-  // context through withContextDo (locks the context mutex for us).
-  _ctx.withContextDo(
-      [&](LLVMContext *ctx) { module = parseAssemblyString(ir, diag, *ctx); });
+  module = parseAssemblyString(ir, diag, *_ctx.getContext());
   if (!module) {
     std::string msg;
     raw_string_ostream os(msg);
     diag.print("rukaml", os);
     return make_error<StringError>(os.str(), inconvertibleErrorCode());
   }
+  // The generated payload carries no datalayout/triple
+  // stamp the host's on before handing the module to the compile layer.
+  module->setDataLayout(_data_layout);
+  module->setTargetTriple(
+      _exec_session->getExecutorProcessControl().getTargetTriple().str());
   return ad_module(ThreadSafeModule(std::move(module), _ctx), std::move(rt));
 }
 
