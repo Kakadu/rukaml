@@ -1,0 +1,8 @@
+(executable
+ (name selfcheck)
+ (libraries IR JIT_engine_lib JIT_orc_lib))
+
+(rule
+ (alias runtest)
+ (action
+  (run ./selfcheck.exe)))

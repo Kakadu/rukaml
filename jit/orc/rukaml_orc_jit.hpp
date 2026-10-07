@@ -9,13 +9,16 @@
 #include "llvm/ExecutionEngine/Orc/IRCompileLayer.h"
 #include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
-#include "llvm/ExecutionEngine/Orc/SelfExecutorProcessControl.h"
 #include "llvm/ExecutionEngine/Orc/Shared/ExecutorSymbolDef.h"
 #include "llvm/ExecutionEngine/Orc/ThreadSafeModule.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/LLVMContext.h"
+#include <cstdint>
 #include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace llvm {
 namespace orc {
@@ -60,7 +63,7 @@ public:
 
   ~RukamlJIT();
 
-  /// Парсит текстовое LLVM IR и добавляет модуль в JIT.
+  /// Parses textual LLVM IR and adds the module to the JIT.
   Error add_ir(StringRef ir, ResourceTrackerSP rt = nullptr);
 
   /// \brief Create a RukamlJIT targeting the host process.
@@ -93,6 +96,18 @@ public:
   /// \return The resolved symbol definition, or an Error if the lookup
   ///         failed.
   Expected<ExecutorSymbolDef> lookup(StringRef name);
+
+  /// \brief Define host symbols (name → address) in the primary JITDylib.
+  ///
+  /// Registers the rukaml runtime (rukaml_stdlib.c) as absolute symbols so
+  /// that JIT'd code resolves it deterministically, without relying on
+  /// -rdynamic or the process-symbol generator.
+  ///
+  /// \param syms Name → host address pairs.
+  ///
+  /// \return An Error if the definitions could not be added.
+  Error define_abs_symbols(
+      const std::vector<std::pair<std::string, uint64_t>> &syms);
 };
 
 } // namespace orc

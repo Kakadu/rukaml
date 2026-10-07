@@ -1,5 +1,11 @@
+(copy_files ../../back/llvm/rukaml_stdlib.c)
+
 (library
  (name JIT_orc_lib)
+ (libraries IR JIT_engine_lib)
+ (foreign_stubs
+  (language c)
+  (names rukaml_stdlib))
  (foreign_stubs
   (language cxx)
   (names rukaml_orc_jit rukaml_orc_jit_bindings)
@@ -8,8 +14,8 @@
    :standard
    -std=c++17
    -fno-rtti
+   -I/usr/lib/llvm19/include
    -D__STDC_CONSTANT_MACROS
    -D__STDC_FORMAT_MACROS
    -D__STDC_LIMIT_MACROS))
- (c_library_flags -lstdc++ -lLLVM-23)
- )
+ (c_library_flags -lstdc++ -L/usr/lib/llvm19/lib -lLLVM-19))

@@ -10,4 +10,6 @@
   amd64_impl
   llvm_impl
   zlib
-  IR))
+  IR
+  JIT_engine_lib
+  JIT_orc_lib))
