@@ -16,6 +16,11 @@ let rec pp_reg ppf =
   | User _ -> failwith "not implemented (User _)"
 ;;
 
+type arg_location =
+  | Reg of reg
+  | Heap of reg
+let args_in_registers = 7;;
+
 type instr =
   | Addi of reg * reg * int
   | Add of reg * reg * reg

@@ -55,9 +55,6 @@ void __mk_err_warning(const char *file, int line, const char *msg) {
 #define Val_false ((value)0)
 
 #if defined(__riscv)
-#define DECLARE_FAKE_ARGS                                                      \
-  int a0, int a1, int a2, int a3, int a4, int a5, int a6, int a7
-#define FAKE_ARGS 0, 1, 2, 3, 4, 5, 6, 7
 
 #if __riscv_xlen == 64
 #define HEADER(size, tag) ((uint64_t)((size << 8u) + (tag % 256u)))
@@ -354,10 +351,10 @@ void rukaml_print_int(value x) {
   fflush(stdout);
 }
 
-void rukaml_print_int_kaml(DECLARE_FAKE_ARGS, value x) { rukaml_print_int(x); }
+void rukaml_print_int_kaml(value x) { rukaml_print_int(x); }
 
 typedef void *(*fun0)(void);
-
+typedef void *(*fun8)(void *, void *, void *, void *, void *, void *, void *, void *);
 void *rukaml_apply0(fun0 f) {
   // TODO: I'm not sure that zero-argument call is needed
   return f();
@@ -453,9 +450,9 @@ value rukaml_tag0(value obj) {
   return Val_int((rukaml_int_t)TAG(obj));
 }
 
-value rukaml_tag(DECLARE_FAKE_ARGS, value obj) { return rukaml_tag0(obj); }
+value rukaml_tag(value obj) { return rukaml_tag0(obj); }
 
-uint64_t rukaml_array_length(DECLARE_FAKE_ARGS, value arr) {
+uint64_t rukaml_array_length(value arr) {
   assert(arr != NULL);
   return SIZE(arr);
 }
@@ -478,7 +475,7 @@ value rukaml_array_stdin(void) {
 
 // read from file
 // TODO: recheck
-value rukaml_array_read_in(DECLARE_FAKE_ARGS, void **str) {
+value rukaml_array_read_in(void **str) {
   int len = 0;
   while (str[len++] != 0)
     ;
@@ -527,7 +524,7 @@ value rukaml_array_get_sysv(value arr, value _n) {
   return (value)(arr[Int_val(n)]);
 }
 
-value rukaml_array_get(DECLARE_FAKE_ARGS, value arr, value n) {
+value rukaml_array_get(value arr, value n) {
   return rukaml_array_get_sysv(arr, n);
 }
 
@@ -543,7 +540,7 @@ value rukaml_array_set_sysv(value arr, value _n, value a) {
   Set_field(arr, Int_val(n), a);
   return Val_unit;
 }
-value rukaml_array_set(DECLARE_FAKE_ARGS, value arr, value n, value a) {
+value rukaml_array_set(value arr, value n, value a) {
   return rukaml_array_set_sysv(arr, n, a);
 }
 
@@ -596,8 +593,8 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
     // for full application we can omit copying closure
     // log("Full application\n");
     size_t i = 0, j;
-    fun0 callable;
-    void **stack_args = alloca(Int_val(Clo_arity(f)) * sizeof(void *));
+    fun8 callable;
+    void **stack_args[8] = {0};
     for (i = 0; i < Int_val(Clo_received(f)); ++i) {
       stack_args[i] = Clo_arg(f, i);
       // printf("Setting arg %u: 0x%" PRIxVAL "\n", i, stack_args[i]);
@@ -615,8 +612,16 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
       // stack_args[j]);
     }
     va_end(argp);
-    callable = (fun0)(uintptr_t)(Clo_code(f));
-    return callable();
+    // size_t middle = Int_val(Clo_arity(f)) / 2;
+    // for (i = 0; i < middle; i++){
+    //   void* temp = stack_args[i]; 
+    //   stack_args[i] = stack_args[Int_val(Clo_arity(f)) - 1 - i]; 
+    //   stack_args[Int_val(Clo_arity(f)) - 1 - i] = temp; 
+    // }
+    callable = (fun8)(uintptr_t)(Clo_code(f));
+    assert(Clo_arity(f) <= 8);
+    return callable(stack_args[0], stack_args[1], stack_args[2], stack_args[3], stack_args[4], stack_args[5], stack_args[6], stack_args[7]);
+    // return callable(stack_args[7], stack_args[6], stack_args[5], stack_args[4], stack_args[3], stack_args[2], stack_args[1], stack_args[0]);
   } else {
     // There we have under application
     value ans_closure = copy_closure(f);
@@ -846,7 +851,7 @@ void rukaml_fprintf_impl(void *dest, value fmt, va_list args) {
   }
 }
 
-void *rukaml_fprintf_wrap(DECLARE_FAKE_ARGS, void *out_channel, value fmt,
+void *rukaml_fprintf_wrap(void *out_channel, value fmt,
                           ...) {
   // log("%s, ch=%X, fmt=%" PRIx64 "\n", __func__, out_channel, fmt);
   if (fmt == NULL) {
@@ -932,7 +937,7 @@ value rukaml_alloc_fprintf_closure_sysv(void *out_channel, value fmt) {
   // log("out_channel = %ld\n", (int64_t)out_channel);
   fflush(stdout);
   if (arity == 0) {
-    return rukaml_fprintf_wrap(FAKE_ARGS, out_channel, fmt);
+    return rukaml_fprintf_wrap(out_channel, fmt);
   }
 
   value closure = rukaml_alloc_closure((void *)(uintptr_t)rukaml_fprintf_wrap, 2 + arity);
@@ -941,14 +946,14 @@ value rukaml_alloc_fprintf_closure_sysv(void *out_channel, value fmt) {
   return rukaml_applyN(closure, 2, out_channel, fmt);
 }
 
-void *rukaml_alloc_fprintf_closure(DECLARE_FAKE_ARGS, value dest, value fmt) {
+void *rukaml_alloc_fprintf_closure(value dest, value fmt) {
   assert(TAG(fmt) == String_tag);
   return rukaml_alloc_fprintf_closure_sysv(dest, fmt);
 }
 
 void *rukaml_alloc_printf_closure0(value fmt) {
   assert(TAG(fmt) == String_tag);
-  return rukaml_alloc_fprintf_closure(FAKE_ARGS, Val_int(1), fmt);
+  return rukaml_alloc_fprintf_closure(Val_int(1), fmt);
 }
 
 // SPRINTF
@@ -1189,7 +1194,7 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
   return ans;
 }
 
-value rukaml_sprintf_wrap(DECLARE_FAKE_ARGS, value fmt, ...) {
+value rukaml_sprintf_wrap(value fmt, ...) {
   if (fmt == NULL) {
     mk_err_fatal("unexpected null ptr");
   }
@@ -1206,7 +1211,7 @@ value rukaml_sprintf_wrap(DECLARE_FAKE_ARGS, value fmt, ...) {
   return ans;
 }
 //
-void *rukaml_alloc_sprintf_closure(DECLARE_FAKE_ARGS, value fmt) {
+void *rukaml_alloc_sprintf_closure(value fmt) {
   if (fmt == NULL) {
     mk_err_fatal("unexpected null");
   }
@@ -1218,7 +1223,7 @@ void *rukaml_alloc_sprintf_closure(DECLARE_FAKE_ARGS, value fmt) {
   uint64_t arity = eval_fmt_arity(fmt);
 
   if (arity == 0) {
-    return rukaml_sprintf_wrap(FAKE_ARGS, fmt);
+    return rukaml_sprintf_wrap(fmt);
   }
 
   void *closure = rukaml_alloc_closure((void*)(uintptr_t)rukaml_sprintf_wrap, 1 + arity);
@@ -1228,7 +1233,7 @@ void *rukaml_alloc_sprintf_closure(DECLARE_FAKE_ARGS, value fmt) {
 
 value rukaml_alloc_sprintf_closure_sysv(value fmt) {
   assert(TAG(fmt) == String_tag);
-  return rukaml_alloc_sprintf_closure(FAKE_ARGS, fmt);
+  return rukaml_alloc_sprintf_closure(fmt);
 }
 
 // rukaml polymorphic equality for SysV ABI
@@ -1260,7 +1265,7 @@ value rukaml_equal_sysv(value l, value r) {
   return Val_false;
 }
 
-value rukaml_equal(DECLARE_FAKE_ARGS, value l, value r) {
+value rukaml_equal(value l, value r) {
   return rukaml_equal_sysv(l, r);
 }
 
@@ -1317,7 +1322,7 @@ value rukaml_compare_sysv(value l, value r) {
   return Val_int(1);
 }
 
-value rukaml_compare(DECLARE_FAKE_ARGS, value l, value r) {
+value rukaml_compare(value l, value r) {
   return rukaml_compare_sysv(l, r);
 }
 
@@ -1326,7 +1331,7 @@ value rukaml_sys_exit_sysv(value n) {
   __builtin_unreachable();
 }
 
-value rukaml_list_length(DECLARE_FAKE_ARGS, value ls) {
+value rukaml_list_length(value ls) {
   for (size_t size = 0;; ++size) {
     if (IS_BLOCK(ls)) {
       switch (TAG(ls)) {
@@ -1348,7 +1353,7 @@ value rukaml_list_length(DECLARE_FAKE_ARGS, value ls) {
 
 value rukaml_string_of_char_list_sysv(value chs) {
   assert(IS_BLOCK(chs));
-  value chars_n = rukaml_list_length(FAKE_ARGS, chs);
+  value chars_n = rukaml_list_length(chs);
   const size_t n = (size_t)Int_val(chars_n);
   // printf("%s, charsN = %ld\n", __func__, n );
   value block = rukaml_alloc_string(chars_n + 1);
@@ -1370,7 +1375,7 @@ value rukaml_string_of_char_list_sysv(value chs) {
   return block;
 }
 
-value rukaml_string_of_char_list(DECLARE_FAKE_ARGS, value chs) {
+value rukaml_string_of_char_list(value chs) {
   return rukaml_string_of_char_list_sysv(chs);
 }
 
@@ -1397,7 +1402,7 @@ value rukaml_end_of_input_sysv(value channel) {
 
   return Val_false;
 }
-value rukaml_end_of_input(DECLARE_FAKE_ARGS, value channel) {
+value rukaml_end_of_input(value channel) {
   return rukaml_end_of_input_sysv(channel);
 }
 void *rukaml_open_impl(value path, const char *mode) {
@@ -1441,17 +1446,17 @@ void *rukaml_open_in_sysv(value path) {
   return rukaml_open_impl(path, "r");
 }
 
-void *rukaml_open_in(DECLARE_FAKE_ARGS, value path) {
+void *rukaml_open_in(value path) {
   // printf("%s. file = %s\n", __func__, (char *)path);
   return rukaml_open_impl(path, "r");
 }
 
-value rukaml_open_out(DECLARE_FAKE_ARGS, value path) {
+value rukaml_open_out(value path) {
   return rukaml_open_impl(path, "w");
 }
 value rukaml_close_out_sysv(value xxx) { __builtin_unreachable(); }
 
-void rukaml_close_channel(DECLARE_FAKE_ARGS, void *channel) {
+void rukaml_close_channel(void *channel) {
   if (channel == NULL) {
     mk_err_warning("unexpected null");
   } else {
