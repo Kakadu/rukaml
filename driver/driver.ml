@@ -111,7 +111,7 @@ module Compiler = struct
 
   (** Generate code for RV64 *)
   let rv64 (ANF stru) =
-    Opts.init_opts ~configured_opts:[(Opts.TailCall, Opts.OptGloballyDisabled)] ();
+    Opts.init_opts();
     let vbs =
       List.map
         (function

@@ -509,7 +509,7 @@ let generate_body is_toplevel body =
       emit ld (RU (sprintf "s%d" i)) (make_sp_offset i)
     done;
     emit shrink_stack args_space ~comm:"deallocate space for args";
-    Addr_of_local.last_pos := !Addr_of_local.last_pos - args_space;
+    args_space
   in
   
   let deallocate_args_for_call argc =
@@ -1061,21 +1061,16 @@ let generate_body is_toplevel body =
       then (
         (* emit_comment "Full application of arity = %d" expected_arity; *)
         if Opts.is_permitted TailCall && is_tailcall dest  
-           && formal_arity <= Opts.TailCall.get_stack_space (!Addr_of_local.current)
         then(
           let to_remove = allocate_args_for_call ~f (arg1 :: args) in
           emit_comment "Init tail call with %d args" formal_arity;
-          let move_offset =  !Addr_of_local.last_pos in
-          
-          for offset = (formal_arity - 1) downto 0 do
-            emit ld t0 @@ make_sp_offset offset;
-            emit sd t0 @@ make_sp_offset (offset + move_offset);
-          done;
           deallocate_args_for_call to_remove;
 
+          let args_space = load_callee_saved_args() in
           emit ld ra (make_sp_offset ra_offset);
+
           let comm = sprintf "Deallocate function frame for tail call" in
-          emit shrink_stack (!Addr_of_local.last_pos) ~comm;
+          emit shrink_stack (!Addr_of_local.last_pos - args_space) ~comm;
           emit tail f.hum_name;
           )
         else(
@@ -1125,34 +1120,14 @@ let generate_body is_toplevel body =
       let app_name = Addr_of_local.pp_to_mach f in 
       helper_a (DReg "a3") arg;
 
-      if Opts.is_permitted TailCall && is_tailcall dest
+      if Opts.is_permitted TailCall && false
       then (
-        let dealloc_stack () = (
-          emit ld ra (make_sp_offset ra_offset);
-          emit shrink_stack (!Addr_of_local.last_pos))
-        in
-
-        let tailed_version = sprintf "rukaml_applyN_tailed_%d" (gensym ()) in
-        load_ident a0 app_name;
-        emit li a1 (Opts.TailCall.get_stack_space (!Addr_of_local.current));
-        emit call "rukaml_applyN_is_tailable";
-        
-        emit bne a0 zero tailed_version;
-
-        load_ident a0 app_name;
-        emit li a1 1;
-        emit mv a2 a3;
-        dealloc_stack();
-        emit tail "rukaml_applyN";
-
-        emit label tailed_version;
-        load_ident a0 app_name;
-        emit mv a1 a3;
-        emit addi a2 sp (!Addr_of_local.last_pos * wordsize());
-        emit call "rukaml_applyN_tail_prepare_args";
-        dealloc_stack();
-        emit jalr zero a0;
-        )
+        emit call "rukaml_applyN";
+        load_ident a1 app_name;
+        let args_space = load_callee_saved_args() in
+        emit ld ra (make_sp_offset ra_offset);
+        emit shrink_stack (!Addr_of_local.last_pos - args_space);
+        emit tail "rukaml_applyN_call")
       else (
         emit mv a2 a3;
         emit li a1 1;
@@ -1457,7 +1432,9 @@ let generate_body is_toplevel body =
   in
   save_callee_saved_args ();
   helper (DReg "a0") body;
-  load_callee_saved_args ();
+  let args_space = load_callee_saved_args () in
+  Addr_of_local.last_pos := !Addr_of_local.last_pos - args_space;
+
   dealloc_locals ~now:()
 ;;
 
