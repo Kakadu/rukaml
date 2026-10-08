@@ -489,8 +489,9 @@ let generate_body is_toplevel body =
   let open Compile_lib in
   let dealloc_locals, locals, ra_offset = allocate_locals body in
   let save_callee_saved_args () =
-    let args_amount = Hashtbl.length Addr_of_local.args in
-    let args_space = (calc_sloc args_amount) in 
+    let args_amount = min Machine.args_in_registers (Hashtbl.length Addr_of_local.args) + 1 in
+    (* "+1" because 8th reg is link for extra regs *) 
+    let args_space = calc_sloc args_amount in 
     emit grow_stack args_space ~comm:"allocate space for args";
     Addr_of_local.last_pos := !Addr_of_local.last_pos + args_space;
 
@@ -498,12 +499,12 @@ let generate_body is_toplevel body =
       emit sd (RU (sprintf "s%d" i)) (make_sp_offset i)
     done;
     for i = 0 to (args_amount - 1) do
-      load_nth_arg ~is_saveable:false (RU (sprintf "s%d" i)) i;
+      emit mv (RU (sprintf "s%d" i)) (RU (sprintf "a%d" i));
     done;
   in
   let load_callee_saved_args () =
-    let args_amount = Hashtbl.length Addr_of_local.args in
-    let args_space = (calc_sloc args_amount) in 
+    let args_amount = min Machine.args_in_registers (Hashtbl.length Addr_of_local.args) + 1 in
+    let args_space = calc_sloc args_amount in 
     for i = 0 to (args_amount - 1) do
       emit ld (RU (sprintf "s%d" i)) (make_sp_offset i)
     done;
@@ -535,6 +536,16 @@ let generate_body is_toplevel body =
       let temp_place = make_sp_offset (List.length !args_temp_storage) in
       args_temp_storage := (temp_place, i) :: !args_temp_storage;
       emit sd reg temp_place ~comm:doc
+    in
+    let maybe_alloc_extra_args_space args =
+      let open Machine in
+      if args <= Machine.args_in_registers then ()
+      else(
+        emit_comment "Allocate space for extra args";
+        emit li a0 (args - Machine.args_in_registers); 
+        emit call "rukaml_alloc_extra_args";
+        emit mv a7 a0;
+      )
     in
     let pp_access ?(doc = "") v offset =
       emit li t0 v;
@@ -604,10 +615,16 @@ let generate_body is_toplevel body =
     in
     let move_args () = 
       List.iter (fun (temp_place, i) ->
-        (* Add heap support *)
-        emit ld (arg_place_by_index ~is_saveable:false i) (temp_place);
+        let arg = (arg_place_by_index ~is_saveable:false i) in
+        if i >= args_in_registers
+        then (
+          emit ld t0 temp_place;
+          emit sd t0 arg;
+        )
+        else emit ld arg temp_place;
       ) !args_temp_storage
     in
+    maybe_alloc_extra_args_space count;
     ListLabels.iteri args ~f:on_arg;
     move_args();
     count
