@@ -66,6 +66,20 @@ typedef int64_t rukaml_int_t;
 typedef uint64_t rukaml_uint_t;
 #define Int_val(n) ((long)n)
 const size_t rukaml_word_size = 8;
+const size_t args_in_registers = 7;
+
+#define INIT_EXTRA_ARGS(start_value) void** extra_args; size_t argc_counter = start_value
+#define TRY_SET_EXTRA_ARGS(va_list) \
+  if (argc_counter == args_in_registers) \
+    extra_args = va_arg(va_list, void **)
+
+#define VA_ARG(var, va_list, type) \
+  TRY_SET_EXTRA_ARGS(va_list); \
+  type var = (argc_counter < args_in_registers) \
+    ? va_arg(va_list, type) \
+    : extra_args[argc_counter - args_in_registers]; \
+  argc_counter++
+
 #define PRIxVAL "lx"
 #define PRIdVAL "ld"
 #endif
@@ -106,6 +120,7 @@ const uint8_t Array_tag = 1;
 const uint8_t Forward_tag = 250;
 const uint8_t String_tag = 252;
 const uint8_t Closure_tag = 247;
+const uint8_t Extra_args_tag = 243;
 
 struct gc_stats {
   size_t gs_allocated_words; // allocated from beginning of the program
@@ -443,6 +458,10 @@ value copy_closure(value src) {
 value rukaml_alloc_array(value size) {
   return rukaml_alloc_block(Int_val(size), Array_tag);
 }
+value rukaml_alloc_extra_args(size_t args){
+  assert(args < 65536);
+  return rukaml_alloc_block(args, Extra_args_tag);
+}
 
 // Standart CC
 value rukaml_tag0(value obj) {
@@ -594,34 +613,38 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
     // log("Full application\n");
     size_t i = 0, j;
     fun8 callable;
-    void **stack_args[8] = {0};
-    for (i = 0; i < Int_val(Clo_received(f)); ++i) {
-      stack_args[i] = Clo_arg(f, i);
-      // printf("Setting arg %u: 0x%" PRIxVAL "\n", i, stack_args[i]);
+    value args[100] = {0};
+    size_t received = Int_val(Clo_received(f)); 
+    size_t arity = Int_val(Clo_arity(f)); 
+
+    for (i = 0; i < received; ++i) {
+      args[i] = Clo_arg(f, i);
+      // printf("Setting arg %u: 0x%" PRIxVAL "\n", i, args[i]);
       // fflush(stdout);
-      // if (IS_ON_HEAP(stack_args[i]))
-      //   rukaml_trace_val(stack_args[i], 3);
+      // if (IS_ON_HEAP(args[i]))
+      //   rukaml_trace_val(args[i], 3);
       // else
       //   log(" not on heap");
     }
 
     // rest of the args
-    for (j = Int_val(Clo_received(f)); j < Int_val(Clo_arity(f)); j++) {
-      stack_args[j] = va_arg(argp, value);
+    for (j = received; j < arity; j++) {
+      args[j] = va_arg(argp, value);
       // printf("Setting arg j=%u, next_arg = 0x%" PRIxVAL "\n", j,
-      // stack_args[j]);
+      // args[j]);
     }
     va_end(argp);
-    // size_t middle = Int_val(Clo_arity(f)) / 2;
-    // for (i = 0; i < middle; i++){
-    //   void* temp = stack_args[i]; 
-    //   stack_args[i] = stack_args[Int_val(Clo_arity(f)) - 1 - i]; 
-    //   stack_args[Int_val(Clo_arity(f)) - 1 - i] = temp; 
-    // }
     callable = (fun8)(uintptr_t)(Clo_code(f));
-    assert(Clo_arity(f) <= 8);
-    return callable(stack_args[0], stack_args[1], stack_args[2], stack_args[3], stack_args[4], stack_args[5], stack_args[6], stack_args[7]);
-    // return callable(stack_args[7], stack_args[6], stack_args[5], stack_args[4], stack_args[3], stack_args[2], stack_args[1], stack_args[0]);
+    
+    value* extra_args = NULL;
+    if (arity > args_in_registers){
+      size_t extra_amount = arity - args_in_registers;
+      extra_args = rukaml_alloc_extra_args(extra_amount);
+      for (i = 0; i < extra_amount; i++){
+        extra_args[i] = args[args_in_registers + i];
+      }
+    }
+    return callable(args[0], args[1], args[2], args[3], args[4], args[5], args[6], extra_args);
   } else {
     // There we have under application
     value ans_closure = copy_closure(f);
@@ -778,6 +801,7 @@ void rukaml_fprintf_impl(void *dest, value fmt, va_list args) {
   }
 
   value fmt_len = rukaml_string_length_sysv((value)fmt);
+  INIT_EXTRA_ARGS(2);
 
   // printf("%s, fmtlen = %ld\n", __func__, fmt_len);
   // fflush(stdout);
@@ -801,30 +825,30 @@ void rukaml_fprintf_impl(void *dest, value fmt, va_list args) {
     switch (ch) {
     case 'a': {
       // fflush(stdout);
-      void *pp_item_closure = va_arg(args, void *);
-      void *item = va_arg(args, void *);
+      VA_ARG(pp_item_closure, args, void *);
+      VA_ARG(item, args, void *);
       rukaml_applyN(pp_item_closure, 2, dest, item);
       break;
     }
     case 'b': {
-      value v = va_arg(args, value);
+      VA_ARG(v, args, value);
       // TODO: fix hardcoded stdout
       fprintf(stdout, "%s", Int_val(v) ? "true" : "false");
       break;
     }
     case 'c': {
-      value v = va_arg(args, value);
+      VA_ARG(v, args, value);
       // TODO: fix hardcoded stdout
       fprintf(stdout, "%c", (char)Int_val(v));
       break;
     }
     case 'x': {
-      value v = va_arg(args, value);
+      VA_ARG(v, args, value);
       fprintf(stdout, "%"PRIxVAL, Int_val(v));
       break;
     }
     case 'd': {
-      value v = va_arg(args, value);
+      VA_ARG(v, args, value);
       // printf("%s %d, dest = %d, v=%ld\n", __func__, __LINE__, dest, v);
       // fflush(stdout);
       // TODO: fix hardcoded stdout
@@ -832,7 +856,7 @@ void rukaml_fprintf_impl(void *dest, value fmt, va_list args) {
       break;
     }
     case 's': {
-      value str = va_arg(args, value);
+      VA_ARG(str, args, value);
       assert(TAG(str) == String_tag);
       rukaml_output_string_sysv(1, str);
       break;
