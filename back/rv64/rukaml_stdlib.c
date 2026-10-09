@@ -66,19 +66,21 @@ typedef int64_t rukaml_int_t;
 typedef uint64_t rukaml_uint_t;
 #define Int_val(n) ((long)n)
 const size_t rukaml_word_size = 8;
-const size_t args_in_registers = 7;
+#define ARGS_IN_REGISTERS 7
 
 #define INIT_EXTRA_ARGS(start_value) void** extra_args; size_t argc_counter = start_value
 #define TRY_SET_EXTRA_ARGS(va_list) \
-  if (argc_counter == args_in_registers) \
+  if (argc_counter == ARGS_IN_REGISTERS) \
     extra_args = va_arg(va_list, void **)
 
 #define VA_ARG(var, va_list, type) \
   TRY_SET_EXTRA_ARGS(va_list); \
-  type var = (argc_counter < args_in_registers) \
+  type var = (argc_counter < ARGS_IN_REGISTERS) \
     ? va_arg(va_list, type) \
-    : extra_args[argc_counter - args_in_registers]; \
+    : extra_args[argc_counter - ARGS_IN_REGISTERS]; \
   argc_counter++
+static bool is_applyN_call = false;
+static void* applyN_args = NULL;
 
 #define PRIxVAL "lx"
 #define PRIdVAL "ld"
@@ -612,13 +614,14 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
     // for full application we can omit copying closure
     // log("Full application\n");
     size_t i = 0, j;
-    fun8 callable;
-    value args[100] = {0};
     size_t received = Int_val(Clo_received(f)); 
     size_t arity = Int_val(Clo_arity(f)); 
+    // for passing arguments into rukaml_applyN_call
+    value *args = malloc(rukaml_word_size * (arity > ARGS_IN_REGISTERS ? arity + 1 : ARGS_IN_REGISTERS + 1));
+    args[0] = Val_int(argc);
 
     for (i = 0; i < received; ++i) {
-      args[i] = Clo_arg(f, i);
+      args[i + 1] = Clo_arg(f, i);
       // printf("Setting arg %u: 0x%" PRIxVAL "\n", i, args[i]);
       // fflush(stdout);
       // if (IS_ON_HEAP(args[i]))
@@ -629,22 +632,14 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
 
     // rest of the args
     for (j = received; j < arity; j++) {
-      args[j] = va_arg(argp, value);
+      args[j + 1] = va_arg(argp, value);
       // printf("Setting arg j=%u, next_arg = 0x%" PRIxVAL "\n", j,
       // args[j]);
     }
     va_end(argp);
-    callable = (fun8)(uintptr_t)(Clo_code(f));
-    
-    value* extra_args = NULL;
-    if (arity > args_in_registers){
-      size_t extra_amount = arity - args_in_registers;
-      extra_args = rukaml_alloc_extra_args(extra_amount);
-      for (i = 0; i < extra_amount; i++){
-        extra_args[i] = args[args_in_registers + i];
-      }
-    }
-    return callable(args[0], args[1], args[2], args[3], args[4], args[5], args[6], extra_args);
+    is_applyN_call = true;
+    applyN_args = args;
+    return f;
   } else {
     // There we have under application
     value ans_closure = copy_closure(f);
@@ -671,19 +666,36 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
   }
   __builtin_unreachable();
 }
-bool rukaml_applyN_is_tailable(value f, size_t stack_space){
-  size_t arity = Int_val(Clo_arity(f));
-  size_t received = Int_val(Clo_received(f));
-  return (stack_space >= arity && received + 1 == arity);
-}
-void* rukaml_applyN_tail_prepare_args(value f, value arg, void** stack){
-  size_t received = Int_val(Clo_received(f));
-  for (size_t i = 0; i < received; ++i) {
-    stack[i] = Clo_arg(f, i);
+__attribute__((noinline, optimize("O2"))) // for tail call
+value rukaml_applyN_call(value f){
+  if (!is_applyN_call)
+    return f;
+  is_applyN_call = false;
+  value* args = (value*)applyN_args;
+
+  fun8 callable = (fun8)(uintptr_t)(Clo_code(f));
+  size_t received = Int_val(Clo_received(f)); 
+  size_t argc = (size_t)Int_val(args[0]);
+  size_t arity = Int_val(Clo_arity(f)); 
+
+  assert(received + argc == arity);
+
+  value* extra_args = NULL;
+  if (arity > ARGS_IN_REGISTERS){
+    size_t extra_amount = arity - ARGS_IN_REGISTERS;
+    extra_args = (value*)rukaml_alloc_extra_args(extra_amount);
+    for (size_t i = 0; i < extra_amount; i++){
+      extra_args[i] = args[ARGS_IN_REGISTERS + i + 1];
+    }
   }
-  stack[received] = arg;  
-  return Clo_code(f);
+  value reg_args[ARGS_IN_REGISTERS] = {0};
+  for(size_t i = 0; i < ARGS_IN_REGISTERS; i++){
+    reg_args[i] = args[i + 1];
+  }
+  free(args);
+  return callable(reg_args[0], reg_args[1], reg_args[2], reg_args[3], reg_args[4], reg_args[5], reg_args[6], extra_args);
 }
+
 void *rukaml_match_failure() {
   puts("Match failure");
   fflush(stdout);
@@ -827,7 +839,7 @@ void rukaml_fprintf_impl(void *dest, value fmt, va_list args) {
       // fflush(stdout);
       VA_ARG(pp_item_closure, args, void *);
       VA_ARG(item, args, void *);
-      rukaml_applyN(pp_item_closure, 2, dest, item);
+      rukaml_applyN_call(rukaml_applyN(pp_item_closure, 2, dest, item));
       break;
     }
     case 'b': {
@@ -1069,7 +1081,7 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
     case 'a': {
       value pp_item_closure = va_arg(args, void *);
       value arg1 = va_arg(args, void *);
-      value rez = rukaml_applyN(pp_item_closure, 2, Val_unit, arg1);
+      value rez = rukaml_applyN_call(rukaml_applyN(pp_item_closure, 2, Val_unit, arg1));
       argslen++;
       sprintf_insert_arg(&__args_start, &__args_fin, (void *)rez);
       break;

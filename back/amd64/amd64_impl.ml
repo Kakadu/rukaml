@@ -101,13 +101,11 @@ type dest =
     (* DStatic_var's are allocated in .bss and access to them is performed via labels *)
   | DStatic_var of Frontend.Ident.t
 
-
-
 module Addr_of_local = struct
   let store : (Frontend.Ident.t, _) Hashtbl.t = Hashtbl.create 13
   let last_pos = ref 0
   let get_locals_count () = !last_pos
-  let current : (Ident.t option) ref = ref None
+  let current : Ident.t option ref = ref None
 
   let clear () =
     Hashtbl.clear store;
@@ -295,6 +293,7 @@ module Toplevel = struct
       Format.eprintf "Can't find toplevel %a\n" Ident.pp ident;
       raise Not_found
   ;;
+
   (* __immediates is used to make toplevel evaluation in the order of declaration *)
   let __immediates : toplevel Queue.t = Queue.create ()
   let iter_immediates f = Queue.iter f __immediates
@@ -381,20 +380,23 @@ let pp_dest ppf = function
   | DStack_var name -> Addr_of_local.pp_local_exn ppf name
   | DStatic_var name -> fprintf ppf "[rel %a]" Toplevel.pp_label_exn name
 ;;
-let is_tailcall = function 
-| DReg "rax" -> true
-| _ -> false
 
-let allocate_free_space ppf callee busy_space = 
+let is_tailcall = function
+  | DReg "rax" -> true
+  | _ -> false
+;;
+
+let allocate_free_space ppf callee busy_space =
   let open Compile_lib.Opts in
   let free_space = TailCall.get_free_space (Some callee) busy_space in
   Addr_of_local.last_pos := !Addr_of_local.last_pos + free_space;
   printfn ppf "  sub rsp, 8*%d ; allocate free space" free_space;
-  free_space;;
+  free_space
+;;
 
-let deallocate_free_space ppf space = 
+let deallocate_free_space ppf space =
   printfn ppf "  add rsp, 8*%d ; deallocate free space" space;
-  Addr_of_local.last_pos := !Addr_of_local.last_pos - space;
+  Addr_of_local.last_pos := !Addr_of_local.last_pos - space
 ;;
 
 let emit_alloc_closure ppf ~fname ~argc =
@@ -916,40 +918,40 @@ let rec generate_body ppf body =
       printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn f;
       printfn ppf "  mov rsi, 1";
       printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arg1;
-      
       if Opts.is_permitted TailCall && is_tailcall dest
       then (
         let tailed_version = Printf.sprintf "rukaml_applyN_tailed_%d" (gensym ()) in
-
         printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn f;
-        printfn ppf "  mov rsi, %d" (Opts.TailCall.get_stack_space (!Addr_of_local.current));
+        printfn ppf "  mov rsi, %d" (Opts.TailCall.get_stack_space !Addr_of_local.current);
         printfn ppf "  call rukaml_applyN_is_tailable";
         printfn ppf "  cmp rax, 1";
         printfn ppf "  je %s" tailed_version;
-
         printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn f;
         printfn ppf "  mov rsi, 1";
         printfn ppf "  mov rdx, %a" Addr_of_local.pp_local_exn arg1;
-        printfn ppf "  add rsp, 8*%d ; deallocate local variables" (Addr_of_local.get_locals_count());
+        printfn
+          ppf
+          "  add rsp, 8*%d ; deallocate local variables"
+          (Addr_of_local.get_locals_count ());
         printfn ppf "  pop rbp";
         printfn ppf "  jmp rukaml_applyN ; making tail call";
-        
         printfn ppf "%s:" tailed_version;
         printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn f;
         printfn ppf "  mov rsi, %a" Addr_of_local.pp_local_exn arg1;
         printfn ppf "  lea rdx, [rbp + 16]";
         printfn ppf "  call rukaml_applyN_tail_prepare_args";
-        printfn ppf "  add rsp, 8*%d ; deallocate local variables" (Addr_of_local.get_locals_count());
+        printfn
+          ppf
+          "  add rsp, 8*%d ; deallocate local variables"
+          (Addr_of_local.get_locals_count ());
         printfn ppf "  pop rbp";
-        printfn ppf "  jmp rax";
-      )
+        printfn ppf "  jmp rax")
       else (
         printfn ppf "  call rukaml_applyN";
         printfn ppf "  add rsp, 8*2 ; free space for args of function \"%a\"" Ident.pp f;
-        printfn ppf "  mov %a, rax" pp_dest dest
-      );
+        printfn ppf "  mov %a, rax" pp_dest dest);
       Addr_of_local.remove_local arg1;
-      Addr_of_local.remove_local temp_padding;
+      Addr_of_local.remove_local temp_padding
     | CApp (APrimitive ("print", 1), AConst (PConst_int n), []) ->
       printfn ppf "  mov rdi, %d" n;
       printfn ppf "  call rukaml_print_int";
@@ -992,27 +994,33 @@ let rec generate_body ppf body =
         formal_arity; *)
       (* printfn ppf "@[; calling @[%a@]@]" ANF.pp_c cexpr; *)
       if expected_arity = formal_arity
-      then (
-        if Opts.is_permitted TailCall && is_tailcall dest 
-          && formal_arity <= Opts.TailCall.get_stack_space (!Addr_of_local.current)
+      then
+        if
+          Opts.is_permitted TailCall
+          && is_tailcall dest
+          && formal_arity <= Opts.TailCall.get_stack_space !Addr_of_local.current
         then (
           let to_remove = allocate_args (arg1 :: args) in
-          for offset = (formal_arity - 1) downto 0 do
+          for offset = formal_arity - 1 downto 0 do
             printfn ppf "  mov r10, [rsp+8*%d]" offset;
-            printfn ppf "  mov [rbp+8*%d], r10" (offset + 2);
+            printfn ppf "  mov [rbp+8*%d], r10" (offset + 2)
           done;
           printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
-          printfn ppf "  add rsp, 8*%d ; deallocate local variables" (Addr_of_local.get_locals_count());
+          printfn
+            ppf
+            "  add rsp, 8*%d ; deallocate local variables"
+            (Addr_of_local.get_locals_count ());
           printfn ppf "  pop rbp";
-          printfn ppf "  jmp %a ; making tail call" Toplevel.pp_label_exn f;
-          )
-        else(
-          let free_space = allocate_free_space ppf f (formal_arity + formal_arity mod 2) in
+          printfn ppf "  jmp %a ; making tail call" Toplevel.pp_label_exn f)
+        else (
+          let free_space =
+            allocate_free_space ppf f (formal_arity + (formal_arity mod 2))
+          in
           let to_remove = allocate_args (arg1 :: args) in
           printfn ppf "  call %a" Toplevel.pp_label_exn f;
           printfn ppf "  add rsp, 8*%d ; dealloc args" to_remove;
           deallocate_free_space ppf free_space;
-          printfn ppf "  mov %a, rax" pp_dest dest))
+          printfn ppf "  mov %a, rax" pp_dest dest)
       else if formal_arity < expected_arity
       then (
         let partial_args_count = allocate_args (arg1 :: args) in
@@ -1531,13 +1539,13 @@ section .text
       | ANF.ANF_vb (_flg, Apat_var { hum_name = "main"; _ }, body) ->
         let name = Ident.ident "main" 0 in
         Toplevel.extend name ~kind:Main;
-        Opts.disable_locally TailCall (fun () -> emit_global_function ppf name body);
+        Opts.disable_locally TailCall (fun () -> emit_global_function ppf name body)
       | ANF.ANF_vb (_flg, Apat_var name, body) ->
         let pats, _ = Compile_lib.ANF.group_abstractions body in
         (match List.length pats with
          | 0 ->
            Toplevel.extend name ~kind:(Immediate Constant);
-           Opts.disable_locally TailCall (fun () -> emit_global_constant ppf name body);           
+           Opts.disable_locally TailCall (fun () -> emit_global_constant ppf name body)
          | argc ->
            Toplevel.extend name ~kind:(Function { argc });
            emit_global_function ppf name body)
