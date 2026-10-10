@@ -20,5 +20,6 @@ struct
 
   let run () symbol = BackORC.run symbol
   let close = BackORC.destroy
+  let runtime_symbols = BackORC.runtime_syms ()
 end :
   JIT_engine_lib.JITEngine.BackEngine)

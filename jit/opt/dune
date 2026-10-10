@@ -1,0 +1,3 @@
+(library
+ (name JIT_opt_lib)
+ (libraries IR llvm llvm.analysis llvm.irreader))
