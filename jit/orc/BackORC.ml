@@ -20,3 +20,8 @@ external run : string -> int64 = "rukaml_orc_run"
 (* Destroys the JIT (endSession); repeated calls are safe, the next
    [create] makes a fresh instance. *)
 external destroy : unit -> unit = "rukaml_orc_destroy"
+
+(* Names of the runtime symbols registered as absolute symbols by
+   [create]; read straight from the registration table, so it works with
+   or without a JIT instance. *)
+external runtime_syms : unit -> string list = "rukaml_orc_runtime_syms"

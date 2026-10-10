@@ -9,6 +9,10 @@ open Compile_lib
     implements the contract. *)
 module Engine : JIT_engine_lib.JITEngine.BackEngine = JIT_orc_lib.OrcEngine
 
+(** Optimization passes between IR generation and [Engine.load]: pure
+    [IR.t -> IR.t] patches of the payload, backend-agnostic. *)
+module JITOpt = JIT_opt_lib.JITOpt
+
 let error fmt =
   let open Stdlib.Format in
   kfprintf
@@ -186,6 +190,8 @@ module Target = struct
     ; cps : bool
     ; caa : bool
     ; ppx : bool
+    ; opt_passes : string list (** JIT optimization passes from [--opt], in flag order. *)
+    ; profile_file : string (** [--profile-file] for the JIT passes. *)
     }
 
   open Compiler
@@ -210,6 +216,27 @@ module Target = struct
   let jit table p =
     (Intermediate.anftree table p) (fun (ANF stru) ->
       let ir = LLVM_impl.anf_to_ir stru in
+      (* optimization passes are IR -> IR and backend-agnostic: they run
+         between IR generation and [load], and every requirement they add
+         to the module must be resolvable by this engine *)
+      let ir =
+        try
+          let config : JITOpt.config = { profile_file = p.profile_file } in
+          let pipeline = JITOpt.of_flags config p.opt_passes in
+          let missing =
+            JITOpt.missing_runtime
+              ~available:Engine.runtime_symbols
+              (JITOpt.requires pipeline)
+          in
+          if not (List.is_empty missing)
+          then
+            error
+              "jit error: missing runtime symbols: [%s]"
+              (String.concat ~sep:", " missing);
+          JITOpt.run pipeline ir
+        with
+        | Failure msg -> error "jit error: %s" msg
+      in
       Option.iter p.out_path ~f:(fun path ->
         Out_channel.write_all path ~data:(IR.payload ir));
       let engine = Engine.create () in
@@ -267,6 +294,8 @@ let () =
   let cps = ref false in
   let caa = ref false in
   let ppx = ref true in
+  let opt_passes = ref [] in
+  let profile_file = ref "rukaml.prof" in
   let open Stdlib.Arg in
   let args =
     [ "-o", String (fun s -> out_path := Some s), " output file"
@@ -276,6 +305,12 @@ let () =
     ; "--caa", Set caa, " enable call arity analysis"
     ; "--no-ppx", Set ppx, " disable preprocessing"
     ; "--rename-main", Bool (fun b -> RV64_impl.rename_main := b), " "
+    ; ( "--opt"
+      , String (fun s -> opt_passes := s :: !opt_passes)
+      , " JIT optimization pass (profile|specialize; repeatable)" )
+    ; ( "--profile-file"
+      , Set_string profile_file
+      , " JIT profile file (written by profile, read by specialize)" )
     ]
   in
   parse args (fun s -> inp_path := Some s) "rukaml";
@@ -286,9 +321,17 @@ let () =
     | None -> In_channel.input_all stdin
   in
   let params =
-    Target.{ text; out_path = !out_path; cps = !cps; caa = !caa; ppx = !ppx }
+    Target.
+      { text
+      ; out_path = !out_path
+      ; cps = !cps
+      ; caa = !caa
+      ; ppx = !ppx
+      ; opt_passes = List.rev !opt_passes
+      ; profile_file = !profile_file
+      }
   in
-  match Base.Map.find (Target.targets Typedtree.empty_table) !target with
+  match Map.find Target.targets !target with
   | Some target -> target params
   | None -> error "invalid target %S" !target
 ;;

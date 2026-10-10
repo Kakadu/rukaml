@@ -26,6 +26,8 @@ void *rukaml_alloc_pair(void *l, void *r);
 void *rukaml_field(int n, void **r);
 void *rukaml_alloc_closure(void *func, int32_t argsc);
 void *rukaml_applyN(void *f, int32_t argc, ...);
+void rukaml_prof_tick(const char *name);
+void rukaml_prof_dump(const char *path);
 }
 
 static llvm::orc::RukamlJIT *g_jit = nullptr;
@@ -47,6 +49,8 @@ static const std::vector<std::pair<std::string, uint64_t>> k_runtime_syms = {
     {"rukaml_field", addr_of(&rukaml_field)},
     {"rukaml_alloc_closure", addr_of(&rukaml_alloc_closure)},
     {"rukaml_applyN", addr_of(&rukaml_applyN)},
+    {"rukaml_prof_tick", addr_of(&rukaml_prof_tick)},
+    {"rukaml_prof_dump", addr_of(&rukaml_prof_dump)},
 };
 
 extern "C" CAMLprim value rukaml_orc_create(value unit) {
@@ -137,4 +141,22 @@ extern "C" CAMLprim value rukaml_orc_destroy(value unit) {
   g_jit = nullptr;
 
   CAMLreturn(Val_unit);
+}
+
+extern "C" CAMLprim value rukaml_orc_runtime_syms(value unit) {
+  CAMLparam1(unit);
+  CAMLlocal1(res);
+
+  res = Val_emptylist;
+  for (auto it = k_runtime_syms.rbegin(); it != k_runtime_syms.rend(); ++it) {
+    CAMLlocal1(hd);
+    hd = caml_alloc_initialized_string(it->first.size(), it->first.data());
+    CAMLlocal1(cell);
+    cell = caml_alloc(2, 0);
+    Store_field(cell, 0, hd);
+    Store_field(cell, 1, res);
+    res = cell;
+  }
+
+  CAMLreturn(res);
 }
