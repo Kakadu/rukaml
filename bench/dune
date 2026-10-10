@@ -1,0 +1,4 @@
+; The workloads are rukaml sources read by bench/harness.c at runtime, not
+; OCaml modules; keep dune (and the @fmt alias) away from them.
+
+(data_only_dirs workloads)
