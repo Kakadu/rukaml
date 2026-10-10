@@ -37,4 +37,6 @@ module type BackEngine = sig
   (** Shut the engine down (repeated calls are safe); [create] after
       [close] yields a fresh instance. *)
   val close : t -> unit
+
+  val runtime_symbols : string list
 end
