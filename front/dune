@@ -14,9 +14,9 @@
  ;(inline_tests)
  (libraries ppx_deriving.runtime angstrom base str)
  (preprocess
-  (pps ppx_deriving.show ppx_expect_nobase))
+  (pps ppx_deriving.show ppx_windtrap))
  (instrumentation
-  (backend bisect_ppx)))
+  (backend ppx_windtrap.coverage)))
 
 (library
  (name frontend_tests)

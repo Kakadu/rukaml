@@ -30,8 +30,8 @@ ifdef CLEAN
 	git clean -fxdq testsuite/artifacts
 	rm -rf testsuite/expected/*.out
 endif
-	dune b testsuite $(VERBOSE_FLAG)
-	dune b testsuite @testsuite/cram $(VERBOSE_FLAG) $(WATCH_FLAG)
+	dune b testsuite $(VERBOSE_FLAG) -instrument-with ppx_windtrap.coverage
+	dune b testsuite @testsuite/cram $(VERBOSE_FLAG) $(WATCH_FLAG) -instrument-with ppx_windtrap.coverage
 
 deps:
 	opam install --depext-only .
@@ -42,7 +42,6 @@ coverage:
 	if [ -d $(TEST_COV_D) ]; then $(RM) -r $(TEST_COV_D); fi
 	mkdir -p $(TEST_COV_D)
 	dune b @default @testsuite/all
-	BISECT_FILE=$(TEST_COV_D)/GT dune b @runtest @testsuite/runtest --no-print-directory \
-			--instrument-with bisect_ppx --force
-	bisect-ppx-report html --coverage-path $(TEST_COV_D) #--expect src/
-	bisect-ppx-report summary --coverage-path $(TEST_COV_D) #--expect src/
+	BISECT_FILE=$(TEST_COV_D) dune b @runtest @testsuite/runtest --no-print-directory \
+			--instrument-with ppx_windtrap.coverage
+	dune exec windtrap -- coverage

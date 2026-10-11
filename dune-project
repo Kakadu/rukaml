@@ -29,7 +29,10 @@
   base
   stdio
   ppx_deriving
-  bisect_ppx_ng
+  (windtrap
+   (>= 0.2.0))
+  (ppx_windtrap
+   (>= 0.2.0))
   parsexp
   (angstrom
    (= 0.16.0))

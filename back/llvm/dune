@@ -8,7 +8,7 @@
  (preprocess
   (pps ppx_inline_test_nobase))
  (instrumentation
-  (backend bisect_ppx)))
+  (backend ppx_windtrap.coverage)))
 
 (library
  (name llvm_impl)
@@ -30,7 +30,7 @@
  (preprocess
   (pps ppx_inline_test_nobase))
  (instrumentation
-  (backend bisect_ppx)))
+  (backend ppx_windtrap.coverage)))
 
 (rule
  (target rukaml_stdlib.o)

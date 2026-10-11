@@ -4,7 +4,7 @@
 
   $ run << EOF
   > type 'a box = | Box of 'a
-  >
+  > 
   > let x = Box 1
   > EOF
   type '_0 box =
@@ -15,7 +15,7 @@
   > type ('a, 'b) result =
   >   | Ok of 'a
   >   | Error of 'b
-  >
+  > 
   > let x = Ok 1
   > let y = Error true
   > EOF
@@ -31,7 +31,7 @@
   > type 'a list =
   >   | Cons of 'a * 'a list
   >   | Nil
-  >
+  > 
   > let x = Nil
   > let y = Cons (1, x)
   > EOF
@@ -47,7 +47,7 @@
   > type ('a, 'b) arrows =
   >   | Normal of ('a -> 'b)
   >   | Reversed of ('b -> 'a)
-  >
+  > 
   > let a = Normal (fun x -> x > 0)
   > let b = Reversed (fun x -> x > 0)
   > EOF
@@ -65,7 +65,7 @@
   $ run << EOF
   > type 'a pair =
   >   | Pair of 'a * 'a
-  >
+  > 
   > let x = Pair ((1, 2), (3, 4))
   > EOF
   type '_0 pair =
@@ -76,9 +76,9 @@
   $ run << EOF
   > type 'a box =
   >   | Box of 'a
-  >
+  > 
   > let x = Box (fun a -> a + 1)
-  >
+  > 
   > let y = Box x
   > EOF
   type '_0 box =
@@ -95,7 +95,7 @@
   > type 'a prod =
   >   | Pair of 'a * 'a
   >   | Triple of 'a * 'a * 'a
-  >
+  > 
   > let is_pair x =
   >   match x with
   >   | Pair (a, b) -> true
@@ -115,7 +115,7 @@
   > type 'a prod =
   >   | Pair of 'a * 'a
   >   | Triple of 'a * 'a * 'a
-  >
+  > 
   > let sum_prod x =
   >   match x with
   >   | Pair (a, b) -> a + b
@@ -134,7 +134,7 @@
   $ run << EOF
   > type 'a pair =
   >   | Pair of 'a * 'a
-  >
+  > 
   > let x = Pair (1, true)
   > EOF
   infer error: unification failed on int and bool
@@ -142,7 +142,7 @@
   $ run << EOF
   > type 'a pair =
   >   | Pair of 'a * 'a
-  >
+  > 
   > let x = Pair (1, 2, 3)
   > EOF
   infer error: constructor arity mistmatch: Pair
@@ -152,7 +152,7 @@
   > type 'a list =
   >   | Cons of 'a * 'a list
   >   | Nil
-  >
+  > 
   > let main =
   >   match Cons (true, Nil) with
   >   | Cons (x, y) -> x + 1
@@ -163,7 +163,7 @@
   $ run << EOF
   > type 'a box =
   >   | Box of 'a
-  >
+  > 
   > let main =
   >   match (Box true) with
   >   | Box x -> x + 1
@@ -174,7 +174,7 @@
   $ run << EOF
   > type 'a pair =
   >   | Pair of 'a * 'a
-  >
+  > 
   > let main =
   >   match Pair (1, 2) with
   >   | Pair (a, b, c) -> a + 1
@@ -192,17 +192,17 @@
   > type 'a list =
   >   | Cons of 'a * 'a list
   >   | Nil
-  >
+  > 
   > let rec map f ls =
   >   match ls with
   >   | Nil -> Nil
   >   | Cons (hd, tl) -> Cons (f hd, map f tl)
-  >
+  > 
   > let rec fold f acc ls =
   >   match ls with
   >   | Nil -> acc
   >   | Cons (hd, tl) -> fold f (f acc hd) tl
-  >
+  > 
   > let rec filter pred ls =
   >   match ls with
   >   | Nil -> Nil
@@ -234,7 +234,7 @@
   > type 'a list =
   >   | Cons of 'a * 'a list
   >   | Nil
-  >
+  > 
   > let rev ls =
   >   let rec aux ls acc =
   >     match ls with
@@ -242,7 +242,7 @@
   >     | Cons (hd, tl) -> aux tl (Cons (hd, acc))
   >   in
   >   aux ls Nil
-  >
+  > 
   > let is_empty ls =
   >   match ls with
   >   | Cons (_, _) -> false
@@ -268,12 +268,12 @@
   > type 'a list =
   >   | Cons of 'a * 'a list
   >   | Nil
-  >
+  > 
   > let rec exists pred ls =
   >   match ls with
   >   | Nil -> false
   >   | Cons (hd, tl) -> if pred hd then true else exists pred tl
-  >
+  > 
   > let rec forall pred ls =
   >   match ls with
   >   | Nil -> true
@@ -297,7 +297,7 @@
   > type 'a option =
   >   | Some of 'a
   >   | None
-  >
+  > 
   > let rec find pred ls =
   >   match ls with
   >   | [] -> None
@@ -317,7 +317,7 @@
   > type 'a option =
   >   | Some of 'a
   >   | None
-  >
+  > 
   > let rec find pred ls =
   >   match ls with
   >   | [] -> None
@@ -338,12 +338,12 @@
   > type 'a option =
   >   | Some of 'a
   >   | None
-  >
+  > 
   > let rec wrap ls =
   >   match ls with
   >   | [] -> []
   >   | x :: xs -> Some x :: wrap ls
-  >
+  > 
   > let unwrap ls =
   >   let rec aux ls acc =
   >     match ls with
@@ -366,6 +366,3 @@
                     | Some x :: xs -> (__lifted_let_1_aux xs) (x :: acc)
   let unwrap: '_4 option list -> '_4 list option =
     fun ls -> (__lifted_let_1_aux ls) []
-
-  $ ../../driver/driver.exe --target rv32
-  $ ../../driver/driver.exe --help

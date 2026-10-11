@@ -156,33 +156,34 @@ let%expect_test "global constant shadowing" =
   run_single_test input;
   [%expect
     {|
-      anf stru:
-      let x =
-                  10
-                let f () =
-                  x
-                let x =
-                  20
-                let g () =
-                  x
+    anf stru:
+    let x =
+                10
+              let f () =
+                x
+              let x =
+                20
+              let g () =
+                x
 
-      mangled stru:
-      let x_id56 =
-                                     10
-                                   let f_id57 () =
-                                     x_id56
-                                   let x_id58 =
-                                     20
-                                   let g_id59 () =
-                                     x_id58
+    mangled stru:
+    let x_id108 =
+                                   10
+                                 let f_id109 () =
+                                   x_id108
+                                 let x_id110 =
+                                   20
+                                 let g_id111 () =
+                                   x_id110
 
-      mangled names:
-      {
-      	g ~> g_id59;
-      	f ~> f_id57;
-      	x ~> x_id56;
-      	x ~> x_id58;
-      } |}]
+    mangled names:
+    {
+    f ~> f_id109;
+    x ~> x_id110;
+    x ~> x_id108;
+    g ~> g_id111;
+    }
+    |}]
 ;;
 
 let%expect_test "let rec" =
@@ -209,12 +210,12 @@ let%expect_test "let rec" =
                 0
 
     mangled stru:
-    let rec fact_id60 n =
+    let rec fact_id112 n =
                                    let temp1 = (n < 1) in
                                    let temp2 = (if temp1
                                                then 1
                                                else let temp3 = (n - 1) in
-                                                    let temp4 = fact_id60 temp3  in
+                                                    let temp4 = fact_id112 temp3  in
                                                     let temp5 = (n * temp4) in
                                                     temp5) in
                                      temp2
@@ -223,9 +224,10 @@ let%expect_test "let rec" =
 
     mangled names:
     {
-    	fact ~> fact_id60;
-    	main ~> main_id62;
-    } |}]
+    fact ~> fact_id112;
+    main ~> main_id114;
+    }
+    |}]
 ;;
 
 let%expect_test "replacing built-in print with user-defined one" =
@@ -254,17 +256,18 @@ let%expect_test "replacing built-in print with user-defined one" =
     let () =
                                        let temp6 = print 1  in
                                        temp6
-                                     let print_id68 weird7 =
+                                     let print_id120 weird7 =
                                        let _ = weird7 in
                                        0
                                      let () =
-                                       let temp8 = print_id68 2  in
+                                       let temp8 = print_id120 2  in
                                        temp8
 
     mangled names:
     {
-    	print ~> print_id68;
-    } |}]
+    print ~> print_id120;
+    }
+    |}]
 ;;
 
 let%expect_test "shadowing global function with local one" =
@@ -294,18 +297,19 @@ let%expect_test "shadowing global function with local one" =
                 temp10
 
     mangled stru:
-    let id_id72 x =
+    let id_id124 x =
                                         x
                                       let () =
                                         let id y = y in
                                           let temp9 = id 0  in
                                           temp9
                                       let () =
-                                        let temp10 = id_id72 0  in
+                                        let temp10 = id_id124 0  in
                                         temp10
 
     mangled names:
     {
-    	id ~> id_id72;
-    } |}]
+    id ~> id_id124;
+    }
+    |}]
 ;;
