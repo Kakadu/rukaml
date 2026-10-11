@@ -23,8 +23,8 @@
     return (n * fact_rec((n - 1)));
   }
   GC statistics
-  Total allocations: 15282(words)
-  Currently allocated: 15282(words)
+  Total allocations: 15296(words)
+  Currently allocated: 15296(words)
   Current bank: 0
 
 

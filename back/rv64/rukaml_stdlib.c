@@ -66,21 +66,6 @@ typedef int64_t rukaml_int_t;
 typedef uint64_t rukaml_uint_t;
 #define Int_val(n) ((long)n)
 const size_t rukaml_word_size = 8;
-#define ARGS_IN_REGISTERS 7
-
-#define INIT_EXTRA_ARGS(start_value) void** extra_args; size_t argc_counter = start_value
-#define TRY_SET_EXTRA_ARGS(va_list) \
-  if (argc_counter == ARGS_IN_REGISTERS) \
-    extra_args = va_arg(va_list, void **)
-
-#define VA_ARG(var, va_list, type) \
-  TRY_SET_EXTRA_ARGS(va_list); \
-  type var = (argc_counter < ARGS_IN_REGISTERS) \
-    ? va_arg(va_list, type) \
-    : extra_args[argc_counter - ARGS_IN_REGISTERS]; \
-  argc_counter++
-static bool is_applyN_call = false;
-static void* applyN_args = NULL;
 
 #define PRIxVAL "lx"
 #define PRIdVAL "ld"
@@ -96,10 +81,24 @@ typedef int32_t rukaml_int_t;
 typedef uint32_t rukaml_uint_t;
 #define Int_val(n) ((int32_t)n)
 const size_t rukaml_word_size = 4;
+
 #define PRIxVAL "x"
 #define PRIdVAL "d"
 #define PRIuint PRIu32
 #endif
+
+// For passing arguments via registers and heap
+#define ARGS_IN_REGISTERS 7
+#define INIT_EXTRA_ARGS(start_value) void** extra_args; size_t argc_counter = start_value  
+#define VA_ARG(var, va_list, type) \
+  if (argc_counter == ARGS_IN_REGISTERS) \
+    extra_args = va_arg(va_list, void **); \
+  type var = (argc_counter < ARGS_IN_REGISTERS) \
+    ? va_arg(va_list, type) \
+    : extra_args[argc_counter - ARGS_IN_REGISTERS]; \
+  argc_counter++
+static bool is_applyN_call = false;
+static void* applyN_args = NULL;
 
 #define Set_field(dest, idx, newval) *((value *)dest + idx) = newval
 #define Field(dest, idx) *((value *)dest + idx)
@@ -614,8 +613,8 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
     // for full application we can omit copying closure
     // log("Full application\n");
     size_t i = 0, j;
-    size_t received = Int_val(Clo_received(f)); 
-    size_t arity = Int_val(Clo_arity(f)); 
+    size_t received = Int_val(Clo_received(f));
+    size_t arity = Int_val(Clo_arity(f));
     // for passing arguments into rukaml_applyN_call
     value *args = malloc(rukaml_word_size * (arity > ARGS_IN_REGISTERS ? arity + 1 : ARGS_IN_REGISTERS + 1));
     args[0] = Val_int(argc);
@@ -674,9 +673,9 @@ value rukaml_applyN_call(value f){
   value* args = (value*)applyN_args;
 
   fun8 callable = (fun8)(uintptr_t)(Clo_code(f));
-  size_t received = Int_val(Clo_received(f)); 
+  size_t received = Int_val(Clo_received(f));
   size_t argc = (size_t)Int_val(args[0]);
-  size_t arity = Int_val(Clo_arity(f)); 
+  size_t arity = Int_val(Clo_arity(f));
 
   assert(received + argc == arity);
 

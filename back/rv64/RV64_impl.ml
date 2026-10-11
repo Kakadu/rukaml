@@ -114,8 +114,27 @@ type dest =
   | DReg of string
   | DStack_var of Ident.t
 
+open Machine
+
+let sd k a b =
+  match !march with
+  | `RV64 -> Machine.sd k a b
+  | `RV32 -> Machine.sw k a b
+;;
+
+let ld k a b =
+  match !march with
+  | `RV64 -> Machine.ld k a b
+  | `RV32 -> Machine.lw k a b
+;;
+
+let mulw k a b c =
+  match !march with
+  | `RV64 -> Machine.mulw k a b c
+  | `RV32 -> Machine.mul k a b c
+;;
+
 let arg_place_by_index ?(is_saveable = true) index =
-  let open Machine in
   assert (index >= 0);
   (* Counting from 0 *)
   if index < args_in_registers
@@ -128,7 +147,6 @@ let arg_place_by_index ?(is_saveable = true) index =
 ;;
 
 let save_ident ?(comm = "") a b =
-  let open Machine in
   emit
     (match b with
      | ROffset _ -> sd
@@ -140,7 +158,6 @@ let save_ident ?(comm = "") a b =
 ;;
 
 let load_ident ?(comm = "") a b =
-  let open Machine in
   emit
     (match b with
      | ROffset _ -> ld
@@ -152,13 +169,11 @@ let load_ident ?(comm = "") a b =
 ;;
 
 let save_nth_arg ?(comm = "") ?(is_saveable = true) src index =
-  let open Machine in
   let place = arg_place_by_index ~is_saveable index in
   if index < args_in_registers then emit mv place src ~comm else emit sd src place ~comm
 ;;
 
 let load_nth_arg ?(comm = "") ?(is_saveable = true) src index =
-  let open Machine in
   let place = arg_place_by_index ~is_saveable index in
   if index < args_in_registers then emit mv src place ~comm else emit ld src place ~comm
 ;;
@@ -280,26 +295,6 @@ end
 let list_iter_revindex ~f xs =
   let l = List.length xs in
   List.iteri (fun n x -> f (l - n - 1) x) xs
-;;
-
-open Machine
-
-let sd k a b =
-  match !march with
-  | `RV64 -> Machine.sd k a b
-  | `RV32 -> Machine.sw k a b
-;;
-
-let ld k a b =
-  match !march with
-  | `RV64 -> Machine.ld k a b
-  | `RV32 -> Machine.lw k a b
-;;
-
-let mulw k a b c =
-  match !march with
-  | `RV64 -> Machine.mulw k a b c
-  | `RV32 -> Machine.mul k a b c
 ;;
 
 let emit_comment ppf = Format.kasprintf (emit comment) ppf
@@ -546,7 +541,6 @@ let generate_body is_toplevel body =
       emit sd reg temp_place ~comm:doc
     in
     let maybe_alloc_extra_args_space args =
-      let open Machine in
       if args <= Machine.args_in_registers
       then ()
       else (
