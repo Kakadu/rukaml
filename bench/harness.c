@@ -463,33 +463,33 @@ int main(int argc, char **argv) {
                       "ll",
                       env_or("RUKAML_RUNTIME_LLVM", "back/llvm/rukaml_stdlib.c"),
                       0 };
-  backend be_amd64 = { "aot amd64 (nasm+gcc)",
-                       "amd64",
-                       env_or("CC_AMD64", "cc"),
-                       env_or("CFLAGS_AMD64", "-O2 -fPIC -w"),
-                       env_or("AS_AMD64", "nasm"),
-                       env_or("AS_FLAGS_AMD64", "-f elf64"),
-                       env_or("LD_AMD64", "cc"),
-                       env_or("LD_FLAGS_AMD64", ""),
-                       env_or("RUN_AMD64", ""),
-                       "s",
-                       env_or("RUKAML_RUNTIME_AMD64", "back/amd64/rukaml_stdlib.c"),
-                       0 };
-  backend be_rv64 = { "aot rv64 (qemu)",
-                      "rv64",
-                      env_or("CC_RV64", "riscv64-linux-gnu-gcc"),
-                      env_or("CFLAGS_RV64", "-O2 -fPIC -w"),
-                      env_or("AS_RV64", "riscv64-linux-gnu-gcc"),
-                      env_or("AS_FLAGS_RV64", "-x assembler -c"),
-                      env_or("LD_RV64", "riscv64-linux-gnu-gcc"),
-                      env_or("LD_FLAGS_RV64", ""),
-                      env_or("RUN_RV64", "qemu-riscv64 -L /usr/riscv64-linux-gnu"),
-                      "s",
-                      env_or("RUKAML_RUNTIME_RV64", "back/rv64/rukaml_stdlib.c"),
-                      1 };
+  // backend be_amd64 = { "aot amd64 (nasm+gcc)",
+  //                      "amd64",
+  //                      env_or("CC_AMD64", "cc"),
+  //                      env_or("CFLAGS_AMD64", "-O2 -fPIC -w"),
+  //                      env_or("AS_AMD64", "nasm"),
+  //                      env_or("AS_FLAGS_AMD64", "-f elf64"),
+  //                      env_or("LD_AMD64", "cc"),
+  //                      env_or("LD_FLAGS_AMD64", ""),
+  //                      env_or("RUN_AMD64", ""),
+  //                      "s",
+  //                      env_or("RUKAML_RUNTIME_AMD64", "back/amd64/rukaml_stdlib.c"),
+  //                      0 };
+  // backend be_rv64 = { "aot rv64 (qemu)",
+  //                     "rv64",
+  //                     env_or("CC_RV64", "riscv64-linux-gnu-gcc"),
+  //                     env_or("CFLAGS_RV64", "-O2 -fPIC -w"),
+  //                     env_or("AS_RV64", "riscv64-linux-gnu-gcc"),
+  //                     env_or("AS_FLAGS_RV64", "-x assembler -c"),
+  //                     env_or("LD_RV64", "riscv64-linux-gnu-gcc"),
+  //                     env_or("LD_FLAGS_RV64", ""),
+  //                     env_or("RUN_RV64", "qemu-riscv64 -L /usr/riscv64-linux-gnu"),
+  //                     "s",
+  //                     env_or("RUKAML_RUNTIME_RV64", "back/rv64/rukaml_stdlib.c"),
+  //                     1 };
   prep_aot(&be_llvm, workload, dir);
-  prep_aot(&be_amd64, workload, dir);
-  prep_aot(&be_rv64, workload, dir);
+  // prep_aot(&be_amd64, workload, dir);
+  // prep_aot(&be_rv64, workload, dir);
 
   /* OCaml comparison, if a companion source exists */
   char *ocaml_src = ocaml_companion(workload);
