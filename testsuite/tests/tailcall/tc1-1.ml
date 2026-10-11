@@ -8,4 +8,6 @@ let rec foo x =
   then 42
   else foo (x - 1)
 
+(* Should work only with enabled optimization *)
+(* If disabled, causes stack overflow *)
 let main = let u = print (foo 100000000) in 0
