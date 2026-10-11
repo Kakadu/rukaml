@@ -215,7 +215,13 @@ module Target = struct
 
   let jit table p =
     (Intermediate.anftree table p) (fun (ANF stru) ->
-      let ir = LLVM_impl.anf_to_ir stru in
+      let vbs =
+        List.map
+          (function
+            | ANF.ANF_vb vb -> vb)
+          stru
+      in
+      let ir = LLVM_impl.anf_to_ir vbs in
       (* optimization passes are IR -> IR and backend-agnostic: they run
          between IR generation and [load], and every requirement they add
          to the module must be resolvable by this engine *)
@@ -230,15 +236,14 @@ module Target = struct
           in
           if not (List.is_empty missing)
           then
-            error
-              "jit error: missing runtime symbols: [%s]"
-              (String.concat ~sep:", " missing);
+            error "jit error: missing runtime symbols: [%s]" (String.concat ", " missing);
           JITOpt.run pipeline ir
         with
         | Failure msg -> error "jit error: %s" msg
       in
-      Option.iter p.out_path ~f:(fun path ->
-        Out_channel.write_all path ~data:(IR.payload ir));
+      Option.iter
+        (fun path -> Out_channel.write_all path ~data:(IR.payload ir))
+        p.out_path;
       let engine = Engine.create () in
       Engine.load engine ir;
       let code =
@@ -246,7 +251,7 @@ module Target = struct
         | Failure msg -> error "jit error: %s" msg
       in
       Engine.close engine;
-      let n : int = Int64.to_int_trunc code in
+      let n = Int64.to_int code in
       Stdlib.exit n)
   ;;
 
@@ -331,7 +336,7 @@ let () =
       ; profile_file = !profile_file
       }
   in
-  match Map.find Target.targets !target with
+  match Base.Map.find (Target.targets Typedtree.empty_table) !target with
   | Some target -> target params
   | None -> error "invalid target %S" !target
 ;;
