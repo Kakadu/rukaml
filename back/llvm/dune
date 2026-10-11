@@ -17,10 +17,11 @@
  (libraries
   llvm
   llvm.analysis
-  llvm.executionengine
+  llvm.irreader
   llvm.target
   llvm.all_backends
   LL
+  IR
   compile_lib
   cconv
   zlib)

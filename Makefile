@@ -6,6 +6,13 @@ build:
 test:
 	dune runtest
 
+bench: build
+	$(CC) -O2 -std=c11 -Wall -Wextra -o bench/harness bench/harness.c
+	./bench/harness bench/workloads/plain.ml
+	./bench/harness bench/workloads/curried.ml
+	./bench/harness bench/workloads/pipeline.ml
+	./bench/harness bench/workloads/affine.ml
+
 watch:
 	dune runtest -w
 

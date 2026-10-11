@@ -9,4 +9,8 @@
   rv64_impl
   amd64_impl
   llvm_impl
-  zlib))
+  zlib
+  IR
+  JIT_engine_lib
+  JIT_orc_lib
+  JIT_opt_lib))

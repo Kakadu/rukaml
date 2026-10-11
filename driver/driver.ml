@@ -2,6 +2,17 @@ open Stdio
 open Frontend
 open Compile_lib
 
+(** The abstract JIT-backend contract lives in [jit/jit_egine/JITEngine];
+    the driver picks the ORC implementation and talks to the JIT only
+    through that contract — never to the low-level C bindings directly.
+    The annotation is the compiler-checked proof that [OrcEngine]
+    implements the contract. *)
+module Engine : JIT_engine_lib.JITEngine.BackEngine = JIT_orc_lib.OrcEngine
+
+(** Optimization passes between IR generation and [Engine.load]: pure
+    [IR.t -> IR.t] patches of the payload, backend-agnostic. *)
+module JITOpt = JIT_opt_lib.JITOpt
+
 let error fmt =
   let open Stdlib.Format in
   kfprintf
@@ -151,9 +162,11 @@ module Compiler = struct
     k (Code f)
   ;;
 
-  (** Put the text result of the functions above to file *)
-  let to_file : type a. string -> a t -> unit =
-    fun path ->
+  (** Put the text result of the functions above to file
+      ([-o] defaults to "a.out" when not given) *)
+  let to_file : type a. string option -> a t -> unit =
+    fun out ->
+    let path = Option.value out ~default:"a.out" in
     let with_ppf f =
       (* for some reason pprint struggles with writing
          directly to file so i'm doing it the ugly way *)
@@ -173,10 +186,12 @@ end
 module Target = struct
   type params =
     { text : string
-    ; out_path : string
+    ; out_path : string option
     ; cps : bool
     ; caa : bool
     ; ppx : bool
+    ; opt_passes : string list (** JIT optimization passes from [--opt], in flag order. *)
+    ; profile_file : string (** [--profile-file] for the JIT passes. *)
     }
 
   open Compiler
@@ -197,6 +212,49 @@ module Target = struct
   let rv64 table p = (Intermediate.anftree table p) rv64
   let amd64 table p = (Intermediate.anftree table p) amd64
   let llvm table p = (Intermediate.anftree table p) llvm
+
+  let jit table p =
+    (Intermediate.anftree table p) (fun (ANF stru) ->
+      let vbs =
+        List.map
+          (function
+            | ANF.ANF_vb vb -> vb)
+          stru
+      in
+      let ir = LLVM_impl.anf_to_ir vbs in
+      (* optimization passes are IR -> IR and backend-agnostic: they run
+         between IR generation and [load], and every requirement they add
+         to the module must be resolvable by this engine *)
+      let ir =
+        try
+          let config : JITOpt.config = { profile_file = p.profile_file } in
+          let pipeline = JITOpt.of_flags config p.opt_passes in
+          let missing =
+            JITOpt.missing_runtime
+              ~available:Engine.runtime_symbols
+              (JITOpt.requires pipeline)
+          in
+          if not (List.is_empty missing)
+          then
+            error "jit error: missing runtime symbols: [%s]" (String.concat ", " missing);
+          JITOpt.run pipeline ir
+        with
+        | Failure msg -> error "jit error: %s" msg
+      in
+      Option.iter
+        (fun path -> Out_channel.write_all path ~data:(IR.payload ir))
+        p.out_path;
+      let engine = Engine.create () in
+      Engine.load engine ir;
+      let code =
+        try Engine.run engine "main" with
+        | Failure msg -> error "jit error: %s" msg
+      in
+      Engine.close engine;
+      let n = Int64.to_int code in
+      Stdlib.exit n)
+  ;;
+
   let finish target p = (target p) (to_file p.out_path)
 
   let targets table =
@@ -206,6 +264,7 @@ module Target = struct
       ; "rv32", finish (rv32 table)
       ; "amd64", finish (amd64 table)
       ; "llvm", finish (llvm table)
+      ; "jit", jit table
       ; "parsetree", finish Intermediate.parsetree
       ; ("cps", fun p -> finish Intermediate.cpstree { p with cps = true })
       ; "cconv", finish Intermediate.cconvtree
@@ -229,26 +288,34 @@ let hack = function
   | "amd64" ->
     Compile_lib.ANF.disable_arity_inline ();
     Compile_lib.ANF.disable_cmp_into_if_inline ()
-  | "llvm" -> Compile_lib.ANF.disable_arity_inline ()
+  | "llvm" | "jit" -> Compile_lib.ANF.disable_arity_inline ()
   | _ -> ()
 ;;
 
 let () =
   let inp_path = ref None in
-  let out_path = ref "a.out" in
+  let out_path = ref None in
   let target = ref "" in
   let cps = ref false in
   let caa = ref false in
   let ppx = ref true in
+  let opt_passes = ref [] in
+  let profile_file = ref "rukaml.prof" in
   let open Stdlib.Arg in
   let args =
-    [ "-o", Set_string out_path, " output file"
+    [ "-o", String (fun s -> out_path := Some s), " output file"
     ; "--target", Set_string target, " compilation target"
     ; "--print-targets", Unit print_targets, " print all supported targets"
     ; "--cps", Set cps, " enable cps conversion"
     ; "--caa", Set caa, " enable call arity analysis"
     ; "--no-ppx", Set ppx, " disable preprocessing"
     ; "--rename-main", Bool (fun b -> RV64_impl.rename_main := b), " "
+    ; ( "--opt"
+      , String (fun s -> opt_passes := s :: !opt_passes)
+      , " JIT optimization pass (profile|specialize; repeatable)" )
+    ; ( "--profile-file"
+      , Set_string profile_file
+      , " JIT profile file (written by profile, read by specialize)" )
     ]
   in
   parse args (fun s -> inp_path := Some s) "rukaml";
@@ -259,7 +326,15 @@ let () =
     | None -> In_channel.input_all stdin
   in
   let params =
-    Target.{ text; out_path = !out_path; cps = !cps; caa = !caa; ppx = !ppx }
+    Target.
+      { text
+      ; out_path = !out_path
+      ; cps = !cps
+      ; caa = !caa
+      ; ppx = !ppx
+      ; opt_passes = List.rev !opt_passes
+      ; profile_file = !profile_file
+      }
   in
   match Base.Map.find (Target.targets Typedtree.empty_table) !target with
   | Some target -> target params
