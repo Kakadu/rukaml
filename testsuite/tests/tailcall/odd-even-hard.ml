@@ -15,6 +15,9 @@ let odd a k =
   else k (a - 1)
 
 let rec even1 a = even a (fun n -> odd n even1)
+
+(* Should work only with enabled optimization *)
+(* If disabled, causes heap overflow *)
 let main =
   let() = printf "%b\n" (even1 30000) in
   let() = printf "%b\n" (even1 30001) in
