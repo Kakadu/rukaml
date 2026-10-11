@@ -615,7 +615,7 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
     size_t i = 0, j;
     size_t received = Int_val(Clo_received(f));
     size_t arity = Int_val(Clo_arity(f));
-    // for passing arguments into rukaml_applyN_call
+    // for passing arguments into rukaml_applyN_try_call
     value *args = malloc(rukaml_word_size * (arity > ARGS_IN_REGISTERS ? arity + 1 : ARGS_IN_REGISTERS + 1));
     args[0] = Val_int(argc);
 
@@ -666,7 +666,7 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
   __builtin_unreachable();
 }
 __attribute__((noinline, optimize("O2"))) // for tail call
-value rukaml_applyN_call(value f){
+value rukaml_applyN_try_call(value f){
   if (!is_applyN_call)
     return f;
   is_applyN_call = false;
@@ -838,7 +838,7 @@ void rukaml_fprintf_impl(void *dest, value fmt, va_list args) {
       // fflush(stdout);
       VA_ARG(pp_item_closure, args, void *);
       VA_ARG(item, args, void *);
-      rukaml_applyN_call(rukaml_applyN(pp_item_closure, 2, dest, item));
+      rukaml_applyN_try_call(rukaml_applyN(pp_item_closure, 2, dest, item));
       break;
     }
     case 'b': {
@@ -1080,7 +1080,7 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
     case 'a': {
       value pp_item_closure = va_arg(args, void *);
       value arg1 = va_arg(args, void *);
-      value rez = rukaml_applyN_call(rukaml_applyN(pp_item_closure, 2, Val_unit, arg1));
+      value rez = rukaml_applyN_try_call(rukaml_applyN(pp_item_closure, 2, Val_unit, arg1));
       argslen++;
       sprintf_insert_arg(&__args_start, &__args_fin, (void *)rez);
       break;

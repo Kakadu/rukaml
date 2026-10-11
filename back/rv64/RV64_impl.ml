@@ -491,9 +491,7 @@ let generate_body is_toplevel body =
   let open Compile_lib in
   let dealloc_locals, locals, ra_offset = allocate_locals body in
   let save_callee_saved_args () =
-    let args_amount =
-      min Machine.args_in_registers (Hashtbl.length Addr_of_local.args) + 1
-    in
+    let args_amount = min args_in_registers (Hashtbl.length Addr_of_local.args) + 1 in
     (* "+1" because 8th reg is link for extra regs *)
     let args_space = calc_sloc args_amount in
     emit grow_stack args_space ~comm:"allocate space for args";
@@ -506,9 +504,7 @@ let generate_body is_toplevel body =
     done
   in
   let load_callee_saved_args () =
-    let args_amount =
-      min Machine.args_in_registers (Hashtbl.length Addr_of_local.args) + 1
-    in
+    let args_amount = min args_in_registers (Hashtbl.length Addr_of_local.args) + 1 in
     let args_space = calc_sloc args_amount in
     for i = 0 to args_amount - 1 do
       emit ld (RU (sprintf "s%d" i)) (make_sp_offset i)
@@ -516,13 +512,7 @@ let generate_body is_toplevel body =
     emit shrink_stack args_space ~comm:"deallocate space for args";
     args_space
   in
-  let deallocate_args_for_call argc =
-    let slotc = calc_sloc argc in
-    Addr_of_local.(last_pos := !last_pos - slotc);
-    let comm = sprintf "deallocate %d args" argc in
-    emit shrink_stack slotc ~comm
-  in
-  let allocate_args_for_call ?f args =
+  let compute_args_for_call ?f ?(put_from = 0) args =
     (* Allocate args for a function call inside a body *)
     let count = List.length args in
     emit
@@ -537,7 +527,7 @@ let generate_body is_toplevel body =
     (* TODO(Kakadu): Rewrite to emit less code *)
     let save_in_temp ?(doc = "") reg i =
       let temp_place = make_sp_offset (List.length !args_temp_storage) in
-      args_temp_storage := (temp_place, i) :: !args_temp_storage;
+      args_temp_storage := (temp_place, i + put_from) :: !args_temp_storage;
       emit sd reg temp_place ~comm:doc
     in
     let maybe_alloc_extra_args_space args =
@@ -545,7 +535,7 @@ let generate_body is_toplevel body =
       then ()
       else (
         emit_comment "Allocate space for extra args";
-        emit li a0 (args - Machine.args_in_registers);
+        emit li a0 (args - args_in_registers);
         emit call "rukaml_alloc_extra_args";
         emit mv a7 a0)
     in
@@ -629,7 +619,8 @@ let generate_body is_toplevel body =
     maybe_alloc_extra_args_space count;
     ListLabels.iteri args ~f:on_arg;
     move_args ();
-    count
+    Addr_of_local.(last_pos := !last_pos - slotc);
+    emit shrink_stack slotc ~comm:(sprintf "deallocate %d args" count)
   in
   let is_unary_prim, on_unary_prim =
     let mangling = String_lit_hash.create 34 in
@@ -1064,17 +1055,15 @@ let generate_body is_toplevel body =
           (* emit_comment "Full application of arity = %d" expected_arity; *)
           Opts.is_permitted TailCall && is_tailcall dest
         then (
-          let to_remove = allocate_args_for_call ~f (arg1 :: args) in
+          compute_args_for_call ~f (arg1 :: args);
           emit_comment "Init tail call with %d args" formal_arity;
-          deallocate_args_for_call to_remove;
           let args_space = load_callee_saved_args () in
           emit ld ra (make_sp_offset ra_offset);
           let comm = sprintf "Deallocate function frame for tail call" in
           emit shrink_stack (!Addr_of_local.last_pos - args_space) ~comm;
           emit tail f.hum_name)
         else (
-          let to_remove = allocate_args_for_call ~f (arg1 :: args) in
-          deallocate_args_for_call to_remove;
+          compute_args_for_call ~f (arg1 :: args);
           emit call f.hum_name;
           emit sd_dest (RU "a0") dest)
       else if formal_arity < expected_arity
@@ -1086,15 +1075,7 @@ let generate_body is_toplevel body =
           with_two_slots (fun _ func_clo_id ->
             emit_alloc_closure f.hum_name expected_arity;
             save_ident a0 (Addr_of_local.pp_to_mach func_clo_id);
-            let _partial_args_count =
-              allocate_args_for_call ~f (arg1 :: args)
-              (* Needed because we allocate temporary space to prepare arguments  *)
-            in
-            emit_comment "Move underapplication args";
-            for i = _partial_args_count - 1 downto 0 do
-              load_nth_arg ~is_saveable:false t0 i;
-              save_nth_arg ~is_saveable:false t0 (i + 2)
-            done;
+            compute_args_for_call ~f ~put_from:2 (arg1 :: args);
             let () =
               load_ident a0 (Addr_of_local.pp_to_mach func_clo_id);
               emit li a1 formal_arity;
@@ -1105,7 +1086,6 @@ let generate_body is_toplevel body =
                    emit ~comm:(sprintf "arg %d" i) ld (RU rname) (make_sp_offset i))
                 (list_take formal_arity [ (*"a0"; *) "a2"; "a3"; "a4"; "a5" ]) *)
             in
-            deallocate_args_for_call formal_arity;
             emit call "rukaml_applyN";
             emit sd_dest (RU "a0") dest)
         in
@@ -1124,9 +1104,10 @@ let generate_body is_toplevel body =
         let args_space = load_callee_saved_args () in
         emit ld ra (make_sp_offset ra_offset);
         emit shrink_stack (!Addr_of_local.last_pos - args_space);
-        emit tail "rukaml_applyN_call")
+        emit tail "rukaml_applyN_try_call"
+        (* TODO: It is possible in compile time to know, now is call or not *))
       else (
-        emit call "rukaml_applyN_call";
+        emit call "rukaml_applyN_try_call";
         emit sd_dest a0 dest)
     | CApp (APrimitive ("field", _), AConst (PConst_int _n), [ AVar _ ]) ->
       failwiths "Not implemented"
