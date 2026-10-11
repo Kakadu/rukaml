@@ -11,6 +11,7 @@ on:
       - 'dev'
 
 env:
+  DEBIAN_FRONTEND: noninteractive
   OPAMROOT: /home/opam/.opam
   OPAMYES: true
   OPAMCONFIRMLEVEL: unsafe-yes
@@ -33,7 +34,7 @@ jobs:
       - run: opam exec -- ocamlopt --version
       - run: opam list
       - run: opam update
-      - run: sudo apt update
+      - run: sudo apt-get update
 
       # checking out the code seems to be important because local switch is used
       - name: Checkout code
@@ -53,6 +54,7 @@ jobs:
           dune runtest
 
       - name: Run the testsuite
-        run: |
-          eval $(opam env)
-          make testsuite VERBOSE=1
+        run: opam exec -- make testsuite VERBOSE=1
+
+      - name: Check formatting
+        run: opam exec -- dune b @fmt
