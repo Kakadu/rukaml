@@ -87,8 +87,10 @@ const size_t rukaml_word_size = 4;
 #define PRIuint PRIu32
 #endif
 
-// For passing arguments via registers and heap
+typedef void *(*fun8)(void *, void *, void *, void *, void *, void *, void *, void *);
 #define ARGS_IN_REGISTERS 7
+
+// These two macroses are needed if we have va_arg function, but we are passed arguments via real Calling Convention
 #define INIT_EXTRA_ARGS(start_value) void** extra_args; size_t argc_counter = start_value  
 #define VA_ARG(var, va_list, type) \
   if (argc_counter == ARGS_IN_REGISTERS) \
@@ -97,8 +99,13 @@ const size_t rukaml_word_size = 4;
     ? va_arg(va_list, type) \
     : extra_args[argc_counter - ARGS_IN_REGISTERS]; \
   argc_counter++
-static bool is_applyN_call = false;
-static void* applyN_args = NULL;
+
+// For convenient addressing of arguments
+#define CC_GET(reg_args, regs_amount, extra_args, i) \
+((i < regs_amount) ? (reg_args[i]) : (extra_args[i - regs_amount]))
+
+#define CC5_GET(reg_args, extra_args, i) CC_GET(reg_args, 5, extra_args, i)
+
 
 #define Set_field(dest, idx, newval) *((value *)dest + idx) = newval
 #define Field(dest, idx) *((value *)dest + idx)
@@ -369,13 +376,6 @@ void rukaml_print_int(value x) {
 
 void rukaml_print_int_kaml(value x) { rukaml_print_int(x); }
 
-typedef void *(*fun0)(void);
-typedef void *(*fun8)(void *, void *, void *, void *, void *, void *, void *, void *);
-void *rukaml_apply0(fun0 f) {
-  // TODO: I'm not sure that zero-argument call is needed
-  return f();
-}
-
 value rukaml_alloc_block(size_t size, uint8_t tag) {
   if (GC.allocated_words + size + 1 > HEAP_SIZE) {
     fprintf(stderr, "Not enough memory\n");
@@ -575,7 +575,13 @@ value rukaml_field(size_t n, value r) {
   return ans;
 }
 
-value rukaml_applyN(value f, rukaml_int_t argc, ...) {
+#pragma GCC push_options
+#pragma GCC optimize ("O2")
+
+value rukaml_applyN(value f, rukaml_int_t argc, 
+  value arg1, value arg2, value arg3,
+  value arg4, value arg5, value *in_extra_args
+) {
   if (!IS_ON_HEAP(f)) {
     printf("%s, 0x%" PRIxVAL "\n", __func__,  (uintptr_t)f);
     printf("main bank:     0x%" PRIxPTR "...0x%" PRIxPTR "\n", GC.main_bank,
@@ -585,8 +591,6 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
   }
 
   assert(TAG(f) == Closure_tag);
-  va_list argp;
-  va_start(argp, argc);
 #if (RUKAML_DEBUG == 1)
   rukaml_trace_val(f, 2);
   log("%s argc = %" PRIx32 ", clo_val = 0x%" PRIxVAL "\n\n", __func__, argc,  (uintptr_t)f);
@@ -609,42 +613,53 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
   //  printf("%d\n", __LINE__);
   assert(Int_val(Clo_arity(f)) < 100);
   assert(Clo_received(f) < Clo_arity(f));
+  value *in_regs = (value[]){arg1, arg2, arg3, arg4, arg5};
   if (Int_val(Clo_received(f)) + argc == Int_val(Clo_arity(f))) {
     // for full application we can omit copying closure
     // log("Full application\n");
-    size_t i = 0, j;
+    size_t i = 0;
+    fun8 callable = (fun8)(uintptr_t)(Clo_code(f));
     size_t received = Int_val(Clo_received(f));
     size_t arity = Int_val(Clo_arity(f));
-    // for passing arguments into rukaml_applyN_try_call
-    value *args = malloc(rukaml_word_size * (arity > ARGS_IN_REGISTERS ? arity + 1 : ARGS_IN_REGISTERS + 1));
-    args[0] = Val_int(argc);
 
-    for (i = 0; i < received; ++i) {
-      args[i + 1] = Clo_arg(f, i);
-      // printf("Setting arg %u: 0x%" PRIxVAL "\n", i, args[i]);
-      // fflush(stdout);
-      // if (IS_ON_HEAP(args[i]))
-      //   rukaml_trace_val(args[i], 3);
-      // else
-      //   log(" not on heap");
+    value *args_temp_space = malloc(rukaml_word_size * arity);
+    // TODO: Add check if NULL
+
+    for (i = 0; i < received; i++){
+      args_temp_space[i] = Clo_arg(f, i);
+    }
+    
+    
+    for (i = 0; i < argc; i++){
+      args_temp_space[received + i] = CC5_GET(in_regs, in_extra_args, i);
     }
 
-    // rest of the args
-    for (j = received; j < arity; j++) {
-      args[j + 1] = va_arg(argp, value);
-      // printf("Setting arg j=%u, next_arg = 0x%" PRIxVAL "\n", j,
-      // args[j]);
+    value out_regs[ARGS_IN_REGISTERS];
+    value *out_extra_args = NULL;
+
+    if (arity <= ARGS_IN_REGISTERS){
+      for (i = 0; i < arity; i++){
+        out_regs[i] = args_temp_space[i];
+      }
     }
-    va_end(argp);
-    is_applyN_call = true;
-    applyN_args = args;
-    return f;
+    else{
+      for (i = 0; i < ARGS_IN_REGISTERS; i++){
+        out_regs[i] = args_temp_space[i];
+      }
+      size_t extra_amount = arity - ARGS_IN_REGISTERS;
+      out_extra_args = (value*)rukaml_alloc_extra_args(extra_amount);
+      for (i = 0; i < extra_amount; i++){
+        out_extra_args[i] = args_temp_space[ARGS_IN_REGISTERS + i];
+      }
+    }
+    free(args_temp_space);
+    return callable(out_regs[0], out_regs[1], out_regs[2], out_regs[3], out_regs[4], out_regs[5], out_regs[6], out_extra_args);
   } else {
     // There we have under application
     value ans_closure = copy_closure(f);
 
     for (size_t i = 0; i < argc; i++) {
-      value arg = (value)va_arg(argp, void *);
+      value arg = CC5_GET(in_regs, in_extra_args, i);
       // printf("partial application \n", __LINE__);
       // rukaml_trace_val(arg, 3);
       // fflush(stdout);
@@ -659,41 +674,30 @@ value rukaml_applyN(value f, rukaml_int_t argc, ...) {
            ans_closure->args_received, ans_closure->argsc);
     fflush(stdout);
 #endif
-    va_end(argp);
 
     return ans_closure;
   }
   __builtin_unreachable();
 }
-__attribute__((noinline, optimize("O2"))) // for tail call
-value rukaml_applyN_try_call(value f){
-  if (!is_applyN_call)
-    return f;
-  is_applyN_call = false;
-  value* args = (value*)applyN_args;
 
-  fun8 callable = (fun8)(uintptr_t)(Clo_code(f));
-  size_t received = Int_val(Clo_received(f));
-  size_t argc = (size_t)Int_val(args[0]);
-  size_t arity = Int_val(Clo_arity(f));
 
-  assert(received + argc == arity);
-
-  value* extra_args = NULL;
-  if (arity > ARGS_IN_REGISTERS){
-    size_t extra_amount = arity - ARGS_IN_REGISTERS;
-    extra_args = (value*)rukaml_alloc_extra_args(extra_amount);
-    for (size_t i = 0; i < extra_amount; i++){
-      extra_args[i] = args[ARGS_IN_REGISTERS + i + 1];
-    }
-  }
-  value reg_args[ARGS_IN_REGISTERS] = {0};
-  for(size_t i = 0; i < ARGS_IN_REGISTERS; i++){
-    reg_args[i] = args[i + 1];
-  }
-  free(args);
-  return callable(reg_args[0], reg_args[1], reg_args[2], reg_args[3], reg_args[4], reg_args[5], reg_args[6], extra_args);
+value rukaml_apply1(value f, value arg) {
+  return rukaml_applyN(f, 1, arg, 0, 0, 0, 0, NULL);
 }
+value rukaml_apply2(value f, value arg1, value arg2) {
+  return rukaml_applyN(f, 2, arg1, arg2, 0, 0, 0, NULL);
+}
+value rukaml_apply3(value f, value arg1, value arg2, value arg3) {
+  return rukaml_applyN(f, 3, arg1, arg2, arg3, 0, 0, NULL);
+}
+value rukaml_apply4(value f, value arg1, value arg2, value arg3, value arg4) {
+  return rukaml_applyN(f, 4, arg1, arg2, arg3, arg4, 0, NULL);
+}
+value rukaml_apply5(value f, value arg1, value arg2, value arg3, value arg4, value arg5) {
+  return rukaml_applyN(f, 5, arg1, arg2, arg3, arg4, arg5, NULL);
+}
+
+#pragma GCC pop_options
 
 void *rukaml_match_failure() {
   puts("Match failure");
@@ -838,7 +842,7 @@ void rukaml_fprintf_impl(void *dest, value fmt, va_list args) {
       // fflush(stdout);
       VA_ARG(pp_item_closure, args, void *);
       VA_ARG(item, args, void *);
-      rukaml_applyN_try_call(rukaml_applyN(pp_item_closure, 2, dest, item));
+      rukaml_apply2(pp_item_closure, dest, item);
       break;
     }
     case 'b': {
@@ -978,7 +982,7 @@ value rukaml_alloc_fprintf_closure_sysv(void *out_channel, value fmt) {
   value closure = rukaml_alloc_closure((void *)(uintptr_t)rukaml_fprintf_wrap, 2 + arity);
   assert(TAG(closure) == Closure_tag);
 
-  return rukaml_applyN(closure, 2, out_channel, fmt);
+  return rukaml_apply2(closure, out_channel, fmt);
 }
 
 void *rukaml_alloc_fprintf_closure(value dest, value fmt) {
@@ -1059,6 +1063,8 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
   value __args_fin = NULL;
   size_t argslen = 0;
 
+  INIT_EXTRA_ARGS(1);
+
   // Collection loop
   for (pos = 0; pos < fmt_len; ++pos) {
     char ch = Int_val(rukaml_string_nth_sysv(fmt, Val_int(pos)));
@@ -1078,15 +1084,15 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
 
     switch (ch) {
     case 'a': {
-      value pp_item_closure = va_arg(args, void *);
-      value arg1 = va_arg(args, void *);
-      value rez = rukaml_applyN_try_call(rukaml_applyN(pp_item_closure, 2, Val_unit, arg1));
+      VA_ARG(pp_item_closure, args, value);
+      VA_ARG(arg1, args, value);
+      value rez = rukaml_apply2(pp_item_closure, Val_unit, arg1);
       argslen++;
       sprintf_insert_arg(&__args_start, &__args_fin, (void *)rez);
       break;
     }
     case 'b': {
-      uintptr_t v = va_arg(args, uintptr_t);
+      VA_ARG(v, args, uintptr_t);
       if (v == 0)
         output_len += 5; // "false"
       else
@@ -1096,14 +1102,14 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
       break;
     }
     case 'c': {
-      char c = (char)va_arg(args, int64_t);
+      VA_ARG(c, args, char);
       output_len++;
       argslen++;
       sprintf_insert_arg(&__args_start, &__args_fin, Val_int((rukaml_int_t)c));
       break;
     }
     case 'd': {
-      value v = va_arg(args, value);
+      VA_ARG(v, args, value);
       if (Int_val(v) < 0)
         output_len++;
       output_len += eval_int_repr(v);
@@ -1112,7 +1118,7 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
       break;
     }
     case 's': {
-      value str = (value)va_arg(args, void **);
+      VA_ARG(str, args, value);
       // rukaml_trace_val(str, 5);
       sprintf_insert_arg(&__args_start, &__args_fin, str);
       // printf("args_start = 0x%Lx\n", __args_start);
@@ -1175,7 +1181,7 @@ value rukaml_sprintf_impl(value fmt, va_list args) {
       break;
     }
     case 'c': {
-      char c = (char)va_arg(args, int64_t);
+      VA_ARG(c, args, char);
       ans[i] = c;
       i++;
       __args_start = (value)Field((value *)__args_start, 1);
@@ -1263,7 +1269,7 @@ void *rukaml_alloc_sprintf_closure(value fmt) {
 
   void *closure = rukaml_alloc_closure((void*)(uintptr_t)rukaml_sprintf_wrap, 1 + arity);
 
-  return rukaml_applyN(closure, 1, fmt);
+  return rukaml_apply1(closure, fmt);
 }
 
 value rukaml_alloc_sprintf_closure_sysv(value fmt) {
