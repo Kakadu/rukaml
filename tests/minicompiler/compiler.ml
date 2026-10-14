@@ -1617,6 +1617,21 @@ let assembly_addi r1 r2 n i =
       exit 2
 ;;
 
+let assembly_ld r1 n r2  i =
+  if r1=A0 && n=8 && r2=FP then (* assuming FP is S0 *)
+    set_mnem 0x0084 0x2503 i
+  else if r1=A0 && n=12 && r2=FP then
+    set_mnem 0x00c4 0x2503 i
+  else if r1=T0 && n=0 && r2=SP then
+    set_mnem 0x0001 0x2283 i
+  else if r1=FP && n=4 && r2=SP then
+    set_mnem 0x0041 0x2403 i
+  else if r1=RA && n=0 && r2=SP then
+    set_mnem 0x0001 0x2083 i
+  else
+    let () = trace_instr i n in
+    exit 6
+
 let assembly oc () =
   (* let count = store_len () in *)
   (* let () = printf "count = %d\n" count in *)
@@ -1694,21 +1709,7 @@ let assembly oc () =
           in
           loop store curi2 next
       | Ld (r1,n,r2) ->
-          let () =
-            if r1=A0 && n=8 && r2=FP then (* assuming FP is S0 *)
-              set_mnem 0x0084 0x2503 i
-            else if r1=A0 && n=12 && r2=FP then
-              set_mnem 0x00c4 0x2503 i
-            else if r1=T0 && n=0 && r2=SP then
-              set_mnem 0x0001 0x2283 i
-            else if r1=FP && n=4 && r2=SP then
-              set_mnem 0x0041 0x2403 i
-            else if r1=RA && n=0 && r2=SP then
-              set_mnem 0x0001 0x2083 i
-            else
-              let () = trace_instr i n in
-              exit 6
-          in
+          let () = assembly_ld r1 n r2 i in
           loop store curi2 next
       | Beq (r1,r2,lab) ->
           let label_instr = assoc_exn lab label_idxs in
