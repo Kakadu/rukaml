@@ -137,13 +137,14 @@ let mulw k a b c =
 let arg_place_by_index ?(is_saveable = true) index =
   assert (index >= 0);
   (* Counting from 0 *)
+  let letter = if is_saveable then "s" else "a" in
+
   if index < args_in_registers
-  then (
-    let letter = if is_saveable then "s" else "a" in
-    RU (Printf.sprintf "%s%d" letter index))
+  then RU (sprintf "%s%d" letter index)
   else (
     let place = wordsize () * (index - args_in_registers) in
-    ROffset (a7, place))
+    ROffset (RU (sprintf "%s7" letter), place) (* it may be ("a7" or "s7") + offset *)
+  )
 ;;
 
 let save_ident ?(comm = "") a b =
@@ -616,7 +617,7 @@ let generate_body is_toplevel body =
            else emit ld arg temp_place)
         !args_temp_storage
     in
-    maybe_alloc_extra_args_space count;
+    maybe_alloc_extra_args_space (put_from + count);
     ListLabels.iteri args ~f:on_arg;
     move_args ();
     Addr_of_local.(last_pos := !last_pos - slotc);
@@ -806,9 +807,8 @@ let generate_body is_toplevel body =
        | AVar arr when Addr_of_local.has_key arr ->
          with_ra_saving (fun () ->
            emit_alloc_closure "rukaml_array_get" 2;
-           emit li a1 1;
-           load_ident a2 (pp_to_mach arr);
-           emit call "rukaml_applyN";
+           load_ident a1 (pp_to_mach arr);
+           emit call "rukaml_apply1";
            emit sd_dest a0 dest)
        | _ -> failwiths "Should not happen %s %d" __FILE__ __LINE__)
     | CApp (APrimitive ("array_make", 2), arg1, [ arg2 ]) ->
@@ -826,9 +826,8 @@ let generate_body is_toplevel body =
        | AVar arr when Addr_of_local.has_key arr ->
          with_ra_saving (fun () ->
            emit_alloc_closure "rukaml_array_set" 3;
-           emit li a1 1;
-           load_ident a2 (pp_to_mach arr);
-           emit call "rukaml_applyN";
+           load_ident a1 (pp_to_mach arr);
+           emit call "rukaml_apply1";
            emit sd_dest a0 dest)
        | _ ->
          Format.eprintf "Error: @[%a@]\n%!" ANF.pp_c e;
@@ -1079,7 +1078,7 @@ let generate_body is_toplevel body =
             let () =
               load_ident a0 (Addr_of_local.pp_to_mach func_clo_id);
               emit li a1 formal_arity;
-              assert (formal_arity < 5)
+              (* assert (formal_arity < 5) *)
               (* See calling convention *)
               (* List.iteri
                 (fun i rname ->
@@ -1095,19 +1094,16 @@ let generate_body is_toplevel body =
       (* A 1 argument application *)
       assert (Option.is_none (is_toplevel f));
       let app_name = Addr_of_local.pp_to_mach f in
-      helper_a (DReg "a2") arg;
-      emit li a1 1;
+      helper_a (DReg "a1") arg;
       load_ident a0 app_name;
-      emit call "rukaml_applyN";
       if Opts.is_permitted TailCall && is_tailcall dest
       then (
         let args_space = load_callee_saved_args () in
         emit ld ra (make_sp_offset ra_offset);
         emit shrink_stack (!Addr_of_local.last_pos - args_space);
-        emit tail "rukaml_applyN_try_call"
-        (* TODO: It is possible in compile time to know, now is call or not *))
+        emit tail "rukaml_apply1")
       else (
-        emit call "rukaml_applyN_try_call";
+        emit call "rukaml_apply1";
         emit sd_dest a0 dest)
     | CApp (APrimitive ("field", _), AConst (PConst_int _n), [ AVar _ ]) ->
       failwiths "Not implemented"
