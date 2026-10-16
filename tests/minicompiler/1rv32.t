@@ -23,8 +23,8 @@
     return (n * fact_rec((n - 1)));
   }
   GC statistics
-  Total allocations: 15296(words)
-  Currently allocated: 15296(words)
+  Total allocations: 15288(words)
+  Currently allocated: 15288(words)
   Current bank: 0
 
 
@@ -128,8 +128,8 @@
   m[30] = (0x81u << 16) + 0x113u;  /* 34:   addi sp, sp, 8 */
   m[31] = (0x0u << 16) + 0x8067u;  /* 35:   ret */
   GC statistics
-  Total allocations: 24341(words)
-  Currently allocated: 24341(words)
+  Total allocations: 24401(words)
+  Currently allocated: 24401(words)
   Current bank: 0
 
 

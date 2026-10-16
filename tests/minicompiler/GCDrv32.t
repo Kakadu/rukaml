@@ -29,8 +29,8 @@
     return gcd(a, (b - a));
   }
   GC statistics
-  Total allocations: 32537(words)
-  Currently allocated: 32537(words)
+  Total allocations: 32547(words)
+  Currently allocated: 32547(words)
   Current bank: 0
 
 
@@ -175,7 +175,7 @@
   m[46] = (0x81u << 16) + 0x113u;  /* 52:   addi sp, sp, 8 */
   m[47] = (0x0u << 16) + 0x8067u;  /* 53:   ret */
   GC statistics
-  Total allocations: 46332(words)
-  Currently allocated: 46332(words)
+  Total allocations: 46440(words)
+  Currently allocated: 46440(words)
   Current bank: 0
 
