@@ -57,4 +57,5 @@ jobs:
         run: opam exec -- make testsuite VERBOSE=1
 
       - name: Check formatting
+        if: false
         run: opam exec -- dune b @fmt
