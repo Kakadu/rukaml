@@ -97,7 +97,7 @@ typedef void *(*fun8)(void *, void *, void *, void *, void *, void *, void *, vo
     extra_args = va_arg(va_list, void **); \
   type var = (argc_counter < ARGS_IN_REGISTERS) \
     ? va_arg(va_list, type) \
-    : extra_args[argc_counter - ARGS_IN_REGISTERS]; \
+    : (type)(uintptr_t)extra_args[argc_counter - ARGS_IN_REGISTERS]; \
   argc_counter++
 
 // For convenient addressing of arguments
