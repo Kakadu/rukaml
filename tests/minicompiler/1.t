@@ -23,8 +23,8 @@ $ echo 'int main(){return;}' > program.c
     return (n * fact_rec((n - 1)));
   }
   GC statistics
-  Total allocations: 15044(words)
-  Currently allocated: 15044(words)
+  Total allocations: 15050(words)
+  Currently allocated: 15050(words)
   Current bank: 0
 
 
@@ -124,8 +124,8 @@ $ echo 'int main(){return;}' > program.c
   m[30] = (0x81u << 16) + 0x113u;  /* 34:   addi sp, sp, 8 */
   m[31] = (0x0u << 16) + 0x8067u;  /* 35:   ret */
   GC statistics
-  Total allocations: 24096(words)
-  Currently allocated: 24096(words)
+  Total allocations: 24156(words)
+  Currently allocated: 24156(words)
   Current bank: 0
 
 
