@@ -275,14 +275,13 @@ let prio expr table =
 ;;
 
 let letdef erhs =
-  return (fun isrec name ps rhs -> isrec, name, List.fold_right elam ps rhs)
-  <*> (trace_pos "let"
-       *> keyword "let"
-       *> option NonRecursive (keyword "rec" >>| fun _ -> Recursive)
-       <* ws)
-  <*> ws *> pattern
-  <*> many (ws *> pattern)
-  <*> ws *> string "=" *> ws *> erhs
+  let* isrec =
+    keyword "let" *> option NonRecursive (keyword "rec" >>| fun _ -> Recursive) <* ws
+  in
+  let* name = ws *> pattern in
+  let* ps = many (ws *> pattern) in
+  let* rhs = ws *> string "=" *> ws *> erhs in
+  return (isrec, name, List.fold_right elam ps rhs)
 ;;
 
 (* The equivalent of [letdef] *)
@@ -634,6 +633,38 @@ let type_declaration =
 let value_binding = letdef (pack.expr pack) <* ws
 let skip_separator = option () (ws *> string ";;" *> return ())
 
+let tracing_many1 (f : structure_item t) =
+  let describe_si ppf = function
+    | Parsetree.Pstr_value (flg, pat, _) ->
+      Format.fprintf ppf "let %a %a" pp_rec_flag flg pp_pattern pat
+    | Pstr_type (h, _) -> Format.fprintf ppf "type %s" h.pty_name
+  in
+  let* head = f in
+  let counterN = ref 1 in
+  let loop =
+    fix (fun self ->
+      let* ans, span =
+        let* () = return () in
+        let counter = Mtime_clock.counter () in
+        let* ans = f in
+        return (ans, Mtime_clock.count counter)
+      in
+      incr counterN;
+      let () =
+        (* if Mtime.Span.is_longer span ~than:Mtime.Span.s *)
+        if true
+        then (
+          Format.printf "item %03d parsed. at %a\n%!" !counterN Mtime.Span.pp span;
+          Format.printf "%a\n%!" describe_si ans)
+      in
+      flush stdout;
+      let* tail = self in
+      return (ans :: tail))
+  in
+  let* all = loop in
+  return (head :: all)
+;;
+
 let structure =
   many1
     (value_binding
@@ -643,6 +674,15 @@ let structure =
 ;;
 
 let parse_structure str =
+  (* let state = Angstrom.Buffered.parse (structure <* ws <* end_of_input) in
+  let state = Angstrom.Buffered.feed state (`String str) in
+  match state with
+  | Angstrom.Buffered.Done (_, x) -> Result.Ok  x
+  | Fail (unc,_, msg) ->
+    let open Angstrom.Buffered in
+      Printf.printf "off = %d, len = %d\n" unc.off unc.len ;
+      Result.Error (`Parse_error msg :> [>error])
+    | _ -> assert false *)
   parse_string ~consume:All (structure <* ws <* end_of_input) str
   |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
 ;;
