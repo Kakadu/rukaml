@@ -5,7 +5,6 @@
 #include <stdarg.h>
 #include <assert.h>
 #include <stdbool.h>
-#include <errno.h>
 
 /* #define clean_errno() (errno == 0 ? "None" : strerror(errno))
 #define log_error(M, ...) fprintf(stderr, "[ERROR] (%s:%d: errno: %s) " M "\n", __FILE__, __LINE__, clean_errno(), ##__VA_ARGS__)
@@ -19,6 +18,20 @@
 
 // #define DEBUG
 
+#define HEADER(size, tag) ((uint64_t)((size << 10u) + (tag % 256u)))
+#define SIZE(ptr) (*((uint64_t *)ptr - 1) >> 10)
+#define TAG(ptr) (*((uint64_t *)ptr - 1) & 0xFF)
+
+const uint8_t Tuple_tag = 0;
+const uint8_t Array_tag = 1;
+
+void rukaml_print_int(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
+                      uint64_t a4 , uint64_t a5, uint64_t a6, uint64_t a7, 
+                      int x)
+{
+  printf("%s %d\n", __func__, x);
+  fflush(stdout);
+}
 void myputc(int x)
 {
   printf("%d", x);
@@ -76,11 +89,57 @@ rukaml_closure *copy_closure(rukaml_closure *src)
 void *rukaml_alloc_pair(void* l, void *r)
 {
   size_t *rez = malloc(3 * sizeof(void*));
-  (rez)[0] = 0; // tag
+  (rez)[0] = HEADER(2, Tuple_tag); // header
   (rez)[1] = (size_t)l;
   (rez)[2] = (size_t)r;
   return rez+1;
 }
+
+void *rukaml_alloc_array(size_t* arr, uint64_t len)
+{
+  size_t *rez = malloc((len + 1) * sizeof(void *));
+  if (!rez)
+    return NULL;
+  (rez)[0] = HEADER(len, Tuple_tag);
+  for (int i = 1; i < len; i++) {
+    (rez)[i] = (size_t)arr[i];
+  }
+  return rez+1;
+}
+
+uint64_t rukaml_array_length(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
+                             uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
+                             void **arr)
+{
+  return SIZE(arr);
+}
+
+void *rukaml_array_get(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
+                       uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
+                       void **arr, uint64_t n)
+{
+  assert(TAG(arr) == Array_tag);
+  if (n >= SIZE(arr))
+  {
+    fprintf(stderr, "Index out of bounds");
+    exit(1);
+  }
+  return arr[n];
+}
+
+void rukaml_array_set(uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3,
+                      uint64_t a4, uint64_t a5, uint64_t a6, uint64_t a7,
+                      void **arr, uint64_t n, void *a)
+{
+  assert(TAG(arr) == Array_tag);
+  if (n >= SIZE(arr))
+  {
+    fprintf(stderr, "Index out of bounds");
+    exit(1);
+  }
+  arr[n] = a;
+}
+
 
 void *rukaml_field(int n, void **r)
 {

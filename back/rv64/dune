@@ -2,7 +2,7 @@
  (name rv64_impl)
  (modules RV64_impl Machine)
  (wrapped false)
- (libraries cconv compile_lib)
+ (libraries cconv compile_lib amd64_impl)
  (instrumentation
   (backend bisect_ppx)))
 
@@ -13,4 +13,6 @@
    (= none %{read:../../cc_rv64})))
  (deps rukaml_stdlib.c)
  (action
-  (system "%{read:../../cc_rv64} -c %{deps} -o %{target}")))
+  (system
+   ;  -Werror -Wfatal-errors
+   "%{read:../../cc_rv64} -c %{deps} -std=c99 -ggdb -o %{target}")))

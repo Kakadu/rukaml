@@ -1,23 +1,27 @@
-type pattern =
-  | PVar of string
-  | PTuple of pattern * pattern * pattern list
+type const =
+  | PConst_int of int
+  | PConst_char of char
+  | PConst_bool of bool
+  | PConst_string of string
 [@@deriving show { with_path = false }]
 
-let pvar s = PVar s
+type pattern =
+  | PUnit
+  | PConst of const
+  | PAny
+  | PVar of string
+  | PTuple of pattern * pattern * pattern list
+  | PConstruct of string * pattern list
+[@@deriving show { with_path = false }]
 
 type rec_flag =
   | Recursive
   | NonRecursive
 [@@deriving show { with_path = false }]
 
-type const =
-  | PConst_int of int
-  (* | PConst_string of string *)
-  | PConst_bool of bool
-[@@deriving show { with_path = false }]
-
 type expr =
   | EUnit
+  | EArray of expr list
   | EConst of const
   | EVar of string
   | EIf of expr * expr * expr
@@ -25,34 +29,83 @@ type expr =
   | EApp of expr * expr
   | ETuple of expr * expr * expr list
   | ELet of rec_flag * pattern * expr * expr
+  | EConstruct of string * expr list
+  | EMatch of expr * (pattern * expr) list1
 [@@deriving show { with_path = false }]
 
+and 'a list1 = 'a * 'a list [@@deriving show { with_path = false }]
+
+let evar s = EVar s
+let pvar s = PVar s
 let const_int n = PConst_int n
+let const_char c = PConst_char c
 let const_bool b = PConst_bool b
+let const_string s = PConst_string s
 let eunit = EUnit
 let econst n = EConst n
-let evar s = EVar s
 let elam v body = ELam (v, body)
 let eapp1 f x = EApp (f, x)
 let etuple a b xs = ETuple (a, b, xs)
+let ematch e pe pes = EMatch (e, (pe, pes))
+let econstruct name args = EConstruct (name, args)
+let pconstruct name args = PConstruct (name, args)
+let earray xs = EArray xs
 
-let eapp f = function
-  | [] -> f
-  | args -> List.fold_left eapp1 f args
+let eapp f ?(is_right_assoc = false) args =
+  match is_right_assoc, args with
+  | _, [] -> f
+  | false, args -> List.fold_left eapp1 f args
+  | true, args -> List.fold_right eapp1 args f
 ;;
 
+let pnil = PConstruct ("[]", [])
+let enil = EConstruct ("[]", [])
+let pcons hd tl = PConstruct ("::", [ hd; tl ])
+let econs hd tl = EConstruct ("::", [ hd; tl ])
 let elet ?(isrec = NonRecursive) p b wher = ELet (isrec, p, b, wher)
 let eite c t e = EIf (c, t, e)
 let emul a b = eapp (evar "*") [ a; b ]
+let ediv a b = eapp (evar "/") [ a; b ]
 let eadd a b = eapp (evar "+") [ a; b ]
 let esub a b = eapp (evar "-") [ a; b ]
 let eeq a b = eapp (evar "=") [ a; b ]
+let ene a b = eapp (evar "<>") [ a; b ]
 let elt a b = eapp (evar "<") [ a; b ]
 let ele a b = eapp (evar "<=") [ a; b ]
+let ege a b = eapp (evar ">=") [ a; b ]
 let egt a b = eapp (evar ">") [ a; b ]
+let elor a b = eapp (evar "||") [ a; b ]
+let eland a b = eapp (evar "&&") [ a; b ]
+let e_cons a b = eapp ~is_right_assoc:true (evar "::") [ a; b ]
 
 type value_binding = rec_flag * pattern * expr [@@deriving show { with_path = false }]
-type structure_item = value_binding [@@deriving show { with_path = false }]
+
+type type_declaration =
+  { pty_params : string list (** ['a] is param in [type 'a list = ...]  *)
+  ; pty_name : string (** [list] is name in [type 'a list = ...]  *)
+  ; pty_kind : type_kind
+  ; pty_manifest : core_type option
+  }
+[@@deriving show { with_path = false }]
+
+and type_kind =
+  | Ptype_abstract (** [ type t = int * bool ] *)
+  | Ptype_variant of (string * core_type list) list1
+  (** [ type t = Some of int | None ]  *)
+[@@deriving show { with_path = false }]
+
+and core_type =
+  | Ptyp_var of string (** [ 'a, 'b ] are type variables in [ type ('a, 'b) ty = ... ] *)
+  | Ptyp_arrow of core_type * core_type (** ['a -> 'b] *)
+  | Ptyp_tuple of core_type * core_type * core_type list (** [ 'a * 'b * 'c ] *)
+  | Ptyp_constr of string * core_type list (** [ int ], ['a option], [ ('a, 'b) list ] *)
+[@@deriving show { with_path = false }]
+
+type structure_item =
+  | Pstr_value of value_binding (** [ let x = ... ] *)
+  | Pstr_type of type_declaration list1 (** [ type x = ... ] *)
+[@@deriving show { with_path = false }]
+
 type structure = structure_item list [@@deriving show { with_path = false }]
 
 let group_lams body =

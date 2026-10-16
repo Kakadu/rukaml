@@ -1,0 +1,2 @@
+CompileFlags:
+  Add: [-DDEBUG=0, -march=rv64gc]

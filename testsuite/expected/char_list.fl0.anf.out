@@ -1,0 +1,45 @@
+let rec __lifted_let_1_helper s len n =
+  let temp1 = (n >= len) in
+  (if temp1
+  then Constr_0
+  else let temp4 = string_nth s n in
+       let temp7 = (n + 1) in
+       let temp8 = __lifted_let_1_helper s len temp7 in
+       (Constr_1 (temp4, temp8)))
+let string_to_char_list s =
+  let temp11 = string_len s  in
+  __lifted_let_1_helper s temp11 0
+let assert_equal msg a b =
+  let temp15 = (a = b) in
+  (if temp15
+  then 0
+  else let temp17 = printf "[error] test failed: %s\n"  in
+       let temp18 = temp17 msg  in
+       exit 1 )
+let test1 () =
+  let temp22 = Constr_0 in
+  let temp23 = (Constr_1 ('5', temp22)) in
+  let temp24 = (Constr_1 ('4', temp23)) in
+  let temp25 = (Constr_1 ('3', temp24)) in
+  let temp26 = (Constr_1 ('2', temp25)) in
+  let temp27 = (Constr_1 ('1', temp26)) in
+  let temp28 = string_of_char_list temp27  in
+  assert_equal "test1" temp28 "12345"
+let test2 () =
+  let temp32 = string_to_char_list "67890"  in
+  let temp33 = string_of_char_list temp32  in
+  assert_equal "test2" temp33 "67890"
+let test3 () =
+  let temp37 = string_to_char_list "abcde"  in
+  let temp38 = string_of_char_list temp37  in
+  let temp39 = string_to_char_list temp38  in
+  let temp40 = string_of_char_list temp39  in
+  let temp41 = string_to_char_list temp40  in
+  let temp42 = string_of_char_list temp41  in
+  assert_equal "test3" temp42 "abcde"
+let main =
+  let temp45 = test1 0  in
+  let temp47 = test2 0  in
+  let temp49 = test3 0  in
+  let temp51 = printf "tests passed"  in
+  exit 0 

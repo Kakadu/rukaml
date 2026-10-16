@@ -1,0 +1,133 @@
+section .note.GNU-stack noalloc noexec nowrite progbits
+section .text
+extern add_gc_static_root
+extern rukaml_alloc_closure
+extern rukaml_print_int
+extern rukaml_print_int_kaml
+extern rukaml_applyN
+extern rukaml_field
+extern rukaml_tag
+extern rukaml_size
+extern rukaml_alloc_pair
+extern rukaml_alloc_block
+extern rukaml_array_stdin
+extern rukaml_array_set
+extern rukaml_array_read_in
+extern rukaml_block_size
+extern rukaml_block_tag
+extern rukaml_block_nth
+extern rukaml_match_failure
+extern rukaml_initialize
+extern rukaml_gc_compact
+extern rukaml_gc_print_stats
+extern rukaml_print_alloc_closure_count
+extern rukaml_alloc_printf_closure
+extern rukaml_alloc_fprintf_closure
+extern rukaml_alloc_sprintf_closure
+extern rukaml_stdout
+extern rukaml_equal_struct
+extern rukaml_string_of_char_list
+extern rukaml_string_equal
+extern rukaml_string_nth
+extern rukaml_string_len
+extern rukaml_apply1
+extern rukaml_apply2
+extern rukaml_stdin
+extern rukaml_stdout
+extern rukaml_stderr
+extern rukaml_substring_sysv
+extern rukaml_open_in
+extern rukaml_open_out
+extern rukaml_close_channel
+extern rukaml_end_of_input
+extern rukaml_input_char
+extern rukaml_argv
+extern rukaml_trace_val
+
+section .bss
+  rukaml_discard: resq 1
+
+
+        section .text
+        _start:
+              push    rbp
+              mov     rbp, rsp   ; prologue
+              call main
+              mov rdi, rax    ; rdi stores return code
+              mov rax, 60     ; exit syscall
+              syscall
+section .text
+rukaml_init_global_immediates:
+  push rbp
+  mov rbp, rsp
+  pop rbp
+  ret ;;; rukaml_init_global_immediates
+section .text
+GLOBAL main
+
+main:
+  push rbp
+  mov  rbp, rsp
+  push rdi          ; save argc
+  push rsi          ; save argv
+  mov rdi, rbp      ; ebp  (for gc initialization)
+  mov rsi, [rsp+8]  ; argc (for Sys.argv initialization)
+  mov rdx, [rsp]    ; argv (for Sys.argv initialization)
+  call rukaml_initialize
+  call rukaml_init_global_immediates
+  pop rsi           ; pass argv to main
+  pop rdi           ; pass argc to main
+  sub rsp, 8*4 ; allocate for local variables temp4, temp3, temp2, temp1
+  mov rdi, 4 ; array size
+  mov rsi, 1 ; array tag
+  call rukaml_alloc_block
+  add rsp, -8*2 ; push array
+  mov qword [rsp], rax
+  mov qword rsi,  1
+  mov qword rdi, [rsp] ; get array
+  mov qword [rdi+8*0], rsi ; set field of array
+  mov qword rsi,  4
+  mov qword rdi, [rsp] ; get array
+  mov qword [rdi+8*1], rsi ; set field of array
+  mov qword rsi,  3
+  mov qword rdi, [rsp] ; get array
+  mov qword [rdi+8*2], rsi ; set field of array
+  mov qword rsi,  3
+  mov qword rdi, [rsp] ; get array
+  mov qword [rdi+8*3], rsi ; set field of array
+  mov rax, [rsp]
+  add rsp, 8*2 ; pop array
+  mov [rbp-1*8], rax
+  add rsp, -8*4
+  mov qword rdx, [rbp-1*8] ; access local var "temp1" [1/2]
+  mov qword [rbp-8*8], rdx  ; access local var "temp1" [2/2]
+  mov qword [rbp-7*8],  1
+  mov qword [rbp-6*8],  42
+  call rukaml_array_set
+  add rsp, 8*4
+  mov [rbp-2*8], rax
+  mov rdi, rukaml_block_nth
+  mov rsi, 2
+  call rukaml_alloc_closure
+  mov rdi, rax
+  mov rsi, 1
+  mov rdx, [rbp-1*8]
+  mov rax, 0
+  call rukaml_applyN
+  mov [rbp-3*8], rax
+  sub rsp, 8 ; padding
+  sub rsp, 8 ; first arg of a function temp3
+  mov qword [rbp-6*8],  1
+  mov rax, 0  ; no float arguments
+  mov rdi, [rbp-3*8]
+  mov rsi, 1
+  mov rdx, [rbp-6*8]
+  call rukaml_applyN
+  add rsp, 8*2 ; free space for args of function "temp3"
+  mov [rbp-4*8], rax
+  mov rdi, [rbp-4*8]
+  call rukaml_print_int
+  mov rax, rax
+  add rsp, 8*4 ; deallocate local variables temp4, temp3, temp2, temp1
+  pop rbp
+  ret  ;;;; main

@@ -28,12 +28,16 @@ module type S = sig
   val build_ptrtoint : ?name:string -> llvalue -> lltype -> llvalue
   val build_inttoptr : ?name:string -> llvalue -> lltype -> llvalue
   val build_pointercast : ?name:string -> llvalue -> lltype -> llvalue
+  val build_alloca : ?name:string -> lltype -> llvalue
 
   (** Just aliases *)
+  val stack_array : Llvm.lltype -> Llvm.llvalue array -> Llvm.llvalue
 
   val const_int : Llvm.lltype -> int -> Llvm.llvalue
+  val const_ptr : Llvm.llvalue -> Llvm.lltype -> Llvm.llvalue
   val params : Llvm.llvalue -> Llvm.llvalue array
   val pp_value : Format.formatter -> llvalue -> unit
+  val pp_type : Format.formatter -> lltype -> unit
 end
 
 let make context builder module_ =
@@ -67,6 +71,7 @@ let make context builder module_ =
     let build_ptrtoint ?(name = "") e typ = Llvm.build_ptrtoint e typ name builder
     let build_inttoptr ?(name = "") e typ = Llvm.build_inttoptr e typ name builder
     let build_pointercast ?(name = "") f typ = Llvm.build_pointercast f typ name builder
+    let build_alloca ?(name = "") typ = Llvm.build_alloca typ name builder
 
     let set_metadata v kind fmt =
       Format.kasprintf
@@ -78,8 +83,11 @@ let make context builder module_ =
 
     (* Aliases *)
     let const_int = Llvm.const_int
+    let const_ptr = Llvm.const_pointercast
+    let stack_array = Llvm.const_array
     let params = Llvm.params
     let pp_value ppf x = Format.fprintf ppf "%s" (Llvm.string_of_llvalue x)
+    let pp_type ppf x = Format.fprintf ppf "%s" (Llvm.string_of_lltype x)
   end
   in
   (module L : S)

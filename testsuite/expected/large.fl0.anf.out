@@ -5,12 +5,12 @@ let large x =
 let main =
   let temp4 = (if false
               then false
-              else let t42 = print 42  in
-                     true) in
+              else let temp8 = print 42  in
+                   1) in
     let temp5 = (if temp4
                 then false
                 else true) in
-      let x = (if temp5
-              then false
-              else true) in
-        large x 
+      let temp6 = (if temp5
+                  then false
+                  else true) in
+        large temp6 

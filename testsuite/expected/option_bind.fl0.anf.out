@@ -1,0 +1,66 @@
+let bind opt f =
+  (if (opt = 0)
+  then Constr_0
+  else let temp6 = block_tag opt  in
+       (if (temp6 = 1)
+       then let temp5 = block_nth opt 0 in
+            f temp5 
+       else match_failure 666 ))
+let return x =
+  (Constr_1 x)
+let int_of_bool x =
+  (if x
+  then 1
+  else 0)
+let rec bool_of_int_opt x =
+  (if (x = 0)
+  then (Constr_1 0)
+  else (if (x = 1)
+       then (Constr_1 1)
+       else Constr_0))
+let __lifted_lam_2 b bs =
+  let temp18 = (Constr_1 (b, bs)) in
+  return temp18 
+let __lifted_lam_1 xs map_ints_to_bools b =
+  let temp20 = map_ints_to_bools xs  in
+  let temp22 = __lifted_lam_2 b  in
+  bind temp20 temp22
+let rec map_ints_to_bools lst =
+  (if (lst = 0)
+  then let temp30 = Constr_0 in
+       (Constr_1 temp30)
+  else let x = block_nth lst 0 in
+       let xs = block_nth lst 1 in
+       let temp25 = bool_of_int_opt x  in
+       let temp28 = __lifted_lam_1 xs map_ints_to_bools in
+       bind temp25 temp28)
+let rec map f ls =
+  (if (ls = 0)
+  then Constr_0
+  else let x = block_nth ls 0 in
+       let xs = block_nth ls 1 in
+       let temp33 = f x  in
+       let temp35 = map f xs in
+       (Constr_1 (temp33, temp35)))
+let rec print_ls ls =
+  (if (ls = 0)
+  then 0
+  else let x = block_nth ls 0 in
+       let xs = block_nth ls 1 in
+       let temp39 = print x  in
+       print_ls xs )
+let main =
+  let temp41 = Constr_0 in
+  let temp42 = (Constr_1 (0, temp41)) in
+  let temp43 = (Constr_1 (0, temp42)) in
+  let temp44 = (Constr_1 (1, temp43)) in
+  let temp45 = (Constr_1 (0, temp44)) in
+  let temp46 = map_ints_to_bools temp45  in
+  let temp54 = block_tag temp46  in
+  (if (temp54 = 1)
+  then let temp53 = block_nth temp46 0 in
+       let temp49 = map int_of_bool temp53 in
+       print_ls temp49 
+  else (if (temp46 = 0)
+       then 1
+       else match_failure 666 ))

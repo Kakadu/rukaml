@@ -1,0 +1,149 @@
+(rule
+ (target compiler.anf.ml)
+ (deps compiler.ml)
+ (mode
+  (promote (until-clean)))
+ (action
+  (run %{project_root}/driver/driver.exe %{deps} --target anf -o %{target})))
+
+(rule
+ (target rukaml_stdlib.o)
+ (enabled_if
+  (not
+   (= none %{read:../../cc_rv64})))
+ (deps %{project_root}/back/rv64/rukaml_stdlib.c)
+ (action
+  (system
+   "%{read:../../cc_rv64} -DRUKAML_DEBUG=0 -march=rv64g -c %{deps} -Wno-pedantic -ffreestanding -nostdlib -std=c99 -ggdb -o %{target}")))
+
+(rule
+ (target rukaml_stdlib.rv32.o)
+ (enabled_if
+  (not
+   (= none %{read:../../cc_rv32})))
+ (deps %{project_root}/back/rv64/rukaml_stdlib.c)
+ (action
+  (system
+   "%{read:../../cc_rv32} -DRUKAML_DEBUG=0 -march=rv32g -c %{deps} -Wno-pedantic -ffreestanding -nostdlib -std=c99 -ggdb -o %{target}")))
+
+(rule
+ (target compiler.s)
+ (deps compiler.ml)
+ (mode
+  (promote (until-clean)))
+ (action
+  (run %{project_root}/driver/driver.exe %{deps} --target rv64 -o %{target})))
+
+(rule
+ (target compiler.rv32.s)
+ (deps compiler.ml)
+ (mode
+  (promote (until-clean)))
+ (action
+  (run %{project_root}/driver/driver.exe %{deps} --target rv32 -o %{target})))
+
+(rule
+ (targets compiler.exe)
+ (deps
+  %{project_root}/driver/driver.exe
+  (:src compiler.s)
+  (:stdlib ./rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (action
+  (progn
+   (run riscv64-linux-gnu-gcc-13 -g -c %{src} -o demo.o)
+   (run riscv64-linux-gnu-gcc-13 -g %{stdlib} demo.o -o %{targets}))))
+
+(rule
+ (targets compiler.rv32.exe)
+ (deps
+  %{project_root}/driver/driver.exe
+  (:src compiler.rv32.s)
+  (:stdlib ./rukaml_stdlib.rv32.o))
+ (mode
+  (promote (until-clean)))
+ (enabled_if
+  (and
+   (not
+    (= none %{read:../../cc_rv32}))
+   (not
+    (= none %{read:../../run_rv32}))))
+ (action
+  (progn
+   (system "%{read:../../cc_rv32} -g -c %{src} -o demo.o")
+   (system "%{read:../../cc_rv32} -g %{stdlib} demo.o -o %{targets}"))))
+
+(cram
+ (applies_to *)
+ (deps ./compiler.exe))
+
+(cram
+ (applies_to emptymain)
+ (deps compiler.anf.ml program.c))
+
+(cram
+ (applies_to 1)
+ (deps ./compiler.exe compiler.anf.ml program.c))
+
+(cram
+ (applies_to 0)
+ (deps ./compiler.exe program0.c))
+
+(cram
+ (applies_to 0rv32)
+ (enabled_if
+  (and
+   (not
+    (= none %{read:../../cc_rv32}))
+   (not
+    (= none %{read:../../run_rv32}))))
+ (deps ./compiler.rv32.exe program0.c ../../run_rv32))
+
+(cram
+ (applies_to 1rv32)
+ (enabled_if
+  (and
+   (not
+    (= none %{read:../../cc_rv32}))
+   (not
+    (= none %{read:../../run_rv32}))))
+ (deps ./compiler.rv32.exe program.c ../../run_rv32))
+
+; (rule
+;  (target compiler.amd64.s)
+;  (deps compiler.ml)
+;  (mode
+;   (promote (until-clean)))
+;  (action
+;   (run %{project_root}/driver/driver.exe %{deps} --target amd64 -o %{target})))
+
+; (rule
+;  (targets amd64.exe)
+;  (deps
+;   %{project_root}/driver/driver.exe
+;   (:src compiler.amd64.s)
+;   (:stdlib ../../back/amd64/rukaml_stdlib.o))
+;  (mode
+;   (promote (until-clean)))
+;  (action
+;   (progn
+;    (run nasm -f elf64 %{src} -o demo.o)
+;    (run gcc-13 -g %{stdlib} demo.o -o %{targets}))))
+
+; (rule
+;  (target compiler.embox.s)
+;  (deps compiler.ml)
+;  (mode
+;   (promote (until-clean)))
+;  (action
+;   (progn
+;    (run
+;     %{project_root}/driver/driver.exe
+;     %{deps}
+;     --rename-main
+;     true
+;     --target
+;     rv32
+;     -o
+;     %{target}))))

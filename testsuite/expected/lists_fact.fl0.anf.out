@@ -1,0 +1,23 @@
+let rec make_naturals n =
+  (if (n = 1)
+  then let temp6 = Constr_0 in
+       (Constr_1 (1, temp6))
+  else let temp3 = (n - 1) in
+       let temp4 = make_naturals temp3  in
+       (Constr_1 (n, temp4)))
+let rec fold f acc ls =
+  (if (ls = 0)
+  then acc
+  else let x = block_nth ls 0 in
+       let xs = block_nth ls 1 in
+       let temp10 = f acc  in
+       let temp11 = temp10 x  in
+       fold f temp11 xs)
+let mul x y =
+  (x * y)
+let fact n =
+  let temp17 = make_naturals n  in
+  fold mul 1 temp17
+let main =
+  let temp19 = fact 7  in
+  print temp19 

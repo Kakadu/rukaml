@@ -1,6 +1,4 @@
-open! Base
 open Stdio
-
 open Frontend
 open Compile_lib
 
@@ -13,6 +11,8 @@ let error fmt =
     err_formatter
     fmt
 ;;
+
+let failwiths fmt = Stdlib.Format.kasprintf failwith fmt
 
 (**
   This module forms some kind of a DSL that can be used
@@ -27,7 +27,7 @@ module Compiler = struct
   type _ t =
     | Parsetree : Parsetree.structure -> Parsetree.structure t
     | Typedtree : Typedtree.structure -> Typedtree.structure t
-    | ANF : ANF.vb list -> ANF.vb list t
+    | ANF : ANF.stru -> ANF.stru t
     | Code : code -> code t
 
   let k x = fun k -> k x
@@ -41,44 +41,65 @@ module Compiler = struct
 
   (** Perform cps conversion on parsetree *)
   let cps (Parsetree stru) ~(caa : bool) =
-    let stru =
-      match CPSConv.cps_conv_program stru with
-      | Ok x -> x
+    (* extracts value_bindings from other structure_items to perform cps conv on it *)
+    let vbs =
+      let aux = function
+        | Parsetree.Pstr_value vb -> Some vb
+        | _ -> None
+      in
+      Stdlib.List.filter_map aux stru
+    in
+    let vbs =
+      match CPSConv.cps_conv vbs with
       | Error err -> error "cps error: %a" CPSConv.pp_error err
-    in
-    let vb =
-      if caa
-      then
+      | Ok vbs when caa ->
         let open CPSLang.MACPS in
-        cps_vb_to_parsetree_vb (CAA.call_arity_anal stru)
-      else
+        List.map cps_vb_to_parsetree_vb (CAA.call_arity_anal vbs)
+      | Ok vbs ->
         let open CPSLang.OneACPS in
-        cps_vb_to_parsetree_vb stru
+        List.map cps_vb_to_parsetree_vb vbs
     in
-    k (Parsetree [ vb ])
+    let open Parsetree in
+    (* merges structure items back together *)
+    let rec merge acc = function
+      | [], [] -> List.rev acc
+      | Pstr_type td :: rest, macps_vbs -> merge (Pstr_type td :: acc) (rest, macps_vbs)
+      | Pstr_value _ :: rest, macps_vb :: macps_vbs ->
+        merge (Pstr_value macps_vb :: acc) (rest, macps_vbs)
+      | [], _ :: _ | Pstr_value _ :: _, [] -> assert false
+    in
+    let stru = merge [] (stru, vbs) in
+    k (Parsetree stru)
   ;;
 
   (** Perform closure conversion *)
   let cconv =
     let collect_globals =
-      List.fold_left ~f:(fun acc -> function
-        | _, Parsetree.PVar s, _ -> CConv.String_set.add s acc
-        | _, PTuple _, _ -> acc)
+      let rec collect_from_patt acc = function
+        | Parsetree.PAny | PConst _ | PUnit -> acc
+        | PVar name -> CConv.String_set.add name acc
+        | PTuple (p1, p2, ps) ->
+          Base.List.fold ~f:collect_from_patt ~init:acc (p1 :: p2 :: ps)
+        | PConstruct (_, args) -> Base.List.fold ~f:collect_from_patt ~init:acc args
+      in
+      Base.List.fold ~f:(fun acc (_rec, lhs, _rhs) -> collect_from_patt acc lhs)
     in
-    let f (globals, acc) vb =
-      let stru = CConv.conv ~standart_globals:globals vb in
-      let globals = collect_globals ~init:globals stru in
-      globals, List.append acc stru
+    let f (globals, acc) = function
+      | Parsetree.Pstr_value vb ->
+        let stru = CConv.conv ~standart_globals:globals vb in
+        let globals = collect_globals ~init:globals stru in
+        globals, List.append acc (List.map (fun vb -> Parsetree.Pstr_value vb) stru)
+      | Parsetree.Pstr_type _ as td -> globals, List.append acc [ td ]
     in
     fun (Parsetree stru) ->
-      let _, stru = List.fold_left stru ~init:(CConv.standart_globals, []) ~f in
+      let _, stru = ListLabels.fold_left stru ~init:(CConv.standart_globals, []) ~f in
       k (Parsetree stru)
   ;;
 
   (** Infer parsetree to typedtree *)
-  let infer (Parsetree stru) =
-    match Inferencer.structure stru with
-    | Ok x -> k (Typedtree x)
+  let infer table (Parsetree stru) =
+    match Inferencer.structure table stru with
+    | Ok (_env, x) -> k (Typedtree x)
     | Error err -> error "infer error: %a" Inferencer.pp_error err
   ;;
 
@@ -90,23 +111,43 @@ module Compiler = struct
 
   (** Generate code for RV64 *)
   let rv64 (ANF stru) =
+    let vbs =
+      List.map
+        (function
+          | ANF.ANF_vb (flg, Apat_var name, body) -> flg, Some name, body
+          | ANF.ANF_vb ((NonRecursive as flg), Apat_unit, body) -> flg, None, body
+          | _ -> failwiths "not implemented %s %d" __FILE__ __LINE__)
+        stru
+    in
     let f ~path =
-      RV64_impl.codegen ~wrap_main_into_start:false stru path |> Result.ok_or_failwith
+      RV64_impl.codegen ~wrap_main_into_start:false vbs path |> Base.Result.ok_or_failwith
     in
     k (Code f)
+  ;;
+
+  let rv32 x =
+    RV64_impl.enable_32 ();
+    rv64 x
   ;;
 
   (** Generate code for AMD64 *)
   let amd64 (ANF stru) =
     let f ~path =
-      Amd64_impl.codegen ~wrap_main_into_start:true stru path |> Result.ok_or_failwith
+      Amd64_impl.codegen ~wrap_main_into_start:true stru path
+      |> Base.Result.ok_or_failwith
     in
     k (Code f)
   ;;
 
   (** Generate code for LLVM *)
   let llvm (ANF stru) =
-    let f ~path = LLVM_impl.codegen stru path |> Result.ok_or_failwith in
+    let vbs =
+      List.map
+        (function
+          | ANF.ANF_vb vb -> vb)
+        stru
+    in
+    let f ~path = LLVM_impl.codegen vbs path |> Base.Result.ok_or_failwith in
     k (Code f)
   ;;
 
@@ -135,36 +176,41 @@ module Target = struct
     ; out_path : string
     ; cps : bool
     ; caa : bool
+    ; ppx : bool
     }
 
   open Compiler
 
   (** Intermediate targets *)
   module Intermediate = struct
-    let parsetree (p : params) = parse p.text
+    let parsetree (p : params) =
+      parse (if p.ppx then Parsing.make_preprocessing_exn p.text else p.text)
+    ;;
+
     let cpstree p = (parsetree p) (if p.cps then cps ~caa:p.caa else ( |> ))
     let cconvtree p = (cpstree p) cconv
-    let typedtree p = (cconvtree p) infer
-    let anftree p = (typedtree p) anf
+    let typedtree table p = (cconvtree p) (infer table)
+    let anftree table p = (typedtree table p) anf
   end
 
-  let rv64 p = (Intermediate.anftree p) rv64
-  let amd64 p = (Intermediate.anftree p) amd64
-  let llvm p = (Intermediate.anftree p) llvm
-
+  let rv32 table p = (Intermediate.anftree table p) rv32
+  let rv64 table p = (Intermediate.anftree table p) rv64
+  let amd64 table p = (Intermediate.anftree table p) amd64
+  let llvm table p = (Intermediate.anftree table p) llvm
   let finish target p = (target p) (to_file p.out_path)
 
-  let targets =
-    Map.of_alist_exn
-      (module String)
-      [ "rv64", finish rv64
-      ; "amd64", finish amd64
-      ; "llvm", finish llvm
+  let targets table =
+    Base.Map.of_alist_exn
+      (module Base.String)
+      [ "rv64", finish (rv64 table)
+      ; "rv32", finish (rv32 table)
+      ; "amd64", finish (amd64 table)
+      ; "llvm", finish (llvm table)
       ; "parsetree", finish Intermediate.parsetree
       ; ("cps", fun p -> finish Intermediate.cpstree { p with cps = true })
       ; "cconv", finish Intermediate.cconvtree
-      ; "typedtree", finish Intermediate.typedtree
-      ; "anf", finish Intermediate.anftree
+      ; "typedtree", finish Intermediate.(typedtree table)
+      ; "anf", finish Intermediate.(anftree table)
       ]
   ;;
 end
@@ -174,7 +220,7 @@ let print_targets () =
   printf
     "supported targets:@ %a@."
     (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf ", ") pp_print_string)
-    (Map.keys Target.targets);
+    (Base.Map.keys (Target.targets Typedtree.empty_table));
   Stdlib.exit 0
 ;;
 
@@ -193,7 +239,7 @@ let () =
   let target = ref "" in
   let cps = ref false in
   let caa = ref false in
-
+  let ppx = ref true in
   let open Stdlib.Arg in
   let args =
     [ "-o", Set_string out_path, " output file"
@@ -201,20 +247,21 @@ let () =
     ; "--print-targets", Unit print_targets, " print all supported targets"
     ; "--cps", Set cps, " enable cps conversion"
     ; "--caa", Set caa, " enable call arity analysis"
+    ; "--no-ppx", Set ppx, " disable preprocessing"
+    ; "--rename-main", Bool (fun b -> RV64_impl.rename_main := b), " "
     ]
   in
   parse args (fun s -> inp_path := Some s) "rukaml";
-
   hack !target;
-
   let text =
     match !inp_path with
     | Some path -> In_channel.with_file path ~f:In_channel.input_all
     | None -> In_channel.input_all stdin
   in
-
-  let params = Target.{ text; out_path = !out_path; cps = !cps; caa = !caa } in
-  match Map.find Target.targets !target with
+  let params =
+    Target.{ text; out_path = !out_path; cps = !cps; caa = !caa; ppx = !ppx }
+  in
+  match Base.Map.find (Target.targets Typedtree.empty_table) !target with
   | Some target -> target params
   | None -> error "invalid target %S" !target
 ;;

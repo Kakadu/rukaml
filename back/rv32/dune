@@ -1,0 +1,14 @@
+(rule
+ (target rukaml_stdlib.o)
+ (enabled_if
+  (and
+   (not
+    (= none %{read:../../cc_rv32}))
+   (not
+    (= none %{read:../../run_rv32}))))
+ (deps ../rv64/rukaml_stdlib.c)
+ (mode
+  (promote (until-clean)))
+ (action
+  (system
+   "%{read:../../cc_rv32}  -std=c11 -ggdb -w -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -c %{deps} -o %{target}")))

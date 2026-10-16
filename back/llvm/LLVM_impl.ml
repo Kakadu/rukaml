@@ -33,7 +33,12 @@ end = struct
 end
 
 let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
-  fun (_flg, name, body) ->
+  fun (_flg, apat, body) ->
+  let name =
+    match apat with
+    | Apat_var name -> name
+    | _ -> failwith "not implemented"
+  in
   (* log "vb %s" name; *)
   let top_look_exn name =
     try LL.lookup_func_exn name, TD.find_typ_exn name with
@@ -72,11 +77,17 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
         [ ptr; LL.const_int i64_typ formal_params_count ]
       in
       LL.build_call typ alloc_closure final_args
-    | ATuple (a, b, []) ->
-      let a = gen_a a in
-      let b = gen_a b in
-      let alloc, typ = top_look_exn "rukaml_alloc_pair" in
-      LL.build_call typ alloc [ a; b ]
+    | AArray [] -> LL.const_int i64_typ 0
+    | AArray r ->
+      let l = List.map gen_a r in
+      let arr = LL.stack_array i64_typ (Array.of_seq @@ List.to_seq l) in
+      let arr_typ = Llvm.array_type i64_typ (List.length l) in
+      let alloca = LL.build_alloca arr_typ in
+      let _ = LL.build_store arr alloca in
+      let ptr = LL.build_pointercast alloca i64_typ in
+      let len = LL.const_int i64_typ (List.length l) in
+      let alloc, typ = top_look_exn "rukaml_alloc_array" in
+      LL.build_call typ alloc [ ptr; len ]
     | anf ->
       Format.eprintf "ANF: %a\n%!" ANF.pp_a anf;
       Format.eprintf
@@ -91,7 +102,12 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
     in
     match anf with
     | CAtom a -> gen_a a
-    | CApp (APrimitive "field", AConst (PConst_int n), [ what ]) ->
+    | CApp (APrimitive ("print", _), AConst (PConst_int n), []) ->
+      let accessor, accessor_typ = top_look_exn "rukaml_print_int" in
+      LL.build_call accessor_typ accessor [ LL.const_int i64_typ n ]
+    (* | CApp (APrimitive "length", AArray r, []) ->  *)
+    | CApp (APrimitive ("field", _), AConst (PConst_int n), [ what ])
+    | CApp (APrimitive ("block_nth", _), what, [ AConst (PConst_int n) ]) ->
       let source = gen_a what in
       (* let accessor = LL.lookup_func_exn "rukaml_field" in
            LL.build_call accessor [ LL.const_int i64_typ n; source ] *)
@@ -143,7 +159,7 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
              LL.set_metadata rez "result_of_application_of_localvar" ""
            in *)
       rez
-    | CApp (APrimitive (("+" | "-" | "*" | "/") as prim), arg1, [ arg2 ]) ->
+    | CApp (APrimitive ((("+" | "-" | "*" | "/") as prim), _), arg1, [ arg2 ]) ->
       let arg1 = gen_a arg1 in
       let arg2 = gen_a arg2 in
       (match prim with
@@ -152,7 +168,7 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
        | "-" -> LL.build_sub arg1 arg2
        | "/" -> LL.build_sdiv arg1 arg2
        | _ -> assert false)
-    | CApp (APrimitive "=", arg1, [ arg2 ]) ->
+    | CApp (APrimitive ("=", _), arg1, [ arg2 ]) ->
       let arg1 = gen_a arg1 in
       let arg2 = gen_a arg2 in
       let rez = LL.build_icmp Llvm.Icmp.Eq arg1 arg2 in
@@ -163,11 +179,11 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
     | CIte (cond, then_, else_) ->
       let cond =
         match cond with
-        | CApp (APrimitive "<", l, [ r ]) ->
+        | CApp (APrimitive ("<", _), l, [ r ]) ->
           let l = gen_a l in
           let r = gen_a r in
           LL.build_icmp Llvm.Icmp.Ult ~name:"ifcond" l r
-        | CApp (APrimitive "=", l, [ r ]) ->
+        | CApp (APrimitive ("=", _), l, [ r ]) ->
           let l = gen_a l in
           let r = gen_a r in
           LL.build_icmp Llvm.Icmp.Eq ~name:"ifcond" l r
@@ -208,16 +224,21 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
       (* merge point *)
       Llvm.position_at_end merge_bb LL.builder;
       Llvm.build_phi [ t, then_bb; e, else_bb ] "phi_result" LL.builder
+    | CTuple (a, b, []) ->
+      let a = gen_a a in
+      let b = gen_a b in
+      let alloc, typ = top_look_exn "rukaml_alloc_pair" in
+      LL.build_call typ alloc [ a; b ]
     | anf ->
       Format.eprintf "ANF: %a\n%!" ANF.pp_c anf;
       failwiths "Unsupported case %s %d" __FUNCTION__ __LINE__
   and gen : _ -> Llvm.llvalue = function
-    | ELet (_, Typedtree.Tpat_tuple _, _, _) -> assert false
-    | ELet (_, Tpat_var name, rhs, wher) ->
+    | ELet (_, Apat_var name, rhs, wher) ->
       let new_virt = gen_c rhs in
       with_virt_binding ~key:name new_virt ~f:(fun () ->
         let rez = gen wher in
         rez)
+    | ELet _ -> assert false
     | EComplex c -> gen_c c
   in
   let args, body = ANF.group_abstractions body in
@@ -227,10 +248,12 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
   in
   let the_function = Llvm.declare_function name.hum_name fun_typ LL.module_ in
   List.iteri
-    (fun n (ANF.APname key) ->
-       let param = Llvm.param the_function n in
-       log "  formal parameter %d: %s" n (Llvm.string_of_llvalue param);
-       add_virt_binding ~key param)
+    (fun n -> function
+       | ANF.Apat_var key ->
+         let param = Llvm.param the_function n in
+         log "  formal parameter %d: %s" n (Llvm.string_of_llvalue param);
+         add_virt_binding ~key param
+       | _ -> failwith "not implemented")
     args;
   let bb = Llvm.append_block LL.context "entry" the_function in
   Llvm.position_at_end bb LL.builder;
@@ -240,7 +263,6 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
   in
   let return_val = gen body in
   let (_ : Llvm.llvalue) = Llvm.build_ret return_val LL.builder in
-
   (* log "@[%a@]\n===\n" LL.pp_value the_function; *)
   (* Llvm.dump_value the_function; *)
 
@@ -338,6 +360,14 @@ let codegen : ANF.vb list -> _ =
     declare_primitive
       "rukaml_alloc_pair"
       (Llvm.function_type i64_type [| i64_type; i64_type |])
+  in
+  let _ =
+    declare_primitive
+      "rukaml_alloc_array"
+      (Llvm.function_type i64_type [| i64_type; i64_type |])
+  in
+  let _ =
+    declare_primitive "rukaml_array_length" (Llvm.function_type i64_type [| i64_type |])
   in
   let _ =
     declare_primitive

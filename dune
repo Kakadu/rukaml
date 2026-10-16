@@ -19,6 +19,10 @@
   as_rv64
   ld_rv64
   run_rv64
+  cc_rv32
+  as_rv32
+  ld_rv32
+  run_rv32
   cc_llvm
   as_llvm
   ld_llvm
@@ -34,3 +38,7 @@
   (alias_rec middle/all)
   (alias_rec back/all)
   (alias_rec driver/all)))
+
+(cram
+ (applies_to xxx)
+ (deps driver/driver.exe tests/minicompiler/compiler.ml))

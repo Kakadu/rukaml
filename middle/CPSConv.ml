@@ -4,7 +4,7 @@ open Frontend
 open Frontend.Parsetree
 open Frontend.Ident
 
-(* ds_pattern, ds_expr, ds_vb --- that's parsetree but every var has id*)
+(* ds_pattern, ds_expr, ds_vb --- that's parsetree but every var has id *)
 type ds_pattern =
   | DPVar of ident
   | DPTuple of ds_pattern * ds_pattern * ds_pattern list
@@ -17,9 +17,8 @@ type ds_expr =
   | DELam of ds_pattern * ds_expr
   | DEApp of ds_expr * ds_expr
   | DETuple of ds_expr * ds_expr * ds_expr list
+  | DEArray of ds_expr list
   | DELet of rec_flag * ds_pattern * ds_expr * ds_expr
-
-type ds_vb = rec_flag * ds_pattern * ds_expr
 
 let ( >>| ) = Base.Result.( >>| )
 let ( let+ ) = ( >>| )
@@ -50,7 +49,6 @@ type a =
 and env = a IMap.t
 
 type potent_not_allowed_expr = ds_expr option (* for rec bindings *)
-type main_id = int
 
 (* Abstract continuations *)
 type c =
@@ -60,10 +58,9 @@ type c =
   | ACont of a * c
   | ICont of ds_expr * ds_expr * env * c
   | TupleBldCont of ds_expr list * a list * env * c
+  (* | ArrayBldCont of ds_expr list * a list * env * c *)
   | LetRecCont of pat * ds_expr * env * c * potent_not_allowed_expr
-  | ToplevelLetRecCont of pat * ds_vb list * main_id * potent_not_allowed_expr
   | LetNonRecCont of ds_pattern * ds_expr * env * c
-  | ToplevelLetNonRecCont of ds_pattern * ds_vb list * main_id
   | BinopsFirstArgCont of var * ds_expr * env * c
   | BinopsSecondArgCont of var * a * c
 
@@ -77,18 +74,40 @@ let extend y a env = IMap.add y a env
 
 (* Utilities to maintain reference counts of user vars in CPS term. *)
 let new_count x counts = IMap.add x 0 counts
-let incr x counts = IMap.add x (1 + IMap.find x counts) counts
+let incr x counts = IMap.update x (Option.map @@ ( + ) 1) counts
 
 let start_glob_envs =
   let extend v =
     let ident = Frontend.Ident.of_string v in
     SMap.add ident.hum_name ident.id
   in
-  let printi = Frontend.Ident.of_string "print" in
-  let closure_count = Frontend.Ident.of_string "closure_count" in
-  ( IMap.(add printi.id (AVar printi) (add closure_count.id (AVar closure_count) empty))
+  let idents =
+    (* TODO: add more stdlib primitives here *)
+    [ "print"
+    ; "closure_count"
+    ; "array_len"
+    ; "array_get"
+    ; "array_set"
+    ; "string_nth"
+    ; "string_len"
+    ]
+  in
+  let idents = List.map (fun x -> Frontend.Ident.of_string x) idents in
+  let imap =
+    List.fold_right
+      (fun x acc -> IMap.add x.id (AVar x) acc)
+      (List.tl idents)
+      IMap.(add (List.hd idents).id (AVar (List.hd idents)) empty)
+  in
+  let smap =
+    List.fold_right (fun x acc -> SMap.add x.hum_name x.id acc) idents SMap.empty
+  in
+  ( imap
   , SMap.(
-      empty
+      (* empty *)
+      (* |> add printi.hum_name printi.id *)
+      (* |> add closure_count.hum_name closure_count.id) *)
+      smap
       |> extend "<"
       |> extend ">"
       |> extend "<="
@@ -98,8 +117,8 @@ let start_glob_envs =
       |> extend "-"
       |> extend "*"
       |> extend "/"
-      |> add printi.hum_name printi.id
-      |> add closure_count.hum_name closure_count.id) )
+      |> extend "&&"
+      |> extend "||") )
 ;;
 
 let upd id k counts no_refs ref_once =
@@ -131,6 +150,7 @@ let preconv_chore ?(with_printing = false) (rec_flag, ptrn, e) k glob_vars free_
       new_count name ident.id k
     | PTuple (p1, p2, pp) ->
       tuple_fold_map_k helper_p p1 p2 pp (fun dp1 dp2 dps -> k (DPTuple (dp1, dp2, dps)))
+    | _ -> failwith "not implemented"
   in
   let rec helper_e e vars k free_vars =
     match e with
@@ -173,6 +193,11 @@ let preconv_chore ?(with_printing = false) (rec_flag, ptrn, e) k glob_vars free_
       let k de1 de2 des = k (DETuple (de1, de2, des)) in
       let helper_e e k = helper_e e vars k in
       tuple_fold_map_k helper_e e1 e2 ee k free_vars
+    | EArray l ->
+      (* TODO(nikita): Test this*)
+      let k l = k (DEArray l) in
+      let helper_e e k = helper_e e vars k in
+      list_fold_map_k helper_e l k free_vars
     | ELet (NonRecursive, ptrn, e1, e2) ->
       let k1 de1 free_vars =
         let k2 dp vars =
@@ -187,6 +212,7 @@ let preconv_chore ?(with_printing = false) (rec_flag, ptrn, e) k glob_vars free_
         helper_e e1 vars k2 free_vars
       in
       helper_p ptrn k1 vars
+    | EMatch _ | EConstruct _ -> failwith "not implemented"
   in
   match rec_flag with
   | Recursive ->
@@ -227,57 +253,57 @@ let%expect_test "counts simple" =
   test_count {| let m x y z = x y y|};
   [%expect
     {|
-  var x got id 25
-  var y got id 26
-  var z got id 27
-  var m got id 28
-  id: 25; counts 1
-  id: 26; counts 2
-  id: 27; counts 0
-  id: 28; counts 0
-  ids that ref_once:
-  25
-  ids that no_refs:
-  27
-  28
-|}]
+    var x got id 74
+    var y got id 75
+    var z got id 76
+    var m got id 77
+    id: 74; counts 1
+    id: 75; counts 2
+    id: 76; counts 0
+    id: 77; counts 0
+    ids that ref_once:
+    74
+    ids that no_refs:
+    76
+    77
+    |}]
 ;;
 
 let%expect_test "counts branching, shadowing" =
   test_count {| let m x y = if x then fun x -> x 1 else fun x -> (y , y x)|};
   [%expect
     {|
-    var x got id 29
-    var y got id 30
-    var x got id 31
-    var x got id 32
-    var m got id 33
-    id: 29; counts 1
-    id: 30; counts 2
-    id: 31; counts 1
-    id: 32; counts 1
-    id: 33; counts 0
+    var x got id 78
+    var y got id 79
+    var x got id 80
+    var x got id 81
+    var m got id 82
+    id: 78; counts 1
+    id: 79; counts 2
+    id: 80; counts 1
+    id: 81; counts 1
+    id: 82; counts 0
     ids that ref_once:
-    29
-    31
-    32
+    78
+    80
+    81
     ids that no_refs:
-    33
-|}]
+    82
+    |}]
 ;;
 
 let%expect_test "counts rec, ptuple" =
   test_count {| let rec (x,y) = x x y|};
   [%expect
     {|
-    var x got id 34
-    var y got id 35
-    id: 34; counts 2
-    id: 35; counts 1
+    var x got id 83
+    var y got id 84
+    id: 83; counts 2
+    id: 84; counts 1
     ids that ref_once:
-    35
+    84
     ids that no_refs:
-|}]
+    |}]
 ;;
 
 let atuple tt =
@@ -316,25 +342,19 @@ let maybe_not_allowed_expr e =
   | _ -> Some e
 ;;
 
+let decide_if_not_alowed counts pat = function
+  | Some e when has_nonzero_counts_vars counts pat -> Error (`Let_rec_not_allowed e)
+  | _ -> Ok ()
+;;
+
 (* The top-level function *)
-let rec cps_glob ds_ref_once ds_no_refs glob_env =
+let of_vb ds_ref_once ds_no_refs glob_env =
   let open Base.Result in
-  let cps_glob = cps_glob ds_ref_once ds_no_refs in
   let one_ref i = ISet.mem i.id ds_ref_once in
-  let helper_toplevelletcont main_id counts = function
-    | (NonRecursive, y', e) :: tl ->
-      ToplevelLetNonRecCont (y', tl, main_id), e, glob_env, counts
-    | [] -> AHALT, DEVar { id = main_id; hum_name = "main" }, glob_env, counts
-    | (Recursive, y', e) :: tl ->
-      let pat, glob_env', counts2 = extend_env glob_env counts y' in
-      ( ToplevelLetRecCont (pat, tl, main_id, maybe_not_allowed_expr e)
-      , e
-      , glob_env'
-      , counts2 )
-  in
   let rec cps env exp c counts =
     match exp with
     | DEVar y -> ret c (IMap.find y.id env) counts
+    | DEArray _ -> failwith "unimplemented"
     | DEConst z -> ret c (AConst z) counts
     | DEUnit -> ret c AUnit counts
     | DELam (ds_pat, e) -> ret c (AClo (ds_pat, e, env)) counts
@@ -367,14 +387,6 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
     | LetRecCont (pat, wh, env, c', dang_expr) ->
       let constr b w = Let (Recursive, pat, b, w) in
       bnd_rec cps a wh env c' constr counts dang_expr pat
-    | ToplevelLetNonRecCont (y, vbs, main_id) ->
-      let constr x b w = Let (NonRecursive, x, b, w) in
-      let c'', e, glob_env', counts2 = helper_toplevelletcont main_id counts vbs in
-      bnd cps_glob y a e glob_env' c'' constr counts2
-    | ToplevelLetRecCont (pat, vbs, main_id, dang_expr) ->
-      let c'', e, glob_env', counts2 = helper_toplevelletcont main_id counts vbs in
-      let constr b w = Let (Recursive, pat, b, w) in
-      bnd_rec cps_glob a e glob_env' c'' constr counts2 dang_expr pat
     | BinopsFirstArgCont (op, e, env, c') ->
       cps env e (BinopsSecondArgCont (op, a, c')) counts
     | BinopsSecondArgCont (op, a1, c') -> binop op a1 a c' counts
@@ -383,9 +395,18 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
     | AVar v when String.equal v.hum_name "print" -> primop v a [] c counts
     | AVar v when String.equal v.hum_name "closure_count" -> primop v a [] c counts
     | AVar _ | AConst _ | AUnit | ASafeBinop _ | ATuple _ ->
-      let* func, arg, counts2 = blessa2 f a counts in
-      let+ cont, counts3 = blessc c counts2 in
-      Call (func, arg, cont), counts3
+      (match a with
+       | AVar v when String.equal v.hum_name "print" ->
+         let x = gensym ~prefix:"x" () |> of_string in
+         let k = gensym ~prefix:"k" () |> of_string in
+         let* func, counts2 = blessa f counts in
+         let* cont, counts3 = blessc c counts2 in
+         let+ b = primop v (AVar x) [] (KVar k) counts in
+         Call (func, Lam (CPVar x, k, fst b), cont), counts3
+       | _ ->
+         let* func, arg, counts2 = blessa2 f a counts in
+         let+ cont, counts3 = blessc c counts2 in
+         Call (func, arg, cont), counts3)
     | AClo (y, body, env) ->
       bnd cps y a body env c (fun x arg b -> Ret (Cont (x, b), arg)) counts
   and cif a e1 e2 c env counts =
@@ -424,11 +445,9 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
            constr pat b w, counts4)
   and bnd_rec cps_func a wh env c constr counts dang_expr pat =
     let* b, counts2 = blessa a counts in
-    match dang_expr with
-    | Some e when has_nonzero_counts_vars counts2 pat -> Error (`Let_rec_not_allowed e)
-    | _ ->
-      let+ w, counts3 = cps_func env wh c counts2 in
-      constr b w, counts3
+    let* () = decide_if_not_alowed counts2 pat dang_expr in
+    let+ w, counts3 = cps_func env wh c counts2 in
+    constr b w, counts3
   and binop op a1 a2 c counts =
     match a1, a2, op.hum_name with
     | _, (AConst (PConst_int 0) | AVar _), "/" -> primop op a1 [ a2 ] c counts
@@ -441,11 +460,6 @@ let rec cps_glob ds_ref_once ds_no_refs glob_env =
       let cp_pat, env', counts4 = extend_env env counts3 dp_pat in
       let+ w, counts5 = cps env' wh c' counts4 in
       Primop (cp_pat, f, arg, args, w), counts5
-    | ToplevelLetNonRecCont ((DPVar _ as dp_pat), vbs, main_id) ->
-      let c', e, glob_env', counts4 = helper_toplevelletcont main_id counts3 vbs in
-      let cp_pat, glob_env'', counts5 = extend_env glob_env' counts4 dp_pat in
-      let+ wh, counts6 = cps_glob glob_env'' e c' counts5 in
-      Primop (cp_pat, f, arg, args, wh), counts6
     | _ ->
       let x = gensym ~prefix:"x" () |> of_string in
       let counts4 = new_count x.id counts3 in
@@ -507,67 +521,6 @@ let free_vars_check k free_vars =
   if has_not_free_vars then k () else Error (`Free_vars_occured free_vars)
 ;;
 
-let cps_conv_vb vb =
-  let open IMap in
-  let k ds_vb _ free_vars _ no_refs ref_once =
-    let k1 () = Ok (ds_vb, no_refs, ref_once) in
-    free_vars_check k1 free_vars
-  in
-  let* (rec_flag, ds_pat, ds_expr), ds_no_refs, ds_ref_once =
-    preconv_chore vb k (snd start_glob_envs) SMap.empty IMap.empty ISet.empty ISet.empty
-  in
-  let pat, glob_env, counts = extend_env (fst start_glob_envs) empty ds_pat in
-  let+ p, _ =
-    match rec_flag with
-    | Recursive -> cps_glob ds_ref_once ds_no_refs glob_env ds_expr AHALT counts
-    | NonRecursive ->
-      cps_glob ds_ref_once ds_no_refs (fst start_glob_envs) ds_expr AHALT empty
-  in
-  rec_flag, pat, p
-;;
-
-let cps_conv_program vbs =
-  let open IMap in
-  let open Ident in
-  let ( let+ ) = Base.Result.( >>| ) in
-  let k ds_vbs glob_vars free_vars counts no_refs ref_once =
-    let main_id = SMap.find "main" glob_vars in
-    let k2 _ no_refs ref_once = Ok (ds_vbs, no_refs, ref_once, main_id) in
-    let k1 () = upd main_id k2 counts no_refs ref_once in
-    free_vars_check k1 free_vars
-  in
-  let* ds_vbs, ds_no_refs, ds_ref_once, main_id =
-    list_fold_map_k
-      (preconv_chore ~with_printing:false)
-      vbs
-      k
-      (snd start_glob_envs)
-      SMap.empty
-      IMap.empty
-      ISet.empty
-      ISet.empty
-  in
-  let cps_glob = cps_glob ds_ref_once ds_no_refs in
-  let+ p, _ =
-    match ds_vbs with
-    | [] -> Ok (Ret (HALT, TUnit), empty)
-    | (NonRecursive, ds_pat, ds_expr) :: tl ->
-      cps_glob
-        (fst start_glob_envs)
-        ds_expr
-        (ToplevelLetNonRecCont (ds_pat, tl, main_id))
-        empty
-    | (Recursive, ds_pat, ds_expr) :: tl ->
-      let pat, glob_env, counts = extend_env (fst start_glob_envs) empty ds_pat in
-      cps_glob
-        glob_env
-        ds_expr
-        (ToplevelLetRecCont (pat, tl, main_id, maybe_not_allowed_expr ds_expr))
-        counts
-  in
-  NonRecursive, CPVar (of_string "main"), p
-;;
-
 let ds_expr_to_expr ds_expr =
   let rec helper_p dp k =
     match dp with
@@ -580,6 +533,9 @@ let ds_expr_to_expr ds_expr =
     match de with
     | DEUnit -> k EUnit
     | DEConst c -> k (EConst c)
+    | DEArray l ->
+      (* TODO(nikita): Test this*)
+      list_fold_map_k helper l (fun l -> k (EArray l))
     | DEVar { hum_name = n; _ } -> k (EVar n)
     | DEIf (de1, de2, de3) ->
       helper de1 (fun e1 ->
@@ -593,6 +549,43 @@ let ds_expr_to_expr ds_expr =
         helper de1 (fun e1 -> helper de2 (fun e2 -> k (ELet (rec_flag, ptrn, e1, e2)))))
   in
   helper ds_expr Fun.id
+;;
+
+let cps_conv vbs =
+  let open IMap in
+  let k ds_vb _ free_vars _ no_refs ref_once =
+    let k1 () = Ok (ds_vb, no_refs, ref_once) in
+    free_vars_check k1 free_vars
+  in
+  let* ds_vbs, ds_no_refs, ds_ref_once =
+    list_fold_map_k
+      (preconv_chore ~with_printing:false)
+      vbs
+      k
+      (snd start_glob_envs)
+      SMap.empty
+      IMap.empty
+      ISet.empty
+      ISet.empty
+  in
+  Result.map (fun (_, cps_vbs) -> List.rev cps_vbs)
+  @@ Base.List.fold_result
+       ds_vbs
+       ~init:(fst start_glob_envs, [])
+       ~f:(fun (glob_env, cps_vbs_acc) (rec_flag, ds_pat, ds_expr) ->
+         let pat, glob_env2, counts2 = extend_env glob_env empty ds_pat in
+         let+ p, _ =
+           match rec_flag with
+           | Recursive ->
+             let* ((_, counts3) as res) =
+               of_vb ds_ref_once ds_no_refs glob_env2 ds_expr AHALT counts2
+             in
+             Result.map (Fun.const res)
+             @@ decide_if_not_alowed counts3 pat
+             @@ maybe_not_allowed_expr ds_expr
+           | NonRecursive -> of_vb ds_ref_once ds_no_refs glob_env ds_expr AHALT empty
+         in
+         glob_env2, (rec_flag, pat, p) :: cps_vbs_acc)
 ;;
 
 let pp_error ppf : error -> _ = function
@@ -611,235 +604,22 @@ let pp_error ppf : error -> _ = function
     Format.fprintf ppf "%s" msg
 ;;
 
-let test_cps_program text =
+let test_cps text =
   let open Frontend in
-  let stru = Result.get_ok @@ Parsing.parse_structure text in
-  match cps_conv_program stru with
+  let stru = Result.get_ok @@ Parsing.parse_value_bindings text in
+  match cps_conv stru with
   | Ok cps_prog ->
-    Format.printf "%a" pp_vb cps_prog;
+    Format.printf "%a" pp_stru cps_prog;
     ANF.reset_gensym ()
   | Error e -> Format.printf "%a\n%!" pp_error e
 ;;
 
-let test_cps_vb text =
+let test_cps text =
   let open Frontend in
-  match cps_conv_vb @@ Parsing.parse_vb_exn text with
-  | Ok cps_vb ->
-    Format.printf "%a" pp_vb cps_vb;
+  let stru = Result.get_ok @@ Parsing.parse_value_bindings text in
+  match cps_conv stru with
+  | Ok cps_prog ->
+    Format.printf "%a" pp_stru cps_prog;
     ANF.reset_gensym ()
   | Error e -> Format.printf "%a\n%!" pp_error e
-;;
-
-let%expect_test "cps simple func" =
-  test_cps_vb {| let double x = 2 * x|};
-  [%expect
-    {|
-    let double x k1 =
-      k1 (2 * x)
-    |}]
-;;
-
-let%expect_test "cps simple prog" =
-  test_cps_program
-    {| let double x = 2 * x
-  let main = double (double 3)|};
-  [%expect
-    {|
-    let main =
-      let double x k1 = k1 (2 * x) in
-      double 3 (fun t2 -> double t2 (fun t3 -> (fun x -> x) t3))
-    |}]
-;;
-
-let%expect_test "cps prog inlining" =
-  test_cps_program
-    {|let y = 3
-  let double x = 2 * x
-  let main = double (y + y)|};
-  [%expect
-    {|
-    let main =
-      2 * (3 + 3)
-    |}]
-;;
-
-let%expect_test "cps rec func (inlining banned)" =
-  test_cps_vb {| let y = let rec t x = t 1 in t 2|};
-  [%expect
-    {|
-    let y =
-      let rec t x k1 = t 1 k1 in
-      t 2 (fun x -> x)
-    |}]
-;;
-
-let%expect_test "cps eta" =
-  test_cps_vb
-    {|
-   let main = let g x = x in (fun x -> g x) g|};
-  [%expect
-    {|
-    let main =
-      let g x k1 = k1 x in
-      g g (fun x -> x)
-    |}]
-;;
-
-let%expect_test "cps eta let" =
-  test_cps_vb
-    {|
-   let main = let g x = x in let f y = g y in f (g 0)|};
-  [%expect
-    {|
-    let main =
-      let g x k1 = k1 x in
-      g 0 (fun t2 -> g t2 (fun x -> x))
-    |}]
-;;
-
-let%expect_test "cps fac" =
-  test_cps_vb {| let rec fac n = if n = 1 then 1 else fac (n-1) * n|};
-  [%expect
-    {|
-    let rec fac n k1 =
-      if n = 1 then k1 1 else fac (n - 1) (fun t2 -> k1 (t2 * n))
-    |}]
-;;
-
-let%expect_test "cps fib" =
-  test_cps_vb
-    {|
-  let rec  fib n =
-if n < 2 then n else fib (n - 1) + fib (n - 2)
-  |};
-  [%expect
-    {|
-    let rec fib n k1 =
-      if n < 2 then k1 n
-      else fib (n - 1) (fun t2 -> fib (n - 2) (fun t3 -> k1 (t2 + t3)))
-    |}]
-;;
-
-let%expect_test "cps complex branching" =
-  test_cps_vb {| let x f = 1 + if (f 2) then 3 else 5|};
-  [%expect
-    {|
-    let x f k1 =
-      f 2 (fun t2 -> let jv3 t4 = k1 (1 + t4) in if t2 then jv3 3 else jv3 5)
-    |}]
-;;
-
-let%expect_test "cps print" =
-  test_cps_vb {|let main  = (fun z -> 1) (print 0) |};
-  [%expect
-    {|
-    let main =
-      let x1 = print 0 in (fun z -> (fun x -> x) 1) x1
-    |}]
-;;
-
-let%expect_test "cps print alias " =
-  test_cps_vb {| let f = let p = print in let z = p 0 in z + 1|};
-  [%expect
-    {|
-    let f =
-      let z = print 0 in (fun x -> x) (z + 1)
-    |}]
-;;
-
-let%expect_test "cps one ref arg-binop" =
-  test_cps_vb {| let f = let g x = x + 1 in g (2 * 2)   |};
-  [%expect
-    {|
-    let f =
-      (2 * 2) + 1
-    |}]
-;;
-
-let%expect_test "cps one ref binop" =
-  test_cps_vb {| let f g = let x = 2 * 2 in g x |};
-  [%expect
-    {|
-    let f g k1 =
-      g (2 * 2) k1
-    |}]
-;;
-
-let%expect_test "cps mult refs arg-const" =
-  test_cps_vb {| let f g = let x = 2 in g x x|};
-  [%expect
-    {|
-    let f g k1 =
-      g 2 (fun t2 -> t2 2 k1)
-    |}]
-;;
-
-let%expect_test "cps  mult refs arg-binop (inlining banned)" =
-  test_cps_vb {| let f g = let x = 2 * 2 in g x x|};
-  [%expect
-    {|
-    let f g k1 =
-      let x = 2 * 2 in g x (fun t2 -> t2 x k1)
-    |}]
-;;
-
-let%expect_test "cps complex tuple-arg" =
-  test_cps_vb {| let f g = g (g 3, 1)|};
-  [%expect
-    {|
-    let f g k1 =
-      g 3 (fun t2 -> g (t2, 1) k1)
-    |}]
-;;
-
-let%expect_test "cps ptuple" =
-  test_cps_vb {| let f (x,y) = x + y|};
-  [%expect
-    {|
-    let f (x, y) k1 =
-      k1 (x + y)
-    |}]
-;;
-
-let%expect_test "cps free vars" =
-  test_cps_vb {| let f x = x + y + z|};
-  [%expect
-    {|
-  Variables are not in scope:
-  z
-  y
-|}]
-;;
-
-let%expect_test "cps func in func" =
-  test_cps_vb {| let z = let rec g y = y in  let f = fun x -> g in f 2 3|};
-  [%expect
-    {|
-    let z =
-      let rec g y k1 = k1 y in
-      (fun x -> g 3 (fun x -> x)) 2
-    |}]
-;;
-
-let%expect_test "cps not allowed let rec" =
-  test_cps_vb {| let main  = let rec  x =  x 0 in 0|};
-  [%expect
-    {|  (x 0): This kind of expression is not allowed as right-hand side of `let rec'
-|}]
-;;
-
-let%expect_test "cps not allowed let rec lambda complex" =
-  test_cps_vb {| let main  = let rec x = (fun z -> (fun y -> x )) 0 in 0|};
-  [%expect
-    {|  ((fun z -> (fun y -> x)) 0): This kind of expression is not allowed as right-hand side of `let rec'
-|}]
-;;
-
-let%expect_test "cps fake rec" =
-  test_cps_vb {| let main  = let rec x = (fun y -> 8) 12 in 0|};
-  [%expect
-    {|
-    let main =
-      (fun y -> let rec x = 8 in (fun x -> x) 0) 12
-    |}]
 ;;

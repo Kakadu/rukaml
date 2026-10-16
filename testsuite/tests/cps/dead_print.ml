@@ -1,13 +1,13 @@
 (*
 test
-  (targets (rv64 promote))
+  (targets rv32 (rv64 promote))
   (flags () (--cps) (--cps --caa))
   (run
     (stdout
       "rukaml_print_int 1"
       "rukaml_print_int 1"))
 *)
-
+(* 123 *)
 let f x =
   let y = print x in
   fun x -> x + 0

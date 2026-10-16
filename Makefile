@@ -12,6 +12,8 @@ watch:
 promote:
 	dune runtest --auto-promote
 
+.PHONY: celan
+celan: clean
 clean:
 	dune clean
 
@@ -33,7 +35,7 @@ endif
 
 deps:
 	opam install --depext-only .
-	opam install --deps-only --with-doc .
+	opam install . --deps-only --with-doc
 
 TEST_COV_D ?= /tmp/rukaml
 coverage:

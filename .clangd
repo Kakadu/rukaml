@@ -1,0 +1,4 @@
+# .clangd
+CompileFlags:
+  Add: [-Wall, -Wextra]
+  Remove: [-Werror]

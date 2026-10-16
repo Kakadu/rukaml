@@ -6,5 +6,5 @@ test
   (run
     (stdout
       "rukaml_print_int 2"
-      "Total closure allocations: 32"))
+      "Total closure allocations: 31"))
 *)

@@ -1,7 +1,7 @@
 profile=janestreet
-version=0.27.0
+version=0.29.0
 
 sequence-style=terminator
 field-space=loose
-module-item-spacing=preserve
-sequence-blank-line=preserve-one
+# module-item-spacing=preserve
+# sequence-blank-line=preserve-one

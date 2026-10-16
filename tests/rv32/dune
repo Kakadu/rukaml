@@ -1,0 +1,67 @@
+(rule
+ (target rukaml_stdlib.o)
+ (enabled_if
+  (and
+   (not
+    (= none %{read:../../cc_rv32}))
+   (not
+    (= none %{read:../../run_rv32}))))
+ (deps %{project_root}/back/rv64/rukaml_stdlib.c)
+ (mode
+  (promote (until-clean)))
+ (action
+  (system
+   "%{read:../../cc_rv32}  -march=rv32imac   -mabi=ilp32   -DRUKAML_DEBUG=0   -ggdb   -c   %{deps}   -Wno-pedantic   -ffreestanding   -nostdlib   -o   %{target}")))
+
+(rule
+ (target demo.s)
+ (deps demo.ml)
+ (mode
+  (promote (until-clean)))
+ (enabled_if
+  (and
+   (not
+    (= none %{read:../../cc_rv32}))
+   (not
+    (= none %{read:../../run_rv32}))))
+ (action
+  (run %{project_root}/driver/driver.exe %{deps} --target rv32 -o %{target})))
+
+(rule
+ (target demo.anf.ml)
+ (deps demo.ml)
+ (mode
+  (promote (until-clean)))
+ (action
+  (run %{project_root}/driver/driver.exe %{deps} --target anf -o %{target})))
+
+(rule
+ (targets demo.exe)
+ (deps
+  %{project_root}/driver/driver.exe
+  (:src demo.s)
+  (:stdlib ./rukaml_stdlib.o))
+ (mode
+  (promote (until-clean)))
+ (enabled_if
+  (and
+   (not
+    (= none %{read:../../cc_rv32}))
+   (not
+    (= none %{read:../../run_rv32}))))
+ (action
+  (progn
+   (system "%{read-lines:../../ld_rv32} -g -c %{src} -o demo.o")
+   (system "%{read-lines:../../ld_rv32} -g %{stdlib} demo.o -o %{targets}")
+   ;
+   )))
+
+(cram
+ (applies_to demo)
+ (enabled_if
+  (and
+   (not
+    (= none %{read:../../cc_rv32}))
+   (not
+    (= none %{read:../../run_rv32}))))
+ (deps %{project_root}/run_rv32 ./demo.exe demo.anf.ml demo.ml demo.s))
