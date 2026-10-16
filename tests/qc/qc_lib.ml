@@ -1,6 +1,14 @@
 let patname =
   let open QCheck.Gen in
   pure (Printf.sprintf "%c%c%c")
+  <*> char_range 'a' 'z'
+  <*> char_range 'a' 'z'
+  <*> char_range 'a' 'z'
+;;
+
+let uname =
+  let open QCheck.Gen in
+  pure (Printf.sprintf "%c%c%c")
   <*> char_range 'A' 'Z'
   <*> char_range 'a' 'z'
   <*> char_range 'a' 'z'
@@ -76,7 +84,7 @@ type expr = Frontend.Parsetree.expr =
   | EApp of expr * expr
   | ETuple of expr * expr * (expr list[@gen short_list (gen_expr_sized (n / 3))])
   | ELet of rec_flag * pattern * expr * expr
-  | EConstruct of (string[@gen patname]) * expr list
+  | EConstruct of (string[@gen uname]) * expr list
   | EMatch of expr * (pattern * expr) list1
     (* [@with list := (list [@gen short_list (gen_expr_sized (n / 3))])] *)
 [@@deriving qcheck]
@@ -84,14 +92,20 @@ type expr = Frontend.Parsetree.expr =
 let rec shrink_expr =
   let open QCheck.Iter in
   function
-  | ELam (_, v) ->
+  | ELam (b, v) ->
     Printf.printf "%s %d\n" __FILE__ __LINE__;
-    shrink_expr v
+    let* big = map (fun v -> ELam (b,v)) (shrink_expr v) in
+    of_list [ v ; big  ]
   | EApp (l, r) -> of_list [ l; r ]
   | EIf (a, b, c) -> of_list [ a; b; c ]
   | EConst (PConst_string s) when String.length s > 5 ->
     return (EConst (PConst_string (StringLabels.sub s ~pos:0 ~len:5)))
   | EConstruct (_, xs) -> of_list xs
+  | EMatch (scru, (h,tl)) ->
+    of_list (match tl with u::_ -> [EMatch (scru, (h,[u]))] | [] -> [])
+    <+>
+      return (EMatch (scru, (h,[]))) <+> of_list (scru :: List.map snd (h::tl))
+
   | _ ->
     print_endline "\nCalled\n";
     of_list []
@@ -129,11 +143,14 @@ let run_expr () =
           with
           | Result.Ok e when e = expected -> true
           | Ok e ->
-            Format.printf "%a\n%!" Frontend.Parsetree.pp_expr e;
+            (* Format.printf "%s %d. \n%!" __FILE__ __LINE__; *)
+            Format.printf "Parsed AST:\n@[%a@]\n%!" Frontend.Parsetree.pp_expr e;
+            Format.printf "Expected AST:\n@[%a@]\n%!" Frontend.Parsetree.pp_expr expected;
             false
           | Error _ ->
+            (* Format.printf "%s %d\n%!" __FILE__ __LINE__; *)
             Printf.eprintf "Can't parse\n";
-            Format.eprintf "Initial AST: @[%a@]\n" Frontend.Parsetree.pp_expr expected;
+            Format.eprintf "Initial AST: @[%a@]\n\n\n" Frontend.Parsetree.pp_expr expected;
             false))
     ]
 ;;
