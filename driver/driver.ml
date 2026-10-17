@@ -192,6 +192,9 @@ module Target = struct
     ; ppx : bool
     ; opt_passes : string list (** JIT optimization passes from [--opt], in flag order. *)
     ; profile_file : string (** [--profile-file] for the JIT passes. *)
+    ; opt_dump : string option
+      (** [--opt-dump]: directory where each optimization pass dumps its
+            intermediate IR. *)
     }
 
   open Compiler
@@ -237,7 +240,23 @@ module Target = struct
           if not (List.is_empty missing)
           then
             error "jit error: missing runtime symbols: [%s]" (String.concat ", " missing);
-          JITOpt.run pipeline ir
+          match p.opt_dump with
+          | None -> JITOpt.run pipeline ir
+          | Some dir ->
+            (try if not (Sys.file_exists dir) then Sys.mkdir dir 0o755 with
+             | Sys_error msg ->
+               error "jit error: cannot create dump directory %s: %s" dir msg);
+            (* the input and every pass output, in flag order; the pass
+                payloads are pre-`; opts=` so they stand alone *)
+            IR.dump_to_file (Filename.concat dir "00-input.ll") ir;
+            let n = ref 0 in
+            let dump name t =
+              incr n;
+              IR.dump_to_file
+                (Filename.concat dir (Printf.sprintf "%02d-%s.ll" !n name))
+                t
+            in
+            JITOpt.run ~dump pipeline ir
         with
         | Failure msg -> error "jit error: %s" msg
       in
@@ -301,6 +320,7 @@ let () =
   let ppx = ref true in
   let opt_passes = ref [] in
   let profile_file = ref "rukaml.prof" in
+  let opt_dump = ref None in
   let open Stdlib.Arg in
   let args =
     [ "-o", String (fun s -> out_path := Some s), " output file"
@@ -316,6 +336,9 @@ let () =
     ; ( "--profile-file"
       , Set_string profile_file
       , " JIT profile file (written by profile, read by specialize)" )
+    ; ( "--opt-dump"
+      , String (fun s -> opt_dump := Some s)
+      , " JIT: dump the IR (DIR/00-input.ll) and after each pass (DIR/NN-<pass>.ll)" )
     ]
   in
   parse args (fun s -> inp_path := Some s) "rukaml";
@@ -334,6 +357,7 @@ let () =
       ; ppx = !ppx
       ; opt_passes = List.rev !opt_passes
       ; profile_file = !profile_file
+      ; opt_dump = !opt_dump
       }
   in
   match Base.Map.find (Target.targets Typedtree.empty_table) !target with

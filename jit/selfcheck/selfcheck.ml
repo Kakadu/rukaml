@@ -21,6 +21,8 @@
   10. a hot chain whose result feeds another site's argument
       ([f 100 (f 10 x)]) specializes without leaving a dangling
       instruction reference.
+  11. [JITOpt.run ~dump] calls the callback once per pass, in flag order,
+      with that pass's output (the raw payload, before the opts header).
 
    The base payload is a hand-written [IR.TextLL] with no runtime
    references, so the lifecycle tests do not depend on the LLVM
@@ -199,5 +201,29 @@ let () =
      | 115L -> ()
      | v -> fail "chained specialized main = %Ld, expected 115L" v);
     Engine.close e);
+  (* 11. intermediate dumps *)
+  with_profile "4\tf\n" (fun dump_path ->
+    let dump_config : JITOpt.config = { profile_file = dump_path } in
+    let seen = ref [] in
+    let dump name t = seen := (name, IR.payload t) :: !seen in
+    let out =
+      JITOpt.run
+        ~dump
+        (JITOpt.of_flags dump_config [ "profile"; "specialize" ])
+        (IR.make IR.TextLL chain_payload)
+    in
+    let seen = List.rev !seen in
+    let names = List.map fst seen in
+    if names <> [ "profile"; "specialize" ]
+    then
+      fail
+        "dump callback got [%s], expected [profile; specialize]"
+        (String.concat "; " names);
+    match seen with
+    | [ (_, first); (_, second) ] ->
+      if first = second then fail "two-pass dumps have identical payloads";
+      if drop_first_line (IR.payload out) <> second
+      then fail "last dump does not match the pipeline result"
+    | _ -> fail "dump callback called %d times, expected 2" (List.length seen));
   print_endline "selfcheck OK"
 ;;

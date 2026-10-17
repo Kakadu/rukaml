@@ -6,6 +6,7 @@ type config =
 
 let ret_type_of ctx fn =
   let scan bb =
+    (* TODO: rewrite with Llvm.instr_begin and Llvm.instr_succ *)
     Llvm.fold_left_instrs
       (fun acc ins ->
          match acc with
@@ -34,6 +35,7 @@ let ret_type_of ctx fn =
 ;;
 
 let first_instr bb =
+  (* TODO: rewrite with Llvm.instr_begin *)
   Llvm.fold_left_instrs
     (fun acc ins ->
        match acc with
@@ -47,6 +49,7 @@ let parse_payload (ir : IR.t) =
   match IR.format ir with
   | IR.Bitcode -> failwith "opt: Bitcode payload is not supported yet"
   | IR.TextLL ->
+    (* should I create ctx in here? *)
     let ctx = Llvm.create_context () in
     let m =
       Llvm_irreader.parse_ir
@@ -142,7 +145,6 @@ end
 module Specialize = struct
   let name = "specialize"
   let requires = []
-
   let hot_threshold = 4L
 
   let read_profile path : (string * int64) list =
@@ -498,18 +500,29 @@ let of_flags (cfg : config) (names : string list) : pipeline =
 ;;
 
 let names (p : pipeline) = List.map (fun (module M : Pass) -> M.name) p
-
 let requires (p : pipeline) = List.concat_map (fun (module M : Pass) -> M.requires) p
 
 let missing_runtime ~available required =
   List.filter (fun sym -> not (List.mem sym available)) required
 ;;
 
-let run (p : pipeline) (ir : IR.t) : IR.t =
+(** [run ?dump pipeline ir] folds the passes left to right. After every
+    pass the optional [dump] callback is invoked with the pass name and its
+    output — the raw [IR.t], before the [; opts=...] header is prepended —
+    so callers can observe every intermediate step. *)
+let run ?(dump = fun (_ : string) (_ : IR.t) -> ()) (p : pipeline) (ir : IR.t) : IR.t =
   match p with
   | [] -> ir
   | passes ->
-    let ir' = List.fold_left (fun acc (module M : Pass) -> M.run acc) ir passes in
+    let ir' =
+      List.fold_left
+        (fun acc (module M : Pass) ->
+           let acc = M.run acc in
+           dump M.name acc;
+           acc)
+        ir
+        passes
+    in
     let opts = String.concat "," (names passes) in
     { ir' with
       IR.producer = ir'.IR.producer ^ "; opts=" ^ opts
