@@ -29,19 +29,28 @@ let disable_locally opt (f : unit -> 'a) : 'a =
   else f ()
 ;;
 
+(* Now, only AMD64 backend uses this module.
+   If we rewrite calling convention there like RV64,
+   then we can remove this module
+*)
 module TailCall = struct
-  let get_tailcall expr =
+  let get_tailcalls expr =
     let rec parse_expr = function
       | ELet (_, _, _, wher) -> parse_expr wher
       | EComplex c_expr -> parse_c_expr c_expr
     and parse_c_expr = function
-      | CApp (AVar f, _, _) -> Some f
+      | CApp (AVar f, _, _) -> Some [ f ]
+      | CIte (_, bthn, bels) ->
+        Some
+          (List.concat_map
+             (Option.value ~default:[])
+             [ parse_expr bthn; parse_expr bels ])
       | _ -> None
     in
     parse_expr expr
   ;;
 
-  let tailcalls : (Ident.t, Ident.t) Hashtbl.t = Hashtbl.create 1024
+  let tailcalls : (Ident.t, Ident.t list) Hashtbl.t = Hashtbl.create 1024
   let funcs_stack_space : (Ident.t, int) Hashtbl.t = Hashtbl.create 1024
 
   let build_tailcalls_table vbs =
@@ -56,18 +65,29 @@ module TailCall = struct
       (fun (`Function (name, pats, expr)) ->
          assert (not (Hashtbl.mem tailcalls name));
          assert (not (Hashtbl.mem funcs_stack_space name));
-         let maybe_tc = get_tailcall expr in
+         let maybe_tc = get_tailcalls expr in
          Option.iter (fun callee -> Hashtbl.add tailcalls name callee) maybe_tc;
          Hashtbl.add funcs_stack_space name (List.length pats))
       funcs
   ;;
 
-  let rec calculate_stack_space func =
-    let maybe_curr_space = Hashtbl.find_opt funcs_stack_space func in
-    let curr_space = Option.value maybe_curr_space ~default:0 in
-    if Hashtbl.mem tailcalls func
-    then max curr_space (calculate_stack_space @@ Hashtbl.find tailcalls func)
-    else curr_space
+  let calculate_stack_space func =
+    let rec calc visited func =
+      let curr_space =
+        Option.value (Hashtbl.find_opt funcs_stack_space func) ~default:0
+      in
+      if List.mem func visited
+      then curr_space
+      else (
+        match Hashtbl.find_opt tailcalls func with
+        | None -> curr_space
+        | Some callees ->
+          List.fold_left
+            (fun s callee -> max s (calc (func :: visited) callee))
+            curr_space
+            callees)
+    in
+    calc [] func
   ;;
 
   let init_ss_table vbs =

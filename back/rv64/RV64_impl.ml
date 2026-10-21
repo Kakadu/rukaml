@@ -138,13 +138,11 @@ let arg_place_by_index ?(is_saveable = true) index =
   assert (index >= 0);
   (* Counting from 0 *)
   let letter = if is_saveable then "s" else "a" in
-
   if index < args_in_registers
   then RU (sprintf "%s%d" letter index)
   else (
     let place = wordsize () * (index - args_in_registers) in
-    ROffset (RU (sprintf "%s7" letter), place) (* it may be ("a7" or "s7") + offset *)
-  )
+    ROffset (RU (sprintf "%s7" letter), place) (* it may be ("a7" or "s7") + offset *))
 ;;
 
 let save_ident ?(comm = "") a b =
@@ -1077,7 +1075,7 @@ let generate_body is_toplevel body =
             compute_args_for_call ~f ~put_from:2 (arg1 :: args);
             let () =
               load_ident a0 (Addr_of_local.pp_to_mach func_clo_id);
-              emit li a1 formal_arity;
+              emit li a1 formal_arity
               (* assert (formal_arity < 5) *)
               (* See calling convention *)
               (* List.iteri
@@ -1729,7 +1727,6 @@ let codegen ?(wrap_main_into_start = true) anf file =
       (* | { kind = Alias _ } -> failwith "TODO alias" *)
       (* | _ -> failwith "TODO" *)
     in
-    Opts.TailCall.init_ss_table vbs;
     List.iter on_vb vbs;
     Format.pp_print_flush ppf ());
   Result.Ok ()
