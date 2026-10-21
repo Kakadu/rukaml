@@ -1590,7 +1590,7 @@ let emit_global_eval ppf is_toplevel ident expr =
   printfn ppf "%s:" fname;
   (* emit addi sp sp (-16); *)
   (* emit sd ra (ROffset (SP, 0)); *)
-  Compile_lib.Opts.disable_locally TailCall (fun () -> generate_body is_toplevel expr);
+  generate_body is_toplevel expr;
   (* emit ld ra (ROffset (SP, 0)); *)
   (* emit shrink_stack 2 *)
   emit ret ~comm:(sprintf "end %s" fname);
