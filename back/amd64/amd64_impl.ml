@@ -106,7 +106,7 @@ module Addr_of_local = struct
   let last_pos = ref 0
   let get_locals_count () = !last_pos
   let current : Ident.t option ref = ref None
-
+  let get_current () = Option.get !current
   let clear () =
     Hashtbl.clear store;
     last_pos := 0
@@ -388,7 +388,7 @@ let is_tailcall = function
 
 let allocate_free_space ppf callee busy_space =
   let open Compile_lib.Opts in
-  let free_space = TailCall.get_free_space (Some callee) busy_space in
+  let free_space = TailCall.get_free_space callee busy_space in
   Addr_of_local.last_pos := !Addr_of_local.last_pos + free_space;
   printfn ppf "  sub rsp, 8*%d ; allocate free space" free_space;
   free_space
@@ -922,7 +922,7 @@ let rec generate_body ppf body =
       then (
         let tailed_version = Printf.sprintf "rukaml_applyN_tailed_%d" (gensym ()) in
         printfn ppf "  mov rdi, %a" Addr_of_local.pp_local_exn f;
-        printfn ppf "  mov rsi, %d" (Opts.TailCall.get_stack_space !Addr_of_local.current);
+        printfn ppf "  mov rsi, %d" (Opts.TailCall.get_stack_space (Addr_of_local.get_current()));
         printfn ppf "  call rukaml_applyN_is_tailable";
         printfn ppf "  cmp rax, 1";
         printfn ppf "  je %s" tailed_version;
@@ -998,7 +998,7 @@ let rec generate_body ppf body =
         if
           Opts.is_permitted TailCall
           && is_tailcall dest
-          && formal_arity <= Opts.TailCall.get_stack_space !Addr_of_local.current
+          && formal_arity <= Opts.TailCall.get_stack_space (Addr_of_local.get_current())
         then (
           let to_remove = allocate_args (arg1 :: args) in
           for offset = formal_arity - 1 downto 0 do
