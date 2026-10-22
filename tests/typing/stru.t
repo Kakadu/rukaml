@@ -81,10 +81,10 @@ Zed combinator should trigger occurs check
   [1]
 
   $ run << EOF
-  > let rec s f g x = f x (g x) in s
+  > let rec s f g x = f x (g x)
   > EOF
-  parse error: : end_of_input
-  [1]
+  let rec s: ('_3 -> '_5 -> '_6) -> ('_3 -> '_5) -> '_3 -> '_6 =
+    fun f g x -> (f x) (g x)
 
   $ run << EOF
   > let rec fac = fun n -> if n=1 then 1 else n * (fac (n-1))
@@ -159,4 +159,3 @@ tuples
     fun z -> z
   let foo: '_1 -> int * bool =
     fun x -> ((__lifted_let_1_y 1), (__lifted_let_1_y true))
-

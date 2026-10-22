@@ -22,12 +22,31 @@ let comment_body =
 ;;
 
 let comment = string "(*" *> comment_body
+let only_spaces = skip_while Base.Char.is_whitespace
 
+(* Skips preprocessing comments.
+   They are needed to make testing of the code with real OCaml easier. *)
+let rule_skip =
+  let parens p = string "(*" *> only_spaces *> p <* only_spaces <* string "*)" in
+  let* _ = parens (string "[begin skip]") in
+  let* _ = many_till any_char (parens (string "[end skip]")) in
+  return ()
+;;
+
+(** Skipping whitespace and comments.
+  We skip whitespace characters.
+  If preprocess comment goes next -- recursion.
+  If normal coment goes next --- recursion.
+  Otherwise --- we finished. *)
 let ws =
   fix (fun self ->
-    let* () = skip_while Base.Char.is_whitespace in
-    let* co = option false (comment >>= fun _ -> return true) in
-    if co then self else return ())
+    let* () = only_spaces in
+    let* pp_stuff = option false (rule_skip >>= fun () -> return true) in
+    if pp_stuff
+    then self
+    else
+      let* co = option false (comment >>= fun _ -> return true) in
+      if co then self else return ())
 ;;
 
 let failf fmt = Format.kasprintf fail fmt
@@ -200,6 +219,10 @@ let escape_seq =
        ]
 ;;
 
+let string_continuation =
+  char '\\' *> char '\n' *> skip_while (fun c -> c = ' ' || c = '\t')
+;;
+
 let constant =
   ws *> fail ""
   <|> (string "0x" *> take_while1 is_hex_digit
@@ -208,8 +231,13 @@ let constant =
   <|> (apostrophes escape_seq >>| const_char)
   <|> (apostrophes (any_char_except [ '\''; '\\' ]) >>| fun ch -> const_char ch)
   <|> quotes
-        (many (any_char_except [ '"'; '\\' ] <|> escape_seq)
-         >>| fun chs -> const_string (Base.String.of_char_list chs))
+        (many
+           (choice
+              [ (any_char_except [ '"'; '\\' ] >>| fun ch -> String.make 1 ch)
+              ; escape_seq >>| String.make 1
+              ; string_continuation *> return ""
+              ])
+         >>| fun chs -> const_string (String.concat "" chs))
   <|> (var_name
        >>= function
        | "true" -> return (const_bool true)
@@ -243,6 +271,8 @@ let patt_basic d =
          let* first = d.patt d in
          (let* rest = many (ws *> char ';' *> d.patt d) in
           return (pcons first (List.fold_right pcons rest pnil)))
+         <* ws
+         <* option () (char ';' *> return ())
          <* ws
          <* char ']')
     <|> constructor
@@ -347,6 +377,9 @@ let pack : dispatch =
     (let* rest = many (ws *> char ';' *> d.expr_tuple d) in
      return (econs first (List.fold_right econs rest enil)))
     <|> return (econs first enil)
+    <* ws
+    (* trailing ';' before ']' is allowed, as in OCaml *)
+    <* option () (char ';' *> return ())
     <* ws
     <* char ']'
   in
@@ -461,6 +494,8 @@ let pack : dispatch =
              (let* rest = many (ws *> char ';' *> d.expr_tuple d) in
               return (econs first (List.fold_right econs rest enil)))
              <|> return (econs first enil)
+             <* ws
+             <* option () (char ';' *> return ())
              <* ws
              <* char ']')
         <|> brackets
@@ -728,7 +763,40 @@ let structure =
      <* skip_separator)
 ;;
 
+(* Angstrom's [pos] is a 0-based byte offset into the string given to
+     [parse_string], i.e. directly into [str] *)
+let line_col str off =
+  (* TODO: Make it more efficient, instead of eating symbols one by one *)
+  let rec loop i line bol =
+    if i >= off || i >= String.length str
+    then line, off - bol + 1
+    else if str.[i] = '\n'
+    then loop (i + 1) (line + 1) (i + 1)
+    else loop (i + 1) line bol
+  in
+  loop 0 1 0
+;;
+
 let parse_structure str =
+  let p =
+    let* ans = structure <* ws in
+    let* offset = pos in
+    let* fin = at_end_of_input in
+    if fin
+    then return ans
+    else (
+      let __ () =
+        match ans with
+        | [] -> ()
+        | _ :: _ ->
+          Format.eprintf "@[%a@]\n%!" Pprint.pp_structure_item (List.hd (List.rev ans))
+      in
+      let line, col = line_col str offset in
+      let msg =
+        Printf.sprintf "unconsumed input at byte %d (line %d, column %d)" offset line col
+      in
+      fail msg)
+  in
   (* let state = Angstrom.Buffered.parse (structure <* ws <* end_of_input) in
   let state = Angstrom.Buffered.feed state (`String str) in
   match state with
@@ -747,28 +815,8 @@ let parse_structure str =
        Printf.printf "off = %d, len = %d\n" unc.off unc.len;
        Result.Error (`Parse_error msg :> [> error ])
      | _ -> assert false) *)
-  parse_string ~consume:All (structure <* ws <* end_of_input) str
+  parse_string ~consume:All p str
   |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
-;;
-
-(** TODO: make preprocessing more flexible (and maybe move it to separated module) *)
-
-let preprocessing =
-  let rule_skip =
-    let parens p = string "(*" *> ws *> p <* ws <* string "*)" in
-    let* _ = parens (string "[begin skip]") in
-    let* _ = many_till any_char (parens (string "[end skip]")) in
-    return ()
-  in
-  let rule_default = comment *> return () in
-  let any_rule = rule_skip <|> rule_default <|> return () in
-  many_till (any_rule *> any_char) end_of_input >>| Base.String.of_list
-;;
-
-let make_preprocessing_exn str =
-  match parse_string ~consume:All preprocessing str with
-  | Error err -> failwith (Format.sprintf "preprocessing error: %s" err)
-  | Ok s -> s
 ;;
 
 (** {1} Testing stuff *)
