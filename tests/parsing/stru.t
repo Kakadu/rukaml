@@ -135,3 +135,13 @@ CPS
                                                                   fibk (n - 2) 
                                                                  (fun q ->
                                                                   k (p + q)))
+
+  $ cat << EOF | ./run.exe -e -
+  > App (App (Var 'x', Var 'z'), App (Var 'y', Var 'z'))
+  > EOF
+  Parsed: App (App (Var 'x', Var 'z'), App (Var 'y', Var 'z'))
+
+  $ cat << EOF | ./run.exe -e  -
+  > A (App (None, []), 11)
+  > EOF
+  Parsed: A (App (None, []), 11)
