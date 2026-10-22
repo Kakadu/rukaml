@@ -44,7 +44,8 @@ module Compiler = struct
     (* extracts value_bindings from other structure_items to perform cps conv on it *)
     let vbs =
       let aux = function
-        | Parsetree.Pstr_value vb -> Some vb
+        | Parsetree.Pstr_value (vb, []) -> Some vb
+        | Pstr_value _ -> failwith "not implemented"
         | _ -> None
       in
       Stdlib.List.filter_map aux stru
@@ -65,7 +66,7 @@ module Compiler = struct
       | [], [] -> List.rev acc
       | Pstr_type td :: rest, macps_vbs -> merge (Pstr_type td :: acc) (rest, macps_vbs)
       | Pstr_value _ :: rest, macps_vb :: macps_vbs ->
-        merge (Pstr_value macps_vb :: acc) (rest, macps_vbs)
+        merge (Pstr_value (macps_vb, []) :: acc) (rest, macps_vbs)
       | [], _ :: _ | Pstr_value _ :: _, [] -> assert false
     in
     let stru = merge [] (stru, vbs) in
@@ -85,10 +86,11 @@ module Compiler = struct
       Base.List.fold ~f:(fun acc (_rec, lhs, _rhs) -> collect_from_patt acc lhs)
     in
     let f (globals, acc) = function
-      | Parsetree.Pstr_value vb ->
+      | Parsetree.Pstr_value (vb, []) ->
         let stru = CConv.conv ~standart_globals:globals vb in
         let globals = collect_globals ~init:globals stru in
-        globals, List.append acc (List.map (fun vb -> Parsetree.Pstr_value vb) stru)
+        globals, List.append acc (List.map (fun vb -> Parsetree.Pstr_value (vb, [])) stru)
+      | Pstr_value _ -> failwith "not implemented"
       | Parsetree.Pstr_type _ as td -> globals, List.append acc [ td ]
     in
     fun (Parsetree stru) ->

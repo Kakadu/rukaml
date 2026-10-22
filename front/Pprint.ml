@@ -286,16 +286,43 @@ let rec pp_expr ctx ppf = function
     fprintf ppf fmt pp_constructor ()
 ;;
 
-let pp_value_binding ppf (is_rec, pat, rhs) =
-  (match is_rec with
-   | Parsetree.Recursive -> fprintf ppf "@[<v 2>@[let rec %a "
-   | NonRecursive -> fprintf ppf "@[<v 2>@[let %a ")
-    (pp_pattern CtxLeftSideLet)
-    pat;
+let pp_value_bindings ppf vbs =
+  fprintf ppf "@[<v>";
+  let prefix_pat i is_rec =
+    match i, is_rec with
+    | 0, Recursive -> ("let rec %a " : _ format)
+    | 0, NonRecursive -> ("let %a " : _ format)
+    | _ -> ("and %a " : _ format)
+  in
+  List.iteri
+    (fun i (is_rec, pat, rhs) ->
+       fprintf ppf "@[";
+       fprintf ppf (prefix_pat i is_rec) (pp_pattern CtxLeftSideLet) pat;
+       match group_lams rhs with
+       | args, rhs ->
+         List.iter (fprintf ppf "%a@ " (pp_pattern CtxLeftSideLet)) args;
+         fprintf ppf "=@ @]@[%a@]@," (pp_expr CtxRightSideLet) rhs)
+    vbs;
+  fprintf ppf "@]"
+;;
+
+let pp_value_binding_gen prefix ppf (is_rec, pat, rhs) =
+  let (_ : _ -> (('a -> 'b -> 'c) -> 'b -> 'c, 'a, 'c) format) = prefix in
+  fprintf ppf "@[<v 2>@[";
+  fprintf ppf (prefix is_rec) (pp_pattern CtxLeftSideLet) pat;
   match group_lams rhs with
   | args, rhs ->
     List.iter (fprintf ppf "%a@ " (pp_pattern CtxLeftSideLet)) args;
     fprintf ppf "=@ @]@[%a@]@]" (pp_expr CtxRightSideLet) rhs
+;;
+
+let pp_value_binding ppf (is_rec, pat, rhs) =
+  pp_value_binding_gen
+    (function
+      | Parsetree.Recursive -> ("let rec %a " : _ format)
+      | NonRecursive -> ("let %a " : _ format))
+    ppf
+    (is_rec, pat, rhs)
 ;;
 
 let pp_pattern = pp_pattern CtxFree
@@ -413,7 +440,8 @@ let pp_type_declaration ppf (td, tds) =
 ;;
 
 let pp_structure_item ppf = function
-  | Parsetree.Pstr_value vb -> pp_value_binding ppf vb
+  | Parsetree.Pstr_value (vb, []) -> pp_value_binding ppf vb
+  | Parsetree.Pstr_value (h, tl) -> pp_value_bindings ppf (h :: tl)
   | Parsetree.Pstr_type tds -> pp_type_declaration ppf tds
 ;;
 

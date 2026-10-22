@@ -67,7 +67,7 @@ and core_type =
 [@@deriving show { with_path = false }]
 
 type structure_item =
-  | Pstr_value of value_binding (** [ let x = ... ] *)
+  | Pstr_value of value_binding * value_binding list (** [ let x = ... ] *)
   | Pstr_type of type_declaration list1 (** [ type x = ... ] *)
 [@@deriving show { with_path = false }]
 

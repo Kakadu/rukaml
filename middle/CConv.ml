@@ -439,10 +439,11 @@ let conv ?(standart_globals = standart_globals)
 ;;
 
 let value_binding = conv
+let mk_vb1 vb = Parsetree.Pstr_value (vb, [])
 
 let structure_item ?(standart_globals = standart_globals) = function
-  | Parsetree.Pstr_value (_ as vb) ->
-    conv ~standart_globals vb |> List.map (fun vb -> Parsetree.Pstr_value vb)
+  | Parsetree.Pstr_value (vb, []) -> conv ~standart_globals vb |> List.map mk_vb1
+  | Parsetree.Pstr_value _ -> failwith "not implemented"
   | Parsetree.Pstr_type _ as td -> [ td ]
 ;;
 
@@ -454,7 +455,7 @@ let structure ?(standart_globals = standart_globals) stru =
     ~f:(fun (glob, ans) stru ->
       log "%s %d" "Processing structure item" __LINE__;
       match stru with
-      | Parsetree.Pstr_value stru ->
+      | Parsetree.Pstr_value (stru, []) ->
         let new_strus = conv ~standart_globals:glob stru in
         log "new strus length = %d" (List.length new_strus);
         let new_glob =
@@ -468,7 +469,8 @@ let structure ?(standart_globals = standart_globals) stru =
               Format.eprintf "@[%a@]\n%!" Parsetree.pp_value_binding vb;
               failwiths "not implemented %s %d" __FILE__ __LINE__)
         in
-        new_glob, List.append ans (List.map (fun vb -> Parsetree.Pstr_value vb) new_strus)
+        new_glob, List.append ans (List.map mk_vb1 new_strus)
+      | Parsetree.Pstr_value _ -> failwith "not implemented"
       | Parsetree.Pstr_type _ as td -> glob, List.append ans [ td ])
   |> snd
 ;;

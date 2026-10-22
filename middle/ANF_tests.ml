@@ -61,7 +61,7 @@ let test_anf ?(simplify = false) ?(print_before = false) text =
   let ( let* ) x f = Result.bind x f in
   match
     let* stru = Frontend.Parsing.parse_value_bindings text in
-    let vbs = CConv.structure (List.map (fun x -> Parsetree.Pstr_value x) stru) in
+    let vbs = CConv.structure (List.map (fun x -> Parsetree.Pstr_value (x, [])) stru) in
     let* _env, stru_typed =
       Inferencer.structure Typedtree.empty_table vbs
       |> Result.map_error (function

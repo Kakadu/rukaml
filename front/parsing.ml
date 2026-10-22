@@ -326,26 +326,18 @@ let prio expr table =
   helper 0
 ;;
 
-let letdef erhs =
-  let* isrec =
-    keyword "let" *> option NonRecursive (keyword "rec" >>| fun _ -> Recursive) <* ws
-  in
+let letdef_gen prefix erhs =
+  let* isrec = prefix in
   let* name = ws *> pattern in
   let* ps = many (ws *> pattern) in
   let* rhs = ws *> string "=" *> ws *> erhs in
   return (isrec, name, List.fold_right elam ps rhs)
 ;;
 
-(* The equivalent of [letdef] *)
-let letdef0 erhs =
-  let+ isrec =
-    keyword "let" *> option NonRecursive (keyword "rec" *> return Recursive) <* ws
-  in
-  let+ name = pattern in
-  (* TODO(Kakadu): not any pattern *)
-  let+ ps = many pattern in
-  let+ rhs = ws *> keyword "=" *> ws *> erhs in
-  isrec, name, List.fold_right elam ps rhs
+let letdef erhs =
+  letdef_gen
+    (keyword "let" *> option NonRecursive (keyword "rec" >>| fun _ -> Recursive) <* ws)
+    erhs
 ;;
 
 let is_uppercase_ascii = function
@@ -721,12 +713,21 @@ let type_declaration =
 ;;
 
 let value_binding = letdef (pack.expr pack) <* ws
+
+let value_bindings =
+  let rhs = pack.expr pack in
+  let* head = letdef rhs <* ws in
+  let* tl = many (letdef_gen (keyword "and" *> ws *> return Recursive) rhs) in
+  return (head, tl)
+;;
+
 let skip_separator = option () (ws *> string ";;" *> return ())
 
 let tracing_many1 (f : structure_item t) =
   let describe_si ppf = function
-    | Parsetree.Pstr_value (flg, pat, _) ->
+    | Parsetree.Pstr_value ((flg, pat, _), []) ->
       Format.fprintf ppf "let %a %a" pp_rec_flag flg pp_pattern pat
+    | Parsetree.Pstr_value _ -> failwith "not impelemented"
     | Pstr_type (h, _) -> Format.fprintf ppf "type %s" h.pty_name
   in
   let* head = f in
@@ -757,8 +758,8 @@ let tracing_many1 (f : structure_item t) =
 
 let structure =
   many1
-    (value_binding
-     >>| (fun vb -> Pstr_value vb)
+    (value_bindings
+     >>| (fun (h, tl) -> Pstr_value (h, tl))
      <|> (type_declaration >>| fun td -> Pstr_type td)
      <* skip_separator)
 ;;

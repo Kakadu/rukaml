@@ -46,12 +46,6 @@ val letdef
   :  Parsetree.expr Angstrom.t
   -> (Parsetree.rec_flag * Parsetree.pattern * Parsetree.expr) Angstrom.t
 
-val letdef0
-  :  Parsetree.expr Angstrom.t
-  -> (Parsetree.rec_flag * Parsetree.pattern * Parsetree.expr) Angstrom.t Angstrom.t
-       Angstrom.t
-       Angstrom.t
-
 val pack : dispatch
 val value_binding : Parsetree.value_binding Angstrom.t
 val value_bindings : Parsetree.value_binding list Angstrom.t

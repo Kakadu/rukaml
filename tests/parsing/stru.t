@@ -145,3 +145,14 @@ CPS
   > A (App (None, []), 11)
   > EOF
   Parsed: A (App (None, []), 11)
+
+  $ cat << EOF | ./run.exe -stru -
+  > let rec odd n =
+  >   if n=1 then true
+  >   else if n=0 then false
+  >   else even (n-1)
+  > and even n = false
+  > EOF
+  Parsed: let rec odd n = if n = 1 then true else if n = 0 then false else even (n - 1)
+          and even n = false
+          

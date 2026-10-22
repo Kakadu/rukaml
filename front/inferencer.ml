@@ -1220,7 +1220,7 @@ let structure_item ?(env = start_env) table pstru_item =
   let ( let* ) = Result.( >>= ) in
   let return = Result.return in
   match pstru_item with
-  | Parsetree.Pstr_value item ->
+  | Parsetree.Pstr_value (item, []) ->
     let* env, typed_vb = vb ~env table item in
     return (env, Tstr_value typed_vb)
   | Parsetree.Pstr_type (item, []) ->
