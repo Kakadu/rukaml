@@ -1,0 +1,297 @@
+\begin{filecontents}[overwrite]{compiler.bib}
+@book{appel1998tiger,
+	author    = {Andrew W. Appel},
+	title     = {Modern Compiler Implementation in ML},
+	publisher = {Cambridge University Press},
+	year      = {1998},
+	isbn      = {978-0521607643},
+	note      = {Tiger book}
+}
+@book{siek2023essentials,
+	author    = {Jeremy G. Siek},
+	title     = {Essentials of Compilation: An Incremental Approach in Racket},
+	publisher = {The MIT Press},
+	year      = {2023},
+	isbn      = {978-0262047760},
+	address   = {Cambridge, Massachusetts}
+}
+@book{appel1992compiling,
+	author    = {Andrew W. Appel},
+	title     = {Compiling with Continuations},
+	publisher = {Cambridge University Press},
+	year      = {1992},
+	address   = {Cambridge, England},
+	isbn      = {0-521-41695-7}
+}
+@online{wiki_tail_call,
+	title   = {Tail call},
+	url     = {https://en.wikipedia.org/wiki/Tail_call},
+	urldate = {2026-10-14}
+}
+
+@online{wiki_cps,
+	title   = {Continuation-passing style},
+	url     = {https://en.wikipedia.org/wiki/Continuation-passing_style},
+	urldate = {2026-10-14}
+}
+\end{filecontents}
+
+\documentclass{article}
+\usepackage{fontspec}%[no-math]
+\usepackage{blindtext}
+\usepackage{polyglossia}
+\usepackage{hyperref}
+
+\usepackage{listings}
+\usepackage{caption}
+\usepackage[a4paper, left=3cm, top=1.5cm, right=3cm]{geometry}
+
+\usepackage[style=authoryear, dashed=false]{biblatex}
+\addbibresource{compiler.bib}
+
+\setdefaultlanguage{russian}
+\setotherlanguage{english}
+
+\setmainfont{Source Sans 3}
+\setsansfont{Source Sans 3}
+\setmonofont[Scale=0.9]{Roboto Mono}
+
+\renewcommand{\lstlistingname}{Пример}
+\captionsetup[lstlisting]{
+	justification=centering,
+	singlelinecheck=false
+}
+
+\title{Оптимизация хвостовой рекурсии в Rukaml.\\Документация}
+\author{Егоров Никита}
+\date{}
+\begin{document}
+	
+	\maketitle
+	\tableofcontents
+	
+	\section{Введение}
+	% В начале я бы не хотел обращать внимание читателя на проблему, где лежат аргументы функции, поскольку это требует глубокого рассмотрения.
+	
+	% Чтобы понимать, как устроена оптимизация, неплохо не только понимать как её использовать, но знать как она выглядит на уровне ассемблера.
+
+	Хвостовой вызов — это вызов функции, после которого вызывающей функции больше ничего не нужно делать.
+	
+	\noindent
+		\begin{minipage}[t]{0.48\textwidth}
+		\begin{lstlisting}[
+			language=ml,
+			captionpos=b,
+			label={lst:1},
+			caption={Не хвостовой вызов}]
+let rec fac n =
+  if n <= 1 then 1
+  else n * fac (n - 1)
+		\end{lstlisting}
+	\end{minipage}
+	\hfill
+	\begin{minipage}[t]{0.48\textwidth}
+		\begin{lstlisting}[
+			language=ml,
+			captionpos=b,
+			label={lst:2},
+			caption={Хвостовой вызов}]
+let rec fac n acc =
+  if n <= 1 then acc
+  else fac (n - 1) (n * acc)
+		\end{lstlisting}
+	\end{minipage}
+
+	Далее \texttt{caller} - вызывающая функция, \texttt{callee} - вызываемая функция.
+	
+	Хвостовой вызов позволяет избежать аллоцирования стекового кадра \texttt{callee}, переиспользовав кадр \texttt{caller}-а. Таким образом, во время исполнения \hyperref[lst:2]{пример №2} будет занимать лишь $O(1)$ памяти, когда как \hyperref[lst:1]{пример №1} $-$ $O(n)$.
+	
+	Примечание: хвостовой вызов, например, инструкция \texttt{tail} в ассемблере \texttt{RV64} $-$ это прыжок без возврата, когда как обычный вызов, например, \texttt{call} - это прыжок с возвратом. Важно понимать эту разницу.
+	
+
+\section{Как её использовать}
+
+Приведённый \hyperref[lst:2]{пример №2} является демонстрацией работы оптимизации для функций верхнего уровня.
+
+В модуле 2.2 будет рассмотрен следующий по частоте вид - передача функции как аргумента.
+
+А в модуле 2.3 будет показан способ, позволяющий программно преобразовать любую функцию так, чтобы в каждой ветви исполнения она использовала хвостовой вызов.
+
+\subsection{Функции верхнего уровня}
+
+Покажем дополнительный пример.
+
+\begin{lstlisting}[language=ml]
+let rec foldr f ini = function
+| [] -> ini
+| x :: xs -> f x (foldr f ini xs)
+
+let rec foldl f ini = function
+| [] -> ini
+| x :: xs -> foldl f (f ini x) xs
+\end{lstlisting}
+
+Два приведённых выше примера - правая и левая свёртка соответственно.
+
+\texttt{foldr} не вызывается хвостовым образом, поскольку после возврата из функции полученное значение подставляется в \lstinline|f x ...|.
+
+С \texttt{foldl} проблем никаких нет.
+\subsection{Замыкания}
+
+Существуют случаи, когда нам необходимо вызвать переданную как аргумент функцию.
+\begin{lstlisting}[
+	language=ml,
+	captionpos=b,
+	label={lst:3},
+	caption={Факториал в CPS стиле}]
+let rec fac_cps n k = 
+  if n <= 1 then k 1
+  else fac_cps (n - 1) (fun r -> k (n * r))
+\end{lstlisting}
+
+Существенная разница между 2.1 и 2.2 появляется, когда дело доходит для реализации, что будет описано позже.
+
+\subsection{CPS}
+Continuation-passing style — стиль программирования, в котором поток управления передаётся в явном виде через вызов “продолжения”.
+
+CPS функция принимает дополнительный аргумент: явное «продолжение» — функцию одного аргумента, которая будет вызвана по окончании вычислений с их результатом в качестве аргумента.
+
+Замечание: каждый вызов в CPS является хвостовым.
+
+Пусть у нас есть следующие функции:
+\begin{lstlisting}[language=ml]
+let pow2 a = a ** 2.0
+let add a b = a +. b
+let sqrt a = a ** 0.5
+let hyp a b = sqrt (add (pow2 a) (pow2 b))
+\end{lstlisting}
+
+Перепишем их в CPS-стиле:
+\begin{lstlisting}[language=ml]
+let pow2 a k = k (a ** 2.)
+let add a b k = k (a +. b)
+let sqrt a k = k (a ** 0.5)
+let hyp a b k = 
+  pow2 a (fun a2 -> 
+    pow2 b (fun b2 -> 
+      add a2 b2 (fun c2 -> sqrt c2 k)))
+\end{lstlisting}
+
+Примечание: преобразовать мы можем любую функцию, в том числе и которая уже была преобразована.
+Например, преобразованный компилятором Rukaml  \hyperref[lst:3]{пример №3}:
+\begin{lstlisting}[language=ml]
+let rec fac_cps n k1 = 
+  k1 (fun k -> 
+    fun k2 -> if n <= 1 then k 1 k2 
+              else 
+              fac_cps (n - 1) 
+                      (fun t3 -> t3 (fun r -> fun k4 -> k (n * r) k4) k2)
+     )
+\end{lstlisting}
+
+\section{Как она реализуется в Rukaml}
+
+На данный момент в backend действуют разные соглашения о вызовах.
+
+\begin{itemize}
+	\item RV64 - первые 7 аргументов через регистры, остальные через кучу.
+	\item AMD64 - все аргументы передаются через стек (кроме runtime-функций).
+\end{itemize} 
+
+Оптимизация в каждом backend реализована по-разному, но общее в любой реализации:
+
+\begin{enumerate}
+	\item Вычислить и переместить аргументы на нужное место.
+	\begin{itemize}
+		\item AMD64: перемещаем аргументы \texttt{callee} туда, где лежат аргументы \texttt{callee}
+		\item RV64: перемещаем первые 7 аргументов через \texttt{a0..a6}, остальные как \texttt{a7[i-8]}, где \texttt{i} $-$ индекс текущего аргумента.
+	\end{itemize}
+	\item Восстановить \texttt{callee-saved} регистры, \texttt{sp} и адрес возврата.
+	\item Прыгнуть без возврата в \texttt{callee}.
+\end{enumerate}
+\subsection{RV64}
+
+В RV64 всё весьма относительно тривиально:
+\begin{itemize}
+	\item Для \href{https://github.com/KrimPast/rukaml/blob/7d05249ecd7c3cf5490ba5d807674cd9fc18ba7b/back/rv64/RV64_impl.ml#L1054-L1063}{функций верхнего уровня} $-$ вычисляем аргументы \texttt{callee}, грузим \texttt{callee-saved} аргументы(\texttt{s0..s7}), \texttt{ra} и возвращаем \texttt{sp} как он был на входе в функцию.
+	\item Для \href{https://github.com/KrimPast/rukaml/blob/7d05249ecd7c3cf5490ba5d807674cd9fc18ba7b/back/rv64/RV64_impl.ml#L1099-L1104}{замыканий} всё аналогично.
+	
+Примечание: мы грузим \texttt{callee-saved} регистры только перед хвостовым вызовом и в конце функции.
+\end{itemize} 
+
+\subsection{AMD64}
+\label{subsec:AMD64_ASM}
+
+В AMD64 всё куда интереснее, поскольку там всё передаётся через стек.
+Это делает оптимизацию хвостового вызова на порядок сложнее. Разберём почему это так.
+
+\begin{itemize}
+	\item Пусть $ sp(f) = $ количеству аргументов функции f. Все аргументы занимают по машинному слову, так что нет смысла оперировать их размером.
+	\item Если $sp(f) \geq sp(g)$, то хвостовой вызов возможен $-$ у нас есть достаточно места, куда сложить аргументы $g$.
+	\item Если $sp(f) < sp(g)$, то у нас есть выбор.
+	\begin{enumerate}
+		\item Отказаться от хвостового вызова, ведь $sp(g) - sp(f)$ аргументов ложить некуда.
+		\item Сделать так, чтобы место было.
+	\end{enumerate}
+	
+	Очевидно, был принят второй вариант. 
+\end{itemize}
+
+Для реализации этого, составляется табличка "кому сколько нужно дополнительного места".
+Она создаёт путём итерирования по всем \texttt{caller} и их хвостовых \texttt{callee}.
+Например, для каждой такой пары устанавливается $sp(caller) = max(sp(caller),\ sp(callee))$\footnote{Реализацию таблички можно посмотреть в файле \href{https://github.com/KrimPast/rukaml/blob/7d05249ecd7c3cf5490ba5d807674cd9fc18ba7b/middle/opts.ml}{middle/opts.ml}, в модуле TailCall.}
+
+Кажется всё прекрасно, но у такого способа есть свои грабли.
+Когда дело доходит до замыканий, всё ломается.
+
+\begin{itemize}
+	\item Пусть функции $f$ передали в качестве аргумента функцию $g$.
+	Мы хотим вызвать хвостовым образом функцию $g$, передав туда $n$ аргументов.
+	\item Проблема в том, что $g$ $-$ замыкание. У него $m$ аргументов уже применено.
+	Однако на стадии компиляции число $m$ в общем случае неизвестно. \footnote{Иначе, чтобы составить такую табличку, нужно пробежаться по абсолютно всему коду и смотреть, скольки аргументное замыкание мы передаём данной функции. Я не утверждаю, что теоретически это невозможно, скорее, если это и выполнимо, то очень трудоёмко.}
+\end{itemize}
+
+Таким образом, данный способ в полной мере работает только для функций верхнего уровня.
+
+В реализации для замыканий динамически проверяется, есть ли в текущем кадре достаточно места, и если да, то вызывается хвостовым образом.
+
+\subsection{Почему в RV64 всё так просто}
+На первый взгляд кажется, что особо нет разницы $-$ передавать аргументы через стек или через кучу.
+
+Однако, если мы передаём аргументы через кучу, то у нас пропадает проблема, описанная в \ref{subsec:AMD64_ASM}. Поскольку 8-й и следующие хранятся в списке на куче, ссылка на который лежит регистре \texttt{a7}. Например, в общих чертах так и реализовано соглашение о вызовах в \texttt{Scheme/Racket}.
+\section{Future Work}
+\subsection{Оптимизация хвостового вызова}
+\begin{itemize}
+
+\item AMD64: Если будет соглашение о вызовах как сейчас в RV64, то нужно добавить полную поддержку хвостового вызова замыканий.
+\item RV64, AMD64: В результате применения оптимизации в коде появляется дополнительное восстановление \texttt{ra}, \texttt{sp }и \texttt{s0..s7} регистров. То же самое происходит и в конце функции перед её возвратом. Можно попробовать избежать этого дублирования.
+\end{itemize}
+
+\subsection{Изменение соглашения о вызовах}
+\begin{itemize}
+	\item RV64: В целях оптимизации производительности переписать \texttt{apply1}, ... , \texttt{apply5} так, чтобы они не использовали applyN.
+	\item RV64: Удалить в комментариях упоминания о передаче данных через стек и добавить о регистрах и куче. Ибо это может сбить с толку.
+
+\urldef{\urlsimlify}\url{https://github.com/KrimPast/rukaml/blob/7d05249ecd7c3cf5490ba5d807674cd9fc18ba7b/back/rv64/RV64_impl.ml#L836}
+
+	\item RV64: В коде появились участки, которые можно упростить благодаря новому соглашению о вызовах.\footnote{\urlsimlify}
+	\item Переписать(?) Calling Convention под AMD64, чтобы оно тоже использовало регистры и кучу. Эта работа не очень пыльная, если сверяться с тем, как реализовано в RV64.
+\end{itemize}
+
+\subsection{Иное}
+\begin{itemize}
+	
+\urldef{\urlargonerv}\url{https://github.com/KrimPast/rukaml/blob/7d05249ecd7c3cf5490ba5d807674cd9fc18ba7b/back/rv64/RV64_impl.ml#L1094}
+\urldef{\urlargoneamd}\url{https://github.com/KrimPast/rukaml/blob/7d05249ecd7c3cf5490ba5d807674cd9fc18ba7b/back/amd64/amd64_impl.ml#L906-L908}
+	\item Переписать в backend AMD64, чтобы вместо \texttt{"printfn ppf ..."} код использовал \texttt{emit} прямо как в RV64.
+	\item AMD64, RV64: В backend применение замыканий пользовательских функций является одноаргументным \footnote{\urlargonerv} \footnote{\urlargoneamd}. Неудивительно, что это ест производительность.
+\end{itemize}
+
+\defbibenvironment{itemize}
+{\begin{itemize}}
+	{\end{itemize}}
+{\item}
+
+\nocite{*}
+\printbibliography[heading=bibnumbered, title={Полезные источники}, env=itemize]
+\end{document}

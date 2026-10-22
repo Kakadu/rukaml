@@ -16,6 +16,8 @@ let rec pp_reg ppf =
   | User _ -> failwith "not implemented (User _)"
 ;;
 
+let args_in_registers = 7
+
 type instr =
   | Addi of reg * reg * int
   | Add of reg * reg * reg
@@ -31,7 +33,11 @@ type instr =
   (** Set Less Than Immediate Unsigned.  sltiu rd,rs1,imm.  x[rd] = x[rs1] <u sext(immediate) *)
   | Li of reg * int
   | Ecall
-  | Call of string
+  | J of string (** A near non-returnable jump *)
+  | Jal of string (** A near returnable jump *)
+  | Tail of string (** A far non-returnable jump *)
+  | Call of string (** A far returnable jump *)
+  | Jalr of reg * reg (** Jump to address in 2st reg with offset and save ra in 1st reg *)
   | Ret
   | Lla of reg * string
   | Lw of reg * reg
@@ -40,6 +46,7 @@ type instr =
   | Sd of reg * reg
   | Mv of reg * reg
   | Beq of reg * reg * string
+  | Bne of reg * reg * string
   | Blt of reg * reg * string
   | Ble of reg * reg * string
   | Label of string
@@ -61,7 +68,11 @@ let pp_instr ppf =
   | Sltiu (r1, r2, n) -> fprintf ppf "sltiu %a, %a, %d" pp_reg r1 pp_reg r2 n
   | Li (r, n) -> fprintf ppf "li %a, %d" pp_reg r n
   | Ecall -> fprintf ppf "ecall"
+  | J f -> fprintf ppf "j %s" f
+  | Jal f -> fprintf ppf "jal %s" f
+  | Tail f -> fprintf ppf "tail %s" f
   | Call f -> fprintf ppf "call %s" f
+  | Jalr (r1, r2) -> fprintf ppf "jalr %a, %a" pp_reg r1 pp_reg r2
   | Ret -> fprintf ppf "ret"
   | Lla (r1, s) -> fprintf ppf "lla %a, %s" pp_reg r1 s
   | Lw (r1, r2) -> fprintf ppf "lw %a, %a" pp_reg r1 pp_reg r2
@@ -72,6 +83,7 @@ let pp_instr ppf =
   | Sw (r1, r2) -> fprintf ppf "sw %a, %a" pp_reg r1 pp_reg r2
   | Sd (r1, r2) -> fprintf ppf "sd %a, %a" pp_reg r1 pp_reg r2
   | Beq (r1, r2, offset) -> fprintf ppf "beq %a, %a, %s" pp_reg r1 pp_reg r2 offset
+  | Bne (r1, r2, offset) -> fprintf ppf "bne %a, %a, %s" pp_reg r1 pp_reg r2 offset
   | Blt (r1, r2, offset) -> fprintf ppf "blt %a, %a, %s" pp_reg r1 pp_reg r2 offset
   | Ble (r1, r2, offset) -> fprintf ppf "ble %a, %a, %s" pp_reg r1 pp_reg r2 offset
   | Label s -> fprintf ppf "%s:" s
@@ -93,7 +105,11 @@ let sltiu k r1 r2 n = k (Sltiu (r1, r2, n))
 let slti k r1 r2 n = k (Slti (r1, r2, n))
 let li k r n = k (Li (r, n))
 let ecall k = k Ecall
+let j k name = k (J name)
+let jal k name = k (Jal name)
+let tail k offset = k (Tail offset)
 let call k name = k (Call name)
+let jalr k r1 r2 = k (Jalr (r1, r2))
 let ret k = k Ret
 let lla k r name = k (Lla (r, name))
 let lw k a b = k (Lw (a, b))
@@ -102,6 +118,7 @@ let sw k a b = k (Sw (a, b))
 let sd k a b = k (Sd (a, b))
 let mv k a b = k (Mv (a, b))
 let beq k r1 r2 r3 = k @@ Beq (r1, r2, r3)
+let bne k r1 r2 r3 = k @@ Bne (r1, r2, r3)
 let blt k r1 r2 r3 = k @@ Blt (r1, r2, r3)
 let ble k r1 r2 r3 = k @@ Ble (r1, r2, r3)
 let label k s = k (Label s)

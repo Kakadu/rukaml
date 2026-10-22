@@ -25,8 +25,8 @@ $ chmod +w program.c
     return m91(m91((n + 11)));
   }
   GC statistics
-  Total allocations: 17105(words)
-  Currently allocated: 17105(words)
+  Total allocations: 17111(words)
+  Currently allocated: 17111(words)
   Current bank: 0
 
 
@@ -134,7 +134,7 @@ $ chmod +w program.c
   m[33] = (0x81u << 16) + 0x113u;  /* 37:   addi sp, sp, 8 */
   m[34] = (0x0u << 16) + 0x8067u;  /* 38:   ret */
   GC statistics
-  Total allocations: 26866(words)
-  Currently allocated: 26866(words)
+  Total allocations: 26926(words)
+  Currently allocated: 26926(words)
   Current bank: 0
 
