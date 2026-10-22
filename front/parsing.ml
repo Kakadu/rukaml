@@ -13,14 +13,33 @@ let log fmt =
 ;;
 
 let pp_list eta = Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf " ") eta
-let ws = skip_while Base.Char.is_whitespace
+
+let comment_body =
+  fix (fun comment_body ->
+    string "*)" *> return ()
+    <|> string "(*" *> comment_body *> comment_body
+    <|> any_char *> comment_body)
+;;
+
+let comment = string "(*" *> comment_body
+
+let ws =
+  fix (fun self ->
+    let* () = skip_while Base.Char.is_whitespace in
+    let* co = option false (comment >>= fun _ -> return true) in
+    if co then self else return ())
+;;
+
 let failf fmt = Format.kasprintf fail fmt
 
-let trace_pos msg =
-  let* n = pos in
-  let _ = msg, n in
-  log "`%s` on pos %d" msg n;
-  return ()
+let trace_pos fmt =
+  Format.kasprintf
+    (fun msg ->
+       let* n = pos in
+       let _ = msg, n in
+       log "`%s` on pos %d" msg n;
+       return ())
+    fmt
 ;;
 
 let trace_avai msg =
@@ -106,7 +125,10 @@ let is_keyword = function
   | _ -> false
 ;;
 
-let string s = trace_pos (Format.sprintf "string `%s`" s) *> string s
+let string s =
+  (* trace_pos "string `%s`" s *>  *)
+  string s
+;;
 
 (* >>| fun x ->
   log "pattern %a parsed" Pprint.pp_pattern x;
@@ -213,7 +235,7 @@ let patt_basic d =
     parens (d.patt d)
     <|> char '(' *> char ')' *> return PUnit
     <|> (constant >>| fun x -> PConst x)
-    <|> (var_name >>= fun v -> return (pvar v) <* trace_pos v)
+    <|> (var_name >>= fun v -> return (pvar v))
     <|> char '[' *> ws *> char ']' *> return pnil
     <|> (char '['
          *> ws
@@ -261,8 +283,8 @@ let prio expr table =
     else (
       let xs = table.(level) in
       return (fun h tl ->
-        log "helper returned h ='%a'" Parsetree.pp_expr h;
-        log "                tl size = %d" (List.length tl);
+        (* log "helper returned h ='%a'" Parsetree.pp_expr h;
+        log "                tl size = %d" (List.length tl); *)
         List.fold_left (fun acc (op, r) -> op acc r) h tl)
       <*> helper (level + 1)
       <*> many
@@ -296,6 +318,11 @@ let letdef0 erhs =
   isrec, name, List.fold_right elam ps rhs
 ;;
 
+let is_uppercase_ascii = function
+  | 'A' .. 'Z' -> true
+  | _ -> false
+;;
+
 type dispatch =
   { prio : dispatch -> expr t
   ; expr_basic : dispatch -> expr t
@@ -307,15 +334,31 @@ type dispatch =
 let pack : dispatch =
   let open Format in
   let expr_tuple d =
-    let* () = ws *> trace_pos "expr_tuple" in
-    let* x1 = d.prio d in
+    (* Expects that left parens are eaten somewhere else *)
+    let* x1 = ws *> d.prio d in
     return (fun x2 xs -> etuple x1 x2 xs)
     <*> ws *> char ',' *> d.prio d
     <*> many (ws *> char ',' *> d.prio d)
     <|> return x1
   in
+  let parse_empty_list = char '[' *> ws *> char ']' *> return enil in
+  let parse_list_sugar d =
+    let* first = char '[' *> ws *> d.expr_tuple d in
+    (let* rest = many (ws *> char ';' *> d.expr_tuple d) in
+     return (econs first (List.fold_right econs rest enil)))
+    <|> return (econs first enil)
+    <* ws
+    <* char ']'
+  in
+  let parse_array_sugar d =
+    brackets
+      (return (fun h tl -> earray (h :: tl))
+       <*> (d.expr_tuple d <* ws)
+       <*> many (string ";" *> d.expr_tuple d <* ws)
+       <|> return @@ earray [])
+  in
   let prio d =
-    let* () = ws *> trace_pos "prio" in
+    (* let* () = ws *> trace_pos "prio" in *)
     fix (fun _self ->
       prio
         (d.expr_long d)
@@ -333,97 +376,74 @@ let pack : dispatch =
          ; [ ws *> string "*", emul; ws *> string "/", ediv ]
         |])
   in
-  let expr_basic d =
-    let parse_list_sugar =
-      char '['
-      *> ws
-      *>
-      let* first = d.expr_tuple d in
-      (let* rest = many (ws *> char ';' *> d.expr_tuple d) in
-       return (econs first (List.fold_right econs rest enil)))
-      <|> return (econs first enil)
-      <* ws
-      <* char ']'
+  let fun_sugar d =
+    let* () = ws in
+    let* ps = keyword "fun" *> many1 pattern in
+    let* b = ws *> string "->" *> ws *> d.prio d in
+    return (List.fold_right (fun patt acc -> elam patt acc) ps b)
+  in
+  let letdef_sugar d =
+    let* isrec, ident, rhs = letdef (d.expr_tuple d) in
+    let* in_ = ws *> keyword "in" *> d.expr d in
+    return (elet ~isrec ident rhs in_)
+  in
+  let ite_sugar d =
+    let* cond = keyword "if" *> d.expr_tuple d in
+    let* th = keyword "then" *> d.expr_tuple d in
+    let* el = keyword "else" *> d.expr_tuple d in
+    return (eite cond th el)
+  in
+  let match_case_sugar d =
+    let parse_case =
+      let* () = ws <* char '|' in
+      let* p = pattern in
+      let* () = ws <* string "->" in
+      let* e = d.expr_tuple d in
+      return (p, e)
     in
-    let parse_empty_list = char '[' *> ws *> char ']' *> return enil in
-    let parse_array_sugar =
-      brackets
-        (return (fun h tl -> earray (h :: tl))
-         <*> (d.expr_tuple d <* ws)
-         <*> many (string ";" *> d.expr_tuple d <* ws)
-         <|> return @@ earray [])
+    let first =
+      parse_case
+      <|>
+      let* p = pattern in
+      let* () = ws *> string "->" *> ws in
+      let* e = d.expr_tuple d in
+      return (p, e)
     in
-    let fun_sugar =
-      keyword "fun" *> many1 pattern
-      >>= fun ps ->
-      ws *> string "->" *> ws *> d.expr d
-      >>= fun b -> return (List.fold_right (fun patt acc -> elam patt acc) ps b)
+    let* subject = keyword "match" *> ws *> d.expr_tuple d <* ws <* keyword "with" in
+    let* case = first in
+    let* cases = many parse_case in
+    return (ematch subject case cases)
+  in
+  let array_or_var_sugar d =
+    let* v =
+      var_name
+      >>= function
+      | "true" -> return (EConst (const_bool true))
+      | "false" -> return (EConst (const_bool false))
+      | v -> return (evar v)
     in
-    let letdef_sugar =
-      letdef (d.expr_tuple d)
-      >>= fun (isrec, ident, rhs) ->
-      ws *> keyword "in" *> d.expr d >>= fun in_ -> return (elet ~isrec ident rhs in_)
-    in
-    let ite_sugar =
-      keyword "if" *> d.expr_tuple d
-      >>= fun cond ->
-      keyword "then" *> d.expr_tuple d
-      >>= fun th ->
-      keyword "else" *> d.expr_tuple d >>= fun el -> return (eite cond th el)
-    in
-    let array_or_var_sugar =
-      let* v = var_name in
+    let* () = ws in
+    let* ans =
       choice
         [ (let* i = char '.' *> char '(' *> number <* char ')' in
            choice
              [ (let* e = string " <- " *> d.expr d in
-                return @@ eapp (evar "array_set") [ evar v; econst (const_int i); e ])
-             ; return @@ eapp (evar "array_get") [ evar v; econst (const_int i) ]
+                return @@ eapp (evar "array_set") [ v; econst (const_int i); e ])
+             ; return @@ eapp (evar "array_get") [ v; econst (const_int i) ]
              ])
-        ; (var_name
-           >>= function
-           | "true" -> return (EConst (const_bool true))
-           | "false" -> return (EConst (const_bool false))
-           | v -> return (evar v))
+        ; return v
         ]
     in
-    let match_case_sugar =
-      let parse_case =
-        let* () = ws <* char '|' in
-        let* p = pattern in
-        let* () = ws <* string "->" in
-        let* e = d.expr_tuple d in
-        return (p, e)
-      in
-      let first =
-        parse_case
-        <|>
-        let* p = pattern in
-        let* () = ws *> string "->" *> ws in
-        let* e = d.expr_tuple d in
-        return (p, e)
-      in
-      let* subject = keyword "match" *> ws *> d.expr_tuple d <* ws <* keyword "with" in
-      let* case = first in
-      let* cases = many parse_case in
-      return (ematch subject case cases)
-    in
+    let* () = ws in
+    return ans
+  in
+  let expr_basic d =
     let* () = ws *> trace_pos "expr_basic" in
     fix (fun _self ->
       let* () = ws in
       let* c = peek_char_fail in
       if c = '['
-      then
-        parse_empty_list <|> parse_list_sugar <|> parse_array_sugar
-        (* else if Char.lowercase_ascii c = c
-      then
-        fail ""
-        <|> (constant >>| fun x -> EConst x)
-        <|> array_or_var_sugar
-        <|> match_case_sugar
-        <|> fun_sugar
-        <|> ite_sugar
-        <|> letdef_sugar *)
+      then parse_empty_list <|> parse_list_sugar d <|> parse_array_sugar d
       else if c = '('
       then char '(' *> char ')' *> return EUnit
       else if is_digit c || c = '\'' || c = '"'
@@ -458,24 +478,59 @@ let pack : dispatch =
              return @@ eapp (evar "array_set") [ evar v; econst (const_int i); e ])
              <|> return @@ eapp (evar "array_get") [ evar v; econst (const_int i) ])
              <|> return (evar v))
-        <|> match_case_sugar
-        <|> fun_sugar
-        <|> ite_sugar
-        <|> letdef_sugar)
+        <|> match_case_sugar d
+        <|> fun_sugar d
+        <|> ite_sugar d
+        <|> letdef_sugar d)
   in
+  let atomic d =
+    let* () = ws *> trace_pos "atomic" in
+    let* () = ws in
+    let* c = peek_char_fail in
+    if c = '['
+    then parse_empty_list <|> parse_list_sugar d <|> parse_array_sugar d
+    else if c = '('
+    then char '(' *> char ')' *> return EUnit <|> parens (d.prio d)
+    else if is_digit c || c = '\'' || c = '"'
+    then constant >>| fun x -> EConst x
+    else if is_uppercase_ascii c
+    then constructor_name >>= fun c -> return (EConstruct (c, []))
+    else
+      fun_sugar d
+      <|> array_or_var_sugar d
+      <|> (var_name >>= fun s -> return (evar s))
+      <|> fail "atomic"
+  in
+  (* Long application *)
   let expr_long d =
-    let* () = ws *> trace_pos "expr_long" in
     fix (fun _self ->
-      many (ws *> (d.expr_basic d <|> parens (d.expr d)) <* ws)
-      >>= function
-      | [] -> fail "can't parse many expressions"
-      | [ h ] -> return h
-      (* TODO? > fix these kludges for adt constructors *)
-      | [ EConstruct (name, []); ETuple (arg1, arg2, args) ] ->
-        return (EConstruct (name, arg1 :: arg2 :: args))
-      | [ EConstruct (name, []); arg ] -> return (EConstruct (name, [ arg ]))
-      (* < *)
-      | foo :: args -> return @@ eapp foo args)
+      let* () = ws in
+      let* c = peek_char_fail in
+      if is_uppercase_ascii c
+      then
+        let* cname = constructor_name <* ws in
+        let* args =
+          let untuple = function
+            | ETuple (a, b, xs) -> return (a :: b :: xs)
+            | x -> return [ x ]
+          in
+          atomic d
+          >>= untuple
+          <|> (parens (d.expr_tuple d) >>= untuple)
+          <|> (parens (fun_sugar d) >>= fun x -> return [ x ])
+          <|> return []
+        in
+        let ans = EConstruct (cname, args) in
+        return ans
+      else
+        letdef_sugar d
+        <|> ite_sugar d
+        <|> match_case_sugar d
+        <|> (many (ws *> (atomic d <|> parens (d.expr d)) <* ws)
+             >>= function
+             | [] -> fail "can't parse many expressions"
+             | [ h ] -> return h
+             | foo :: args -> return @@ eapp foo args))
   in
   { expr_basic; expr_long; prio; expr_tuple; expr = expr_tuple }
 ;;
@@ -677,12 +732,21 @@ let parse_structure str =
   (* let state = Angstrom.Buffered.parse (structure <* ws <* end_of_input) in
   let state = Angstrom.Buffered.feed state (`String str) in
   match state with
-  | Angstrom.Buffered.Done (_, x) -> Result.Ok  x
-  | Fail (unc,_, msg) ->
+  | Angstrom.Buffered.Done (_, x) -> Result.Ok x
+  | Fail (unc, _, msg) ->
     let open Angstrom.Buffered in
-      Printf.printf "off = %d, len = %d\n" unc.off unc.len ;
-      Result.Error (`Parse_error msg :> [>error])
-    | _ -> assert false *)
+    let (unc : unconsumed) = unc in
+    Printf.printf "off = %d, len = %d\n" unc.off unc.len;
+    Result.Error (`Parse_error msg :> [> error ])
+  | Partial _f ->
+    (match _f `Eof with
+     | Angstrom.Buffered.Done (_, x) -> Result.Ok x
+     | Fail (unc, _, msg) ->
+       let open Angstrom.Buffered in
+       let (unc : unconsumed) = unc in
+       Printf.printf "off = %d, len = %d\n" unc.off unc.len;
+       Result.Error (`Parse_error msg :> [> error ])
+     | _ -> assert false) *)
   parse_string ~consume:All (structure <* ws <* end_of_input) str
   |> Result.map_error (fun s -> (`Parse_error s :> [> error ]))
 ;;
@@ -690,13 +754,6 @@ let parse_structure str =
 (** TODO: make preprocessing more flexible (and maybe move it to separated module) *)
 
 let preprocessing =
-  let comment_body =
-    fix (fun comment_body ->
-      string "*)" *> return ()
-      <|> string "(*" *> comment_body *> comment_body
-      <|> any_char *> comment_body)
-  in
-  let comment = string "(*" *> comment_body in
   let rule_skip =
     let parens p = string "(*" *> ws *> p <* ws <* string "*)" in
     let* _ = parens (string "[begin skip]") in

@@ -27,14 +27,14 @@ let end_of_input ic =
   | c ->
     let () = seek_in ic (pos_in ic - 1) in
     false
-;;
+
 
 (* [end skip] *)
 
 let failwith msg =
   let () = fprintf stderr "[compiler] error: %s \n" msg in
   exit 1
-;;
+
 
 (* list primitives *)
 
@@ -45,25 +45,25 @@ let list_rev ls =
     | x :: xs -> aux xs (x :: acc)
   in
   aux ls []
-;;
+
 
 let rec list_fold f ls init =
   match ls with
   | [] -> init
   | x :: xs -> list_fold f xs (f init x)
-;;
+
 
 let rec list_fold_right f ls init =
   match ls with
   | [] -> init
   | x :: xs -> f x (list_fold_right f xs init)
-;;
+
 
 let rec list_map f ls =
   match ls with
   | [] -> []
   | x :: xs -> f x :: list_map f xs
-;;
+
 
 let rec list_iter f ls =
   match ls with
@@ -71,13 +71,13 @@ let rec list_iter f ls =
   | x :: xs ->
     let () = f x in
     list_iter f xs
-;;
+
 
 let rec list_length ls =
   match ls with
   | [] -> 0
   | _ :: xs -> 1 + list_length xs
-;;
+
 
 let is_lparen ch = (ch = '(')
 let is_rparen ch = (ch = ')')
@@ -106,7 +106,7 @@ let int_of_digits chs =
   | h::tl ->
       aux (int_of_digit h) tl
 
-;;
+
 
 (* ast *)
 
@@ -165,7 +165,7 @@ let is_cpp_keyword s =
   | "for" -> true
   | "while" -> true
   | _ -> false
-;;
+
 
 (* ast printer *)
 
@@ -173,7 +173,7 @@ let pp_option pp_item oc t =
   match t with
   | None -> ()
   | Some item -> pp_item oc item
-;;
+
 
 let pp_list pp_item sep oc t =
   match t with
@@ -190,13 +190,13 @@ let pp_list pp_item sep oc t =
     let () = output_string oc sep in
     loop oc xs
     (*fprintf oc "%a%s%a" pp_item x1 sep loop xs*)
-;;
+
 
 let pp_ptype oc t =
   match t with
   | Ptype_int -> output_string oc "int"
   | Ptype_void -> output_string oc "void"
-;;
+
 
 let pp_pbinop oc op =
   match op with
@@ -212,7 +212,7 @@ let pp_pbinop oc op =
   | Pbinop_ge -> output_string oc ">="
   | Pbinop_and -> output_string oc "&&"
   | Pbinop_or -> output_string oc "||"
-;;
+
 
 let rec pp_pexpr oc e =
   match e with
@@ -234,7 +234,7 @@ let rec pp_pexpr oc e =
     fprintf oc ")"
   | Pexpr_assign (v, e) -> fprintf oc "%s = %a" v pp_pexpr e
   | Pexpr_tern (c, t, e) -> fprintf oc "%a ? %a : %a" pp_pexpr c pp_pexpr t pp_pexpr e
-;;
+
 
 let pp_decl oc decl =
   let pp_vb oc (name, expr_opt) =
@@ -251,7 +251,7 @@ let pp_decl oc decl =
      | vb1 :: vbs ->
        let () = pp_vb oc vb1 in
        fprintf oc "%a" (pp_list pp_vb ", ") vbs)
-;;
+
 
 let rec pp_pstmt oc stmt =
   match stmt with
@@ -284,7 +284,7 @@ let rec pp_pstmt oc stmt =
        let () = fprintf oc "\n" in
        pp_pstmt oc body
      | None -> fprintf oc ";\n")
-;;
+
 
 let pp_pprogram_item oc func =
   match func with
@@ -302,7 +302,7 @@ let pp_pprogram_item oc func =
     let () = fprintf oc ") {\n" in
     let () = list_iter (fprintf oc "  %a\n" pp_pstmt) fbody in
     fprintf oc "}\n"
-;;
+
 
 let pp_pprogram oc prog = list_iter (pp_pprogram_item oc) prog
 
@@ -334,13 +334,13 @@ let bind p f state =
   | Prez_error err -> Prez_error err
   | Prez_success (x, state2) ->
       f x state2
-;;
+
 
 let map p f state =
   match p state with
   | Prez_error err -> Prez_error err
   | Prez_success (rez, state) -> return (f rez) state
-;;
+
 
 let many p state =
   let rec aux acc state =
@@ -351,7 +351,7 @@ let many p state =
         Prez_success (ans, state)
   in
   aux [] state
-;;
+
 
 let many1 p state =
   match p state with
@@ -360,13 +360,13 @@ let many1 p state =
     (match many p state2 with
      | Prez_error err -> Prez_error err
      | Prez_success (xs, state3) -> return (x :: xs) state3)
-;;
+
 
 let choice2 p1 p2 state =
   match p1 state with
   | Prez_error _ -> p2 state
   | success -> success
-;;
+
 
 let choice_err = (Perr_message "choice")
 
@@ -378,7 +378,7 @@ let rec choice ps state =
     (match ans with
      | Prez_success (rez, state2) -> ans
      | Prez_error _ -> choice ps state)
-;;
+
 
 let take_while pred state =
   let rec aux pos acc =
@@ -391,7 +391,7 @@ let take_while pred state =
         else return (list_rev acc) pos)
   in
   aux state []
-;;
+
 
 let skip_while pred pos =
   let rec aux pred pos =
@@ -404,7 +404,6 @@ let skip_while pred pos =
       else return () pos)
   in
   aux pred pos
-;;
 
 let take_while1 pred pos =
   if pos >= string_len sarr.(0)
@@ -414,17 +413,17 @@ let take_while1 pred pos =
     if pred ch1
     then map (take_while pred) (fun chs -> ch1 :: chs) (pos + 1)
     else Prez_error (Perr_message "take_while1"))
-;;
+
 
 let rec take_while1_string_aux pred curpos =
   let s = sarr.(0) in
   if pred (string_nth s curpos)
   then take_while1_string_aux pred (1+curpos)
   else curpos
-;;
+
 
 let take_while1_string_err = Perr_message "take_while1_string"
-;;
+
 let take_while1_string pred pos =
   let rpos = take_while1_string_aux pred pos in
   if rpos > pos
@@ -432,7 +431,7 @@ let take_while1_string pred pos =
     let ans = substring sarr.(0) pos (rpos-pos) in
     Prez_success (ans, rpos)
   else Prez_error take_while1_string_err
-;;
+
 
 let drop_left p1 p2 state =
 (*
@@ -441,7 +440,7 @@ let drop_left p1 p2 state =
   match p1 state with
   | Prez_error err -> Prez_error err
   | Prez_success (_, state2) -> p2 state2
-;;
+
 
 let drop_right p1 p2 state =
   let ans = p1 state in
@@ -451,7 +450,7 @@ let drop_right p1 p2 state =
     (match p2 state2 with
      | Prez_error err -> Prez_error err
      | Prez_success (_, state3) -> return rez state3)
-;;
+
 
 let char ch pos =
   if pos >= string_len sarr.(0)
@@ -462,7 +461,7 @@ let char ch pos =
     if ch0 = ch
     then return ch (pos + 1)
     else Prez_error (Perr_message "unexpected char")
-;;
+
 
 let lparen pos = char '(' pos
 let rparen pos = char ')' pos
@@ -492,7 +491,7 @@ let string expected pos =
   let () = trace_rukaml_val state in
   let () = printf "expected ='%s'\n" expected in *)
   aux (string_len expected) (string_len sarr.(0)) 0
-;;
+
 
 let rec drop_many ps p state =
   match ps with
@@ -501,7 +500,7 @@ let rec drop_many ps p state =
     (match p1 state with
      | Prez_error err -> Prez_error err
      | Prez_success (_, state2) -> drop_many ps p state2)
-;;
+
 
 (* parser implementation *)
 
@@ -518,18 +517,18 @@ let ws pos =
         Prez_success ((), pos)
   in
   helper (string_len sarr.(0)) pos
-;;
+
 
 let skip_ws p state =
   match ws state with
   | Prez_success (_, st0) -> p st0
   | Prez_error _ -> exit 2
-;;
+
 let ws_exn st =
   match ws st with
   | Prez_success (_, st0) -> st0
   | _ -> exit 44
-;;
+
 let trim p st =
   let st = ws_exn st in
   let ans = p st in
@@ -584,6 +583,7 @@ let braces p st  =
   drop_left (trim (char '{')) (drop_right p (trim (char '}'))) st
   *)
 
+
 let parse_identifier eta =
   let ans = take_while1_string is_alphanum eta in
   match ans with
@@ -595,7 +595,6 @@ let parse_identifier eta =
     else if is_digit (string_nth name 0)
     then Prez_error (Perr_expected "identifier")
     else Prez_success (name, pos1)
-;;
 
 let parse_type eta =
   (*let (_,pos) = eta in
@@ -609,7 +608,8 @@ let parse_type eta =
         return Ptype_void)
     ]
     eta
-;;
+
+
 
 let make_binop_level expr_parser ops =
   let make_parser (op_str, op_ctor) =
@@ -620,7 +620,7 @@ let make_binop_level expr_parser ops =
   let level = choice (list_map make_parser ops) in
   bind expr_parser (fun init ->
     map (many level) (fun fs -> list_fold (fun acc f -> f acc) fs init))
-;;
+
 
 
 let parse_expr_call parse_expr =
@@ -634,7 +634,7 @@ let parse_expr_call parse_expr =
               (fun es -> return (Pexpr_call (fname, e1 :: es)))))
          (* no args *)
          (return (Pexpr_call (fname, [])))))
-;;
+
 
 let num_of_string_exn s =
   let rec loop s pos len acc =
@@ -645,7 +645,7 @@ let num_of_string_exn s =
     else acc
   in
   loop s 0 (string_len s) 0
-;;
+
 
 let lookahead pred pos =
   let s = sarr.(0) in
@@ -709,7 +709,7 @@ let parse_expr_atom parse_expr pos =
         pos
     else return (Pexpr_var fname) pos)
     pos
-;;
+
 
 let mul_div_spec = [ "*", Pbinop_mul; "/", Pbinop_div ]
 let add_sub_spec =  [ "+", Pbinop_add; "-", Pbinop_sub ]
@@ -733,7 +733,7 @@ let parse_expr_binop parse_expr =
   let parse_comp = make_binop_level parse_add_sub comp_spec in
   let parse_logical = make_binop_level parse_comp logical_spec in
   parse_logical
-;;
+
 
 let parse_expr_tern parse_expr pos =
   let pos = ws_exn pos in
@@ -751,7 +751,7 @@ let parse_expr_tern parse_expr pos =
     else
       return c pos)
     pos
-;;
+
 
 let parse_expr_assign parse_expr pos =
   let pos = ws_exn pos in
@@ -762,7 +762,7 @@ let parse_expr_assign parse_expr pos =
          (bind parse_expr (fun rhs -> return (Pexpr_assign (v, rhs))))))
     (parse_expr_tern parse_expr)
     pos
-;;
+
 
 let rec parse_expression state =
   parse_expr_assign parse_expression state
@@ -790,7 +790,7 @@ let parse_decl =
         (many (drop_left (skip_ws (char ',')) parse_single_var))
         (fun vs -> Pdecl_var (t, v1 :: vs))))
     pos
-;;
+
 
 let parse_stmt_return pos =
   let pos = ws_exn pos in
@@ -805,7 +805,7 @@ let parse_stmt_return pos =
        (bind parse_expression (fun e ->
           drop_left (skip_ws (char ';')) (return (Pstmt_return (Some e))))) pos)
     pos
-;;
+
 
 let parse_stmt_ite parse_stmt pos =
   let pos = ws_exn pos in
@@ -819,7 +819,7 @@ let parse_stmt_ite parse_stmt pos =
               (bind parse_stmt (fun e -> return (Pstmt_ite (c, t, Some e)))))
            (return (Pstmt_ite (c, t, None))))))
            pos
-;;
+
 
 let parse_stmt_for parse_stmt =
   let option p = choice2 (map p (fun x -> Some x)) (return None) in
@@ -844,20 +844,20 @@ let parse_stmt_for parse_stmt =
                                (drop_left (skip_ws (char ';')) (return None)))
                             (fun body_opt ->
                                Pstmt_for (decl_opt, cond_opt, iter_opt, body_opt))))))))))
-;;
+
 
 let parse_stmt_block parse_stmt =
   map (braces (many parse_stmt)) (fun stmts -> Pstmt_block stmts)
-;;
+
 
 let parse_stmt_decl pos =
   bind parse_decl (fun decl -> drop_left (skip_ws (char ';')) (return (Pstmt_decl decl)))
   pos
-;;
+
 
 let parse_stmt_expr eta =
   bind parse_expression (fun e -> drop_left (skip_ws (char ';')) (return (Pstmt_expr e))) eta
-;;
+
 
 let rec parse_statement state =
   (choice
@@ -869,7 +869,7 @@ let rec parse_statement state =
      ; parse_stmt_expr
      ])
     state
-;;
+
 
 let parse_fun_param pos =
   let pos = ws_exn pos in
@@ -878,7 +878,7 @@ let parse_fun_param pos =
     let pos = ws_exn pos in
     bind parse_identifier (fun name -> return (ty, name)) pos
   | Prez_error e -> Prez_error e
-;;
+
 
 
 let parse_fun_params pos =
@@ -899,7 +899,7 @@ let parse_fun_params pos =
               pos)
           pos)
     pos
-;;
+
 
 let parse_function pos =
   (* let () = printf "\ninside parse_function\n" in
@@ -915,7 +915,7 @@ let parse_function pos =
           | Pstmt_block stmts -> return (Pitem_function (name, ty, params, stmts))
           | _ -> fail (Perr_expected "function body")))))
     pos
-;;
+
 
 let parse_program eta =
   many (skip_ws parse_function) eta
@@ -925,7 +925,7 @@ let pp_parsing_error oc err =
   | Perr_message msg -> fprintf oc "error: %s" msg
   | Perr_expected x -> fprintf oc "expected: %s" x
   | Perr_unexpected_eof -> fprintf oc "unexpected eof"
-;;
+
 
 (* codegen *)
 
@@ -935,7 +935,7 @@ let sizeof_ctype ptype =
   match ptype with
   | Ptype_int -> wordsize
   | Ptype_void -> 0
-;;
+
 
 (* Machine *)
 
@@ -1019,14 +1019,14 @@ let bne k a b c = k (Bne (a,b,c))
 let beqz k a b = k (Beq (a,RZ,b))
 let seqz k a b = k (Seqz (a,b))
 let sneqz k a b = k (Sneqz (a,b))
-;;
+
 
 let store_info = [| 0; 110 |] (* count and max_count *)
 let store = array_make 110 (Ret 0)
-;;
+
 (* return instruction and labels count together *)
 let store_len () = array_get store_info 0
-;;
+
 
 let pp_store oc () =
   let () = fprintf oc "#store has %d instrs\n"
@@ -1039,7 +1039,7 @@ let pp_store oc () =
       loop oc (1+i) last
   in
   loop oc 0 (array_get store_info 0 )
-;;
+
 let queue_add i =
   let cur = array_get store_info 0 in
   if cur < array_get store_info 1
@@ -1053,7 +1053,7 @@ let queue_add i =
     exit 1
 
 let emit instr = instr queue_add
-;;
+
 (* C0 like implementation (every var gets it's own place in vars pool) *)
 let eval_locals_pool_size stms =
   let eval_opt eval opt =
@@ -1076,14 +1076,14 @@ let eval_locals_pool_size stms =
     | Pstmt_expr _ -> 0
   in
   list_fold (fun acc stm -> acc + aux stm) stms 0
-;;
+
 
 let locals_pools = [| [] |]
-;;
+
 let push_pool size =
   let old_pools = array_get locals_pools 0 in
   array_set locals_pools 0 ((0, size) :: old_pools)
-;;
+
 
 let pop_pool size =
   match array_get locals_pools 0 with
@@ -1092,19 +1092,19 @@ let pop_pool size =
     if size = _size
     then array_set locals_pools 0 other_pools
     else failwith "something bad: can not pop pool (size mismatch)"
-;;
+
 
 let emit_init_locals_pool oc pool_size =
   let () = push_pool pool_size in
   (* let () = fprintf oc "addi sp, sp, %d\n" (pool_size * (0 - 1)) in *)
   emit addi SP SP (pool_size * (0 - 1))
-;;
+
 
 let emit_destroy_locals_pool oc pool_size =
   let () = pop_pool pool_size in
   (* let () = fprintf oc "addi sp, sp, %d\n" pool_size in *)
   emit addi SP SP pool_size
-;;
+
 
 (* negative offsets over fp (use it for local vars, not for function parameters) *)
 let get_offset_for_new_var nbytes =
@@ -1117,29 +1117,29 @@ let get_offset_for_new_var nbytes =
       else array_set locals_pools 0 ((offset + nbytes, pool_size) :: other_pools)
     in
     0 - nbytes - offset
-;;
+
 
 (* scopes *)
 
 let scopes = [| [] |]
-;;
+
 let enter_scope () =
   let old_scopes = array_get scopes 0 in
   array_set scopes 0 ([] :: old_scopes)
-;;
+
 
 let exit_scope () =
   match array_get scopes 0 with
   | [] -> failwith "something bad: can not exit scope (no scopes)"
   | _ :: old_scopes -> array_set scopes 0 old_scopes
-;;
+
 
 let add_to_scope name offset =
   match array_get scopes 0 with
   | [] -> failwith "something bad: can not add var (no scopes)"
   | current_scope :: old_scopes ->
     array_set scopes 0 (((name, offset) :: current_scope) :: old_scopes)
-;;
+
 
 let add_func_params_to_scope params =
   let rec aux params i =
@@ -1151,7 +1151,7 @@ let add_func_params_to_scope params =
       aux xs (i + 1)
   in
   aux params 0
-;;
+
 
 let find_var_offset name =
   let rec aux ss =
@@ -1161,22 +1161,22 @@ let find_var_offset name =
     | ((v, offset) :: vs) :: ss -> if v = name then offset else aux (vs :: ss)
   in
   aux (array_get scopes 0)
-;;
+
 
 let pp_local_var oc name =
   let offset = find_var_offset name in
   fprintf oc "%d(fp)" offset
-;;
+
 
 (* unique labels *)
 
 let label_counter = [| 0 |] (* TODO: replace with ref *)
-;;
+
 let fresh_label prefix =
   let n = array_get label_counter 0 in
   let () = array_set label_counter 0 (n + 1) in
   sprintf "%s_%d" prefix n
-;;
+
 
 (* codegen *)
 
@@ -1275,7 +1275,7 @@ let rec codegen_expr oc expr =
     let () = codegen_expr oc expr in
     emit sd A0 (find_var_offset var) FP
     (* fprintf oc "  sd a0, %a\n" pp_local_var var *)
-;;
+
 
 let codegen_decl oc decl =
   match decl with
@@ -1295,7 +1295,7 @@ let codegen_decl oc decl =
          | None -> ())
     in
     aux vbs
-;;
+
 
 let rec codegen_statement oc epilogue stmt =
   match stmt with
@@ -1379,11 +1379,11 @@ let rec codegen_statement oc epilogue stmt =
     let () = fprintf oc "%s:\n" end_label in
     () *)
   | Pstmt_decl decl -> codegen_decl oc decl
-;;
 
-let flags = [| true |];;
+
+let flags = [| true |]
 (* [| dumpC; |] *)
-let set_dump_c flg = array_set flags 0 flg;;
+let set_dump_c flg = array_set flags 0 flg
 
 
 let pp_prologue oc fname pool_size =
@@ -1409,7 +1409,7 @@ let pp_prologue oc fname pool_size =
   let () = emit addi FP SP 0 in
   let () = emit_init_locals_pool oc pool_size in
   ()
-;;
+
 
 
 let pp_epilogue oc epilogue_label pool_size =
@@ -1420,7 +1420,7 @@ let pp_epilogue oc epilogue_label pool_size =
   let () = emit addi SP SP (2*wordsize) in
   let () = emit ret in
   ()
-;;
+
 
 let codegen_function oc func =
   match func with
@@ -1437,16 +1437,16 @@ let codegen_function oc func =
     then pp_store oc ()
     else ()
 
-;;
+
 
 let codegen_program oc prog = list_iter (codegen_function oc) prog
-;;
 
-let mnemonics_info = [| 0; 150 |];;
-let mnemonics = array_make 150 0;;
-let mnemonics_max_len () = array_get mnemonics_info 1;;
+
+let mnemonics_info = [| 0; 150 |]
+let mnemonics = array_make 150 0
+let mnemonics_max_len () = array_get mnemonics_info 1
 let get_mnemonics () = mnemonics
-;;
+
 
 let for_loop start len f arr =
   let rec loop start len f arr =
@@ -1457,7 +1457,7 @@ let for_loop start len f arr =
       ()
   in
   loop start len f arr
-;;
+
 
 let rec collect_labels acc icount pos =
   (* let () = printf "collect labels at  pos %d\n" pos in *)
@@ -1469,7 +1469,7 @@ let rec collect_labels acc icount pos =
     match r with
     | Label s -> collect_labels ((s,icount)::acc) icount pos1
     | _ -> collect_labels acc (icount+1) pos1
-;;
+
 
 let rec assoc_exn k xs =
   match xs with
@@ -1478,7 +1478,7 @@ let rec assoc_exn k xs =
     let (a,v) =  h in
     if string_equal k a then v
     else assoc_exn k tl
-;;
+
 
 (* increments mnemonic count and writes the last one *)
 let set_mnem hi lo i =
@@ -1491,11 +1491,11 @@ let set_mnem hi lo i =
   let () = array_set mnemonics_info 0 (pos+1) in
 
   ()
-;;
+
 
 let trace_instr i offset =
   printf "== %a, offset = %d\n" pp_inst i  offset
-;;
+
 
 let assembly_li r n i oc icount =
   if r=A0 && n=0 then
@@ -1523,7 +1523,7 @@ let assembly_li r n i oc icount =
   else
     let () = trace_instr i n  in
     failwith "Not implemented in Li"
-;;
+
 
 let assembly_add r1 r2 r3 i oc icount =
   if r1=A0 && r2=T0 && r3=A0 then
@@ -1535,7 +1535,7 @@ let assembly_add r1 r2 r3 i oc icount =
   else
     let () = fprintf oc "== %a\n" pp_inst i in
     exit 3
-;;
+
 
 let assembly_j offset i oc icount =
   if offset = 0-47
@@ -1595,7 +1595,7 @@ let assembly_j offset i oc icount =
   else
     let () = trace_instr i offset in
     set_mnem 0xffff 0xffff i
-;;
+
 
 let assembly_addi r1 r2 n i =
   if r1=SP && r2=SP && n = (0-8) then
@@ -1615,7 +1615,7 @@ let assembly_addi r1 r2 n i =
   else
       let () = printf "== %a\n" pp_inst i in
       exit 2
-;;
+
 
 let assembly_ld r1 n r2  i =
   if r1=A0 && n=8 && r2=FP then (* assuming FP is S0 *)
@@ -1786,7 +1786,7 @@ let assembly oc () =
         exit 22
   in
   loop store 0 0
-;;
+
 
 let print_asm_as_c oc =
   let rec printer label_idxs icount ipos =
@@ -1825,7 +1825,7 @@ let print_asm_as_c oc =
   let label_idxs = collect_labels [] 0 0 in
   (* let () = printf "store_len  =  %d\n" (store_len()) in *)
   printer label_idxs 0 0
-;;
+
 
 (* driver *)
 
@@ -1843,7 +1843,7 @@ let usage () =
       "[compiler] Usage: compiler <input-file> [-o <output-file>] [--target rv64|parsetree]\n"
   in
   exit 1
-;;
+
 
 let current_line state =
   let str, pos = state in
@@ -1855,7 +1855,7 @@ let current_line state =
     else loop (pos + 1) cnt
   in
   loop pos 1
-;;
+
 
 
 
@@ -1876,7 +1876,7 @@ let test_a_function input target =
         if array_get flags 0
         then print_asm_as_c stdout
         else ()
-;;
+
 
 let run_single oc target input =
   let () = printf "\n" in
@@ -1904,25 +1904,25 @@ let run_single oc target input =
       printf
         "parsing failed: can not parse many program items (failed at ~%d line)\n"
         (current_line (input, pos) + 1)
-;;
+
 
 let test ok_msg input f =
   let () = array_set sarr 0 input in
   match f 0 with
   | Prez_error _ -> printf "Failed '%s'\n" ok_msg
   | Prez_success (_,pos) -> printf "Success '%s' on pos %d\n" ok_msg pos
-;;
+
 let test1 () = test "demo1" "{return 1;}" (parse_stmt_block parse_statement)
-;;
+
 let test2 () = test "demo2" "int main() {return 1;}" parse_function
-;;
+
 let test3 () =
   let input = "factrec1(){}" in
   let () = array_set sarr 0 input in
   match parse_identifier 0 with
   | Prez_error _ -> printf "Failed\n"
   | Prez_success (name,pos) -> printf "Success '%s' on pos %d\n" name pos
-;;
+
 let test4 () =
   let input = "void f(){ return 5; }" in
   let () = array_set sarr 0 input in
@@ -1931,7 +1931,7 @@ let test4 () =
   | Prez_success (f, pos) ->
     let () = pp_pprogram stdout [f] in
     printf "Success 'test4' on pos %d\n" pos
-;;
+
 let test5 () =
   let input = "factrec1(){}" in
   let () = array_set sarr 0 input in
@@ -1941,7 +1941,7 @@ let test5 () =
       (* let l = list_length chs in *)
       let name = string_of_char_list chs in
       printf "Success '%s' on pos %d\n" name pos
-;;
+
 
 let parse_args argv =
   let argc = array_len argv in
@@ -2001,7 +2001,7 @@ let parse_args argv =
     | Some s -> s
   in
   input_path, output_path, target
-;;
+
 
 (* main *)
 
