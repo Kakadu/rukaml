@@ -34,7 +34,7 @@ let disable_locally opt (f : unit -> 'a) : 'a =
    then we can remove this module
 *)
 module TailCall = struct
-  let get_tailcalls expr =
+  let get_tailcalls expr pats =
     let rec parse_expr = function
       | ELet (_, _, _, wher) -> parse_expr wher
       | EComplex c_expr -> parse_c_expr c_expr
@@ -47,7 +47,15 @@ module TailCall = struct
              [ parse_expr bthn; parse_expr bels ])
       | _ -> None
     in
-    parse_expr expr
+    let unfiltered = Option.value (parse_expr expr) ~default:[] in
+    (* Filter to include only tailcalls of high-level functions *)
+    let pats_names = List.filter_map
+      (function 
+       | Apat_var name -> Some name.Ident.hum_name
+       | _ -> None) 
+      pats 
+    in
+    List.filter (fun tc -> not (List.mem tc.Ident.hum_name pats_names)) unfiltered
   ;;
 
   let tailcalls : (Ident.t, Ident.t list) Hashtbl.t = Hashtbl.create 1024
@@ -65,8 +73,8 @@ module TailCall = struct
       (fun (`Function (name, pats, expr)) ->
          assert (not (Hashtbl.mem tailcalls name));
          assert (not (Hashtbl.mem funcs_stack_space name));
-         let maybe_tc = get_tailcalls expr in
-         Option.iter (fun callee -> Hashtbl.add tailcalls name callee) maybe_tc;
+         let maybe_tcs = get_tailcalls expr pats in
+         Hashtbl.add tailcalls name maybe_tcs;
          Hashtbl.add funcs_stack_space name (List.length pats))
       funcs
   ;;
@@ -98,7 +106,17 @@ module TailCall = struct
          let space = calculate_stack_space key in
          let space_rounded = space + (space mod 2) in
          Hashtbl.replace funcs_stack_space key space_rounded)
-      keys
+      keys;
+    (* Debug *)
+      (* Hashtbl.iter (fun k v -> 
+        print_endline @@ "Stack space of " ^ k.Ident.hum_name ^ " is " ^ string_of_int v; 
+      ) funcs_stack_space;
+
+      Hashtbl.iter (fun k ks -> 
+        let names = List.map (fun x -> x.Ident.hum_name) ks in
+        print_endline @@ "Tailcalls of " ^ k.Ident.hum_name ^ " are [" ^ (String.concat ", " names) ^ "]"; 
+      ) tailcalls; *)
+   
   ;;
 
   let get_stack_space name = Hashtbl.find funcs_stack_space (Option.get name)
@@ -112,8 +130,8 @@ module TailCall = struct
   (* For compability with AMD64 *)
   let vb_to_function = function
     | ANF_vb (_, Apat_var name, body) ->
-      let pats, _ = ANF.group_abstractions body in
-      if List.length pats > 0 then Some (`Function (name, pats, body)) else None
+      let pats, real_body = ANF.group_abstractions body in
+      if List.length pats > 0 then Some (`Function (name, pats, real_body)) else None
     | _ -> None
   ;;
 end
