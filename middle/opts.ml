@@ -29,11 +29,11 @@ let disable_locally opt (f : unit -> 'a) : 'a =
   else f ()
 ;;
 
-(* Now, only AMD64 backend uses this module.
-   If we rewrite calling convention there like RV64,
-   then we can remove this module
-*)
 module TailCall = struct
+  (* Now, only AMD64 backend uses this module.
+     If we rewrite calling convention there like RV64,
+     then we can remove this module
+  *)
   let get_tailcalls expr pats =
     let rec parse_expr = function
       | ELet (_, _, _, wher) -> parse_expr wher
@@ -48,7 +48,7 @@ module TailCall = struct
       | _ -> None
     in
     let unfiltered = Option.value (parse_expr expr) ~default:[] in
-    (* Filter to include only tailcalls of high-level functions *)
+    (* Filter to include only tailcalls of top-level functions *)
     let pats_names = List.filter_map
       (function 
        | Apat_var name -> Some name.Ident.hum_name
@@ -119,7 +119,10 @@ module TailCall = struct
    
   ;;
 
-  let get_stack_space name = Hashtbl.find funcs_stack_space (Option.get name)
+  let get_stack_space name = 
+    match Hashtbl.find_opt funcs_stack_space name with
+    | Some space -> space
+    | None -> failwith ("get_stack_space: not found `" ^ name.hum_name ^ "` function")
 
   let get_free_space name busy =
     let all_space = get_stack_space name in
