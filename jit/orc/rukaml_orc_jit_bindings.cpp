@@ -22,6 +22,7 @@ void *rukaml_apply0(void *f);
 void *rukaml_apply1(void *f, void *arg1);
 void *rukaml_apply2(void *f, void *arg1, void *arg2);
 void *rukaml_apply3(void *f, void *arg1, void *arg2, void *arg3);
+void *rukaml_apply4(void *f, void *arg1, void *arg2, void *arg3, void *arg4);
 void *rukaml_alloc_pair(void *l, void *r);
 void *rukaml_field(int n, void **r);
 void *rukaml_alloc_closure(void *func, int32_t argsc);
@@ -45,6 +46,7 @@ static const std::vector<std::pair<std::string, uint64_t>> k_runtime_syms = {
     {"rukaml_apply1", addr_of(&rukaml_apply1)},
     {"rukaml_apply2", addr_of(&rukaml_apply2)},
     {"rukaml_apply3", addr_of(&rukaml_apply3)},
+    {"rukaml_apply4", addr_of(&rukaml_apply4)},
     {"rukaml_alloc_pair", addr_of(&rukaml_alloc_pair)},
     {"rukaml_field", addr_of(&rukaml_field)},
     {"rukaml_alloc_closure", addr_of(&rukaml_alloc_closure)},

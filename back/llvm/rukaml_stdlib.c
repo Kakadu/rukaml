@@ -42,6 +42,7 @@ typedef void *(*fun0)(void);
 typedef void *(*fun1)(void *);
 typedef void *(*fun2)(void *, void *);
 typedef void *(*fun3)(void *, void *, void *);
+typedef void *(*fun4)(void *, void *, void *, void *);
 
 void *rukaml_apply0(void *f)
 {
@@ -65,6 +66,12 @@ void *rukaml_apply3(void *f, void *arg1, void *arg2, void *arg3)
 {
   fun3 foo = (fun3)f;
   return foo(arg1, arg2, arg3);
+}
+
+void *rukaml_apply4(void *f, void *arg1, void *arg2, void *arg3, void *arg4)
+{
+  fun4 foo = (fun4)f;
+  return foo(arg1, arg2, arg3, arg4);
 }
 
 typedef struct
@@ -205,6 +212,9 @@ void *rukaml_applyN(void *f, int32_t argc, ...)
       break;
     case 3:
       return rukaml_apply3(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2]);
+      break;
+    case 4:
+      return rukaml_apply4(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2], f_closure->args[3]);
       break;
     default:
       printf("FUCK, f_closure->argsc = %u\n", f_closure->argsc);
