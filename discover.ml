@@ -138,7 +138,7 @@ let () =
     export_toolchain toolchain_rv32 ~suffix:"rv32";
     print_toolchain toolchain_rv32
   in
-  let clang = "clang-16" in
+  let clang = "clang-19" in
   let defaults_llvm =
     { cc = { defaults_amd64.cc with path = clang }
     ; as_ = { path = clang; flags = "-x ir -c" }
