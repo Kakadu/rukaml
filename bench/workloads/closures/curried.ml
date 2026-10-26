@@ -6,11 +6,19 @@
    direct call to a clone with the constant 1 baked in (`add$spec$0`), so
    this workload is where the optimization shows.
 
-   result: acc = n, i.e. 1000000 for n = 1000000. *)
+   The inner loop has a fixed depth so the stack stays constant while
+   [bench_iters] scales the work; see ../recursion/plain.ml.
+
+   result: acc = bench_iters * 1000. *)
+
+let bench_iters = 1000
 
 let add a b = a + b
 
-let rec loop n acc =
-  if n = 0 then acc else let f = add 1 in loop (n - 1) (f acc)
+let rec inner n acc =
+  if n = 0 then acc else let f = add 1 in inner (n - 1) (f acc)
 
-let main = loop 1000000 0
+let rec outer m acc =
+  if m = 0 then acc else outer (m - 1) (inner 1000 acc)
+
+let main = outer bench_iters 0

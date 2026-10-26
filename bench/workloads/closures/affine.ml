@@ -7,7 +7,10 @@
    win per site than the unary case of pipeline.ml.
 
    result: acc grows by 2*3 + 1*4 + 5*1 = 15 per inner iteration, i.e.
-   15000000 for 1000 * 1000 iterations; exit value modulo 256. *)
+   15000 * bench_iters for the default bench_iters = 1000; exit value modulo
+   256. *)
+
+let bench_iters = 1000
 
 let fma k a x = k * a + x
 
@@ -22,4 +25,4 @@ let rec inner n acc =
 let rec outer m acc =
   if m = 0 then acc else outer (m - 1) (inner 1000 acc)
 
-let main = outer 1000 0
+let main = outer bench_iters 0

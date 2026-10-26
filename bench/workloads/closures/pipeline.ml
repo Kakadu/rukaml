@@ -15,8 +15,11 @@
    a million) so the [inner] loop's hot code stays cache-resident and the
    per-iteration transform cost, not stack traffic, dominates.
 
-   result: acc grows by 1 + 2 - 1 + 3 = 5 per inner iteration, i.e. 5000000 for
-   1000 * 1000 iterations; the driver exits with that value modulo 256. *)
+   result: acc grows by 1 + 2 - 1 + 3 = 5 per inner iteration, i.e.
+   5000 * bench_iters for the default bench_iters = 1000; the driver exits
+   with that value modulo 256. *)
+
+let bench_iters = 1000
 
 let inc a x = x + a
 let dec a x = x - a
@@ -33,4 +36,4 @@ let rec inner n acc =
 let rec outer m acc =
   if m = 0 then acc else outer (m - 1) (inner 1000 acc)
 
-let main = outer 1000 0
+let main = outer bench_iters 0
