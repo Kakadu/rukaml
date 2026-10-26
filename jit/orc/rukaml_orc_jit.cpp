@@ -16,7 +16,6 @@ RukamlJIT::RukamlJIT(std::unique_ptr<ExecutionSession> exec_session,
                      std::make_unique<ConcurrentIRCompiler>(std::move(jtmb))),
       _data_layout(std::move(data_layout)),
       _mangle(*_exec_session, _data_layout),
-      _ctx(std::make_unique<LLVMContext>()),
       _main_jd(_exec_session->createBareJITDylib("<main>")) {
   // No DynamicLibrarySearchGenerator for the current process — on purpose:
   // the only host code JIT'd code may reference is the rukaml runtime, and it
@@ -55,6 +54,13 @@ Expected<ExecutorSymbolDef> RukamlJIT::lookup(StringRef name) {
   return _exec_session->lookup({&_main_jd}, _mangle(name.str()));
 }
 
+Expected<uint64_t> RukamlJIT::lookup_addr(StringRef name) {
+  auto sym = lookup(name);
+  if (!sym)
+    return sym.takeError();
+  return sym->getAddress().getValue();
+}
+
 Error RukamlJIT::define_abs_symbols(
     const std::vector<std::pair<std::string, uint64_t>> &syms) {
   SymbolMap map;
@@ -65,14 +71,15 @@ Error RukamlJIT::define_abs_symbols(
 }
 
 RukamlJIT::~RukamlJIT() {
+  _version_trackers.clear();
   if (auto err = _exec_session->endSession())
     _exec_session->reportError(std::move(err));
 }
 
 Error RukamlJIT::add_ir(StringRef ir, ResourceTrackerSP rt) {
+  auto ctx = std::make_unique<LLVMContext>();
   SMDiagnostic diag;
-  std::unique_ptr<Module> module;
-  module = parseAssemblyString(ir, diag, *_ctx.getContext());
+  std::unique_ptr<Module> module = parseAssemblyString(ir, diag, *ctx);
   if (!module) {
     std::string msg;
     raw_string_ostream os(msg);
@@ -84,7 +91,15 @@ Error RukamlJIT::add_ir(StringRef ir, ResourceTrackerSP rt) {
   module->setDataLayout(_data_layout);
   module->setTargetTriple(
       _exec_session->getExecutorProcessControl().getTargetTriple().str());
-  return ad_module(ThreadSafeModule(std::move(module), _ctx), std::move(rt));
+  ThreadSafeContext ts_ctx(std::move(ctx));
+  return ad_module(ThreadSafeModule(std::move(module), std::move(ts_ctx)),
+                   std::move(rt));
+}
+
+Error RukamlJIT::add_delta_ir(StringRef ir) {
+  auto rt = _main_jd.createResourceTracker();
+  _version_trackers.push_back(rt);
+  return add_ir(ir, std::move(rt));
 }
 
 } // namespace orc

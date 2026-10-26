@@ -40,3 +40,47 @@ module type BackEngine = sig
 
   val runtime_symbols : string list
 end
+
+type event =
+  | Hot of int
+  | Timeout
+  | Stop
+
+(** Extended contract for an online (tiered) JIT backend. *)
+module type OnlineEngine = sig
+  include BackEngine
+
+  (** Load a delta IR module under a fresh per-version ResourceTracker. *)
+  val load_delta : t -> IR.t -> unit
+
+  (** Look up a compiled symbol's raw address. *)
+  val symbol_address : t -> string -> int64
+
+  (** Bind the Tier 0 global tables (@rukaml.slots, @rukaml.cnt, @rukaml.miss)
+      for a module with [num_funcs] slotted functions. *)
+  val bind_tables : t -> int -> unit
+
+  (** Atomically redirect [@rukaml.slots[slot]] to the address of [symbol]. *)
+  val install : t -> slot:int -> symbol:string -> unit
+
+  (** Wait up to [timeout_ms] for the next hot-function event. *)
+  val next_event : t -> timeout_ms:int -> event
+
+  (** Signal the event queue to wake up and return [Stop]. *)
+  val stop_events : t -> unit
+
+  (** Read the sampled argument profile for [func_id] (length [arity]):
+      [Some v] when the parameter was constant [v] across the sampling window,
+      [None] when unseen or varied. *)
+  val read_arg_profile : t -> func_id:int -> arity:int -> int64 option array
+
+  (** Read the sampled closure target for [site_id]:
+      [Some (code_addr, argsc, args_received)] if monomorphic. *)
+  val read_site_profile : t -> site_id:int -> (int64 * int * int) option
+
+  (** Read [(cnt, miss)] counters for [func_id]. *)
+  val read_counts : t -> func_id:int -> int64 * int64
+
+  (** Reset [cnt], [miss], argument profile, and queued flag for [func_id]. *)
+  val reset_func_profile : t -> func_id:int -> unit
+end
