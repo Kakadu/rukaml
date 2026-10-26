@@ -7,7 +7,7 @@ open Compile_lib
     through that contract — never to the low-level C bindings directly.
     The annotation is the compiler-checked proof that [OrcEngine]
     implements the contract. *)
-module Engine : JIT_engine_lib.JITEngine.BackEngine = JIT_orc_lib.OrcEngine
+module Engine : JIT_engine_lib.JITEngine.OnlineEngine = JIT_orc_lib.OrcEngine
 
 (** Optimization passes between IR generation and [Engine.load]: pure
     [IR.t -> IR.t] patches of the payload, backend-agnostic. *)
@@ -225,6 +225,16 @@ module Target = struct
           stru
       in
       let ir = LLVM_impl.anf_to_ir vbs in
+      if List.mem "online" p.opt_passes
+      then (
+        let code =
+          try JITOpt.Online.run_online (module Engine) ?dump_dir:p.opt_dump ir with
+          | Failure msg -> error "jit error: %s" msg
+        in
+        Option.iter
+          (fun path -> Out_channel.write_all path ~data:(IR.payload ir))
+          p.out_path;
+        Stdlib.exit (Int64.to_int code));
       (* optimization passes are IR -> IR and backend-agnostic: they run
          between IR generation and [load], and every requirement they add
          to the module must be resolvable by this engine *)
@@ -332,7 +342,7 @@ let () =
     ; "--rename-main", Bool (fun b -> RV64_impl.rename_main := b), " "
     ; ( "--opt"
       , String (fun s -> opt_passes := s :: !opt_passes)
-      , " JIT optimization pass (profile|specialize; repeatable)" )
+      , " JIT optimization pass (online|profile|devirt|specialize|o2|tier0; comma-separated or repeatable)" )
     ; ( "--profile-file"
       , Set_string profile_file
       , " JIT profile file (written by profile, read by specialize)" )
