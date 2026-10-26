@@ -6,12 +6,15 @@ build:
 test:
 	dune runtest
 
-bench: build
-	$(CC) -O2 -std=c11 -Wall -Wextra -o bench/harness bench/harness.c
-	./bench/harness bench/workloads/plain.ml
-	./bench/harness bench/workloads/curried.ml
-	./bench/harness bench/workloads/pipeline.ml
-	./bench/harness bench/workloads/affine.ml
+.PHONY: bench bench-online bench-all
+bench:
+	$(MAKE) -C bench
+
+bench-online:
+	$(MAKE) -C bench bench-online
+
+bench-all:
+	$(MAKE) -C bench bench-all
 
 watch:
 	dune runtest -w
