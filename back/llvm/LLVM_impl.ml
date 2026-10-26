@@ -311,6 +311,9 @@ let build_module (anf : ANF.vb list) : Llvm.llmodule =
     "rukaml_alloc_pair"
     (Llvm.function_type i64_type [| i64_type; i64_type |]);
   declare_primitive
+    "rukaml_alloc_array"
+    (Llvm.function_type i64_type [| i64_type; i64_type |]);
+  declare_primitive
     "rukaml_field"
     (* TODO: Should first argument be untagged?  *)
     (Llvm.function_type i64_type [| i64_type; i64_type |]);
