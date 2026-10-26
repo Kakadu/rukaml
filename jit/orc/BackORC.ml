@@ -1,12 +1,6 @@
 (* Low-level bindings for RukamlJIT. Do not use them outside jit/orc:
    the driver-facing contract is JITEngine.BackEngine (see OrcEngine). *)
 
-(* Idempotent within a process: creates [g_jit] (if there is none yet) and
-   registers the rukaml runtime (back/llvm/rukaml_stdlib.c, compiled into
-   this same .so — jit/orc/dune) as absolute symbols: no -rdynamic and no
-   process-symbol generator in the JITDylib. Registration happens exactly
-   once, under "just created", otherwise a second create would be a
-   duplicate symbol definition. *)
 external create : unit -> unit = "rukaml_orc_create"
 
 (* Adds a textual LLVM IR ([IR.TextLL] payload) as a new module to the
@@ -25,3 +19,23 @@ external destroy : unit -> unit = "rukaml_orc_destroy"
    [create]; read straight from the registration table, so it works with
    or without a JIT instance. *)
 external runtime_syms : unit -> string list = "rukaml_orc_runtime_syms"
+external add_delta : string -> unit = "rukaml_orc_add_delta"
+external lookup_address : string -> int64 = "rukaml_orc_lookup_address"
+external bind_tables : int -> unit = "rukaml_orc_bind_tables"
+external install_slot : int -> string -> unit = "rukaml_orc_install_slot"
+external next_event : int -> int = "rukaml_orc_next_event"
+external stop_events : unit -> unit = "rukaml_orc_stop_events"
+
+external read_arg_profile
+  :  int
+  -> int
+  -> int64 option array
+  = "rukaml_orc_read_arg_profile"
+
+external read_site_profile
+  :  int
+  -> (int64 * int * int) option
+  = "rukaml_orc_read_site_profile"
+
+external read_counts : int -> int64 * int64 = "rukaml_orc_read_counts"
+external reset_func_profile : int -> unit = "rukaml_orc_reset_func_profile"

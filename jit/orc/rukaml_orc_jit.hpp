@@ -46,11 +46,11 @@ private:
   /// Interner used to mangle symbol names for the target.
   MangleAndInterner _mangle;
 
-  /// Thread-safe wrapper around the LLVMContext.
-  ThreadSafeContext _ctx;
-
   /// The primary JITDylib that holds user-added modules.
   JITDylib &_main_jd;
+
+  /// Resource trackers for dynamically compiled delta modules.
+  std::vector<ResourceTrackerSP> _version_trackers;
 
 public:
   /// \brief Construct a RukamlJIT from its constituent pieces.
@@ -63,8 +63,12 @@ public:
 
   ~RukamlJIT();
 
-  /// Parses textual LLVM IR and adds the module to the JIT.
+  /// Parses textual LLVM IR into a fresh ThreadSafeContext and adds the module.
   Error add_ir(StringRef ir, ResourceTrackerSP rt = nullptr);
+
+  /// Parses textual LLVM IR and adds it under a dedicated per-version
+  /// ResourceTracker.
+  Error add_delta_ir(StringRef ir);
 
   /// \brief Create a RukamlJIT targeting the host process.
   ///
@@ -96,6 +100,9 @@ public:
   /// \return The resolved symbol definition, or an Error if the lookup
   ///         failed.
   Expected<ExecutorSymbolDef> lookup(StringRef name);
+
+  /// \brief Look up a compiled symbol's raw address by name.
+  Expected<uint64_t> lookup_addr(StringRef name);
 
   /// \brief Define host symbols (name → address) in the primary JITDylib.
   ///

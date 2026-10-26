@@ -225,5 +225,37 @@ let () =
       if drop_first_line (IR.payload out) <> second
       then fail "last dump does not match the pipeline result"
     | _ -> fail "dump callback called %d times, expected 2" (List.length seen));
+  (* 12. devirt pass: collapses non-constant alloc_closure + applyN chain *)
+  let nonconst_chain_payload =
+    "declare i64 @rukaml_alloc_closure(i64, i64)\n\
+     declare i64 @rukaml_applyN(i64, i64, ...)\n\
+     define i64 @add(i64 %0, i64 %1) {\n\
+    \  %r = add i64 %0, %1\n\
+    \  ret i64 %r\n\
+     }\n\
+     define i64 @step(i64 %a, i64 %b) {\n\
+    \  %cl = call i64 @rukaml_alloc_closure(i64 ptrtoint (ptr @add to i64), i64 2)\n\
+    \  %p1 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %cl, i64 1, i64 %a)\n\
+    \  %r = call i64 (i64, i64, ...) @rukaml_applyN(i64 %p1, i64 1, i64 %b)\n\
+    \  ret i64 %r\n\
+     }\n\
+     define i64 @main() {\n\
+    \  %res = call i64 @step(i64 19, i64 23)\n\
+    \  ret i64 %res\n\
+     }\n"
+  in
+  let devirt_ir =
+    JITOpt.run
+      (JITOpt.of_flags config [ "devirt,o2" ])
+      (IR.make IR.TextLL nonconst_chain_payload)
+  in
+  if contains (IR.payload devirt_ir) "call i64 @rukaml_alloc_closure"
+  then fail "devirt left rukaml_alloc_closure in step";
+  let e_dev = Engine.create () in
+  Engine.load e_dev devirt_ir;
+  (match Engine.run e_dev "main" with
+   | 42L -> ()
+   | v -> fail "devirt+o2 main = %Ld, expected 42L" v);
+  Engine.close e_dev;
   print_endline "selfcheck OK"
 ;;

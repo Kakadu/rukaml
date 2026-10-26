@@ -1,3 +1,12 @@
 (library
  (name JIT_opt_lib)
- (libraries IR llvm llvm.analysis llvm.irreader))
+ (libraries
+  IR
+  JIT_engine_lib
+  threads.posix
+  llvm
+  llvm.analysis
+  llvm.irreader
+  llvm.target
+  llvm.all_backends
+  llvm.passbuilder))
