@@ -1,0 +1,19 @@
+(test
+ (name selfcheck)
+ (modules selfcheck)
+ (libraries IR JIT_engine_lib JIT_orc_lib JIT_opt_lib))
+
+(test
+ (name unit)
+ (modules unit)
+ (libraries
+  IR
+  JIT_engine_lib
+  JIT_orc_lib
+  JIT_opt_lib
+  llvm
+  llvm.irreader
+  llvm.analysis))
+
+(cram
+ (deps %{project_root}/driver/driver.exe))

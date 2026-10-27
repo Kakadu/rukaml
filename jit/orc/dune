@@ -30,4 +30,6 @@
    -D__STDC_FORMAT_MACROS
    -D__STDC_LIMIT_MACROS))
  (c_library_flags
-  (-lstdc++ (:include llvm_ldflags.sexp))))
+  (-lstdc++ (:include llvm_ldflags.sexp)))
+ (instrumentation
+  (backend bisect_ppx)))
