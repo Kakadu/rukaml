@@ -1,6 +1,6 @@
 # JIT vs AOT benchmark
 
-`bench/harness.c` compares the **real online JIT** with **rukaml's AOT LLVM
+`jit/bench/harness.c` compares the **real online JIT** with **rukaml's AOT LLVM
 backend at `-O3`**.  The matrix is intentionally small:
 
 | row | command | runner |
@@ -33,13 +33,13 @@ The Rukaml programs are grouped by theme:
 
 | directory | workloads |
 | --- | --- |
-| `bench/workloads/recursion/` | `plain.ml`, `fib.ml` |
-| `bench/workloads/closures/` | `curried.ml`, `pipeline.ml`, `affine.ml` |
-| `bench/workloads/higher_order/` | `hof_fold.ml` |
-| `bench/workloads/online/` | `power.ml`, `online_showcase.ml` |
+| `jit/bench/workloads/recursion/` | `plain.ml`, `fib.ml` |
+| `jit/bench/workloads/closures/` | `curried.ml`, `pipeline.ml`, `affine.ml` |
+| `jit/bench/workloads/higher_order/` | `hof_fold.ml` |
+| `jit/bench/workloads/online/` | `power.ml`, `online_showcase.ml` |
 
 The `.ocaml.ml` twins used for manual `ocamlc`/`ocamlopt` comparisons live in a
-parallel tree: `bench/workloads/ocaml/<theme>/`.  They are not run by the
+parallel tree: `jit/bench/workloads/ocaml/<theme>/`.  They are not run by the
 harness and are not part of `make bench`.
 
 `ack` and the CPS workloads were removed from the active suite: `ack` is slower
@@ -148,7 +148,7 @@ smoke comparison, not a statistical result):
 
 ## Usage
 
-The bench targets live in `bench/Makefile`; the root Makefile delegates with
+The bench targets live in `jit/bench/Makefile`; the root Makefile delegates with
 `$(MAKE) -C bench`.  Run from the repository root (`eval $(opam env)` first if
 `_opam/bin` is not in `PATH`):
 
@@ -172,14 +172,14 @@ make bench BENCH_REPS=1 BENCH_ARGS='--sizes 500,1000'
 make bench BENCH_EXCLUDE_BACKENDS=
 
 # One row:
-./bench/harness --reps 3 --sizes 500,1000 --only 'jit' \
-  bench/workloads/recursion/plain.ml
-./bench/harness --reps 3 --sizes 500,1000 --only 'aot rv64' \
-  bench/workloads/recursion/plain.ml
+./jit/bench/harness --reps 3 --sizes 500,1000 --only 'jit' \
+  jit/bench/workloads/recursion/plain.ml
+./jit/bench/harness --reps 3 --sizes 500,1000 --only 'aot rv64' \
+  jit/bench/workloads/recursion/plain.ml
 
 # Full output:
-./bench/harness --reps 3 --sizes 500,1000,2000 --verbose --qemu-insn \
-  --json bench.json bench/workloads/recursion/plain.ml
+./jit/bench/harness --reps 3 --sizes 500,1000,2000 --verbose --qemu-insn \
+  --json bench.json jit/bench/workloads/recursion/plain.ml
 ```
 
 `make bench-online` uses `BENCH_ONLINE_REPS` (default `1`); override it with
@@ -205,15 +205,15 @@ The harness disables address-space randomization for children and raises
 
 ## qemu instruction counting
 
-`bench/qemu_plugin/qemu_insn_plugin.c` is a qemu TCG plugin that counts every
+`jit/bench/qemu_plugin/qemu_insn_plugin.c` is a qemu TCG plugin that counts every
 translated guest instruction and writes the total to `QEMU_INSN_FILE` at guest
 exit.  The harness inserts `-plugin <path>` into the qemu command line and
 fits `I(N) = a + b*N`.  Build it manually if needed:
 
 ```sh
 cc -O2 -shared -fPIC $(pkg-config --cflags glib-2.0) \
-  -o bench/qemu_plugin/libqemu_insn.so \
-  bench/qemu_plugin/qemu_insn_plugin.c
+  -o jit/bench/qemu_plugin/libqemu_insn.so \
+  jit/bench/qemu_plugin/qemu_insn_plugin.c
 ```
 
 If the plugin is missing, the harness prints a `skipped` note and continues.
@@ -244,7 +244,7 @@ _start:
   call main
 ```
 
-The runtime is compiled with `-D__amd64__=0 -include bench/amd64_compat.h`,
+The runtime is compiled with `-D__amd64__=0 -include jit/bench/amd64_compat.h`,
 because the legacy `#if __amd64__` block conflicts with modern compilers that
 define `__amd64__`.
 
@@ -295,5 +295,5 @@ Example:
 ```sh
 QEMU_RV64='qemu-riscv64' \
 QEMU_RV64_FLAGS='-L /opt/rv64-sysroot -cpu rv64' \
-  ./bench/harness --only 'aot rv64' --reps 3 bench/workloads/recursion/plain.ml
+  ./jit/bench/harness --only 'aot rv64' --reps 3 jit/bench/workloads/recursion/plain.ml
 ```
