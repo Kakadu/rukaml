@@ -8,13 +8,13 @@ test:
 
 .PHONY: bench bench-online bench-all
 bench:
-	$(MAKE) -C bench
+	$(MAKE) -C jit/bench
 
 bench-online:
-	$(MAKE) -C bench bench-online
+	$(MAKE) -C jit/bench bench-online
 
 bench-all:
-	$(MAKE) -C bench bench-all
+	$(MAKE) -C jit/bench bench-all
 
 watch:
 	dune runtest -w

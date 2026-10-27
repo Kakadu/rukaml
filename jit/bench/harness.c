@@ -1,5 +1,5 @@
 /*
- * bench/harness.c -- online JIT vs rukaml AOT.
+ * jit/bench/harness.c -- online JIT vs rukaml AOT.
  *
  * Matrix:
  *   jit            driver --target jit --opt=online
@@ -18,7 +18,7 @@
  *   insn       qemu guest instruction count I(N) = a + b*N
  *   results    every checked row must return the baseline's exit status
  *
- * Build: cc -O2 -std=c11 -Wall -Wextra -o bench/harness bench/harness.c
+ * Build: cc -O2 -std=c11 -Wall -Wextra -o jit/bench/harness jit/bench/harness.c
  */
 
 #define _GNU_SOURCE
@@ -582,7 +582,7 @@ static void init_backends(void) {
               RUN_HOST, 0, 0);
   add_backend("aot amd64", "amd64", "amd64", env_or("CC_AMD64", "cc"),
               env_or("CFLAGS_AMD64",
-                     "-O2 -fPIC -w -D__amd64__=0 -include bench/amd64_compat.h "
+                     "-O2 -fPIC -w -D__amd64__=0 -include jit/bench/amd64_compat.h "
                      "-Wno-incompatible-pointer-types "
                      "-Wno-implicit-function-declaration"),
               env_or("AS_AMD64", "nasm"), env_or("AS_FLAGS_AMD64", "-f elf64"),
@@ -1106,7 +1106,7 @@ int main(int argc, char **argv) {
     if (e != NULL && *e != '\0') g_cpu = atoi(e);
   }
   g_driver = env_or("RUKAML_DRIVER", "_build/default/driver/driver.exe");
-  g_plugin = env_or("RUKAML_QEMU_PLUGIN", "bench/qemu_plugin/libqemu_insn.so");
+  g_plugin = env_or("RUKAML_QEMU_PLUGIN", "jit/bench/qemu_plugin/libqemu_insn.so");
   g_base_n = read_bench_iters(workload);
 
   if (sizes_arg != NULL) {

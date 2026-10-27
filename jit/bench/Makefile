@@ -6,13 +6,13 @@
 #   make bench BENCH_REPS=1 BENCH_ARGS='--sizes 500,1000'
 #
 # Or directly from this directory:
-#   make -C bench
+#   make -C jit/bench
 #
 # The harness is run with the repository root as its working directory, so
 # its default driver/plugin/workload paths keep working.
 
 BENCH_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-ROOT := $(abspath $(BENCH_DIR)/..)
+ROOT := $(abspath $(BENCH_DIR)/../..)
 
 CC ?= cc
 GLIB_CFLAGS := $(shell pkg-config --cflags glib-2.0 2>/dev/null)
@@ -32,15 +32,17 @@ PLUGIN := $(BENCH_DIR)/qemu_plugin/libqemu_insn.so
 # expensive online showcase is a separate target so the default run stays
 # reasonably short.
 BENCH_WORKLOADS := \
-	bench/workloads/recursion/plain.ml \
-	bench/workloads/recursion/fib.ml \
-	bench/workloads/closures/curried.ml \
-	bench/workloads/closures/pipeline.ml \
-	bench/workloads/closures/affine.ml \
-	bench/workloads/higher_order/hof_fold.ml \
-	bench/workloads/online/power.ml
+	jit/bench/workloads/recursion/plain.ml \
+	jit/bench/workloads/recursion/fib.ml \
+	jit/bench/workloads/closures/curried.ml \
+	jit/bench/workloads/closures/pipeline.ml \
+	jit/bench/workloads/closures/affine.ml \
+	jit/bench/workloads/higher_order/hof_fold.ml \
+	jit/bench/workloads/online/power.ml \
+	jit/bench/workloads/online/tre_devirt.ml \
+	jit/bench/workloads/online/spec_nonlinear.ml
 
-BENCH_ONLINE_WORKLOAD := bench/workloads/online/online_showcase.ml
+BENCH_ONLINE_WORKLOAD := jit/bench/workloads/online/online_showcase.ml
 
 .PHONY: bench bench-online bench-all build harness clean
 
@@ -50,14 +52,14 @@ BENCH_ONLINE_WORKLOAD := bench/workloads/online/online_showcase.ml
 bench: build harness
 	cd $(ROOT) && set -e; \
 	for workload in $(BENCH_WORKLOADS); do \
-		./bench/harness --reps $(BENCH_REPS) --qemu-insn \
+		./jit/bench/harness --reps $(BENCH_REPS) --qemu-insn \
 			$(BENCH_EXCLUDE_ARGS) $(BENCH_ARGS) $$workload; \
 	done
 
 # The showcase is intentionally large enough to amortize online tier-up; its
 # AOT rows are expensive, so it gets one repetition by default.
 bench-online: build harness
-	cd $(ROOT) && ./bench/harness --reps $(BENCH_ONLINE_REPS) --qemu-insn \
+	cd $(ROOT) && ./jit/bench/harness --reps $(BENCH_ONLINE_REPS) --qemu-insn \
 		$(BENCH_EXCLUDE_ARGS) $(BENCH_ARGS) $(BENCH_ONLINE_WORKLOAD)
 
 bench-all: bench bench-online

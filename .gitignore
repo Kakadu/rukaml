@@ -1,4 +1,4 @@
 /.envrc
 _build
 _coverage
-/bench/harness
+/jit/bench/harness
