@@ -1,4 +1,6 @@
 (library
  (name JIT_engine_lib)
  (modules JITEngine)
- (libraries IR))
+ (libraries IR)
+ (instrumentation
+  (backend bisect_ppx)))
