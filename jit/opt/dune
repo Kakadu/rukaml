@@ -9,4 +9,6 @@
   llvm.irreader
   llvm.target
   llvm.all_backends
-  llvm.passbuilder))
+  llvm.passbuilder)
+ (instrumentation
+  (backend bisect_ppx)))
