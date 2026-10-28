@@ -40,6 +40,57 @@ Use the `driver` to compile some examples
 dune exec driver -- testsuite/tests/fac.ml --target rv64 -o fac.s
 ```
 
+## JIT
+
+The `jit` target compiles the program to LLVM IR and runs `main` in-process
+via ORC (LLVM 19), returning `main`'s value as the driver's exit code.
+
+```fish
+dune exec driver -- jit/bench/workloads/closures/affine.ml --target jit
+```
+
+Optimization passes are enabled with `--opt` (repeatable or comma-separated;
+passes run left to right):
+
+| flag | meaning |
+| --- | --- |
+| `profile` | instrument and write a profile to `--profile-file` |
+| `specialize` | specialize using a profile written by `profile` |
+| `devirt` | devirtualize calls |
+| `o2` | apply `-O2` |
+| `tier0` | Tier0 stubs/slots, plumbing for online |
+| `online` | online tier-up: background optimization of hot functions |
+
+`--opt-dump DIR` writes the IR after each pass (`00-input.ll`, `NN-<pass>.ll`,
+or `NN-delta-<symbol>.ll` for online). `--opt=online` is exclusive: other
+`--opt` names are ignored.
+
+```fish
+# offline profile, then specialize
+dune exec driver -- jit/bench/workloads/closures/affine.ml --target jit \
+  --profile-file affine.prof --opt=profile
+dune exec driver -- jit/bench/workloads/closures/affine.ml --target jit \
+  --profile-file affine.prof --opt=specialize --opt-dump ./optdump
+
+# online tier-up
+dune exec driver -- jit/bench/workloads/closures/affine.ml --target jit \
+  --opt=online --opt-dump ./optdump
+
+# JIT vs AOT LLVM -O3 benchmarks
+make bench                 # default workloads, 5 reps
+make bench-online          # large online showcase, 1 rep by default
+make bench-all             # both
+make bench BENCH_REPS=1 BENCH_ARGS='--sizes 500,1000'  # quick smoke run
+```
+
+`make bench` compares the online JIT with `aot llvm -O3` (the baseline) and with
+`ocamlc`/`ocamlopt` on the OCaml twins of each workload; `make bench-online`
+runs the large showcase with one repetition.  See
+[`jit/bench/README.md`](jit/bench/README.md) for details.
+
+JIT tests: `dune test tests/jit`. Online mode is x86-64-only; its
+performance is covered by `make bench`/`make bench-online`.
+
 ### `discover` the environment and run the testsuite
 On the first run of `dune build` rukaml `discover`s your environment
 ```

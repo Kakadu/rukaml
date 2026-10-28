@@ -2,6 +2,13 @@ open Stdio
 open Frontend
 open Compile_lib
 
+(** JIT backend used by [--target jit]; the annotation checks that
+    [OrcEngine] implements the [JITEngine] contract. *)
+module Engine : JIT_engine_lib.JITEngine.OnlineEngine = JIT_orc_lib.OrcEngine
+
+(** JIT passes: pure [IR.t -> IR.t] rewrites applied before [Engine.load]. *)
+module JITOpt = JIT_opt_lib.JITOpt
+
 let error fmt =
   let open Stdlib.Format in
   kfprintf
@@ -109,6 +116,14 @@ module Compiler = struct
     k (ANF anf)
   ;;
 
+  (** ANF value bindings. *)
+  let value_bindings stru =
+    List.map
+      (function
+        | ANF.ANF_vb vb -> vb)
+      stru
+  ;;
+
   (** Generate code for RV64 *)
   let rv64 (ANF stru) =
     let vbs =
@@ -141,19 +156,17 @@ module Compiler = struct
 
   (** Generate code for LLVM *)
   let llvm (ANF stru) =
-    let vbs =
-      List.map
-        (function
-          | ANF.ANF_vb vb -> vb)
-        stru
+    let f ~path =
+      LLVM_impl.codegen (value_bindings stru) path |> Base.Result.ok_or_failwith
     in
-    let f ~path = LLVM_impl.codegen vbs path |> Base.Result.ok_or_failwith in
     k (Code f)
   ;;
 
-  (** Put the text result of the functions above to file *)
-  let to_file : type a. string -> a t -> unit =
-    fun path ->
+  (** Put the text result of the functions above to file
+      ([-o] defaults to "a.out" when not given) *)
+  let to_file : type a. string option -> a t -> unit =
+    fun out ->
+    let path = Option.value out ~default:"a.out" in
     let with_ppf f =
       (* for some reason pprint struggles with writing
          directly to file so i'm doing it the ugly way *)
@@ -173,10 +186,13 @@ end
 module Target = struct
   type params =
     { text : string
-    ; out_path : string
+    ; out_path : string option
     ; cps : bool
     ; caa : bool
     ; ppx : bool
+    ; opt_passes : string list (** [--opt] passes, in flag order. *)
+    ; profile_file : string (** [--profile-file] for [profile]/[specialize]. *)
+    ; opt_dump : string option (** [--opt-dump] directory. *)
     }
 
   open Compiler
@@ -197,6 +213,66 @@ module Target = struct
   let rv64 table p = (Intermediate.anftree table p) rv64
   let amd64 table p = (Intermediate.anftree table p) amd64
   let llvm table p = (Intermediate.anftree table p) llvm
+
+  (** Checks that [Engine] provides every runtime symbol the passes need. *)
+  let jit_check_runtime pipeline =
+    let missing =
+      JITOpt.missing_runtime ~available:Engine.runtime_symbols (JITOpt.requires pipeline)
+    in
+    if not (List.is_empty missing)
+    then error "jit error: missing runtime symbols: [%s]" (String.concat ", " missing)
+  ;;
+
+  (** Runs the offline passes, optionally dumping the IR before and after each. *)
+  let jit_optimize p ir =
+    try
+      let config : JITOpt.config = { profile_file = p.profile_file } in
+      let pipeline = JITOpt.of_flags config p.opt_passes in
+      jit_check_runtime pipeline;
+      match p.opt_dump with
+      | None -> JITOpt.run pipeline ir
+      | Some dir ->
+        (try if not (Sys.file_exists dir) then Sys.mkdir dir 0o755 with
+         | Sys_error msg -> error "jit error: cannot create dump directory %s: %s" dir msg);
+        IR.dump_to_file (Filename.concat dir "00-input.ll") ir;
+        let n = ref 0 in
+        let dump name t =
+          incr n;
+          IR.dump_to_file (Filename.concat dir (Printf.sprintf "%02d-%s.ll" !n name)) t
+        in
+        JITOpt.run ~dump pipeline ir
+    with
+    | Failure msg -> error "jit error: %s" msg
+  ;;
+
+  (** Online mode: tier-up while [main] runs; other [--opt] names are ignored. *)
+  let jit_online p ir =
+    let code =
+      try JITOpt.Online.run_online (module Engine) ?dump_dir:p.opt_dump ir with
+      | Failure msg -> error "jit error: %s" msg
+    in
+    Option.iter (fun path -> Out_channel.write_all path ~data:(IR.payload ir)) p.out_path;
+    Stdlib.exit (Int64.to_int code)
+  ;;
+
+  let jit table p =
+    (Intermediate.anftree table p) (fun (ANF stru) ->
+      let ir = LLVM_impl.anf_to_ir (value_bindings stru) in
+      if List.mem "online" p.opt_passes then jit_online p ir;
+      let ir = jit_optimize p ir in
+      Option.iter
+        (fun path -> Out_channel.write_all path ~data:(IR.payload ir))
+        p.out_path;
+      let engine = Engine.create () in
+      Engine.load engine ir;
+      let code =
+        try Engine.run engine "main" with
+        | Failure msg -> error "jit error: %s" msg
+      in
+      Engine.close engine;
+      Stdlib.exit (Int64.to_int code))
+  ;;
+
   let finish target p = (target p) (to_file p.out_path)
 
   let targets table =
@@ -206,6 +282,7 @@ module Target = struct
       ; "rv32", finish (rv32 table)
       ; "amd64", finish (amd64 table)
       ; "llvm", finish (llvm table)
+      ; "jit", jit table
       ; "parsetree", finish Intermediate.parsetree
       ; ("cps", fun p -> finish Intermediate.cpstree { p with cps = true })
       ; "cconv", finish Intermediate.cconvtree
@@ -229,26 +306,36 @@ let hack = function
   | "amd64" ->
     Compile_lib.ANF.disable_arity_inline ();
     Compile_lib.ANF.disable_cmp_into_if_inline ()
-  | "llvm" -> Compile_lib.ANF.disable_arity_inline ()
+  | "llvm" | "jit" -> Compile_lib.ANF.disable_arity_inline ()
   | _ -> ()
 ;;
 
 let () =
   let inp_path = ref None in
-  let out_path = ref "a.out" in
+  let out_path = ref None in
   let target = ref "" in
   let cps = ref false in
   let caa = ref false in
   let ppx = ref true in
+  let opt_passes = ref [] in
+  let profile_file = ref "rukaml.prof" in
+  let opt_dump = ref None in
   let open Stdlib.Arg in
   let args =
-    [ "-o", Set_string out_path, " output file"
+    [ "-o", String (fun s -> out_path := Some s), " output file"
     ; "--target", Set_string target, " compilation target"
     ; "--print-targets", Unit print_targets, " print all supported targets"
     ; "--cps", Set cps, " enable cps conversion"
     ; "--caa", Set caa, " enable call arity analysis"
     ; "--no-ppx", Set ppx, " disable preprocessing"
     ; "--rename-main", Bool (fun b -> RV64_impl.rename_main := b), " "
+    ; ( "--opt"
+      , String (fun s -> opt_passes := s :: !opt_passes)
+      , " JIT pass: online|profile|devirt|specialize|o2|tier0" )
+    ; "--profile-file", Set_string profile_file, " JIT profile file"
+    ; ( "--opt-dump"
+      , String (fun s -> opt_dump := Some s)
+      , " JIT: dump IR before and after each pass to DIR" )
     ]
   in
   parse args (fun s -> inp_path := Some s) "rukaml";
@@ -259,7 +346,16 @@ let () =
     | None -> In_channel.input_all stdin
   in
   let params =
-    Target.{ text; out_path = !out_path; cps = !cps; caa = !caa; ppx = !ppx }
+    Target.
+      { text
+      ; out_path = !out_path
+      ; cps = !cps
+      ; caa = !caa
+      ; ppx = !ppx
+      ; opt_passes = List.rev !opt_passes
+      ; profile_file = !profile_file
+      ; opt_dump = !opt_dump
+      }
   in
   match Base.Map.find (Target.targets Typedtree.empty_table) !target with
   | Some target -> target params

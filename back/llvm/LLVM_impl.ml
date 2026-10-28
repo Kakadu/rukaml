@@ -23,15 +23,6 @@ end
 
 module String_map = Map.Make (String)
 
-module Top_defs : sig
-  val add : string -> Llvm.lltype -> unit
-  val find_typ_exn : string -> Llvm.lltype
-end = struct
-  let store : Llvm.lltype String_map.t ref = ref String_map.empty
-  let add name typ = store := String_map.add name typ !store
-  let find_typ_exn name = String_map.find name !store
-end
-
 let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
   fun (_flg, apat, body) ->
   let name =
@@ -67,16 +58,17 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
     | AVar name when Hashtbl.mem virt_of_named_hash name -> virt_of_name name
     | AVar name ->
       assert (LL.has_toplevel_func name.hum_name);
-      let alloc_closure, typ = top_look_exn "rukaml_alloc_closure" in
-      log "%s %d" __FILE__ __LINE__;
-      log "typ of alloc_closure = %S" (Llvm.string_of_lltype typ);
-      let final_args =
-        let f = LL.lookup_func_exn name.hum_name in
-        let formal_params_count = LL.params f |> Array.length in
+      let f, fty = top_look_exn name.hum_name in
+      let arity = LL.params f |> Array.length in
+      if arity = 0
+      then
+        (* TODO: amd64/rv64 make zero-arity top-level values init-time
+           globals; replace this nullary thunk with the same model. *)
+        LL.build_call fty f []
+      else (
+        let alloc_closure, alloc_ty = top_look_exn "rukaml_alloc_closure" in
         let ptr = LL.build_pointercast f i64_typ in
-        [ ptr; LL.const_int i64_typ formal_params_count ]
-      in
-      LL.build_call typ alloc_closure final_args
+        LL.build_call alloc_ty alloc_closure [ ptr; LL.const_int i64_typ arity ])
     | AArray [] -> LL.const_int i64_typ 0
     | AArray r ->
       let l = List.map gen_a r in
@@ -284,99 +276,93 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
   ()
 ;;
 
-let codegen : ANF.vb list -> _ =
-  fun anf out_file ->
+(** Build an LLVM module for [anf]. The caller owns the module; see [codegen]
+    and [to_ir]. *)
+let build_module (anf : ANF.vb list) : Llvm.llmodule =
   let context = Llvm.global_context () in
   let builder = Llvm.builder context in
-  let () = assert (Llvm_executionengine.initialize ()) in
   let the_module = Llvm.create_module context "main" in
-  let _the_execution_engine = Llvm_executionengine.create the_module in
   let module LL = (val LL.make context builder the_module) in
   let i64_type = Llvm.i64_type context in
-  let lama_ptr_type = Llvm.pointer_type context in
-  let _prepare_main () =
-    let ft =
-      (* TODO main has special args *)
-      let args = Array.make 0 lama_ptr_type in
-      Llvm.function_type i64_type args
-    in
-    let the_function = Llvm.declare_function "main" ft the_module in
-    (* Create a new basic block to start insertion into. *)
-    let bb = Llvm.append_block context "entry" the_function in
-    Llvm.position_at_end bb builder;
-    (* Add all arguments to the symbol table and create their allocas. *)
-    (* Finish off the function. *)
-    let return_val =
-      let c = Llvm.const_int i64_type 0x30 in
-      (* let __ () =
-           Llvm.(
-             build_call
-               (lookup_function "printf" the_module |> Option.get)
-               [| const_stringz context "%d"; c |])
-             "" builder
-         in *)
-      let _ =
-        let f = LL.lookup_func_exn "myputc" in
-        let typ = Llvm.function_type (Llvm.void_type context) [| i64_type |] in
-        LL.build_call typ f [ c ]
-      in
-      Llvm.const_int i64_type 0
-    in
-    let (_ : Llvm.llvalue) = Llvm.build_ret return_val builder in
-    (* Validate the generated code, checking for consistency. *)
-    (match Llvm_analysis.verify_function the_function with
-     | true -> ()
-     | false ->
-       Stdlib.Format.printf
-         "invalid function generated\n%s\n"
-         (Llvm.string_of_llvalue the_function);
-       Llvm_analysis.assert_valid_function the_function);
-    (* Optimize the function. *)
-    let (_ : bool) = Llvm_analysis.verify_function the_function in
-    (* Llvm.dump_value the_function; *)
-    ()
+  (* Types of top-level definitions, filled while generating bodies. *)
+  let module TD = struct
+    let store : Llvm.lltype String_map.t ref = ref String_map.empty
+    let add name typ = store := String_map.add name typ !store
+    let find_typ_exn name = String_map.find name !store
+  end
   in
   let declare_primitive name typ =
-    Top_defs.add name typ;
-    Llvm.declare_function name typ the_module
+    TD.add name typ;
+    let (_ : Llvm.llvalue) = Llvm.declare_function name typ the_module in
+    ()
   in
-  let _ =
-    declare_primitive
-      "myputc"
-      (Llvm.function_type (Llvm.void_type context) [| i64_type |])
-  in
-  let _ =
-    (* void* lama_applyN(void* f, int32_t, ...) *)
-    declare_primitive
-      "rukaml_applyN"
-      (Llvm.var_arg_function_type i64_type [| i64_type; i64_type |])
-  in
-  let _ =
-    declare_primitive
-      "rukaml_alloc_closure"
-      (Llvm.function_type i64_type [| i64_type; i64_type |])
-  in
-  let _ =
-    declare_primitive
-      "rukaml_alloc_pair"
-      (Llvm.function_type i64_type [| i64_type; i64_type |])
-  in
-  let _ =
-    declare_primitive
-      "rukaml_alloc_array"
-      (Llvm.function_type i64_type [| i64_type; i64_type |])
-  in
-  let _ =
-    declare_primitive "rukaml_array_length" (Llvm.function_type i64_type [| i64_type |])
-  in
-  let _ =
-    declare_primitive
-      "rukaml_field"
-      (* TODO: Should first argument be untagged?  *)
-      (Llvm.function_type i64_type [| i64_type; i64_type |])
-  in
-  (* prepare_main (); *)
-  List.iter (on_vb (module LL) (module Top_defs : TOP_DEFS)) anf;
+  declare_primitive "myputc" (Llvm.function_type (Llvm.void_type context) [| i64_type |]);
+  declare_primitive
+    (* void *rukaml_applyN(void *f, int32_t argc, ...) *)
+    "rukaml_applyN"
+    (Llvm.var_arg_function_type i64_type [| i64_type; i64_type |]);
+  declare_primitive
+    "rukaml_alloc_closure"
+    (Llvm.function_type i64_type [| i64_type; i64_type |]);
+  declare_primitive
+    "rukaml_alloc_pair"
+    (Llvm.function_type i64_type [| i64_type; i64_type |]);
+  declare_primitive
+    "rukaml_alloc_array"
+    (Llvm.function_type i64_type [| i64_type; i64_type |]);
+  declare_primitive
+    "rukaml_field"
+    (* TODO: check whether the first argument should be untagged. *)
+    (Llvm.function_type i64_type [| i64_type; i64_type |]);
+  List.iter (on_vb (module LL) (module TD : TOP_DEFS)) anf;
+  the_module
+;;
+
+(** Serialize [the_module] into the [IR.t] payload consumed by the JIT. The
+    caller keeps ownership of the module. *)
+let to_ir (the_module : Llvm.llmodule) : IR.t =
+  IR.make IR.TextLL (Llvm.string_of_llmodule the_module)
+;;
+
+(** [ANF.vb list -> IR.t]: build a module, serialize it and dispose it. *)
+let anf_to_ir (anf : ANF.vb list) : IR.t =
+  let the_module = build_module anf in
+  let ir = to_ir the_module in
+  Llvm.dispose_module the_module;
+  ir
+;;
+
+(** [--target llvm]: print the textual IR of [anf] to [out_file]. *)
+let codegen : ANF.vb list -> _ =
+  fun anf out_file ->
+  let the_module = build_module anf in
   Llvm.print_module out_file the_module;
+  Llvm.dispose_module the_module;
   Result.ok ()
+;;
+
+(* IR boundary used by the JIT: [to_ir] -> text -> parse -> verify. *)
+let%test "IR round-trip" =
+  let context = Llvm.global_context () in
+  let the_module = Llvm.create_module context "ir_round_trip" in
+  let i64 = Llvm.i64_type context in
+  let the_function =
+    Llvm.declare_function "identity" (Llvm.function_type i64 [| i64 |]) the_module
+  in
+  let bb = Llvm.append_block context "entry" the_function in
+  let builder = Llvm.builder context in
+  Llvm.position_at_end bb builder;
+  let (_ : Llvm.llvalue) = Llvm.build_ret (Llvm.param the_function 0) builder in
+  let ir = to_ir the_module in
+  Llvm.dispose_module the_module;
+  let parsed =
+    Llvm_irreader.parse_ir context (Llvm.MemoryBuffer.of_string (IR.payload ir))
+  in
+  let result =
+    match Llvm_analysis.verify_module parsed with
+    | None -> IR.format ir = IR.TextLL
+    | Some _ -> false
+  in
+  Llvm.dispose_module parsed;
+  result
 ;;

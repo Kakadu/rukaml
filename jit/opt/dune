@@ -1,0 +1,14 @@
+(library
+ (name JIT_opt_lib)
+ (libraries
+  IR
+  JIT_engine_lib
+  threads.posix
+  llvm
+  llvm.analysis
+  llvm.irreader
+  llvm.target
+  llvm.all_backends
+  llvm.passbuilder)
+ (instrumentation
+  (backend bisect_ppx)))

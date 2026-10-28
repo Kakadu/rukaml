@@ -42,6 +42,7 @@ typedef void *(*fun0)(void);
 typedef void *(*fun1)(void *);
 typedef void *(*fun2)(void *, void *);
 typedef void *(*fun3)(void *, void *, void *);
+typedef void *(*fun4)(void *, void *, void *, void *);
 
 void *rukaml_apply0(void *f)
 {
@@ -65,6 +66,12 @@ void *rukaml_apply3(void *f, void *arg1, void *arg2, void *arg3)
 {
   fun3 foo = (fun3)f;
   return foo(arg1, arg2, arg3);
+}
+
+void *rukaml_apply4(void *f, void *arg1, void *arg2, void *arg3, void *arg4)
+{
+  fun4 foo = (fun4)f;
+  return foo(arg1, arg2, arg3, arg4);
 }
 
 typedef struct
@@ -161,26 +168,59 @@ void *rukaml_alloc_closure(void *func, int32_t argsc)
   return ans;
 }
 
-void *rukaml_applyN(void *f, int32_t argc, ...)
+__attribute__((constructor)) static void rukaml_stdlib_init(void)
 {
   setbuf(stdout, NULL);
+}
+
+void *rukaml_applyN(void *f, int32_t argc, ...)
+{
 #ifdef DEBUG
   printf("%s argc = %u, closure = %p\n", __func__, argc, f);
   fflush(stdout);
 #endif
+  rukaml_closure *orig = (rukaml_closure *)f;
+  assert(orig->args_received + argc <= orig->argsc);
+
   va_list argp;
   va_start(argp, argc);
-  rukaml_closure *f_closure = copy_closure((rukaml_closure *)f);
-  // printf("f->arg_received = %u\n", f_closure->args_received);
-  //  printf("%d\n", __LINE__);
-  assert(f_closure->args_received + argc <= f_closure->argsc);
 
-  for (size_t i = 0; i < argc; i++)
+  if (orig->args_received + argc == orig->argsc)
   {
-    // printf("%d\n", __LINE__);
+    void *args[4];
+    int32_t received = orig->args_received;
+    for (int32_t i = 0; i < received; i++)
+    {
+      args[i] = orig->args[i];
+    }
+    for (int32_t i = 0; i < argc; i++)
+    {
+      args[received + i] = va_arg(argp, void *);
+    }
+    va_end(argp);
+    switch (orig->argsc)
+    {
+    case 0:
+      return rukaml_apply0(orig->code);
+    case 1:
+      return rukaml_apply1(orig->code, args[0]);
+    case 2:
+      return rukaml_apply2(orig->code, args[0], args[1]);
+    case 3:
+      return rukaml_apply3(orig->code, args[0], args[1], args[2]);
+    case 4:
+      return rukaml_apply4(orig->code, args[0], args[1], args[2], args[3]);
+    default:
+      printf("FUCK, f_closure->argsc = %u\n", orig->argsc);
+      printf("Application of too many arguments is not implemented!");
+      assert(false);
+    }
+  }
+
+  rukaml_closure *f_closure = copy_closure(orig);
+  for (int32_t i = 0; i < argc; i++)
+  {
     void *arg1 = va_arg(argp, void *);
-    // printf("arg[%lu] = %p, ", i, arg1);
-    fflush(stdout);
     f_closure->args[f_closure->args_received++] = arg1;
   }
 #ifdef DEBUG
@@ -190,27 +230,42 @@ void *rukaml_applyN(void *f, int32_t argc, ...)
   fflush(stdout);
 #endif
   va_end(argp);
-  if (f_closure->argsc == f_closure->args_received)
-  {
-    switch (f_closure->argsc)
-    {
-    case 0:
-      return rukaml_apply0(f_closure->code);
-      break;
-    case 1:
-      return rukaml_apply1(f_closure->code, f_closure->args[0]);
-      break;
-    case 2:
-      return rukaml_apply2(f_closure->code, f_closure->args[0], f_closure->args[1]);
-      break;
-    case 3:
-      return rukaml_apply3(f_closure->code, f_closure->args[0], f_closure->args[1], f_closure->args[2]);
-      break;
-    default:
-      printf("FUCK, f_closure->argsc = %u\n", f_closure->argsc);
-      printf("Application of too many arguments is not implemented!");
-      assert(false);
-    }
-  }
   return f_closure;
+}
+
+#define RUKAML_PROF_MAX 256
+static const char *rukaml_prof_names[RUKAML_PROF_MAX];
+static long rukaml_prof_counts[RUKAML_PROF_MAX];
+static int rukaml_prof_n = 0;
+
+void rukaml_prof_tick(const char *name)
+{
+  int i;
+  for (i = 0; i < rukaml_prof_n; ++i)
+    if (rukaml_prof_names[i] == name ||
+        strcmp(rukaml_prof_names[i], name) == 0)
+    {
+      ++rukaml_prof_counts[i];
+      return;
+    }
+  if (rukaml_prof_n < RUKAML_PROF_MAX)
+  {
+    rukaml_prof_names[rukaml_prof_n] = name;
+    rukaml_prof_counts[rukaml_prof_n] = 1;
+    ++rukaml_prof_n;
+  }
+}
+
+void rukaml_prof_dump(const char *path)
+{
+  int i;
+  FILE *f = fopen(path, "w");
+  if (!f)
+  {
+    fprintf(stderr, "rukaml: cannot write profile to %s\n", path);
+    return;
+  }
+  for (i = 0; i < rukaml_prof_n; ++i)
+    fprintf(f, "%ld\t%s\n", rukaml_prof_counts[i], rukaml_prof_names[i]);
+  fclose(f);
 }
