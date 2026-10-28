@@ -2,15 +2,11 @@ open Stdio
 open Frontend
 open Compile_lib
 
-(** The abstract JIT-backend contract lives in [jit/jit_egine/JITEngine];
-    the driver picks the ORC implementation and talks to the JIT only
-    through that contract — never to the low-level C bindings directly.
-    The annotation is the compiler-checked proof that [OrcEngine]
-    implements the contract. *)
+(** JIT backend used by [--target jit]; the annotation checks that
+    [OrcEngine] implements the [JITEngine] contract. *)
 module Engine : JIT_engine_lib.JITEngine.OnlineEngine = JIT_orc_lib.OrcEngine
 
-(** Optimization passes between IR generation and [Engine.load]: pure
-    [IR.t -> IR.t] patches of the payload, backend-agnostic. *)
+(** JIT passes: pure [IR.t -> IR.t] rewrites applied before [Engine.load]. *)
 module JITOpt = JIT_opt_lib.JITOpt
 
 let error fmt =
@@ -120,6 +116,14 @@ module Compiler = struct
     k (ANF anf)
   ;;
 
+  (** ANF value bindings. *)
+  let value_bindings stru =
+    List.map
+      (function
+        | ANF.ANF_vb vb -> vb)
+      stru
+  ;;
+
   (** Generate code for RV64 *)
   let rv64 (ANF stru) =
     let vbs =
@@ -152,13 +156,9 @@ module Compiler = struct
 
   (** Generate code for LLVM *)
   let llvm (ANF stru) =
-    let vbs =
-      List.map
-        (function
-          | ANF.ANF_vb vb -> vb)
-        stru
+    let f ~path =
+      LLVM_impl.codegen (value_bindings stru) path |> Base.Result.ok_or_failwith
     in
-    let f ~path = LLVM_impl.codegen vbs path |> Base.Result.ok_or_failwith in
     k (Code f)
   ;;
 
@@ -190,11 +190,9 @@ module Target = struct
     ; cps : bool
     ; caa : bool
     ; ppx : bool
-    ; opt_passes : string list (** JIT optimization passes from [--opt], in flag order. *)
-    ; profile_file : string (** [--profile-file] for the JIT passes. *)
-    ; opt_dump : string option
-      (** [--opt-dump]: directory where each optimization pass dumps its
-            intermediate IR. *)
+    ; opt_passes : string list (** [--opt] passes, in flag order. *)
+    ; profile_file : string (** [--profile-file] for [profile]/[specialize]. *)
+    ; opt_dump : string option (** [--opt-dump] directory. *)
     }
 
   open Compiler
@@ -216,60 +214,52 @@ module Target = struct
   let amd64 table p = (Intermediate.anftree table p) amd64
   let llvm table p = (Intermediate.anftree table p) llvm
 
+  (** Checks that [Engine] provides every runtime symbol the passes need. *)
+  let jit_check_runtime pipeline =
+    let missing =
+      JITOpt.missing_runtime ~available:Engine.runtime_symbols (JITOpt.requires pipeline)
+    in
+    if not (List.is_empty missing)
+    then error "jit error: missing runtime symbols: [%s]" (String.concat ", " missing)
+  ;;
+
+  (** Runs the offline passes, optionally dumping the IR before and after each. *)
+  let jit_optimize p ir =
+    try
+      let config : JITOpt.config = { profile_file = p.profile_file } in
+      let pipeline = JITOpt.of_flags config p.opt_passes in
+      jit_check_runtime pipeline;
+      match p.opt_dump with
+      | None -> JITOpt.run pipeline ir
+      | Some dir ->
+        (try if not (Sys.file_exists dir) then Sys.mkdir dir 0o755 with
+         | Sys_error msg -> error "jit error: cannot create dump directory %s: %s" dir msg);
+        IR.dump_to_file (Filename.concat dir "00-input.ll") ir;
+        let n = ref 0 in
+        let dump name t =
+          incr n;
+          IR.dump_to_file (Filename.concat dir (Printf.sprintf "%02d-%s.ll" !n name)) t
+        in
+        JITOpt.run ~dump pipeline ir
+    with
+    | Failure msg -> error "jit error: %s" msg
+  ;;
+
+  (** Online mode: tier-up while [main] runs; other [--opt] names are ignored. *)
+  let jit_online p ir =
+    let code =
+      try JITOpt.Online.run_online (module Engine) ?dump_dir:p.opt_dump ir with
+      | Failure msg -> error "jit error: %s" msg
+    in
+    Option.iter (fun path -> Out_channel.write_all path ~data:(IR.payload ir)) p.out_path;
+    Stdlib.exit (Int64.to_int code)
+  ;;
+
   let jit table p =
     (Intermediate.anftree table p) (fun (ANF stru) ->
-      let vbs =
-        List.map
-          (function
-            | ANF.ANF_vb vb -> vb)
-          stru
-      in
-      let ir = LLVM_impl.anf_to_ir vbs in
-      if List.mem "online" p.opt_passes
-      then (
-        let code =
-          try JITOpt.Online.run_online (module Engine) ?dump_dir:p.opt_dump ir with
-          | Failure msg -> error "jit error: %s" msg
-        in
-        Option.iter
-          (fun path -> Out_channel.write_all path ~data:(IR.payload ir))
-          p.out_path;
-        Stdlib.exit (Int64.to_int code));
-      (* optimization passes are IR -> IR and backend-agnostic: they run
-         between IR generation and [load], and every requirement they add
-         to the module must be resolvable by this engine *)
-      let ir =
-        try
-          let config : JITOpt.config = { profile_file = p.profile_file } in
-          let pipeline = JITOpt.of_flags config p.opt_passes in
-          let missing =
-            JITOpt.missing_runtime
-              ~available:Engine.runtime_symbols
-              (JITOpt.requires pipeline)
-          in
-          if not (List.is_empty missing)
-          then
-            error "jit error: missing runtime symbols: [%s]" (String.concat ", " missing);
-          match p.opt_dump with
-          | None -> JITOpt.run pipeline ir
-          | Some dir ->
-            (try if not (Sys.file_exists dir) then Sys.mkdir dir 0o755 with
-             | Sys_error msg ->
-               error "jit error: cannot create dump directory %s: %s" dir msg);
-            (* the input and every pass output, in flag order; the pass
-                payloads are pre-`; opts=` so they stand alone *)
-            IR.dump_to_file (Filename.concat dir "00-input.ll") ir;
-            let n = ref 0 in
-            let dump name t =
-              incr n;
-              IR.dump_to_file
-                (Filename.concat dir (Printf.sprintf "%02d-%s.ll" !n name))
-                t
-            in
-            JITOpt.run ~dump pipeline ir
-        with
-        | Failure msg -> error "jit error: %s" msg
-      in
+      let ir = LLVM_impl.anf_to_ir (value_bindings stru) in
+      if List.mem "online" p.opt_passes then jit_online p ir;
+      let ir = jit_optimize p ir in
       Option.iter
         (fun path -> Out_channel.write_all path ~data:(IR.payload ir))
         p.out_path;
@@ -280,8 +270,7 @@ module Target = struct
         | Failure msg -> error "jit error: %s" msg
       in
       Engine.close engine;
-      let n = Int64.to_int code in
-      Stdlib.exit n)
+      Stdlib.exit (Int64.to_int code))
   ;;
 
   let finish target p = (target p) (to_file p.out_path)
@@ -342,13 +331,11 @@ let () =
     ; "--rename-main", Bool (fun b -> RV64_impl.rename_main := b), " "
     ; ( "--opt"
       , String (fun s -> opt_passes := s :: !opt_passes)
-      , " JIT optimization pass (online|profile|devirt|specialize|o2|tier0; comma-separated or repeatable)" )
-    ; ( "--profile-file"
-      , Set_string profile_file
-      , " JIT profile file (written by profile, read by specialize)" )
+      , " JIT pass: online|profile|devirt|specialize|o2|tier0" )
+    ; "--profile-file", Set_string profile_file, " JIT profile file"
     ; ( "--opt-dump"
       , String (fun s -> opt_dump := Some s)
-      , " JIT: dump the IR (DIR/00-input.ll) and after each pass (DIR/NN-<pass>.ll)" )
+      , " JIT: dump IR before and after each pass to DIR" )
     ]
   in
   parse args (fun s -> inp_path := Some s) "rukaml";
