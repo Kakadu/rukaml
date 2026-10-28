@@ -276,19 +276,15 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
   ()
 ;;
 
-(** Build an LLVM module implementing the given ANF program.
-
-    The module is owned by the caller: nothing is printed to disk and the
-    module is not disposed; see [codegen] (print to file) and [to_ir]
-    (serialize for the JIT). *)
+(** Build an LLVM module for [anf]. The caller owns the module; see [codegen]
+    and [to_ir]. *)
 let build_module (anf : ANF.vb list) : Llvm.llmodule =
   let context = Llvm.global_context () in
   let builder = Llvm.builder context in
   let the_module = Llvm.create_module context "main" in
   let module LL = (val LL.make context builder the_module) in
   let i64_type = Llvm.i64_type context in
-  (* Types of toplevel definitions, discovered while generating the body.
-     Used to be a global ref shared between calls of [codegen]. *)
+  (* Types of top-level definitions, filled while generating bodies. *)
   let module TD = struct
     let store : Llvm.lltype String_map.t ref = ref String_map.empty
     let add name typ = store := String_map.add name typ !store
@@ -302,7 +298,7 @@ let build_module (anf : ANF.vb list) : Llvm.llmodule =
   in
   declare_primitive "myputc" (Llvm.function_type (Llvm.void_type context) [| i64_type |]);
   declare_primitive
-    (* void* lama_applyN(void* f, int32_t, ...) *)
+    (* void *rukaml_applyN(void *f, int32_t argc, ...) *)
     "rukaml_applyN"
     (Llvm.var_arg_function_type i64_type [| i64_type; i64_type |]);
   declare_primitive
@@ -316,20 +312,19 @@ let build_module (anf : ANF.vb list) : Llvm.llmodule =
     (Llvm.function_type i64_type [| i64_type; i64_type |]);
   declare_primitive
     "rukaml_field"
-    (* TODO: Should first argument be untagged?  *)
+    (* TODO: check whether the first argument should be untagged. *)
     (Llvm.function_type i64_type [| i64_type; i64_type |]);
   List.iter (on_vb (module LL) (module TD : TOP_DEFS)) anf;
   the_module
 ;;
 
-(** Serialize [the_module] into the [IR.t] payload that crosses over to the
-    JIT side. Does not dispose the module: the caller keeps ownership. *)
+(** Serialize [the_module] into the [IR.t] payload consumed by the JIT. The
+    caller keeps ownership of the module. *)
 let to_ir (the_module : Llvm.llmodule) : IR.t =
   IR.make IR.TextLL (Llvm.string_of_llmodule the_module)
 ;;
 
-(** One step [ANF.vb list -> IR.t]: builds the module, serializes it and
-    disposes the intermediate module. *)
+(** [ANF.vb list -> IR.t]: build a module, serialize it and dispose it. *)
 let anf_to_ir (anf : ANF.vb list) : IR.t =
   let the_module = build_module anf in
   let ir = to_ir the_module in
@@ -337,7 +332,7 @@ let anf_to_ir (anf : ANF.vb list) : IR.t =
   ir
 ;;
 
-(** [--target llvm]: print textual IR of [anf] to [out_file]. *)
+(** [--target llvm]: print the textual IR of [anf] to [out_file]. *)
 let codegen : ANF.vb list -> _ =
   fun anf out_file ->
   let the_module = build_module anf in
@@ -346,9 +341,7 @@ let codegen : ANF.vb list -> _ =
   Result.ok ()
 ;;
 
-(* Round trip across the IR boundary that the JIT uses:
-   [to_ir] -> text -> [Llvm_irreader.parse_ir] -> verify. Guards that the
-   payload [jit/] will consume is parseable and well-formed. *)
+(* IR boundary used by the JIT: [to_ir] -> text -> parse -> verify. *)
 let%test "IR round-trip" =
   let context = Llvm.global_context () in
   let the_module = Llvm.create_module context "ir_round_trip" in
