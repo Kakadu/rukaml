@@ -13,6 +13,7 @@ let create_state () : state =
   { clone_counter = Hashtbl.create 8; memo = Hashtbl.create 16 }
 ;;
 
+(** Parses the tab-separated ["count\tname"] lines written by [Profile]. *)
 let read_profile path : (string * int64) list =
   if not (Sys.file_exists path)
   then
@@ -53,6 +54,8 @@ let const_key args =
   |> String.concat ","
 ;;
 
+(** Specializes calls to hot functions with constant arguments into cloned
+    [name$spec$N] functions; returns whether the module changed. *)
 let run_on_module ?(state = create_state ()) ~is_hot ctx m : bool =
   let site_of ins =
     let s_opt =

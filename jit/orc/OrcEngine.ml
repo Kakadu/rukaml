@@ -1,10 +1,5 @@
-(** ORC implementation of the [JIT_engine_lib.JITEngine.OnlineEngine]
-    (and [BackEngine]) contract.
-
-    The low-level externals — [BackORC] — remain an internal detail of
-    [jit/orc]: the driver sees only this module (through the annotated
-    contract). [create] also brings up the rukaml runtime (absolute
-    symbols), which the driver used to call explicitly. *)
+(** ORC implementation of [JITEngine.OnlineEngine]. [BackORC] remains an
+    internal detail of [jit/orc]. *)
 include (
 struct
   type t = unit

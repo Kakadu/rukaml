@@ -4,6 +4,7 @@ let name = "o2"
 let requires = []
 let init_targets = lazy (Llvm_all_backends.initialize ())
 
+(** Runs the LLVM new-pass-manager pipeline [passes] on the module. *)
 let run_on_module ?(passes = "default<O2>") m =
   Lazy.force init_targets;
   let triple = Llvm_target.Target.default_triple () in
@@ -32,3 +33,4 @@ let run (ir : IR.t) : IR.t =
   with_parsed_ir ir (fun _ctx m ->
     run_on_module m;
     true)
+;;

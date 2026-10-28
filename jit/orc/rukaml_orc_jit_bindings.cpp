@@ -21,7 +21,7 @@ extern "C" {
 #include <caml/signals.h>
 }
 
-// Rukaml LLVM runtime (back/llvm/rukaml_stdlib.c) compiled to the same .so
+// Rukaml LLVM runtime (back/llvm/rukaml_stdlib.c), compiled into the same .so.
 extern "C" {
 void myputc(int x);
 void *rukaml_apply0(void *f);
@@ -159,8 +159,8 @@ template <typename F> static uint64_t addr_of(F f) {
   return (uint64_t)(uintptr_t)f;
 }
 
-// Runtime symbol names must match declare_primitive in
-// back/llvm/LLVM_impl.ml (build_module) and the definitions in rukaml_stdlib.c.
+// Must match declare_primitive in back/llvm/LLVM_impl.ml and the definitions
+// in rukaml_stdlib.c.
 static const std::vector<std::pair<std::string, uint64_t>> k_runtime_syms = {
     {"myputc", addr_of(&myputc)},
     {"rukaml_apply0", addr_of(&rukaml_apply0)},
@@ -198,10 +198,8 @@ extern "C" CAMLprim value rukaml_orc_create(value unit) {
       else
         g_jit = jit_or_error->release();
 
-      // The runtime is registered exactly once — here, when g_jit is
-      // actually created: a second create without it would be a duplicate
-      // symbol definition, and registering outside of create belongs to the
-      // backend, not the driver.
+      // Register the runtime once, when g_jit is created: a second
+      // registration would duplicate symbols.
       if (g_jit) {
         if (llvm::Error err = g_jit->define_abs_symbols(k_runtime_syms)) {
           err_msg = llvm::toString(std::move(err));
@@ -526,8 +524,8 @@ extern "C" CAMLprim value rukaml_orc_destroy(value unit) {
   {
     std::lock_guard<std::mutex> lk(g_jit_mu);
     reset_online_state();
-    // ~RukamlJIT runs endSession(); delete nullptr is safe, so a repeated
-    // destroy (and destroy without create) is a no-op.
+    // ~RukamlJIT ends the session; deleting nullptr is safe, so repeated
+    // destroy is a no-op.
     delete g_jit;
     g_jit = nullptr;
   }

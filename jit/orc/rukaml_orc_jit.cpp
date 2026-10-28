@@ -17,11 +17,9 @@ RukamlJIT::RukamlJIT(std::unique_ptr<ExecutionSession> exec_session,
       _data_layout(std::move(data_layout)),
       _mangle(*_exec_session, _data_layout),
       _main_jd(_exec_session->createBareJITDylib("<main>")) {
-  // No DynamicLibrarySearchGenerator for the current process — on purpose:
-  // the only host code JIT'd code may reference is the rukaml runtime, and it
-  // is registered explicitly via define_abs_symbols (see the hpp). A generator
-  // would additionally expose the host `main`; for a program without an entry
-  // point lookup("main") would silently find and call it.
+  // No process-symbol generator: JIT'd code may only reference the rukaml
+  // runtime, which define_abs_symbols registers explicitly. A generator would
+  // also expose the host `main`, which lookup("main") could silently call.
 }
 
 Expected<std::unique_ptr<RukamlJIT>> RukamlJIT::create() {
@@ -86,8 +84,7 @@ Error RukamlJIT::add_ir(StringRef ir, ResourceTrackerSP rt) {
     diag.print("rukaml", os);
     return make_error<StringError>(os.str(), inconvertibleErrorCode());
   }
-  // The generated payload carries no datalayout/triple
-  // stamp the host's on before handing the module to the compile layer.
+  // The payload carries no datalayout/triple; stamp the host's on.
   module->setDataLayout(_data_layout);
   module->setTargetTriple(
       _exec_session->getExecutorProcessControl().getTargetTriple().str());

@@ -3,6 +3,8 @@ open Common
 let name = "profile"
 let requires = [ "rukaml_prof_tick"; "rukaml_prof_dump" ]
 
+(** Instruments every definition with [rukaml_prof_tick] and dumps the profile
+    on every return of [main]. *)
 let run (cfg : config) (ir : IR.t) : IR.t =
   with_parsed_ir ir (fun ctx m ->
     let ptr = Llvm.pointer_type ctx in
@@ -32,7 +34,7 @@ let run (cfg : config) (ir : IR.t) : IR.t =
       (defined_functions m);
     (match Llvm.lookup_function "main" m with
      | Some main_fn when is_definition main_fn ->
-       (* сначала собираем все ret, потом меняем модуль *)
+       (* collect all returns first, then modify the module *)
        (match List.filter (is_op Llvm.Opcode.Ret) (instrs_of_fn main_fn) with
         | [] -> ()
         | rets ->

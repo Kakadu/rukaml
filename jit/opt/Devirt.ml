@@ -3,6 +3,8 @@ open Common
 let name = "devirt"
 let requires = []
 
+(** Rewrites [rukaml_alloc_closure -> rukaml_applyN] chains into direct calls;
+    returns whether the module changed. *)
 let run_on_module ?(is_hot = fun _ -> true) ctx m : bool =
   let sites =
     fold_module_instrs

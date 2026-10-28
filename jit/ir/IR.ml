@@ -1,10 +1,6 @@
 type format =
-  | TextLL
-  (** Textual IR (.ll), parsed with [Llvm_irreader] on the OCaml
-                side and [parseAssemblyString] on the ORC side. *)
-  | Bitcode
-  (** Binary bitcode (.bc). Reserved: not produced yet, switch is
-                a one-liner in [LLVM_impl.to_ir] once wanted. *)
+  | TextLL (** Textual IR (.ll). *)
+  | Bitcode (** Binary bitcode (.bc); not produced yet. *)
 
 type t =
   { format : format

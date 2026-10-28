@@ -26,6 +26,7 @@ type meta =
   ; sample_window : int64
   }
 
+(** Definitions that can be slotted: non-[main], arity 1..4. *)
 let slotted_functions m =
   defined_functions m
   |> List.filter (fun fn ->
@@ -34,6 +35,8 @@ let slotted_functions m =
     name <> "main" && arity >= 1 && arity <= 4)
 ;;
 
+(** Instruments functions with profiling prologues and replaces each one by a
+    slot-dispatching stub over a `.t0` clone; returns the metadata. *)
 let instrument_module
       ?(hot_threshold = default_hot_threshold)
       ?(sample_window = default_sample_window)
@@ -63,6 +66,7 @@ let instrument_module
   let cnt_arr_ty = Llvm.array_type i64_ty n_slots in
   let miss_arr_ty = Llvm.array_type i64_ty n_slots in
   let next_site_id = ref 0 in
+  (* List of tuples of fn info, fn as llvalue, fn type and fn clone *)
   let func_entries =
     List.mapi
       (fun id fn ->
@@ -71,6 +75,7 @@ let instrument_module
          let arity = Array.length params in
          let ret_ty = Option.value (ret_type_of ctx fn) ~default:i64_ty in
          let fty = Llvm.function_type ret_ty (Array.map Llvm.type_of params) in
+         (* Dynamic sites of fn *)
          let dsites = dyn_sites_of_fn fn in
          let callsites =
            List.mapi
@@ -86,7 +91,7 @@ let instrument_module
          in
          let keep = Array.make arity true in
          let t0_name = fname ^ ".t0" in
-         (* Trivial one to one cloning, all params are ketp *)
+         (* Trivial one to one cloning, all params are kept *)
          let t0_fn =
            match clone_specialized ctx m ~name:t0_name ~fty ~keep ~args:[||] fn with
            | Some f' -> f'
@@ -101,10 +106,14 @@ let instrument_module
     then [| Llvm.const_null ptr_ty |]
     else Array.of_list (List.map (fun (_, _, _, t0_fn) -> t0_fn) func_entries)
   in
+  (* Global array of ptrs to actual fn version. Initially filled with t0 fallbacks
+     which are exact clones of the original function *)
   let slots_glob =
     Llvm.define_global "rukaml.slots" (Llvm.const_array ptr_ty init_ptrs) m
   in
+  (* Global array of function call counters *)
   let cnt_glob = Llvm.define_global "rukaml.cnt" (Llvm.const_null cnt_arr_ty) m in
+  (* Global array of function miss counters. Miss happens when function is called with different set of args *)
   let miss_glob = Llvm.define_global "rukaml.miss" (Llvm.const_null miss_arr_ty) m in
   Llvm.set_alignment 8 slots_glob;
   Llvm.set_alignment 8 cnt_glob;
@@ -159,8 +168,9 @@ let instrument_module
        let b_hot = Llvm.builder_at_end ctx t0_hot in
        ignore (Llvm.build_call hot_ty hot_fn [| const_id |] "" b_hot);
        ignore (Llvm.build_br body_entry b_hot);
-       (* 3. Turn original fn into a slot-dispatching stub *)
+       (* Turn original fn into a slot-dispatching stub *)
        clear_function_body ctx fn;
+       (* New block for a stub *)
        let stub_bb = Llvm.append_block ctx "entry" fn in
        let b_stub = Llvm.builder_at_end ctx stub_bb in
        let slot_ptr =
@@ -176,6 +186,7 @@ let instrument_module
   { funcs; num_sites = !next_site_id; hot_threshold; sample_window }
 ;;
 
+(** [instrument ir] instruments [ir] and returns the new IR and metadata. *)
 let instrument
       ?(hot_threshold = default_hot_threshold)
       ?(sample_window = default_sample_window)
