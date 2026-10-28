@@ -11,11 +11,13 @@ let redirect_self_calls ctx ~orig_name ~new_fn ~new_fty ~keep ~const_args fn =
            let n_ops = Llvm.num_operands ins in
            let args = Array.init (n_ops - 1) (fun i -> Llvm.operand ins i) in
            if
+             (* Check if args are the same *)
              Array.length args = Array.length keep
              && Array.for_all
                   (fun b -> b)
                   (Array.mapi (fun i k -> k || args.(i) == const_args.(i)) keep)
            then (ins, args) :: acc
+           (* Skip self call with different args *)
            else acc)
          else acc)
       []
@@ -94,9 +96,7 @@ let build_ic_helper ctx m ~ic_name ~callee_fn ~argsc ~miss_arr_ty ~miss_glob ~fu
        b_slow);
   let apply_ty = Llvm.var_arg_function_type i64_ty [| i64_ty; i64_ty |] in
   let apply_fn = Llvm.declare_function "rukaml_applyN" apply_ty m in
-  let apply_operands =
-    Array.append [| cl_val; Llvm.const_int i64_ty argsc |] call_args
-  in
+  let apply_operands = Array.append [| cl_val; Llvm.const_int i64_ty argsc |] call_args in
   let r_slow = Llvm.build_call apply_ty apply_fn apply_operands "" b_slow in
   ignore (Llvm.build_ret r_slow b_slow);
   ic_fty, ic_fn
@@ -338,10 +338,10 @@ let build_delta
             then Llvm.set_linkage Llvm.Linkage.Internal fn
             else Llvm.set_linkage Llvm.Linkage.Available_externally fn)
          (defined_functions m);
-       ignore ( payload_of m );
+       ignore (payload_of m);
        O2.run_on_module ~passes:"cgscc(inline)" m;
        ignore (Devirt.run_on_module ctx m);
-       ignore ( payload_of m );
+       ignore (payload_of m);
        O2.run_on_module m;
        if Devirt.run_on_module ctx m then O2.run_on_module m;
        (* Strip any remaining Available_externally definitions so only ver_name
@@ -355,6 +355,7 @@ let build_delta
        { master_ir with IR.payload = payload_of m }, ver_name, is_guarded)
 ;;
 
+(** Per-function online state. *)
 type func_state =
   | Cold
   | Optimized of
@@ -368,6 +369,8 @@ type func_state =
 let max_versions = 4
 let max_recompiles = 3
 
+(** Instruments [master_ir], runs [main] and optimizes hot functions on a
+    background thread; returns [main]'s result. *)
 let run_online
       (type e)
       (module E : JIT_engine_lib.JITEngine.OnlineEngine with type t = e)
@@ -412,9 +415,7 @@ let run_online
            (fun dir ->
               incr dump_seq;
               let fname =
-                Filename.concat
-                  dir
-                  (Printf.sprintf "%02d-delta-%s.ll" !dump_seq ver_sym)
+                Filename.concat dir (Printf.sprintf "%02d-delta-%s.ll" !dump_seq ver_sym)
               in
               IR.dump_to_file fname delta_ir)
            dump_dir
@@ -521,3 +522,4 @@ let run_online
            E.stop_events eng;
            Thread.join opt_thread)
          (fun () -> E.run eng "main"))
+;;

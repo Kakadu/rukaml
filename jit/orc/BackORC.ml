@@ -1,24 +1,20 @@
-(* Low-level bindings for RukamlJIT. Do not use them outside jit/orc:
-   the driver-facing contract is JITEngine.BackEngine (see OrcEngine). *)
+(** Low-level RukamlJIT bindings. External use goes through
+    [JITEngine.BackEngine] (see [OrcEngine]). *)
 
 external create : unit -> unit = "rukaml_orc_create"
 
-(* Adds a textual LLVM IR ([IR.TextLL] payload) as a new module to the
-   JITDylib; compilation is lazy — on the first lookup. *)
+(** Adds an [IR.TextLL] module; compilation happens on first lookup. *)
 external update : string -> unit = "rukaml_orc_update"
 
-(* Looks up a compiled symbol and calls it. Every rukaml function is
-   compiled to i64 (...args) -> i64, hence int64; entry point — "main". *)
+(** Looks up and calls a symbol; every rukaml function is [i64 -> i64]. *)
 external run : string -> int64 = "rukaml_orc_run"
 
-(* Destroys the JIT (endSession); repeated calls are safe, the next
-   [create] makes a fresh instance. *)
+(** Destroys the JIT; repeated calls are safe. *)
 external destroy : unit -> unit = "rukaml_orc_destroy"
 
-(* Names of the runtime symbols registered as absolute symbols by
-   [create]; read straight from the registration table, so it works with
-   or without a JIT instance. *)
+(** Runtime symbols registered as absolute by [create]. *)
 external runtime_syms : unit -> string list = "rukaml_orc_runtime_syms"
+
 external add_delta : string -> unit = "rukaml_orc_add_delta"
 external lookup_address : string -> int64 = "rukaml_orc_lookup_address"
 external bind_tables : int -> unit = "rukaml_orc_bind_tables"

@@ -1,8 +1,4 @@
-type config =
-  { profile_file : string
-    (** Where the [profile] pass dumps counters (tab-separated
-            "count<TAB>name" lines); what [specialize] reads back. *)
-  }
+type config = { profile_file : string (** Written by [profile], read by [specialize]. *) }
 
 let ( let* ) = Option.bind
 
@@ -28,7 +24,7 @@ let fold_fn_instrs f acc fn =
   Llvm.fold_left_blocks (fun acc bb -> Llvm.fold_left_instrs f acc bb) acc fn
 ;;
 
-(* модуль -> функции -> блоки -> инструкции; по умолчанию только определения *)
+(** Module -> functions -> blocks -> instructions; definitions only by default. *)
 let fold_module_instrs ?(fn_filter = is_definition) f acc m =
   Llvm.fold_left_functions
     (fun acc fn -> if fn_filter fn then fold_fn_instrs f acc fn else acc)
@@ -39,6 +35,7 @@ let fold_module_instrs ?(fn_filter = is_definition) f acc m =
 let instrs_of_block bb = Llvm.fold_left_instrs (fun acc i -> i :: acc) [] bb |> List.rev
 let instrs_of_fn fn = fold_fn_instrs (fun acc i -> i :: acc) [] fn |> List.rev
 
+(** Explicitly defined functions, not declarations. *)
 let defined_functions m =
   Llvm.fold_left_functions
     (fun acc fn -> if is_definition fn then fn :: acc else acc)
@@ -62,6 +59,7 @@ let ret_type_of ctx fn =
     else Llvm.type_of (Llvm.operand r 0))
 ;;
 
+(** Groups values by key, preserving first-seen key order. *)
 let group_by key xs =
   let tbl = Hashtbl.create 8
   and order = ref [] in
@@ -80,6 +78,7 @@ let group_by key xs =
   List.rev_map (fun k -> k, List.rev (Hashtbl.find tbl k)) !order
 ;;
 
+(** Parses the payload into a fresh context and module. *)
 let parse_payload (ir : IR.t) =
   match IR.format ir with
   | IR.Bitcode -> failwith "opt: Bitcode payload is not supported yet"
@@ -93,12 +92,15 @@ let parse_payload (ir : IR.t) =
     ctx, m
 ;;
 
+(** Serializes the module, failing if verification fails. *)
 let payload_of m =
   match Llvm_analysis.verify_module m with
   | None -> Llvm.string_of_llmodule m
   | Some msg -> failwith ("opt: patched IR is invalid: " ^ String.trim msg)
 ;;
 
+(** Parses the payload, runs [f ctx m], and re-serializes only when [f]
+    returns [true]. *)
 let with_parsed_ir (ir : IR.t) (f : Llvm.llcontext -> Llvm.llmodule -> bool) : IR.t =
   let ctx, m = parse_payload ir in
   Fun.protect
@@ -110,19 +112,18 @@ let with_parsed_ir (ir : IR.t) (f : Llvm.llcontext -> Llvm.llmodule -> bool) : I
        if changed then { ir with IR.payload = payload_of m } else ir)
 ;;
 
-(* [call ... callee] - last operand of call instruction is callee *)
+(** The callee is the last operand of a call. *)
 let is_named ins fn_name =
   is_instr ins
   && is_op Llvm.Opcode.Call ins
   && Llvm.value_name (Llvm.operand ins (Llvm.num_operands ins - 1)) = fn_name
 ;;
 
-(* Create a chain rukaml_alloc_closure -> rukaml_applyN -> ... -> rukaml_applyN;
-   returns tuple containing head of the chain (`call ... rukaml_alloc_closure ...`),
-   array of combined args and the chain as list *)
+(** Follows a [rukaml_alloc_closure -> rukaml_applyN -> ...] chain from [start];
+    returns its head, the flattened args and the chain. *)
 let walk start =
   let rec go cur args chain =
-    (* операнды: замыкание, число аргументов, аргументы..., callee *)
+    (* operands: closure, arg count, args..., callee *)
     let n_args = Llvm.num_operands cur - 3 in
     if n_args < 1
     then None
@@ -139,7 +140,7 @@ let walk start =
   go start [||] []
 ;;
 
-(* Same as `walk`, but root of chain is any non `rukaml_applyN` llvalue *)
+(** Like [walk], but the chain root may be any non-[rukaml_applyN] value. *)
 let walk_any start =
   let rec go cur args intermediates =
     let n_args = Llvm.num_operands cur - 3 in
@@ -156,7 +157,7 @@ let walk_any start =
   go start [||] []
 ;;
 
-(* Basically checks that v is leaf of rukaml_applyN chain/tree *)
+(** Whether [v] is used as the closure argument of [rukaml_applyN]. *)
 let is_used_as_apply_closure v =
   Llvm.fold_left_uses
     (fun acc u ->
@@ -173,7 +174,7 @@ type dyn_site =
   ; intermediates : Llvm.llvalue list (** intermediate applyN calls, oldest first *)
   }
 
-(* Collect dynamic sites of function *)
+(** Dynamic [rukaml_applyN] sites of a function. *)
 let dyn_sites_of_fn fn : dyn_site list =
   fold_fn_instrs
     (fun acc ins ->
@@ -218,8 +219,8 @@ let extract_callee_name v =
   else ""
 ;;
 
-(* Get the actual function from `call ... rukaml_alloc_closure ...`
-   (first argument of rukaml_alloc_closure) *)
+(** The function allocated by `call ... rukaml_alloc_closure ...`, i.e. its
+    first argument, when the arity matches. *)
 let target_of m alloc =
   if Llvm.num_operands alloc <> 3
   then None
@@ -290,8 +291,8 @@ let direct_site_of m ~require_const ~is_hot ins =
         | _ -> None)))
 ;;
 
-(* Клонирует [target] в новую функцию [name] с типом [fty]: параметры, для
-   которых [keep.(i) = false], заменяются константами [args.(i)]. *)
+(** Clones [target] into a new function [name] of type [fty]: parameters with
+    [keep.(i) = false] are replaced by the constants [args.(i)]. *)
 let clone_specialized ctx m ~name ~fty ~keep ~args target =
   let olds = Llvm.basic_blocks target in
   if Array.length olds = 0
@@ -345,7 +346,7 @@ let clone_specialized ctx m ~name ~fty ~keep ~args target =
                 pairs := (ins, c) :: !pairs))
            (instrs_of_block old))
       olds;
-    (* Rewrite operands in instuctions calls *)
+    (* Rewrite operands in cloned instructions *)
     List.iter
       (fun (oi, ni) ->
          for k = 0 to Llvm.num_operands oi - 1 do

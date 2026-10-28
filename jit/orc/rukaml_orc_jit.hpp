@@ -23,96 +23,59 @@
 namespace llvm {
 namespace orc {
 
-/// \brief In-process ORC JIT for Rukaml modules.
-///
-/// RukamlJIT owns the ORC execution session along with the object linking
-/// and IR compilation layers that form an in-process JIT. It exposes a
-/// minimal interface for adding IR modules to a primary JITDylib and for
-/// looking up compiled symbols by name.
+/// In-process ORC JIT for Rukaml modules.
 class RukamlJIT {
 private:
-  /// The ORC execution session that owns all JIT state.
+  /// Owns all JIT state.
   std::unique_ptr<ExecutionSession> _exec_session;
 
-  /// Layer that links relocatable objects into the target process.
+  /// Links relocatable objects into the process.
   RTDyldObjectLinkingLayer _object_layer;
 
-  /// Layer that compiles LLVM IR into relocatable objects.
+  /// Compiles IR into relocatable objects.
   IRCompileLayer _compile_layer;
 
-  /// Data layout describing the target machine.
+  /// Target data layout.
   DataLayout _data_layout;
 
-  /// Interner used to mangle symbol names for the target.
+  /// Symbol name mangler.
   MangleAndInterner _mangle;
 
-  /// The primary JITDylib that holds user-added modules.
+  /// Primary JITDylib.
   JITDylib &_main_jd;
 
-  /// Resource trackers for dynamically compiled delta modules.
+  /// Resource trackers of delta modules.
   std::vector<ResourceTrackerSP> _version_trackers;
 
 public:
-  /// \brief Construct a RukamlJIT from its constituent pieces.
-  ///
-  /// \param exec_session The execution session that owns the JIT.
-  /// \param jtmb         Builder describing the target machine.
-  /// \param data_layout  Data layout for the target.
   RukamlJIT(std::unique_ptr<ExecutionSession> exec_session,
             JITTargetMachineBuilder jtmb, DataLayout data_layout);
 
   ~RukamlJIT();
 
-  /// Parses textual LLVM IR into a fresh ThreadSafeContext and adds the module.
+  /// Parses textual IR and adds it, under [rt] or the default tracker.
   Error add_ir(StringRef ir, ResourceTrackerSP rt = nullptr);
 
-  /// Parses textual LLVM IR and adds it under a dedicated per-version
-  /// ResourceTracker.
+  /// Parses textual IR and adds it under a new per-version tracker.
   Error add_delta_ir(StringRef ir);
 
-  /// \brief Create a RukamlJIT targeting the host process.
-  ///
-  /// Builds a SelfExecutorProcessControl, derives the target triple and
-  /// default data layout from the host, and constructs a JIT instance.
-  ///
-  /// \return A newly constructed RukamlJIT, or an Error if the host target
-  ///         information could not be obtained.
+  /// Creates a JIT for the host process.
   static Expected<std::unique_ptr<RukamlJIT>> create();
 
-  /// \brief Get the primary JITDylib.
-  ///
-  /// \return A reference to the "<main>" JITDylib.
+  /// Primary JITDylib.
   JITDylib &get_main_jd();
 
-  /// \brief Add an LLVM IR module to the JIT.
-  ///
-  /// \param tsm The thread-safe module to compile and link.
-  /// \param rt  Optional resource tracker. If null, the main JITDylib's
-  ///            default resource tracker is used.
-  ///
-  /// \return An Error indicating success or describing the failure.
+  /// Adds a module to the JIT.
   Error ad_module(ThreadSafeModule tsm, ResourceTrackerSP rt = nullptr);
 
-  /// \brief Look up a compiled symbol by name.
-  ///
-  /// \param name The unmangled symbol name to resolve.
-  ///
-  /// \return The resolved symbol definition, or an Error if the lookup
-  ///         failed.
+  /// Resolves a symbol by name.
   Expected<ExecutorSymbolDef> lookup(StringRef name);
 
-  /// \brief Look up a compiled symbol's raw address by name.
+  /// Resolves a symbol's raw address.
   Expected<uint64_t> lookup_addr(StringRef name);
 
-  /// \brief Define host symbols (name → address) in the primary JITDylib.
-  ///
-  /// Registers the rukaml runtime (rukaml_stdlib.c) as absolute symbols so
-  /// that JIT'd code resolves it deterministically, without relying on
-  /// -rdynamic or the process-symbol generator.
-  ///
-  /// \param syms Name → host address pairs.
-  ///
-  /// \return An Error if the definitions could not be added.
+  /// Defines host symbols (name -> address) in the primary JITDylib, e.g. the
+  /// rukaml runtime, so that JIT'd code resolves them without -rdynamic.
   Error define_abs_symbols(
       const std::vector<std::pair<std::string, uint64_t>> &syms);
 };
