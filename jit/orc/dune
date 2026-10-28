@@ -1,16 +1,5 @@
 (copy_files ../../back/llvm/rukaml_stdlib.c)
 
-(rule
- (targets llvm_cflags.sexp llvm_ldflags.sexp)
- (action
-  (progn
-   (with-stdout-to
-    llvm_cflags.sexp
-    (run sh -c "echo \"(-I$(llvm-config-19 --includedir))\""))
-   (with-stdout-to
-    llvm_ldflags.sexp
-    (run sh -c "echo \"(-L$(llvm-config-19 --libdir) -lLLVM-19)\"")))))
-
 (library
  (name JIT_orc_lib)
  (libraries IR JIT_engine_lib)
@@ -25,11 +14,11 @@
    :standard
    -std=c++17
    -fno-rtti
-   (:include llvm_cflags.sexp)
+   -I%{read:../../llvm_includedir}
    -D__STDC_CONSTANT_MACROS
    -D__STDC_FORMAT_MACROS
    -D__STDC_LIMIT_MACROS))
  (c_library_flags
-  (-lstdc++ (:include llvm_ldflags.sexp)))
+  (-lstdc++ -L%{read:../../llvm_libdir} -lLLVM-19))
  (instrumentation
   (backend bisect_ppx)))

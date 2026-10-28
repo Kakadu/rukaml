@@ -91,6 +91,24 @@ let export_toolchain toolchain ~suffix =
   Out_channel.write_all (spf "run_%s" suffix) ~data:run
 ;;
 
+let export_llvm_dirs dirs =
+  let default = "none", "none" in
+  let includedir, libdir = Option.value dirs ~default in
+  Out_channel.write_all "llvm_includedir" ~data:includedir;
+  Out_channel.write_all "llvm_libdir" ~data:libdir
+;;
+
+let discover_llvm_dirs cfg llvm_config =
+  discover_bin cfg llvm_config
+  |> Option.map ~f:(fun bin ->
+    let query flag =
+      let out = C.Process.run_capture_exn cfg bin [ flag ] |> String.strip in
+      log "%s %s -> %s" llvm_config flag out;
+      out
+    in
+    query "--includedir", query "--libdir")
+;;
+
 let () =
   let cfg = C.create "rukaml" in
   let print_toolchain toolchain =
@@ -148,5 +166,7 @@ let () =
   in
   let toolchain_llvm = discover_toolchain cfg defaults_llvm ~suffix:"llvm" in
   export_toolchain toolchain_llvm ~suffix:"llvm";
-  print_toolchain toolchain_llvm
+  print_toolchain toolchain_llvm;
+  let llvm_config = "llvm-config-19" in
+  export_llvm_dirs (discover_llvm_dirs cfg llvm_config)
 ;;
