@@ -58,16 +58,17 @@ let on_vb (module LL : LL.S) (module TD : TOP_DEFS) : ANF.vb -> _ =
     | AVar name when Hashtbl.mem virt_of_named_hash name -> virt_of_name name
     | AVar name ->
       assert (LL.has_toplevel_func name.hum_name);
-      let alloc_closure, typ = top_look_exn "rukaml_alloc_closure" in
-      log "%s %d" __FILE__ __LINE__;
-      log "typ of alloc_closure = %S" (Llvm.string_of_lltype typ);
-      let final_args =
-        let f = LL.lookup_func_exn name.hum_name in
-        let formal_params_count = LL.params f |> Array.length in
+      let f, fty = top_look_exn name.hum_name in
+      let arity = LL.params f |> Array.length in
+      if arity = 0
+      then
+        (* TODO: amd64/rv64 make zero-arity top-level values init-time
+           globals; replace this nullary thunk with the same model. *)
+        LL.build_call fty f []
+      else (
+        let alloc_closure, alloc_ty = top_look_exn "rukaml_alloc_closure" in
         let ptr = LL.build_pointercast f i64_typ in
-        [ ptr; LL.const_int i64_typ formal_params_count ]
-      in
-      LL.build_call typ alloc_closure final_args
+        LL.build_call alloc_ty alloc_closure [ ptr; LL.const_int i64_typ arity ])
     | AArray [] -> LL.const_int i64_typ 0
     | AArray r ->
       let l = List.map gen_a r in

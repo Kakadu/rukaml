@@ -59,3 +59,16 @@ Errors.
   $ ../../driver/driver.exe sum.ml --target jit --opt=o2 --opt-dump blocker/dump
   jit error: cannot create dump directory blocker/dump: blocker/dump: Not a directory
   [1]
+
+Top-level values are nullary thunks: a reference must call them, not pass their
+closure address.
+
+  $ cat > toplevel.ml <<'EOF'
+  > let bench_iters = 10
+  > let rec outer m acc = if m = 0 then acc else outer (m - 1) (acc + 1)
+  > let main = outer bench_iters 0
+  > EOF
+  $ ../../driver/driver.exe toplevel.ml --target jit
+  [10]
+  $ ../../driver/driver.exe toplevel.ml --target jit --opt=online
+  [10]
