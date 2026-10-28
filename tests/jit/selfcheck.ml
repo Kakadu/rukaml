@@ -62,10 +62,8 @@ let write_file path data =
 ;;
 
 let read_file path =
-  let ic = open_in path in
-  let data = really_input_string ic (in_channel_length ic) in
-  close_in ic;
-  data
+  try In_channel.with_open_text path (Fun.compose Option.some In_channel.input_all) with
+  | Sys_error _ -> None
 ;;
 
 let with_profile contents f =
@@ -125,9 +123,11 @@ let () =
     Engine.load e prof_ir;
     expect_main "profile run" (Engine.run e "main");
     Engine.close e;
-    let content = read_file prof_path in
-    if not (contains content "1\tmain")
-    then fail "profile file %S lacks a main counter" content);
+    match read_file prof_path with
+    | None -> fail "cannot read file"
+    | Some content ->
+      if not (contains content "1\tmain")
+      then fail "profile file %S lacks a main counter" content);
   (* 9. specialize pass end to end *)
   let chain_payload =
     "declare i64 @rukaml_alloc_closure(i64, i64)\n\
