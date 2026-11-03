@@ -130,6 +130,16 @@ end = struct
       let* acc = init in
       list_foldm ~f ~init:(f acc h) tl
   ;;
+
+  let rec list_mapm ~f xs =
+    let open Syntax in
+    match xs with
+    | [] -> return []
+    | h :: tl ->
+      let* h = f h in
+      let* tl = list_mapm ~f tl in
+      return (h :: tl)
+  ;;
 end
 
 module Subst : sig
@@ -1079,6 +1089,65 @@ let vb ?(env = start_env) table (flg, pat, body) : (_, [> error ]) Result.t =
   |> Result.map_error ~f:(function #error as x -> x)
 ;;
 
+let type_vbs ?(env = start_env) table h tl =
+  let foo vbs =
+    let open R.Syntax in
+    let* answers =
+      R.list_foldm
+        ~init:(R.return [])
+        ~f:(fun acc -> function
+           | _, Parsetree.PVar name, _ ->
+             let* tv = fresh_var ~level:0 in
+             return ((name, tv) :: acc)
+           | _ -> assert false)
+        vbs
+    in
+    let env =
+      List.fold_left
+        ~f:(fun env (name, ty) -> Type_env.extend_string name (S (Var_set.empty, ty)) env)
+        ~init:env
+        answers
+    in
+    R.list_foldm
+      vbs
+      ~init:(R.return (env, []))
+      ~f:(fun (env, xs) -> function
+        | _, Parsetree.PVar name, body ->
+          let* ty, tbody = infer env table body in
+          let tv = List.Assoc.find_exn answers ~equal:String.equal name in
+          let* () = unify table tv ty in
+          return (env, (ty, Tpat_var (Type_env.ident_of_string name env), tbody) :: xs)
+        | _ -> fail `Only_varibles_on_the_left_of_letrec)
+  in
+  match tl with
+  | [] ->
+    let ( let* ) = Result.( >>= ) in
+    let return = Result.return in
+    let* env, typed_vb = vb ~env table h in
+    return (env, Tstr_value typed_vb)
+  | _ ->
+    assert (Parsetree.is_recursive_vb h);
+    let vbs = h :: tl in
+    run (foo vbs)
+    |> Result.map ~f:(fun (env, tvbs) ->
+      let _ : (ty * Typedtree.pattern * expr) list = tvbs in
+      let env, vbs =
+        List.fold_map tvbs ~init:env ~f:(fun env (ty, tpat, tbody) ->
+          let scheme = generalize ~level:(-1) ty in
+          let tvb = value_binding Recursive tpat tbody scheme in
+          let env =
+            match tpat with
+            | Typedtree.Tpat_var ident -> Type_env.extend_by_ident ident scheme env
+            | _ -> env
+          in
+          env, tvb)
+      in
+      match vbs with
+      | [] -> assert false
+      | h :: tl -> env, Typedtree.Tstr_values (Recursive, h, tl))
+    |> Result.map_error ~f:(function #error as x -> x)
+;;
+
 let ( <*> ) mf mx = mf >>= fun f -> mx >>= fun x -> return (f x)
 
 let check_constr_arity (env : Type_env.t) name args =
@@ -1220,13 +1289,12 @@ let structure_item ?(env = start_env) table pstru_item =
   let ( let* ) = Result.( >>= ) in
   let return = Result.return in
   match pstru_item with
-  | Parsetree.Pstr_value (item, []) ->
-    let* env, typed_vb = vb ~env table item in
-    return (env, Tstr_value typed_vb)
+  | Parsetree.Pstr_value (h, tl) -> type_vbs ~env table h tl
   | Parsetree.Pstr_type (item, []) ->
     let* env, stru_item = td ~env item in
     return (env, Tstr_type stru_item)
-  | _ -> failwith "not implemented: \"and\" chain of type declarations"
+  | Parsetree.Pstr_type (_, _ :: _) ->
+    failwith "not implemented: 'and' chain of type declarations"
 ;;
 
 let structure ?(env = start_env) table stru =

@@ -115,3 +115,15 @@ let group_lams body =
   in
   helper [] body
 ;;
+
+let is_recursive_vb (flg, _, _) =
+  match flg with
+  | Recursive -> true
+  | NonRecursive -> false
+;;
+
+let pstr_value_of_vbs vbs =
+  match vbs with
+  | [] -> failwith "Bad argument"
+  | h :: tl -> Pstr_value (h, tl)
+;;

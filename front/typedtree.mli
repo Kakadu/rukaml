@@ -128,6 +128,7 @@ type type_declaration =
 
 type structure_item =
   | Tstr_value of value_binding
+  | Tstr_values of Parsetree.rec_flag * value_binding * value_binding list
   | Tstr_type of type_declaration
 
 type structure = structure_item list

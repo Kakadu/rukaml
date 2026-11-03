@@ -45,7 +45,7 @@ module Compiler = struct
     let vbs =
       let aux = function
         | Parsetree.Pstr_value (vb, []) -> Some vb
-        | Pstr_value _ -> failwith "not implemented"
+        | Pstr_value _ -> failwiths "not implemented %s %d" __FILE__ __LINE__
         | _ -> None
       in
       Stdlib.List.filter_map aux stru
@@ -85,12 +85,22 @@ module Compiler = struct
       in
       Base.List.fold ~f:(fun acc (_rec, lhs, _rhs) -> collect_from_patt acc lhs)
     in
+    let collect_globals_in_stru ~init =
+      List.fold_left
+        (fun acc -> function
+           | Parsetree.Pstr_value (vb1, vbs) -> collect_globals ~init:acc (vb1 :: vbs)
+           | Pstr_type _ -> acc)
+        init
+    in
     let f (globals, acc) = function
       | Parsetree.Pstr_value (vb, []) ->
-        let stru = CConv.conv ~standart_globals:globals vb in
+        let stru = CConv.value_binding ~standart_globals:globals vb in
         let globals = collect_globals ~init:globals stru in
         globals, List.append acc (List.map (fun vb -> Parsetree.Pstr_value (vb, [])) stru)
-      | Pstr_value _ -> failwith "not implemented"
+      | Pstr_value (vb1, vbs) ->
+        let stru = CConv.value_bindings ~standart_globals:globals vb1 vbs in
+        let globals = collect_globals_in_stru ~init:globals stru in
+        globals, stru
       | Parsetree.Pstr_type _ as td -> globals, List.append acc [ td ]
     in
     fun (Parsetree stru) ->

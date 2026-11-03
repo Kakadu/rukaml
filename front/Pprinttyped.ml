@@ -204,13 +204,11 @@ let pp_expr =
 
 let pp_hum = pp_expr ~pars:false
 
-let pp_vb_hum ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
+let pp_vb_hum prefix ppf { tvb_flag; tvb_pat; tvb_body; tvb_typ } =
   fprintf
     ppf
-    "@[<v 2>@[let %s%a: @[%a@] =@]@,@[%a@]@]"
-    (match tvb_flag with
-     | Recursive -> "rec "
-     | NonRecursive -> "")
+    "@[<v 2>@[%s %a: @[%a@] =@]@,@[%a@]@]"
+    (prefix tvb_flag)
     pp_pattern
     tvb_pat
     (pp_typ_hum ~parens:false)
@@ -257,7 +255,27 @@ let iter_idents = Ident.Ident_map.iter_idents
 
 let pp_stru_item ppf = function
   | Tstr_type td -> pp_td_hum ppf td
-  | Tstr_value vb -> pp_vb_hum ppf vb
+  | Tstr_value vb ->
+    pp_vb_hum
+      (function
+        | Recursive -> "let rec"
+        | NonRecursive -> "let")
+      ppf
+      vb
+  | Tstr_values (_, vb1, vbs) ->
+    fprintf ppf "@[<v>";
+    List.iteri
+      (fun i vb ->
+         pp_vb_hum
+           (fun flg ->
+              match i, flg with
+              | 0, Recursive -> "let rec"
+              | 0, _ -> "let"
+              | _ -> "and")
+           ppf
+           vb)
+      (vb1 :: vbs);
+    fprintf ppf "@]"
 ;;
 
 let pp_stru ppf stru =

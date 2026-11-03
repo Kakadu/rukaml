@@ -13,16 +13,21 @@ val standart_globals : String_set.t
 
 (** Closure conversion. *)
 
-val conv
-  :  ?standart_globals:String_set.t
-  -> Parsetree.value_binding
-  -> Parsetree.value_binding list
-
-(** An alias for [conv] *)
 val value_binding
   :  ?standart_globals:String_set.t
   -> Parsetree.value_binding
+  -> Frontend.Parsetree.value_binding list
+
+val value_binding
+  :  ?standart_globals:String_set.t
+  -> Parsetree.value_binding
+  -> Frontend.Parsetree.value_binding list
+
+val value_bindings
+  :  ?standart_globals:String_set.t
+  -> Parsetree.value_binding
   -> Parsetree.value_binding list
+  -> Parsetree.structure_item list
 
 val structure_item
   :  ?standart_globals:String_set.t

@@ -28,7 +28,7 @@ let%expect_test " " =
 let wrap ?(verbose = false) ?(standart_globals = standart_globals) input =
   set_logging verbose;
   let ast = Parsing.parse_vb_exn input in
-  let rez = conv ~standart_globals ast in
+  let rez = value_binding ~standart_globals ast in
   Format.printf
     "@[%a@]\n\t~~[%d value bindings]~~>\n@[<v>%a@]\n"
     Pprint.pp_value_binding
@@ -199,5 +199,21 @@ let%expect_test "unwrap as structure" =
                                        | (Some x) :: xs -> __lifted_let_8_aux xs
                                        | _ -> 0)
     let unwrap ls = __lifted_let_8_aux ls
+    |}]
+;;
+
+let%expect_test "Zed combinator" =
+  on_structure
+    "let main = fun f -> (fun x -> f (fun v -> x x v)) (fun x -> f (fun v -> x x v))";
+  [%expect
+    {|
+    let main f = (fun x -> f (fun v -> x x v)) (fun x -> f (fun v -> x x v))
+    ~~[5 value bindings]~~>
+
+      let __lifted_lam_12 x v = x x v
+    let __lifted_lam_11 f x = f (__lifted_lam_12 x)
+    let __lifted_lam_10 x v = x x v
+    let __lifted_lam_9 f x = f (__lifted_lam_10 x)
+    let main f = __lifted_lam_11 f (__lifted_lam_9 f)
     |}]
 ;;

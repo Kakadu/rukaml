@@ -115,3 +115,5 @@ val pnil : pattern
 val enil : expr
 val pcons : pattern -> pattern -> pattern
 val econs : expr -> expr -> expr
+val is_recursive_vb : value_binding -> bool
+val pstr_value_of_vbs : value_binding list -> structure_item

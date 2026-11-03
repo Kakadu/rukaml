@@ -29,6 +29,7 @@ module SS = String_set
 let simplify =
   let open Parsetree in
   let rec helper = function
+    (* (fun x -> (fun a -> B) x) ~~> (fun a -> B) *)
     | ELam (PVar x, EApp ((ELam (_, _) as func), EVar y)) when x = y -> helper func
     | ELam (p, body) -> ELam (p, helper body)
     | (EVar _ as e) | (EConst _ as e) -> e
@@ -192,8 +193,12 @@ let classify standart_globals patterns expr =
   if SS.cardinal vars = 0 then None else Some vars
 ;;
 
-let conv ?(standart_globals = standart_globals)
-  : Parsetree.value_binding -> Parsetree.value_binding list
+let helper_vb1 ?(standart_globals = standart_globals)
+  :  Parsetree.value_binding
+  -> Parsetree.value_binding * Parsetree.value_binding list
+  (* TODO: ideally we return taret value binding and list of value bindingd list,
+  because nested function could be mutually-recursive.
+  At the moment nested let rec is not parsed. *)
   =
   let open Parsetree in
   (* TODO(Kakadu): don't know if monads are needed here *)
@@ -423,7 +428,7 @@ let conv ?(standart_globals = standart_globals)
     let args, rhs = group_lams root in
     let enriched_globals = standart_globals |> String_set.add v in
     let saved, last_rhs = Monads.Store.run (helper enriched_globals rhs) [] in
-    List.rev_append saved [ is_rec, pat, elams args last_rhs ]
+    (is_rec, pat, elams args last_rhs), saved
     (* |> List.map simplify_vb *)
   | is_rec, ((PTuple _ | PConstruct _) as pat), root ->
     let saved, rhs =
@@ -431,19 +436,54 @@ let conv ?(standart_globals = standart_globals)
         (helper (SS.union (vars_from_pattern pat) standart_globals) root)
         []
     in
-    List.rev_append saved [ is_rec, pat, rhs ] |> List.map simplify_vb
+    simplify_vb (is_rec, pat, rhs), List.map simplify_vb saved
   | is_rec, ((PUnit | PAny | PConst _) as pat), root ->
     log "%s %d, is_rec = %a, discard pattern" __FUNCTION__ __LINE__ pp_rec_flag is_rec;
     let saved, rhs = Monads.Store.run (helper standart_globals root) [] in
-    List.rev_append saved [ is_rec, pat, rhs ] |> List.map simplify_vb
+    simplify_vb (is_rec, pat, rhs), List.map simplify_vb saved
 ;;
 
-let value_binding = conv
+let value_binding ?(standart_globals = standart_globals) vb1 =
+  let vb1, vbs = helper_vb1 ~standart_globals vb1 in
+  List.rev vbs @ [ vb1 ]
+;;
+
+let value_bindings ?(standart_globals = standart_globals) vb1 vbs =
+  (* assert (not (List.is_empty vbs)); *)
+  let _ : Frontend.Parsetree.value_binding = vb1 in
+  if Parsetree.is_recursive_vb vb1
+  then (
+    let all_vbs = vb1 :: vbs in
+    let globals =
+      List.fold_left
+        (fun acc -> function
+           | _, Parsetree.PVar name, _ -> SS.add name acc
+           | _ -> assert false)
+        standart_globals
+        all_vbs
+    in
+    let rec_vbs, other_vbs =
+      List.fold_left
+        (fun (acc_vb, acc_other) vb ->
+           let vb, vbs = helper_vb1 ~standart_globals:globals vb in
+           vb :: acc_vb, vbs :: acc_other)
+        ([], [])
+        all_vbs
+    in
+    List.rev_map (fun vb -> Parsetree.Pstr_value (vb, [])) (List.concat other_vbs)
+    @ [ Parsetree.pstr_value_of_vbs rec_vbs ])
+  (* failwiths "not implemented %s %d" __FUNCTION__ __LINE__ *)
+  else failwiths "not implemented: non-recurusve letrec.  %s %d" __FUNCTION__ __LINE__
+;;
+
 let mk_vb1 vb = Parsetree.Pstr_value (vb, [])
 
 let structure_item ?(standart_globals = standart_globals) = function
-  | Parsetree.Pstr_value (vb, []) -> conv ~standart_globals vb |> List.map mk_vb1
-  | Parsetree.Pstr_value _ -> failwith "not implemented"
+  | Parsetree.Pstr_value (vb, []) ->
+    let vb1, vb_other = helper_vb1 ~standart_globals vb in
+    List.map mk_vb1 (vb_other @ [ vb1 ])
+    (* TODO: dynamic arrays *)
+  | Parsetree.Pstr_value _ -> failwiths "not implemented %s %d" __FILE__ __LINE__
   | Parsetree.Pstr_type _ as td -> [ td ]
 ;;
 
@@ -456,7 +496,7 @@ let structure ?(standart_globals = standart_globals) stru =
       log "%s %d" "Processing structure item" __LINE__;
       match stru with
       | Parsetree.Pstr_value (stru, []) ->
-        let new_strus = conv ~standart_globals:glob stru in
+        let new_strus = value_binding ~standart_globals:glob stru in
         log "new strus length = %d" (List.length new_strus);
         let new_glob =
           ListLabels.fold_left ~init:glob new_strus ~f:(fun acc -> function
@@ -470,7 +510,7 @@ let structure ?(standart_globals = standart_globals) stru =
               failwiths "not implemented %s %d" __FILE__ __LINE__)
         in
         new_glob, List.append ans (List.map mk_vb1 new_strus)
-      | Parsetree.Pstr_value _ -> failwith "not implemented"
+      | Parsetree.Pstr_value _ -> failwiths "not implemented %s %d" __FILE__ __LINE__
       | Parsetree.Pstr_type _ as td -> glob, List.append ans [ td ])
   |> snd
 ;;

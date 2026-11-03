@@ -159,3 +159,15 @@ tuples
     fun z -> z
   let foo: '_1 -> int * bool =
     fun x -> ((__lifted_let_1_y 1), (__lifted_let_1_y true))
+
+  $ run << EOF
+  > let rec odd n =
+  >   if n=1 then true
+  >   else if n=0 then false
+  >   else even (n-1)
+  > and even n = false
+  > EOF
+  let rec odd: int -> bool =
+    fun n -> (if n = 1 then true else (if n = 0 then false else even (n - 1)))
+  and even: int -> bool =
+    fun n -> false
