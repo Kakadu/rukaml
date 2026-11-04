@@ -22,21 +22,7 @@ extern "C" {
 }
 
 // Rukaml LLVM runtime (back/llvm/rukaml_stdlib.c), compiled into the same .so.
-extern "C" {
-void myputc(int x);
-void *rukaml_apply0(void *f);
-void *rukaml_apply1(void *f, void *arg1);
-void *rukaml_apply2(void *f, void *arg1, void *arg2);
-void *rukaml_apply3(void *f, void *arg1, void *arg2, void *arg3);
-void *rukaml_apply4(void *f, void *arg1, void *arg2, void *arg3, void *arg4);
-void *rukaml_alloc_pair(void *l, void *r);
-void *rukaml_alloc_array(size_t *arr, uint64_t len);
-void *rukaml_field(int n, void **r);
-void *rukaml_alloc_closure(void *func, int32_t argsc);
-void *rukaml_applyN(void *f, int32_t argc, ...);
-void rukaml_prof_tick(const char *name);
-void rukaml_prof_dump(const char *path);
-}
+#include "rukaml.h"
 
 namespace {
 

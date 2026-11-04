@@ -38,6 +38,6 @@
  (enabled_if
   (not
    (= none %{read:../../cc_llvm})))
- (deps rukaml_stdlib.c)
+ (deps rukaml_stdlib.c rukaml.h)
  (action
-  (system "%{read:../../cc_llvm} -c %{deps} -o %{target}")))
+  (system "%{read:../../cc_llvm} -c rukaml_stdlib.c -o %{target}")))

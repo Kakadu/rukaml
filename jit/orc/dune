@@ -1,4 +1,5 @@
 (copy_files ../../back/llvm/rukaml_stdlib.c)
+(copy_files ../../back/llvm/rukaml.h)
 
 (library
  (name JIT_orc_lib)
@@ -15,6 +16,7 @@
    -std=c++17
    -fno-rtti
    -I%{read:../../llvm_includedir}
+   -I../../back/llvm
    -D__STDC_CONSTANT_MACROS
    -D__STDC_FORMAT_MACROS
    -D__STDC_LIMIT_MACROS))
