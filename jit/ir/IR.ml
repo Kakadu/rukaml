@@ -12,9 +12,8 @@ let producer = "rukaml; llvm-ocaml-bindings 19.1.7"
 let make format payload = { format; payload; producer }
 
 let dump_to_file file t =
-  let out = open_out file in
-  Printf.fprintf out "%s\n" t.payload;
-  close_out out
+  let str = Printf.sprintf "%s\n" t.payload in
+  Out_channel.with_open_text file (fun oc -> Out_channel.output_string oc str)
 ;;
 
 let format (t : t) = t.format
