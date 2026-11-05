@@ -86,3 +86,38 @@ let run ?(dump = fun (_ : string) (_ : IR.t) -> ()) (p : pipeline) (ir : IR.t) :
     ; IR.payload = "; opts=" ^ opts ^ "\n" ^ IR.payload ir'
     }
 ;;
+
+let test_config : config = { profile_file = "inline.prof" }
+
+let%test "of_flags splits commas" =
+  names (of_flags test_config [ "devirt,o2"; "tier0" ]) = [ "devirt"; "o2"; "tier0" ]
+;;
+
+let%test "of_flags empty" = names (of_flags test_config []) = []
+
+let%test "of_flags rejects unknown names" =
+  match of_flags test_config [ "online" ] with
+  | _ -> false
+  | exception Failure _ -> true
+;;
+
+let%test "of_flags rejects empty names" =
+  match of_flags test_config [ "devirt," ] with
+  | _ -> false
+  | exception Failure _ -> true
+;;
+
+let%test "requires lists pass dependencies" =
+  requires (of_flags test_config [ "tier0" ]) = Tier0.requires
+;;
+
+let%test "missing_runtime keeps order and duplicates" =
+  missing_runtime ~available:[ "a"; "b" ] [ "d"; "b"; "c"; "d" ] = [ "d"; "c"; "d" ]
+;;
+
+let%test "missing_runtime with nothing required" = missing_runtime ~available:[] [] = []
+
+let%test "empty pipeline is the identity" =
+  let ir = IR.make IR.TextLL "x" in
+  run empty ir == ir
+;;

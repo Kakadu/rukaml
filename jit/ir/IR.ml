@@ -18,3 +18,13 @@ let dump_to_file file t =
 
 let format (t : t) = t.format
 let payload (t : t) = t.payload
+
+let%test "make/format/payload/producer" =
+  let ir = make TextLL "payload" in
+  format ir = TextLL && payload ir = "payload" && ir.producer = producer
+;;
+
+let%test "bitcode format" =
+  let ir = make Bitcode "BC" in
+  format ir = Bitcode && payload ir = "BC"
+;;

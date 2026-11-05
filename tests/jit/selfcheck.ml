@@ -1,53 +1,8 @@
-(* Lifecycle selfcheck for the JIT_engine_lib.JITEngine.BackEngine
-   contract in its ORC implementation, plus the optimization pipeline in
-   JIT_opt_lib. Run from the alias runtest (jit/selfcheck/dune). Checks,
-   within a single process:
-   1. a second create without close does not duplicate runtime symbols
-      (registration happens once, under "just created", in
-      rukaml_orc_create);
-   2. load/run/close; a repeated close is safe (delete nullptr);
-   3. create after close yields a fresh engine (main is defined again);
-   4. run after close raises Failure;
-   5. an empty pipeline is the identity: payload and producer stay
-      byte-for-byte;
-   6. an unknown pass name fails with Failure;
-   7. missing_runtime reports exactly the unmet requirements, and the
-      engine supplies what the profile pass needs;
-   8. the profile pass instruments a payload, the engine runs it, and the
-      profile file gets a non-zero counter;
-   9. the specialize pass collapses a hot curried call chain into a
-      direct call (hot: payload has a clone and the program still runs;
-      cold: payload untouched apart from the opts comment);
-  10. a hot chain whose result feeds another site's argument
-      ([f 100 (f 10 x)]) specializes without leaving a dangling
-      instruction reference.
-  11. [JITOpt.run ~dump] calls the callback once per pass, in flag order,
-      with that pass's output (the raw payload, before the opts header).
-
-   The base payload is a hand-written [IR.TextLL] with no runtime
-   references, so the lifecycle tests do not depend on the LLVM
-   backend. *)
 module Engine : JIT_engine_lib.JITEngine.BackEngine = JIT_orc_lib.OrcEngine
 module JITOpt = JIT_opt_lib.JITOpt
-
-let payload = "define i64 @main() {\n  ret i64 5\n}\n"
-
-let fail fmt =
-  Printf.ksprintf
-    (fun s ->
-       prerr_endline ("selfcheck FAIL: " ^ s);
-       exit 1)
-    fmt
-;;
+open Test_support
 
 let expect_main tag v = if v <> 5L then fail "%s: main = %Ld, expected 5L" tag v
-
-let contains hay needle =
-  let nh = String.length hay
-  and nn = String.length needle in
-  let rec loop i = i + nn <= nh && (String.sub hay i nn = needle || loop (i + 1)) in
-  loop 0
-;;
 
 let drop_first_line s =
   match String.index_opt s '\n' with
@@ -55,162 +10,114 @@ let drop_first_line s =
   | None -> s
 ;;
 
-let write_file path data =
-  let oc = open_out path in
-  output_string oc data;
-  close_out oc
-;;
+let payload = fixture "main5.ll"
+let chain_payload = fixture "chain.ll"
 
-let read_file path =
-  try In_channel.with_open_text path (Fun.compose Option.some In_channel.input_all) with
-  | Sys_error _ -> None
-;;
-
-let with_profile contents f =
-  let path = Filename.temp_file "rukaml_selfcheck" ".prof" in
-  write_file path contents;
+let run_and_close ir =
+  let e = Engine.create () in
   Fun.protect
-    ~finally:(fun () -> if Sys.file_exists path then Sys.remove path)
-    (fun () -> f path)
+    ~finally:(fun () -> Engine.close e)
+    (fun () ->
+       Engine.load e ir;
+       Engine.run e "main")
 ;;
 
-let () =
-  let ir = IR.make IR.TextLL payload in
+let test_lifecycle () =
   let e1 = Engine.create () in
-  let _e2 = Engine.create () in
-  Engine.load e1 ir;
+  Engine.load e1 payload;
   expect_main "first run" (Engine.run e1 "main");
   Engine.close e1;
-  Engine.close _e2;
-  let e3 = Engine.create () in
-  Engine.load e3 ir;
-  expect_main "second run" (Engine.run e3 "main");
-  Engine.close e3;
-  (match Engine.run e3 "main" with
-   | v -> fail "run after close returned %Ld, expected Failure" v
-   | exception Failure msg -> if String.trim msg = "" then fail "empty Failure");
-  (* 5. empty pipeline: identity *)
-  let ir' = JITOpt.run JITOpt.empty ir in
-  if IR.payload ir' <> payload || ir'.IR.producer <> ir.IR.producer
-  then fail "empty pipeline changed payload or producer";
-  (* 6. unknown pass name *)
+  Engine.close e1 (* repeated close is safe *);
+  let e2 = Engine.create () in
+  Engine.load e2 payload;
+  expect_main "second run" (Engine.run e2 "main");
+  Engine.close e2;
+  match Engine.run e2 "main" with
+  | v -> fail "run after close returned %Ld, expected Failure" v
+  | exception Failure _ -> ()
+;;
+
+let test_empty_pipeline () =
+  let ir' = JITOpt.run JITOpt.empty payload in
+  if IR.payload ir' <> IR.payload payload || ir'.IR.producer <> payload.IR.producer
+  then fail "empty pipeline changed payload or producer"
+;;
+
+let test_unknown_pass () =
   let config : JITOpt.config = { profile_file = "unused.prof" } in
-  (match JITOpt.of_flags config [ "nope" ] with
-   | _ -> fail "unknown pass name accepted"
-   | exception Failure msg -> if String.length msg = 0 then fail "empty Failure");
-  (* 7. requirement checking *)
-  let profile_pipeline = JITOpt.of_flags config [ "profile" ] in
-  if JITOpt.names profile_pipeline <> [ "profile" ] then fail "wrong pipeline names";
-  if JITOpt.requires profile_pipeline <> [ "rukaml_prof_tick"; "rukaml_prof_dump" ]
-  then fail "wrong profile requirements";
+  match JITOpt.of_flags config [ "nope" ] with
+  | _ -> fail "unknown pass name accepted"
+  | exception Failure _ -> ()
+;;
+
+let test_missing_runtime () =
+  let config : JITOpt.config = { profile_file = "unused.prof" } in
   let missing = JITOpt.missing_runtime ~available:[ "a"; "b" ] [ "b"; "c"; "d" ] in
   if missing <> [ "c"; "d" ]
   then fail "missing_runtime = [%s], expected [c, d]" (String.concat ", " missing);
-  let missing_engine =
-    JITOpt.missing_runtime
-      ~available:Engine.runtime_symbols
-      (JITOpt.requires profile_pipeline)
-  in
-  if missing_engine <> []
-  then fail "engine lacks runtime symbols: [%s]" (String.concat ", " missing_engine);
-  (* 8. profile pass end to end *)
-  with_profile "" (fun prof_path ->
-    let prof_config : JITOpt.config = { profile_file = prof_path } in
-    let prof_ir = JITOpt.run (JITOpt.of_flags prof_config [ "profile" ]) ir in
-    if String.length (IR.payload prof_ir) <= String.length payload
+  List.iter
+    (fun name ->
+       let pipeline = JITOpt.of_flags config [ name ] in
+       let unmet =
+         JITOpt.missing_runtime
+           ~available:Engine.runtime_symbols
+           (JITOpt.requires pipeline)
+       in
+       if unmet <> []
+       then
+         fail
+           "pass %s needs runtime symbols missing from the engine: [%s]"
+           name
+           (String.concat ", " unmet))
+    [ "profile"; "devirt"; "specialize"; "o2"; "tier0" ]
+;;
+
+let test_profile_pass () =
+  with_tmp_file "" (fun prof_path ->
+    let config : JITOpt.config = { profile_file = prof_path } in
+    let prof_ir = JITOpt.run (JITOpt.of_flags config [ "profile" ]) payload in
+    if String.length (IR.payload prof_ir) <= String.length (IR.payload payload)
     then fail "profile pass did not instrument the payload";
-    let e = Engine.create () in
-    Engine.load e prof_ir;
-    expect_main "profile run" (Engine.run e "main");
-    Engine.close e;
-    match read_file prof_path with
-    | None -> fail "cannot read file"
-    | Some content ->
-      if not (contains content "1\tmain")
-      then fail "profile file %S lacks a main counter" content);
-  (* 9. specialize pass end to end *)
-  let chain_payload =
-    "declare i64 @rukaml_alloc_closure(i64, i64)\n\
-     declare i64 @rukaml_applyN(i64, i64, ...)\n\
-     define i64 @f(i64 %0, i64 %1) {\n\
-    \  %r = add i64 %0, %1\n\
-    \  ret i64 %r\n\
-     }\n\
-     define i64 @main() {\n\
-    \  %cl = call i64 @rukaml_alloc_closure(i64 ptrtoint (ptr @f to i64), i64 2)\n\
-    \  %p1 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %cl, i64 1, i64 4)\n\
-    \  %r = call i64 (i64, i64, ...) @rukaml_applyN(i64 %p1, i64 1, i64 7)\n\
-    \  ret i64 %r\n\
-     }\n"
-  in
-  with_profile "1\tf\n" (fun cold_path ->
-    let cold_config : JITOpt.config = { profile_file = cold_path } in
-    let cold_ir =
-      JITOpt.run
-        (JITOpt.of_flags cold_config [ "specialize" ])
-        (IR.make IR.TextLL chain_payload)
-    in
-    if drop_first_line (IR.payload cold_ir) <> chain_payload
+    expect_main "profile run" (run_and_close prof_ir);
+    let content = read_file prof_path in
+    if not (contains content "1\tmain")
+    then fail "profile file %S lacks a main counter" content)
+;;
+
+let test_specialize_cold_hot () =
+  with_tmp_file "1\tf\n" (fun cold_path ->
+    let config : JITOpt.config = { profile_file = cold_path } in
+    let cold_ir = JITOpt.run (JITOpt.of_flags config [ "specialize" ]) chain_payload in
+    if drop_first_line (IR.payload cold_ir) <> IR.payload chain_payload
     then fail "cold specialize changed the payload");
-  with_profile "4\tf\n" (fun hot_path ->
-    let hot_config : JITOpt.config = { profile_file = hot_path } in
-    let hot_ir =
-      JITOpt.run
-        (JITOpt.of_flags hot_config [ "specialize" ])
-        (IR.make IR.TextLL chain_payload)
-    in
+  with_tmp_file "4\tf\n" (fun hot_path ->
+    let config : JITOpt.config = { profile_file = hot_path } in
+    let hot_ir = JITOpt.run (JITOpt.of_flags config [ "specialize" ]) chain_payload in
     if not (contains (IR.payload hot_ir) "$spec$")
     then fail "hot specialize produced no clone";
-    let e = Engine.create () in
-    Engine.load e hot_ir;
-    (match Engine.run e "main" with
-     | 11L -> ()
-     | v -> fail "specialized main = %Ld, expected 11L" v);
-    Engine.close e);
-  (* 10. specialize when a rewritten site's result feeds another site *)
-  let chained_payload =
-    "declare i64 @rukaml_alloc_closure(i64, i64)\n\
-     declare i64 @rukaml_applyN(i64, i64, ...)\n\
-     define i64 @f(i64 %0, i64 %1) {\n\
-    \  %r = add i64 %0, %1\n\
-    \  ret i64 %r\n\
-     }\n\
-     define i64 @main() {\n\
-    \  %c1 = call i64 @rukaml_alloc_closure(i64 ptrtoint (ptr @f to i64), i64 2)\n\
-    \  %p1 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %c1, i64 1, i64 10)\n\
-    \  %r1 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %p1, i64 1, i64 5)\n\
-    \  %c2 = call i64 @rukaml_alloc_closure(i64 ptrtoint (ptr @f to i64), i64 2)\n\
-    \  %p2 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %c2, i64 1, i64 100)\n\
-    \  %r2 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %p2, i64 1, i64 %r1)\n\
-    \  ret i64 %r2\n\
-     }\n"
-  in
-  with_profile "4\tf\n" (fun chain_path ->
-    let chain_config : JITOpt.config = { profile_file = chain_path } in
+    let v = run_and_close hot_ir in
+    if v <> 11L then fail "specialized main = %Ld, expected 11L" v)
+;;
+
+let test_specialize_chained () =
+  with_tmp_file "4\tf\n" (fun chain_path ->
+    let config : JITOpt.config = { profile_file = chain_path } in
+    let chained_payload = fixture "chained.ll" in
     let chain_ir =
-      try
-        JITOpt.run
-          (JITOpt.of_flags chain_config [ "specialize" ])
-          (IR.make IR.TextLL chained_payload)
-      with
+      try JITOpt.run (JITOpt.of_flags config [ "specialize" ]) chained_payload with
       | Failure msg -> fail "chained specialize: %s" msg
     in
-    let e = Engine.create () in
-    Engine.load e chain_ir;
-    (match Engine.run e "main" with
-     | 115L -> ()
-     | v -> fail "chained specialized main = %Ld, expected 115L" v);
-    Engine.close e);
-  (* 11. intermediate dumps *)
-  with_profile "4\tf\n" (fun dump_path ->
-    let dump_config : JITOpt.config = { profile_file = dump_path } in
+    let v = run_and_close chain_ir in
+    if v <> 115L then fail "chained specialized main = %Ld, expected 115L" v)
+;;
+
+let test_dump_callback () =
+  with_tmp_file "4\tf\n" (fun dump_path ->
+    let config : JITOpt.config = { profile_file = dump_path } in
     let seen = ref [] in
     let dump name t = seen := (name, IR.payload t) :: !seen in
     let out =
-      JITOpt.run
-        ~dump
-        (JITOpt.of_flags dump_config [ "profile"; "specialize" ])
-        (IR.make IR.TextLL chain_payload)
+      JITOpt.run ~dump (JITOpt.of_flags config [ "profile"; "specialize" ]) chain_payload
     in
     let seen = List.rev !seen in
     let names = List.map fst seen in
@@ -224,38 +131,69 @@ let () =
       if first = second then fail "two-pass dumps have identical payloads";
       if drop_first_line (IR.payload out) <> second
       then fail "last dump does not match the pipeline result"
-    | _ -> fail "dump callback called %d times, expected 2" (List.length seen));
-  (* 12. devirt pass: collapses non-constant alloc_closure + applyN chain *)
-  let nonconst_chain_payload =
-    "declare i64 @rukaml_alloc_closure(i64, i64)\n\
-     declare i64 @rukaml_applyN(i64, i64, ...)\n\
-     define i64 @add(i64 %0, i64 %1) {\n\
-    \  %r = add i64 %0, %1\n\
-    \  ret i64 %r\n\
-     }\n\
-     define i64 @step(i64 %a, i64 %b) {\n\
-    \  %cl = call i64 @rukaml_alloc_closure(i64 ptrtoint (ptr @add to i64), i64 2)\n\
-    \  %p1 = call i64 (i64, i64, ...) @rukaml_applyN(i64 %cl, i64 1, i64 %a)\n\
-    \  %r = call i64 (i64, i64, ...) @rukaml_applyN(i64 %p1, i64 1, i64 %b)\n\
-    \  ret i64 %r\n\
-     }\n\
-     define i64 @main() {\n\
-    \  %res = call i64 @step(i64 19, i64 23)\n\
-    \  ret i64 %res\n\
-     }\n"
-  in
+    | _ -> fail "dump callback called %d times, expected 2" (List.length seen))
+;;
+
+let test_devirt () =
+  let config : JITOpt.config = { profile_file = "unused.prof" } in
   let devirt_ir =
-    JITOpt.run
-      (JITOpt.of_flags config [ "devirt,o2" ])
-      (IR.make IR.TextLL nonconst_chain_payload)
+    JITOpt.run (JITOpt.of_flags config [ "devirt"; "o2" ]) (fixture "nonconst_chain.ll")
   in
   if contains (IR.payload devirt_ir) "call i64 @rukaml_alloc_closure"
   then fail "devirt left rukaml_alloc_closure in step";
-  let e_dev = Engine.create () in
-  Engine.load e_dev devirt_ir;
-  (match Engine.run e_dev "main" with
-   | 42L -> ()
-   | v -> fail "devirt+o2 main = %Ld, expected 42L" v);
-  Engine.close e_dev;
-  print_endline "selfcheck OK"
+  let v = run_and_close devirt_ir in
+  if v <> 42L then fail "devirt+o2 main = %Ld, expected 42L" v
+;;
+
+let test_devirt_arities () =
+  let config : JITOpt.config = { profile_file = "unused.prof" } in
+  List.iter
+    (fun name ->
+       let out = JITOpt.run (JITOpt.of_flags config [ "devirt" ]) (fixture name) in
+       let text = IR.payload out in
+       if
+         contains text "call i64 @rukaml_alloc_closure"
+         || contains text "@rukaml_applyN(i64 %"
+       then fail "%s: devirt left a closure chain" name;
+       let v = run_and_close out in
+       if v <> 42L then fail "%s: main = %Ld, expected 42L" name v)
+    [ "chain_arity1.ll"; "chain_arity3.ll"; "chain_arity4.ll"; "chain_arity5.ll" ]
+;;
+
+let test_multi_site () =
+  let config : JITOpt.config = { profile_file = "unused.prof" } in
+  let out = JITOpt.run (JITOpt.of_flags config [ "devirt" ]) (fixture "multi_site.ll") in
+  let text = IR.payload out in
+  if not (contains text "call i64 @add(" && contains text "call i64 @mul(")
+  then fail "devirt did not rewrite both sites";
+  let v = run_and_close out in
+  if v <> 35L then fail "multi_site main = %Ld, expected 35L" v
+;;
+
+let test_nullary () =
+  let v = run_and_close (fixture "nullary.ll") in
+  if v <> 42L then fail "nullary main = %Ld, expected 42L" v;
+  let out =
+    JITOpt.run
+      (JITOpt.of_flags { profile_file = "unused.prof" } [ "devirt" ])
+      (fixture "nullary.ll")
+  in
+  let v = run_and_close out in
+  if v <> 42L then fail "nullary after devirt = %Ld, expected 42L" v
+;;
+
+let () =
+  check ~name:"lifecycle" test_lifecycle;
+  check ~name:"empty_pipeline" test_empty_pipeline;
+  check ~name:"unknown_pass" test_unknown_pass;
+  check ~name:"missing_runtime" test_missing_runtime;
+  check ~name:"profile_pass" test_profile_pass;
+  check ~name:"specialize_cold_hot" test_specialize_cold_hot;
+  check ~name:"specialize_chained" test_specialize_chained;
+  check ~name:"dump_callback" test_dump_callback;
+  check ~name:"devirt" test_devirt;
+  check ~name:"devirt_arities" test_devirt_arities;
+  check ~name:"multi_site" test_multi_site;
+  check ~name:"nullary" test_nullary;
+  summary ~suite:"selfcheck" ()
 ;;

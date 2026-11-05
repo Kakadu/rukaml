@@ -10,5 +10,10 @@
   llvm.target
   llvm.all_backends
   llvm.passbuilder)
+ (inline_tests)
+ (flags
+  (:standard -linkall))
+ (preprocess
+  (pps ppx_inline_test_nobase))
  (instrumentation
   (backend bisect_ppx)))

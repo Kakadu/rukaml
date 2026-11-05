@@ -29,28 +29,23 @@ let read_profile path : (string * int64) list =
     let* n = Int64.of_string_opt (String.sub line 0 i) in
     Some (String.sub line (i + 1) (String.length line - i - 1), n)
   in
-  let ic = open_in path in
-  Fun.protect
-    ~finally:(fun () -> close_in_noerr ic)
-    (fun () ->
-       let rec loop acc =
-         match input_line ic with
-         | exception End_of_file -> acc
-         | line when String.trim line = "" -> loop acc
-         | line ->
-           (match parse line with
-            | Some entry -> loop (entry :: acc)
-            | None -> malformed line)
-       in
-       loop [])
+  In_channel.with_open_text path (fun ic ->
+    let rec loop acc =
+      match In_channel.input_line ic with
+      | None -> acc
+      | Some line when String.trim line = "" -> loop acc
+      | Some line ->
+        (match parse line with
+         | Some entry -> loop (entry :: acc)
+         | None -> malformed line)
+    in
+    loop [])
 ;;
 
 let const_key args =
   Array.to_list args
   |> List.mapi (fun i a ->
-    if Llvm.is_constant a
-    then Printf.sprintf "%d=%s" i (Llvm.string_of_llvalue a)
-    else "")
+    if Llvm.is_constant a then Printf.sprintf "%d=%s" i (Llvm.string_of_llvalue a) else "")
   |> String.concat ","
 ;;
 
@@ -128,9 +123,7 @@ let run_on_module ?(state = create_state ()) ~is_hot ctx m : bool =
           match Llvm.lookup_function name m with
           | Some existing_fn -> Some (fty, existing_fn)
           | None ->
-            let* f' =
-              clone_specialized ctx m ~name ~fty ~keep ~args:s0.args s0.target
-            in
+            let* f' = clone_specialized ctx m ~name ~fty ~keep ~args:s0.args s0.target in
             Some (fty, f')
         in
         Option.iter
@@ -149,3 +142,4 @@ let run (cfg : config) (ir : IR.t) : IR.t =
     | None -> false
   in
   with_parsed_ir ir (fun ctx m -> run_on_module ~is_hot ctx m)
+;;
