@@ -33,11 +33,9 @@
  (instrumentation
   (backend bisect_ppx)))
 
-(rule
- (target rukaml_stdlib.o)
- (enabled_if
-  (not
-   (= none %{read:../../cc_llvm})))
- (deps rukaml_stdlib.c rukaml.h)
- (action
-  (system "%{read:../../cc_llvm} -c rukaml_stdlib.c -o %{target}")))
+(library
+ (name rukaml_runtime)
+ (modules)
+ (foreign_stubs
+  (language c)
+  (names rukaml_stdlib)))

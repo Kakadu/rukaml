@@ -48,6 +48,10 @@ Errors.
   $ ../../driver/driver.exe sum.ml --target jit --opt=nope
   jit error: unknown JIT optimization pass: "nope"
   [1]
+  $ rm -f rukaml.prof
+  $ ../../driver/driver.exe sum.ml --target jit --opt=specialize
+  jit error: specialize: profile file rukaml.prof does not exist (run with --opt=profile first)
+  [1]
   $ ../../driver/driver.exe sum.ml --target jit --opt=specialize --profile-file missing.prof
   jit error: specialize: profile file missing.prof does not exist (run with --opt=profile first)
   [1]
