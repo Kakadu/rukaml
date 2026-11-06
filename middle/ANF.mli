@@ -29,7 +29,10 @@ and apat =
 
 and vb = Parsetree.rec_flag * apat * expr
 
-type stru_item = ANF_vb of vb
+type stru_item =
+  | ANF_vb of vb
+  | ANF_vbs of Parsetree.rec_flag * (apat * expr) * (apat * expr) list
+
 type stru = stru_item list
 
 val show_c_expr : c_expr -> string

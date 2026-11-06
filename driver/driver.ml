@@ -99,12 +99,15 @@ module Compiler = struct
         globals, List.append acc (List.map (fun vb -> Parsetree.Pstr_value (vb, [])) stru)
       | Pstr_value (vb1, vbs) ->
         let stru = CConv.value_bindings ~standart_globals:globals vb1 vbs in
+        (* Format.printf "STRU 2:\n@[%a@]\n\n" Pprint.structure stru; *)
         let globals = collect_globals_in_stru ~init:globals stru in
-        globals, stru
+        globals, List.append acc stru
       | Parsetree.Pstr_type _ as td -> globals, List.append acc [ td ]
     in
     fun (Parsetree stru) ->
+      (* Format.printf "STRU:\n@[%a@]\n\n" Pprint.structure stru; *)
       let _, stru = ListLabels.fold_left stru ~init:(CConv.standart_globals, []) ~f in
+      (* Format.printf "STRU:\n@[%a@]\n\n" Pprint.structure stru; *)
       k (Parsetree stru)
   ;;
 
@@ -123,12 +126,19 @@ module Compiler = struct
 
   (** Generate code for RV64 *)
   let rv64 (ANF stru) =
-    Opts.init_opts();
+    Opts.init_opts ();
     let vbs =
       List.map
         (function
-          | ANF.ANF_vb (flg, Apat_var name, body) -> flg, Some name, body
-          | ANF.ANF_vb ((NonRecursive as flg), Apat_unit, body) -> flg, None, body
+          | ANF.ANF_vb (flg, Apat_var name, body) -> flg, [ Some name, body ]
+          | ANF.ANF_vb ((NonRecursive as flg), Apat_unit, body) -> flg, [ None, body ]
+          | ANF_vbs (flg, h, tl) ->
+            ( flg
+            , List.map
+                (function
+                  | ANF.Apat_var name, b -> Some name, b
+                  | _ -> failwiths "not implemented %s %d" __FILE__ __LINE__)
+                (h :: tl) )
           | _ -> failwiths "not implemented %s %d" __FILE__ __LINE__)
         stru
     in
@@ -145,7 +155,7 @@ module Compiler = struct
 
   (** Generate code for AMD64 *)
   let amd64 (ANF stru) =
-    Opts.init_opts();
+    Opts.init_opts ();
     let f ~path =
       Amd64_impl.codegen ~wrap_main_into_start:true stru path
       |> Base.Result.ok_or_failwith

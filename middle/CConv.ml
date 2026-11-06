@@ -151,6 +151,20 @@ let%expect_test " " =
   [%expect {|{set| a, |set} |}]
 ;;
 
+let does_use_bad_names set expr =
+  let exception Found in
+  let iterator =
+    { Parsetree.default_mapper with
+      evar = (fun _ name -> if String_set.mem name set then raise Found else EVar name)
+    }
+  in
+  try
+    let _ : Parsetree.expr = iterator.expr iterator expr in
+    false
+  with
+  | Found -> true
+;;
+
 let sugarize_let = Parsetree.group_lams
 
 let gensym =
@@ -449,11 +463,21 @@ let value_binding ?(standart_globals = standart_globals) vb1 =
 ;;
 
 let value_bindings ?(standart_globals = standart_globals) vb1 vbs =
-  (* assert (not (List.is_empty vbs)); *)
+  (* Format.printf "%s: 1 + %d\n" __FUNCTION__ (List.length vbs); *)
   let _ : Frontend.Parsetree.value_binding = vb1 in
   if Parsetree.is_recursive_vb vb1
   then (
     let all_vbs = vb1 :: vbs in
+    let bad_names =
+      List.fold_left
+        (fun acc -> function
+           | _, Parsetree.PVar name, _ -> SS.add name acc
+           | _ -> acc)
+        SS.empty
+        all_vbs
+    in
+    (* let () = Format.printf "bad names: @[%a@]\n%!" SS.pp bad_names in *)
+    (* Format.printf "All_vbs: @[%a@]\n" Pprint.value_bindings all_vbs; *)
     let globals =
       List.fold_left
         (fun acc -> function
@@ -466,12 +490,35 @@ let value_bindings ?(standart_globals = standart_globals) vb1 vbs =
       List.fold_left
         (fun (acc_vb, acc_other) vb ->
            let vb, vbs = helper_vb1 ~standart_globals:globals vb in
+           (* Printf.printf "helper_vb1 returned:\n";
+           List.iteri
+             (fun i vb -> Format.printf "@[%i : %a@]@," i Pprint.value_bindings [ vb ])
+             (vb :: vbs);
+           Printf.printf "\n"; *)
            vb :: acc_vb, vbs :: acc_other)
         ([], [])
         all_vbs
     in
-    List.rev_map (fun vb -> Parsetree.Pstr_value (vb, [])) (List.concat other_vbs)
-    @ [ Parsetree.pstr_value_of_vbs rec_vbs ])
+    (* List.rev_map (fun vb -> Parsetree.Pstr_value (vb, [])) (List.concat other_vbs)
+    @ [ Parsetree.pstr_value_of_vbs rec_vbs ] *)
+    let rec_vbs, other_vbs =
+      List.fold_left
+        (fun (acc_vb, acc_other) ((_, p, e) as vb) ->
+           if does_use_bad_names bad_names e
+           then vb :: acc_vb, acc_other
+           else
+             ( (* let () = Format.printf "%a doens't use bad names\n%!" Pprint.pp_pattern p in
+             let () = Format.printf "@[%a@]\n%!" Pprint.pp_value_binding vb in *)
+               acc_vb
+             , vb :: acc_other ))
+        (List.rev rec_vbs, [])
+        (List.concat other_vbs)
+    in
+    if List.is_empty other_vbs
+    then [ Parsetree.pstr_value_of_vbs rec_vbs ]
+    else
+      List.map (fun vb -> Parsetree.Pstr_value (vb, [])) other_vbs
+      @ [ Parsetree.pstr_value_of_vbs rec_vbs ])
   (* failwiths "not implemented %s %d" __FUNCTION__ __LINE__ *)
   else failwiths "not implemented: non-recurusve letrec.  %s %d" __FUNCTION__ __LINE__
 ;;

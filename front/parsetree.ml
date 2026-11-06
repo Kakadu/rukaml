@@ -127,3 +127,52 @@ let pstr_value_of_vbs vbs =
   | [] -> failwith "Bad argument"
   | h :: tl -> Pstr_value (h, tl)
 ;;
+
+type expr_mapper =
+  { earray : expr_mapper -> expr list -> expr
+  ; econst : expr_mapper -> const -> expr
+  ; evar : expr_mapper -> string -> expr
+  ; eif : expr_mapper -> expr -> expr -> expr -> expr
+  ; elam : expr_mapper -> pattern -> expr -> expr
+  ; eapp : expr_mapper -> expr -> expr -> expr
+  ; etuple : expr_mapper -> expr -> expr -> expr list -> expr
+  ; elet : expr_mapper -> rec_flag -> pattern -> expr -> expr -> expr
+  ; econstruct : expr_mapper -> string -> expr list -> expr
+  ; ematch : expr_mapper -> expr -> (pattern * expr) list1 -> expr
+  ; expr : expr_mapper -> expr -> expr
+  }
+
+let default_mapper =
+  { earray = (fun self xs -> EArray (List.map (self.expr self) xs))
+  ; econst = (fun _ c -> econst c)
+  ; evar = (fun _ -> evar)
+  ; eif =
+      (fun self c th el ->
+        eite (self.expr self c) (self.expr self th) (self.expr self el))
+  ; elam = (fun self p e -> elam p (self.expr self e))
+  ; eapp = (fun self f x -> eapp1 (self.expr self f) (self.expr self x))
+  ; etuple =
+      (fun self a b xs ->
+        etuple (self.expr self a) (self.expr self b) (List.map (self.expr self) xs))
+  ; elet =
+      (fun self isrec p b rhs -> elet ~isrec p (self.expr self b) (self.expr self rhs))
+  ; econstruct = (fun self name xs -> econstruct name (List.map (self.expr self) xs))
+  ; ematch =
+      (fun self scru (h, tl) ->
+        let f (p, e1) = p, self.expr self e1 in
+        ematch (self.expr self scru) (f h) (List.map f tl))
+  ; expr =
+      (fun self -> function
+         | EUnit -> EUnit
+         | EArray xs -> self.earray self xs
+         | EConst c -> self.econst self c
+         | EVar v -> self.evar self v
+         | EIf (c, th, el) -> self.eif self c th el
+         | ELam (p, b) -> self.elam self p b
+         | EApp (f, x) -> self.eapp self f x
+         | ETuple (a, b, cs) -> self.etuple self a b cs
+         | ELet (flg, p, b, wher) -> self.elet self flg p b wher
+         | EConstruct (s, args) -> self.econstruct self s args
+         | EMatch (scru, pats) -> self.ematch self scru pats)
+  }
+;;

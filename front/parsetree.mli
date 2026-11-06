@@ -117,3 +117,19 @@ val pcons : pattern -> pattern -> pattern
 val econs : expr -> expr -> expr
 val is_recursive_vb : value_binding -> bool
 val pstr_value_of_vbs : value_binding list -> structure_item
+
+type expr_mapper =
+  { earray : expr_mapper -> expr list -> expr
+  ; econst : expr_mapper -> const -> expr
+  ; evar : expr_mapper -> string -> expr
+  ; eif : expr_mapper -> expr -> expr -> expr -> expr
+  ; elam : expr_mapper -> pattern -> expr -> expr
+  ; eapp : expr_mapper -> expr -> expr -> expr
+  ; etuple : expr_mapper -> expr -> expr -> expr list -> expr
+  ; elet : expr_mapper -> rec_flag -> pattern -> expr -> expr -> expr
+  ; econstruct : expr_mapper -> string -> expr list -> expr
+  ; ematch : expr_mapper -> expr -> (pattern * expr) list1 -> expr
+  ; expr : expr_mapper -> expr -> expr
+  }
+
+val default_mapper : expr_mapper

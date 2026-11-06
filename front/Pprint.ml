@@ -456,7 +456,12 @@ let pp_stru ppf vbs =
   close_box ()
 ;;
 
-let value_bindings ppf = List.iter (fun vb -> pp_value_binding ppf vb)
+let value_bindings ppf xs =
+  fprintf ppf "@[<v>";
+  List.iter (fun vb -> fprintf ppf "%a@," pp_value_binding vb) xs;
+  fprintf ppf "@]"
+;;
+
 let structure = pp_stru
 
 (* testing stuff *)

@@ -1469,7 +1469,7 @@ let prepare_string_lit_init ppf anf =
              | _ -> ())
       }
     in
-    List.iter (fun (_, _, e) -> iter.on_expr iter e) anf
+    List.iter (fun (_, xs) -> List.iter (fun (_, e) -> iter.on_expr iter e) xs) anf
   in
   let assembly_a_string ppf s =
     if String.for_all (fun c -> Char.code c < 128) s
@@ -1599,6 +1599,7 @@ let rename_main = ref false
 
 let codegen ?(wrap_main_into_start = true) anf file =
   let _ = wrap_main_into_start in
+  let _ : (Parsetree.rec_flag * (Ident.t option * ANF.expr) list) list = anf in
   Stdio.Out_channel.with_file file ~f:(fun ch ->
     let ppf = Format.formatter_of_out_channel ch in
     let is_toplevel, vbs =
@@ -1612,27 +1613,42 @@ let codegen ?(wrap_main_into_start = true) anf file =
       let vbs =
         List.map
           (function
-            | _, None, body ->
-              let fresh = ANF.gensym_id ~prefix:"eval" () in
-              Toplevel.extend fresh ~kind:(Immediate Eval);
-              `Global_eval (fresh, body)
-            | _, Some name, body ->
-              let pats, expr = Compile_lib.ANF.group_abstractions body in
-              let argc = List.length pats in
-              if String.equal name.Ident.hum_name "main"
-              then (
-                let () = Toplevel.extend name ~kind:Toplevel.Main in
-                `Main (name, body))
-              else if argc = 0
-              then (
-                let () = Toplevel.extend name ~kind:Toplevel.(Immediate Constant) in
-                Hashtbl.add hash name argc;
-                `Immediate (name, body))
-              else (
-                let () = assert (argc >= 1 || name.Ident.hum_name = "main") in
-                let () = Toplevel.extend name ~kind:(Toplevel.Function { argc }) in
-                Hashtbl.add hash name argc;
-                `Function (name, pats, expr)))
+            | _, [] -> assert false
+            | flg, [ h ] ->
+              (match h with
+               | None, body ->
+                 let fresh = ANF.gensym_id ~prefix:"eval" () in
+                 Toplevel.extend fresh ~kind:(Immediate Eval);
+                 `Global_eval (fresh, body)
+               | Some name, body ->
+                 let pats, expr = Compile_lib.ANF.group_abstractions body in
+                 let argc = List.length pats in
+                 if String.equal name.Ident.hum_name "main"
+                 then (
+                   let () = Toplevel.extend name ~kind:Toplevel.Main in
+                   `Main (name, body))
+                 else if argc = 0
+                 then (
+                   let () = Toplevel.extend name ~kind:Toplevel.(Immediate Constant) in
+                   Hashtbl.add hash name argc;
+                   `Immediate (name, body))
+                 else (
+                   let () = assert (argc >= 1 || name.Ident.hum_name = "main") in
+                   let () = Toplevel.extend name ~kind:(Toplevel.Function { argc }) in
+                   Hashtbl.add hash name argc;
+                   `Function (name, pats, expr)))
+            | _, h :: tl ->
+              let f = function
+                | Some name, body ->
+                  let pats, expr = Compile_lib.ANF.group_abstractions body in
+                  let argc = List.length pats in
+                  assert (argc > 0);
+                  let () = Toplevel.extend name ~kind:(Toplevel.Function { argc }) in
+                  Hashtbl.add hash name argc;
+                  name, pats, expr
+                | _ -> failwiths "not implemeted %s %d" __FILE__ __LINE__
+              in
+              `Functions (List.map f (h :: tl)))
           anf
       in
       is_toplevel, vbs
@@ -1692,6 +1708,36 @@ let codegen ?(wrap_main_into_start = true) anf file =
         Addr_of_local.remove_args names;
         print_epilogue ppf name.hum_name;
         Machine.flush_queue ppf
+      | `Functions fs ->
+        printfn ppf "\n.text";
+        List.iter (fun (name, _, _) -> printfn ppf ".globl %s" name.Ident.hum_name) fs;
+        List.iter
+          (fun (name, pats, body) ->
+             let () = printfn ppf "%s:" name.Ident.hum_name in
+             let names =
+               List.filter_map
+                 (function
+                   | ANF.Apat_var name -> Some name
+                   | Apat_unit -> None
+                   | p -> failwiths "not implemented: pattern %a" ANF.pp_apat p)
+                 pats
+             in
+             let argc = List.length pats in
+             assert (argc > 0);
+             ListLabels.iteri
+               ~f:(fun i -> function
+                  | ANF.Apat_var name -> Addr_of_local.add_arg ~argc i name
+                  | Apat_unit -> ()
+                  | _ -> failwith "not implemented")
+               pats;
+             log "\nGenerating function %a" Ident.pp name;
+             Addr_of_local.current := Some name;
+             generate_body is_toplevel body;
+             Addr_of_local.current := None;
+             Addr_of_local.remove_args names;
+             print_epilogue ppf name.hum_name;
+             Machine.flush_queue ppf)
+          fs
       | `Main (name, expr) ->
         put_init_global_immediates ppf;
         printfn ppf "\n.text";

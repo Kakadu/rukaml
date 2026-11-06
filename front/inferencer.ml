@@ -5,7 +5,7 @@ open Base
 module Format = Stdlib.Format (* silencing a warning *)
 
 let use_logging = false
-(* let use_logging = true *)
+let use_logging = true
 
 let log fmt =
   if use_logging
@@ -61,7 +61,7 @@ module R : sig
   val return : 'a -> 'a t
   val fail : error -> 'a t
 
-  include Monad.Infix with type 'a t := 'a t
+  include Base.Monad.Infix with type 'a t := 'a t
 
   module Syntax : sig
     val ( let* ) : 'a t -> ('a -> 'b t) -> 'b t
@@ -94,8 +94,8 @@ end = struct
     | Ok a -> f a last
   ;;
 
-  let fail e st = st, Result.fail e
-  let return x last = last, Result.return x
+  let fail e st = st, Base.Result.fail e
+  let return x last = last, Base.Result.return x
   let bind x ~f = x >>= f
 
   let ( >>| ) : 'a 'b. 'a t -> ('a -> 'b) -> 'b t =
@@ -179,9 +179,9 @@ end = struct
 
   let empty = []
   let singleton k v = [ k, v ]
-  let find_exn k xs = List.Assoc.find_exn xs k ~equal:Int.equal
-  let find k xs = List.Assoc.find xs k ~equal:Int.equal
-  let remove xs k = List.Assoc.remove xs k ~equal:Int.equal
+  let find_exn k xs = Base.List.Assoc.find_exn xs k ~equal:Int.equal
+  let find k xs = Base.List.Assoc.find xs k ~equal:Int.equal
+  let remove xs k = Base.List.Assoc.remove xs k ~equal:Int.equal
 
   let apply s =
     let rec helper typ =
@@ -1090,6 +1090,8 @@ let vb ?(env = start_env) table (flg, pat, body) : (_, [> error ]) Result.t =
 ;;
 
 let type_vbs ?(env = start_env) table h tl =
+  log "%s %d" Stdlib.__FUNCTION__ Stdlib.__LINE__;
+  log "%a\n" Pprint.structure [ Pstr_value (h, tl) ];
   let foo vbs =
     let open R.Syntax in
     let* answers =

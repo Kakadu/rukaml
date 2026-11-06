@@ -51,7 +51,10 @@ and apat =
 
 and vb = Parsetree.rec_flag * apat * expr
 
-type stru_item = ANF_vb of vb
+type stru_item =
+  | ANF_vb of vb
+  | ANF_vbs of Parsetree.rec_flag * (apat * expr) * (apat * expr) list
+
 type stru = stru_item list
 
 (* TODO: only complex expression should be there *)
@@ -205,6 +208,18 @@ include struct
       fprintf ppf "@[<v 2>@[let %a%a " Pprint.pp_flg flg helper_p name;
       List.iter (fprintf ppf "%a " pp_apat) pats;
       fprintf ppf "=@]@ @[%a@]@]" pp body
+    | ANF_vbs (flg, h, tl) ->
+      assert (flg = Parsetree.Recursive);
+      fprintf ppf "@[<v>";
+      List.iteri
+        (fun i (name, expr) ->
+           let pats, body = group_abstractions expr in
+           let prefix = if i = 0 then "let rec" else "and" in
+           fprintf ppf "@[<v 2>@[%s %a " prefix helper_p name;
+           List.iter (fprintf ppf "%a " pp_apat) pats;
+           fprintf ppf "=@]@ @[%a@]@]@," pp body)
+        (h :: tl);
+      fprintf ppf "@]"
   ;;
 
   let pp_stru ppf (items : stru) =
@@ -558,6 +573,17 @@ let simplify_stru_item acc = function
   | ANF_vb vb ->
     let new_acc, new_vb = simplify_vb acc vb in
     new_acc, ANF_vb new_vb
+  | ANF_vbs (flg, h, tl) ->
+    (* Format.eprintf "ANF simplification omitted\n"; *)
+    Stdppx.List.fold_left_map
+      ~f:(fun acc (p, b) ->
+        match simplify_vb acc (Recursive, p, b) with
+        | acc, (_, p, b) -> acc, (p, b))
+      ~init:acc
+      (h :: tl)
+    |> (function
+     | acc, h :: tl -> acc, ANF_vbs (flg, h, tl)
+     | _ -> assert false)
 ;;
 
 let simplify_stru (stru : stru) : stru =
@@ -901,6 +927,26 @@ let anf_stru stru =
     | [] -> List.concat (List.rev acc)
     | Tstr_type _ :: xs -> aux xs acc
     | Tstr_value vb :: xs -> aux xs (anf_stru_item vb :: acc)
+    | Tstr_values (_flg, h, tl) :: xs ->
+      let interim =
+        List.map
+          (fun vb ->
+             match anf_stru_item vb with
+             | [ ANF_vb vb ] -> vb
+             | _ ->
+               failwiths
+                 "%s %d: Error. Highly likely because of tuple on left hand side "
+                 __FILE__
+                 __LINE__)
+          (h :: tl)
+      in
+      (match interim with
+       | [] -> assert false
+       | [ h ] -> aux xs ([ ANF_vb h ] :: acc)
+       | (_, p1, rhs1) :: tl ->
+         aux
+           xs
+           ([ ANF_vbs (_flg, (p1, rhs1), List.map (fun (_, a, b) -> a, b) tl) ] :: acc))
   in
   aux stru []
 ;;

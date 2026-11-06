@@ -217,3 +217,27 @@ let%expect_test "Zed combinator" =
     let main f = __lifted_lam_11 f (__lifted_lam_9 f)
     |}]
 ;;
+
+let%expect_test _ =
+  on_structure
+    {|
+   let return x = x
+
+   let rec odd n  =
+     if n=1 then true else if n=0 then false else even (n-1)
+   and even n =
+     if n = 0 then true else if n=1 then (fun x -> x) false else return (odd (n-1))
+
+    |};
+  [%expect
+    {|
+    let main f = (fun x -> f (fun v -> x x v)) (fun x -> f (fun v -> x x v))
+    ~~[5 value bindings]~~>
+
+      let __lifted_lam_12 x v = x x v
+    let __lifted_lam_11 f x = f (__lifted_lam_12 x)
+    let __lifted_lam_10 x v = x x v
+    let __lifted_lam_9 f x = f (__lifted_lam_10 x)
+    let main f = __lifted_lam_11 f (__lifted_lam_9 f)
+    |}]
+;;
