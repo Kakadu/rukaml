@@ -1,3 +1,7 @@
+(cram
+ (deps ../../driver/driver.exe compiler.ml 1.ml)
+ (applies_to perf))
+
 (rule
  (target compiler.anf.ml)
  (deps compiler.ml)

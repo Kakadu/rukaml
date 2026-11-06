@@ -286,7 +286,7 @@ let rec pp_expr ctx ppf = function
     fprintf ppf fmt pp_constructor ()
 ;;
 
-let pp_value_bindings ppf vbs =
+let pp_value_bindings is_rec ppf vbs =
   fprintf ppf "@[<v>";
   let prefix_pat i is_rec =
     match i, is_rec with
@@ -295,7 +295,7 @@ let pp_value_bindings ppf vbs =
     | _ -> ("and %a " : _ format)
   in
   List.iteri
-    (fun i (is_rec, pat, rhs) ->
+    (fun i (pat, rhs) ->
        fprintf ppf "@[";
        fprintf ppf (prefix_pat i is_rec) (pp_pattern CtxLeftSideLet) pat;
        match group_lams rhs with
@@ -306,7 +306,7 @@ let pp_value_bindings ppf vbs =
   fprintf ppf "@]"
 ;;
 
-let pp_value_binding_gen prefix ppf (is_rec, pat, rhs) =
+let pp_value_binding_gen prefix is_rec ppf (is_rec, pat, rhs) =
   let (_ : _ -> (('a -> 'b -> 'c) -> 'b -> 'c, 'a, 'c) format) = prefix in
   fprintf ppf "@[<v 2>@[";
   fprintf ppf (prefix is_rec) (pp_pattern CtxLeftSideLet) pat;
@@ -316,11 +316,12 @@ let pp_value_binding_gen prefix ppf (is_rec, pat, rhs) =
     fprintf ppf "=@ @]@[%a@]@]" (pp_expr CtxRightSideLet) rhs
 ;;
 
-let pp_value_binding ppf (is_rec, pat, rhs) =
+let pp_value_binding is_rec ppf (pat, rhs) =
   pp_value_binding_gen
     (function
       | Parsetree.Recursive -> ("let rec %a " : _ format)
       | NonRecursive -> ("let %a " : _ format))
+    is_rec
     ppf
     (is_rec, pat, rhs)
 ;;
@@ -440,8 +441,8 @@ let pp_type_declaration ppf (td, tds) =
 ;;
 
 let pp_structure_item ppf = function
-  | Parsetree.Pstr_value (vb, []) -> pp_value_binding ppf vb
-  | Parsetree.Pstr_value (h, tl) -> pp_value_bindings ppf (h :: tl)
+  | Parsetree.Pstr_value (flg, vb, []) -> pp_value_binding flg ppf vb
+  | Parsetree.Pstr_value (flg, h, tl) -> pp_value_bindings flg ppf (h :: tl)
   | Parsetree.Pstr_type tds -> pp_type_declaration ppf tds
 ;;
 
@@ -456,11 +457,15 @@ let pp_stru ppf vbs =
   close_box ()
 ;;
 
-let value_bindings ppf xs =
-  fprintf ppf "@[<v>";
-  List.iter (fun vb -> fprintf ppf "%a@," pp_value_binding vb) xs;
-  fprintf ppf "@]"
+let value_bindings flg ppf xs =
+  match xs with
+  | [] -> failwith "bad argument"
+  | h :: tl -> pp_structure_item ppf (Pstr_value (flg, h, tl))
 ;;
+
+(* fprintf ppf "@[<v>";
+  List.iter (fun vb -> fprintf ppf "%a@," pp_value_binding vb) xs;
+  fprintf ppf "@]" *)
 
 let structure = pp_stru
 

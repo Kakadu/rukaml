@@ -1,2 +1,6 @@
 (cram
  (deps %{project_root}/driver/driver.exe))
+
+(cram
+ (applies_to mutual2)
+ (deps ../typing/mutual2.ml))

@@ -50,7 +50,7 @@ let simplify_vb (flg, pat, rhs) = flg, pat, simplify rhs
 
 let%expect_test " " =
   let ast = Parsing.parse_vb_exn "let ter loop = (fun n -> loop n 0) loop" in
-  Format.printf "%a\n%!" Pprint.pp_value_binding (simplify_vb ast);
+  Format.printf "%a\n%!" (Pprint.pp_value_binding NonRecursive) (simplify_vb ast);
   [%expect {| let ter n = loop n 0 |}]
 ;;
 

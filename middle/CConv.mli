@@ -20,11 +20,13 @@ val value_binding
 
 val value_binding
   :  ?standart_globals:String_set.t
+  -> Parsetree.rec_flag
   -> Parsetree.value_binding
   -> Frontend.Parsetree.value_binding list
 
 val value_bindings
   :  ?standart_globals:String_set.t
+  -> Parsetree.rec_flag
   -> Parsetree.value_binding
   -> Parsetree.value_binding list
   -> Parsetree.structure_item list

@@ -1059,7 +1059,7 @@ let w e =
   |> Result.map_error ~f:(function #error as x -> x)
 ;;
 
-let vb ?(env = start_env) table (flg, pat, body) : (_, [> error ]) Result.t =
+let vb ?(env = start_env) table flg (pat, body) : (_, [> error ]) Result.t =
   let level = -1 in
   let comp =
     match flg, pat with
@@ -1089,9 +1089,9 @@ let vb ?(env = start_env) table (flg, pat, body) : (_, [> error ]) Result.t =
   |> Result.map_error ~f:(function #error as x -> x)
 ;;
 
-let type_vbs ?(env = start_env) table h tl =
+let type_vbs ?(env = start_env) table flg h tl =
   log "%s %d" Stdlib.__FUNCTION__ Stdlib.__LINE__;
-  log "%a\n" Pprint.structure [ Pstr_value (h, tl) ];
+  log "%a\n" Pprint.structure [ Pstr_value (flg, h, tl) ];
   let foo vbs =
     let open R.Syntax in
     let* answers =
@@ -1125,7 +1125,7 @@ let type_vbs ?(env = start_env) table h tl =
   | [] ->
     let ( let* ) = Result.( >>= ) in
     let return = Result.return in
-    let* env, typed_vb = vb ~env table h in
+    let* env, typed_vb = vb ~env table flg h in
     return (env, Tstr_value typed_vb)
   | _ ->
     assert (Parsetree.is_recursive_vb h);

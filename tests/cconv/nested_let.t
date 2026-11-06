@@ -13,7 +13,7 @@
   > let rec aux n y =
   >    let m = aux (n - 1) in
   >    m y in
-  >  aux x 0 
+  >  aux x 0
   > EOF
   let rec __lifted_let_1_aux n y = let m = __lifted_let_1_aux (n - 1) in 
                                    m y

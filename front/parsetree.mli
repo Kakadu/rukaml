@@ -43,7 +43,7 @@ type expr =
 
 and 'a list1 = 'a * 'a list [@@deriving show { with_path = false }]
 
-type value_binding = rec_flag * pattern * expr [@@deriving show { with_path = false }]
+type value_binding = pattern * expr [@@deriving show { with_path = false }]
 
 type type_declaration =
   { pty_params : string list (** ['a] is param in [type 'a list = ...]  *)
@@ -67,7 +67,7 @@ and core_type =
 [@@deriving show { with_path = false }]
 
 type structure_item =
-  | Pstr_value of value_binding * value_binding list (** [ let x = ... ] *)
+  | Pstr_value of rec_flag * value_binding * value_binding list (** [ let x = ... ] *)
   | Pstr_type of type_declaration list1 (** [ type x = ... ] *)
 [@@deriving show { with_path = false }]
 

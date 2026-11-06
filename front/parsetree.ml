@@ -78,7 +78,7 @@ let elor a b = eapp (evar "||") [ a; b ]
 let eland a b = eapp (evar "&&") [ a; b ]
 let e_cons a b = eapp ~is_right_assoc:true (evar "::") [ a; b ]
 
-type value_binding = rec_flag * pattern * expr [@@deriving show { with_path = false }]
+type value_binding = pattern * expr [@@deriving show { with_path = false }]
 
 type type_declaration =
   { pty_params : string list (** ['a] is param in [type 'a list = ...]  *)
@@ -102,7 +102,7 @@ and core_type =
 [@@deriving show { with_path = false }]
 
 type structure_item =
-  | Pstr_value of value_binding * value_binding list (** [ let x = ... ] *)
+  | Pstr_value of rec_flag * value_binding * value_binding list (** [ let x = ... ] *)
   | Pstr_type of type_declaration list1 (** [ type x = ... ] *)
 [@@deriving show { with_path = false }]
 
@@ -122,10 +122,10 @@ let is_recursive_vb (flg, _, _) =
   | NonRecursive -> false
 ;;
 
-let pstr_value_of_vbs vbs =
+let pstr_value_of_vbs flg vbs =
   match vbs with
-  | [] -> failwith "Bad argument"
-  | h :: tl -> Pstr_value (h, tl)
+  | [] -> failwith "Bad argument of pstr_value_of_vbs"
+  | h :: tl -> Pstr_value (flg, h, tl)
 ;;
 
 type expr_mapper =

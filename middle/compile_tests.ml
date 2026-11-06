@@ -14,25 +14,25 @@ let iter n =
 ;;
 
 let%expect_test " " =
-  let _, _, expr = Parsing.parse_vb_exn iter in
+  let _, (_, expr) = Parsing.parse_vb_exn iter in
   Format.printf "%a\n" String_set.pp (free_vars_of_expr expr);
   [%expect {|{set| +, =, |set} |}]
 ;;
 
 let%expect_test " " =
-  let _, _, expr = Parsing.parse_vb_exn "let x = let rec loop m = m in loop x" in
+  let _, (_, expr) = Parsing.parse_vb_exn "let x = let rec loop m = m in loop x" in
   Format.printf "%a\n" String_set.pp (free_vars_of_expr expr);
   [%expect {|{set| x, |set} |}]
 ;;
 
 let wrap ?(verbose = false) ?(standart_globals = standart_globals) input =
   set_logging verbose;
-  let ast = Parsing.parse_vb_exn input in
-  let rez = value_binding ~standart_globals ast in
+  let flg, vb = Parsing.parse_vb_exn input in
+  let rez = value_binding ~standart_globals vb in
   Format.printf
     "@[%a@]\n\t~~[%d value bindings]~~>\n@[<v>%a@]\n"
-    Pprint.pp_value_binding
-    ast
+    (Pprint.pp_value_binding flg)
+    vb
     (List.length rez)
     (pp_print_list ~pp_sep:(fun ppf () -> fprintf ppf "@.") Pprint.pp_value_binding)
     rez;
